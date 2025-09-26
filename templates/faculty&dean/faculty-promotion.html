@@ -1,0 +1,154 @@
+{% extends "faculty&dean/base.html" %}
+
+{% block title %}My Application{% endblock %}
+
+{% block page_title %}My Application{% endblock %}
+
+{% block content %}
+    <section class="grid">
+
+      <!-- Stepper -->
+      <div class="card" style="grid-column:1 / -1; padding:20px">
+        <h3>Promotion Application Progress</h3>
+        <div class="stepper">
+          <div class="step done">
+            <div class="circle">1</div>
+            Submitted
+            <small>2025-09-05</small>
+          </div>
+          <div class="step done">
+            <div class="circle">2</div>
+            HRMD Review
+            <small>Approved 2025-09-08</small>
+          </div>
+          <div class="step active">
+            <div class="circle">3</div>
+            VP Admin Review
+            <small>Pending</small>
+          </div>
+          <div class="step">
+            <div class="circle">4</div>
+            President Approval
+            <small>Not yet</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Two-column layout -->
+      <div class="grid-2" style="grid-column:1 / -1">
+
+        <!-- Regularization -->
+        <div class="card-promotion" style="padding:20px">
+          <div class="card-header"><i class='bx bx-pie-chart-alt'></i><span>Regularization Progress</span></div>
+          <div style="display:flex;align-items:center;gap:16px;margin-top:12px">
+            <div class="progress-circle"><span>70%</span></div>
+            <div>
+              <p style="font-size:14px"><strong>Status:</strong> Probationary (Year 2 of 3)</p>
+              <p style="font-size:14px"><strong>Master’s Degree:</strong> <span class="status completed">Completed</span></p>
+              <p style="font-size:14px"><strong>Evaluations:</strong> Avg. 4.5/5 <span class="status ok">OK</span></p>
+              <p style="font-size:14px"><strong>Attendance:</strong> 94% <span class="status ok">OK</span></p>
+            </div>
+          </div>
+          <p style="font-size:13px;color:var(--muted);margin-top:10px">ℹ️ Regularization is automatic and reviewed by HRMD — no action needed.</p>
+        </div>
+
+        <!-- Promotion Application -->
+        <div class="card-promotion" style="padding:20px">
+          <div class="card-header"><i class='bx bx-pie-chart-alt'></i><span>Promotion Application</span></div>
+          <p style="font-size:14px">Please upload the required documents:</p>
+          <div class="upload-field">
+            <label><i class='bx bx-file'></i> Resume / CV</label>
+            <input type="file" />
+            <span class="status nu">Not Uploaded</span>
+          </div>
+          <div class="upload-field" style="margin-top:10px">
+            <label><i class='bx bx-file'></i> Cover Letter</label>
+            <input type="file" />
+            <span class="status nu">Not Uploaded</span>
+          </div>
+          <button class="btn-primary" style="margin-top:15px"><i class='bx bx-upload'></i> Submit Application</button>
+        </div>
+
+      </div>
+
+      <!-- Bottom Section -->
+      <div class="grid-3" style="grid-column:1 / -1; gap:20px">
+
+        <!-- SPC Guidelines -->
+        <div class="card-promotion">
+          <div class="collapsible">📘 SPC Guidelines <i class='bx bx-chevron-right'></i></div>
+          <div class="content">
+            <ul>
+              <li><strong>Regularization:</strong> Teaching: 3 yrs with Master’s; Non-Teaching: 6 mos with good evaluation.</li>
+              <li><strong>Promotion:</strong> Degree-based (Bachelor’s → Master’s → Doctorate).</li>
+              <li>Research involvement recognized separately, not part of rank promotion.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Application History -->
+        <div class="card-promotion">
+          <div class="collapsible">📂 Application History <i class='bx bx-chevron-right'></i></div>
+          <div class="content">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Status</th>
+                  <th>Remarks</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>2024</td>
+                  <td><span class="status ok">Approved</span></td>
+                  <td>Promoted to Associate Professor</td>
+                </tr>
+                <tr>
+                  <td>2022</td>
+                  <td><span class="status rejected">Rejected</span></td>
+                  <td>Insufficient research publications</td>
+                </tr>
+                <tr>
+                  <td>2020</td>
+                  <td><span class="status completed">Initial</span></td>
+                  <td>Appointed Assistant Professor</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Help -->
+        <!-- Need Help Collapsible -->
+<div class="card" style="grid-column:1 / -1;padding:20px">
+  <div class="collapsible">❓ Need Help? <i class='bx bx-chevron-right'></i></div>
+  <div class="content">
+    <ul style="line-height:1.8">
+      <li>📄 For promotion document requirements, check the HRMD portal or ask your department secretary.</li>
+      <li>📧 For questions on regularization, email <strong>hrmd@spc.edu.ph</strong>.</li>
+      <li>📞 For urgent concerns, call the HRMD office at (032) 123-4567.</li>
+    </ul>
+  </div>
+</div>
+      </div>
+    </section>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script>
+    const sidebar = document.getElementById('sidebar');
+    document.getElementById('btnToggle').addEventListener('click', () => {
+      sidebar.classList.toggle('collapsed');
+    });
+
+    // collapsibles
+    document.querySelectorAll(".collapsible").forEach(btn => {
+      btn.addEventListener("click", () => {
+        btn.classList.toggle("active");
+        let content = btn.nextElementSibling;
+        content.classList.toggle("show");
+      });
+    });
+  </script>
+{% endblock %}

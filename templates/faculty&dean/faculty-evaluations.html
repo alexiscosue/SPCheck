@@ -1,0 +1,146 @@
+{% extends "faculty&dean/base.html" %}
+
+{% block title %}My Evaluations{% endblock %}
+
+{% block page_title %}My Evaluations{% endblock %}
+
+{% block content %}
+  <section class="grid">
+    <!-- KPI Cards -->
+    <div class="kpis card">
+      <div class="kpi card"><div class="icon eval"><i class='bx bx-star'></i></div><div><div class="title">Overall Average</div><div class="value">4.3</div></div></div>
+      <div class="kpi card"><div class="icon fac"><i class='bx bx-user'></i></div><div><div class="title">Student Score</div><div class="value">4.4</div></div></div>
+      <div class="kpi card"><div class="icon att"><i class='bx bx-group'></i></div><div><div class="title">Peer Score</div><div class="value">4.2</div></div></div>
+      <div class="kpi card"><div class="icon promo"><i class='bx bx-award'></i></div><div><div class="title">Admin Score</div><div class="value">4.3</div></div></div>
+    </div>
+
+    <!-- Left column -->
+    <div class="chart-large">
+      <div class="chart-card-f  card">
+        <div class="card-header"><i class='bx bx-list-ul'></i><span>Faculty Evaluations</span></div>
+        <div class="table">
+          <table>
+            <thead><tr><th>Faculty</th><th>Subject</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td>Prof. John Doe</td><td>Database Systems</td><td><span class="status completed">Completed</span></td><td><button class="btn-action"><i class='bx bx-show'></i></button></td></tr>
+              <tr><td>Prof. Jane Smith</td><td>Business Management</td><td><span class="status pending">Pending</span></td><td><button class="btn-action"><i class='bx bx-edit'></i></button></td></tr>
+              <tr><td>Prof. Michael Reyes</td><td>Education Theories</td><td><span class="status pending">Pending</span></td><td><button class="btn-action"><i class='bx bx-edit'></i></button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Feedback + Trends Tabs -->
+<div class="card chart-large">
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="feedback">Recent Feedback</button>
+    <button class="tab-btn" data-tab="trends">Evaluation Trends</button>
+  </div>
+
+  <!-- Tab 1: Recent Feedback -->
+  <div id="feedback" class="tab-content active">
+    <div class="table">
+      <table>
+        <thead><tr><th>Evaluator</th><th>Feedback</th></tr></thead>
+        <tbody>
+          <tr><td><span class="feedback-tag">Student</span></td><td>Prof. explains topics clearly and relates them to real-world cases.</td></tr>
+          <tr><td><span class="feedback-tag">Peer</span></td><td>Always punctual and consistent in class management.</td></tr>
+          <tr><td><span class="feedback-tag">Admin</span></td><td>Meets institutional teaching standards.</td></tr>
+          <tr><td><span class="feedback-tag">Student</span></td><td>Encourages participation but can improve on feedback speed.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab 2: Evaluation Trends -->
+  <div id="trends" class="tab-content">
+    <canvas id="trendChart" height="190"></canvas>
+  </div>
+</div>
+
+    </div>
+
+    <!-- Right column -->
+    <div class="chart-side">
+      <div class="chart-card card">
+        <div class="card-header"><i class='bx bx-pie-chart-alt'></i><span>Evaluator Breakdown</span></div>
+        <canvas id="breakdownChart" height="170"></canvas>
+      </div>
+
+      <div class="chart-card-f">
+  <div class="card-header"><i class='bx bx-bar-chart-square'></i><span>Department Comparison</span></div>
+  <div class="comparison-wrapper">
+    <div class="comparison-row">
+      <span class="label">Your avg:</span>
+      <div class="comparison-bar">
+        <div class="comparison-fill you" style="width:86%">4.3</div>
+      </div>
+    </div>
+    <div class="comparison-row">
+      <span class="label">Dept. avg:</span>
+      <div class="comparison-bar">
+        <div class="comparison-fill dept" style="width:84%">4.2</div>
+      </div>
+    </div>
+    <div class="comparison-row">
+      <span class="label">College avg:</span>
+      <div class="comparison-bar">
+        <div class="comparison-fill college" style="width:82%">4.1</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    </div>
+  </section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  // Chart: Evaluation trend
+  const trendCtx = document.getElementById('trendChart').getContext('2d');
+  new Chart(trendCtx, {
+    type: 'line',
+    data: {
+      labels: ['Sem 1','Sem 2','Sem 3','Sem 4'],
+      datasets: [{
+        label: 'Average Score',
+        data: [4.1,4.3,4.2,4.4],
+        borderColor: '#7b1113',
+        backgroundColor: 'rgba(123,17,19,0.1)',
+        tension: 0.35,
+        fill: true,
+        pointRadius: 4,
+        pointBackgroundColor: '#7b1113'
+      }]
+    },
+    options: { responsive: true, plugins:{ legend:{ display:false } }, scales:{ y:{ min:3.5, max:5, ticks:{ stepSize:0.5 } } } }
+  });
+
+  // Chart: Evaluator breakdown
+  const breakdownCtx = document.getElementById('breakdownChart').getContext('2d');
+  new Chart(breakdownCtx, {
+    type: 'doughnut',
+    data: {
+      labels:['Students','Peers','Admins'],
+      datasets:[{ data:[60,25,15], backgroundColor:['#3b82f6','#7b1113','#f1c40f'] }]
+    },
+    options:{ cutout:'70%', plugins:{ legend:{ position:'bottom' } } }
+  });
+
+  const tabBtns = document.querySelectorAll(".tab-btn");
+const tabContents = document.querySelectorAll(".tab-content");
+
+tabBtns.forEach(btn => {
+  btn.addEventListener("click", () => {
+    // reset active
+    tabBtns.forEach(b => b.classList.remove("active"));
+    tabContents.forEach(c => c.classList.remove("active"));
+
+    // activate clicked
+    btn.classList.add("active");
+    document.getElementById(btn.dataset.tab).classList.add("active");
+  });
+});
+</script>
+{% endblock %}

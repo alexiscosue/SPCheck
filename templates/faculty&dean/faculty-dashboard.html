@@ -1,0 +1,140 @@
+{% extends "faculty&dean/base.html" %}
+
+{% block title %}Faculty Dashboard{% endblock %}
+
+{% block page_title %}Welcome back, {{ faculty_name | default('Prof. Santos') }}{% endblock %}
+
+{% block content %}
+<!-- Dashboard Grid -->
+<section class="grid">
+  <!-- KPI Cards -->
+  <div class="kpis card">
+    <div class="kpi card">
+      <div class="icon att"><i class='bx bx-check-shield'></i></div>
+      <div>
+        <div class="title">Attendance Rate</div>
+        <div class="value">96% <i class='bx bx-up-arrow-alt' style="color:#16a34a"></i></div>
+      </div>
+    </div>
+
+    <div class="kpi card">
+      <div class="icon eval"><i class='bx bx-star'></i></div>
+      <div>
+        <div class="title">Evaluation Score</div>
+        <div class="value">4.4 / 5 <i class='bx bx-up-arrow-alt' style="color:#10b981"></i></div>
+      </div>
+    </div>
+
+    <div class="kpi card">
+      <div class="icon promo"><i class='bx bx-award'></i></div>
+      <div>
+        <div class="title">Promotion Status</div>
+        <div class="value">Eligible</div>
+      </div>
+    </div>
+
+    <div class="kpi card">
+      <div class="icon fac"><i class='bx bx-book'></i></div>
+      <div>
+        <div class="title">Teaching Load</div>
+        <div class="value">12 Units</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="chart-large">
+    <div class="chart-card card">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="font-weight:700">Attendance Trend</div>
+        <div style="font-size:13px;color:var(--muted)">Last 30 days</div>
+      </div>
+      <canvas id="myAttendanceChart" height="170"></canvas>
+    </div>
+
+    <div class="chart-card card">
+      <div style="font-weight:700;margin-bottom:6px">Evaluation Breakdown</div>
+      <canvas id="myEvalChart" height="170"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-side">
+    <!-- Resources / Announcements -->
+    <div class="card resources">
+      <div class="card-header">
+        <span>Resources & Announcements</span>
+      </div>
+      <div class="card-body">
+        <div class="resource-item">
+          <a href="#" class="resource-link">Faculty Handbook 2025 Update</a>
+          <span class="date">Sep 10</span>
+        </div>
+        <div class="resource-item">
+          <a href="#" class="resource-link">Webinar: "Digital Tools for Teaching"</a>
+          <span class="date">Sep 20, 3 PM</span>
+        </div>
+        <div class="resource-item">
+          <a href="#" class="resource-link">Submit Syllabus for Fall Semester</a>
+          <span class="date">Sep 18</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Class Schedule -->
+    <div class="card schedule">
+      <div class="card-header">
+        <i class='bx bx-calendar'></i>
+        <span>Class Schedule</span>
+      </div>
+      <div class="card-body">
+        <div class="schedule-item">
+          <div>
+            <div class="class-name">DB Systems</div>
+            <div class="class-room">LS221</div>
+          </div>
+          <div class="class-time">9:45-11:00AM</div>
+        </div>
+        <div class="schedule-item">
+          <div>
+            <div class="class-name">Web Dev</div>
+            <div class="class-room">SJ301</div>
+          </div>
+          <div class="class-time">11:00-12:30PM</div>
+        </div>
+        <div class="schedule-item">
+          <div>
+            <div class="class-name">Capstone</div>
+            <div class="class-room">GK306</div>
+          </div>
+          <div class="class-time">1:45-3:00PM</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  // Charts
+  const myAttendanceCtx = document.getElementById('myAttendanceChart').getContext('2d');
+  new Chart(myAttendanceCtx, {
+    type: 'line',
+    data: {
+      labels: ['Week 1','Week 2','Week 3','Week 4'],
+      datasets: [{ label:'Attendance %', data:[94,96,95,97], borderColor:'#7b1113', backgroundColor:'rgba(123,17,19,0.1)', tension:0.35, pointRadius:4, pointBackgroundColor:'#fff' }]
+    },
+    options:{ responsive:true, plugins:{ legend:{ display:false } }, scales:{ y:{ min:80, max:100, ticks:{ stepSize:5 } } } }
+  });
+
+  const myEvalCtx = document.getElementById('myEvalChart').getContext('2d');
+  new Chart(myEvalCtx, {
+    type: 'bar',
+    data: {
+      labels:['Students','Peers','Admin'],
+      datasets:[{ label:'Average Score', data:[4.5,4.3,4.2], backgroundColor:['#3b82f6','#10b981','#f1c40f'] }]
+    },
+    options:{ responsive:true, plugins:{ legend:{ display:false } }, scales:{ y:{ min:0, max:5, ticks:{ stepSize:1 } } } }
+  });
+</script>
+{% endblock %}

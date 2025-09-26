@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SPCheck — HR Attendance</title>
+
+  <!-- Fonts, Icons, CSS -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='img/logo.png') }}">
+  <style>
+    
+  </style>
+</head>
+<body>
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <img src="{{ url_for('static', filename='img/logo.png') }}" alt="SPC Logo">
+      <div style="display:flex;flex-direction:column">
+        <div class="title">SPCheck</div>
+        <div style="font-size:12px;color:var(--muted)">HR Portal</div>
+      </div>
+    </div>
+    <nav class="menu" aria-label="Main menu">
+      <a href="{{ url_for('hr_dashboard') }}"><i class='bx bx-grid-alt'></i><span>Dashboard</span></a>
+      <a href="{{ url_for('hr_employees') }}"><i class='bx bx-user'></i><span>Employees</span></a>
+      <a href="{{ url_for('hr_evaluations') }}"><i class='bx bx-bar-chart'></i><span>Evaluations</span></a>
+      <a href="{{ url_for('hr_attendance') }}" class="active"><i class='bx bx-calendar-check'></i><span>Attendance</span></a>
+      <a href="{{ url_for('hr_promotions') }}"><i class='bx bx-award'></i><span>Promotions</span></a>
+      <a href="{{ url_for('hr_settings') }}"><i class='bx bx-cog'></i><span>Settings</span></a>
+
+      <div class="bottom">
+        <a href="{{ url_for('login') }}" style="color:#b91c1c"><i class='bx bx-log-out'></i><span>Logout</span></a>
+      </div>
+    </nav>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="topbar">
+      <button class="toggle" id="btnToggle"><i class='bx bx-menu'></i></button>
+      <h2 style="margin-left:10px">Faculty Attendance</h2>
+      <div class="actions" style="margin-left:auto">
+        <div class="notif" title="Notifications" aria-live="polite">
+          <i class='bx bx-bell' style="font-size:20px;color:var(--muted)"></i>
+          <div class="badge" id="notifBadge">6</div>
+        </div>
+
+        <div class="profile" title="Admin profile">
+          <img src="{{ url_for('static', filename='img/people.png') }}" alt="SPC Logo">
+          <div style="text-align:left">
+            <div style="font-weight:700">Bella Hadid</div>
+            <div style="font-size:12px;color:var(--muted)">HR • Admin</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section class="grid" aria-live="polite">
+      <div class="kpis card" style="padding:16px">
+        <div class="kpi card" style="gap:14px">
+          <div class="icon fac"><i class='bx bx-check-shield' style="font-size:20px"></i></div>
+          <div>
+            <div class="title">Total Faculty</div>
+            <div class="value" id="kpi-att">52</div>
+          </div>
+        </div>
+
+        <div class="kpi card" style="gap:14px">
+          <div class="icon eval"><i class='bx bx-user'></i></div>
+          <div>
+            <div class="title">Present Today</div>
+            <div class="value" id="kpi-fac">20</div>
+          </div>
+        </div>
+
+        <div class="kpi card" style="gap:14px">
+          <div class="icon promo"><i class='bx bx-check-circle'></i></div>
+          <div>
+            <div class="title">Late today</div>
+            <div class="value" id="kpi-eval">3</div>
+          </div>
+        </div>
+
+        <div class="kpi card" style="gap:14px">
+          <div class="icon att"><i class='bx bx-award'></i></div>
+          <div>
+            <div class="title">Absent Today</div>
+            <div class="value" id="kpi-promo">2</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Faculty Attendance Logs -->
+      <div class="chart-large card">
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="logs">All Faculty Logs</button>
+          <button class="tab-btn" data-tab="classes">View Classes</button>
+        </div>
+
+        <!-- All Faculty Logs -->
+        <div id="logs" class="tab-content active">
+          <div class="search-filter">
+            <input type="text" id="logSearch" placeholder="Search by name or date...">
+            <select id="logFilter"><option value="">All Status</option><option>Present</option><option>Late</option><option>Absent</option></select>
+          </div>
+          <div class="table">
+            <table>
+              <thead><tr><th>Name</th><th>Date</th><th>Time In</th><th>Time Out</th><th>Status</th></tr></thead>
+              <tbody id="logsBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- View Classes Tab -->
+        <div id="classes" class="tab-content">
+          <div class="search-filter">
+            <input type="text" id="facultySearch" placeholder="Search faculty...">
+          </div>
+          <div class="table">
+            <table>
+              <thead><tr><th>Faculty</th><th>Department</th><th>Action</th></tr></thead>
+              <tbody id="facultyBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      
+
+      <!-- Status Breakdown -->
+      <div class="chart-side">
+        <div class="chart-card card">
+          <div class="card-header"><i class='bx bx-pie-chart-alt'></i>Status Breakdown</div>
+          <canvas id="statusBreakdown" height="160"></canvas>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Per-Class Attendance Modal -->
+  <div class="modal" id="classModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modalFacultyName">Faculty Name</h3>
+        <span class="close-btn" id="closeModal">&times;</span>
+      </div>
+      <div class="table">
+        <table>
+          <thead><tr><th>Class</th><th>Schedule</th><th>Time In</th><th>Time Out</th><th>Status</th></tr></thead>
+          <tbody id="classBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Sidebar toggle
+    const sidebar = document.getElementById('sidebar');
+    document.getElementById('btnToggle').addEventListener('click',()=>sidebar.classList.toggle('collapsed'));
+
+    // Tabs
+    document.querySelectorAll('.tab-btn').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.tab).classList.add('active');
+      });
+    });
+
+    // Sample data
+    let facultyLogs = [
+      {name:'Prof. Santos', date:'2025-09-22', in:'08:00', out:'12:00', status:'Present'},
+      {name:'Prof. Cruz', date:'2025-09-22', in:'08:10', out:'12:00', status:'Late'},
+      {name:'Prof. Reyes', date:'2025-09-22', in:'—', out:'—', status:'Absent'}
+    ];
+
+    let facultyList = [
+      {name:'Prof. Santos', dept:'IT', classes:[
+        {class:'CS101', schedule:'MWF 8-9am', in:'08:00', out:'09:00', status:'Present'},
+        {class:'CS102', schedule:'TTh 10-11am', in:'10:05', out:'11:00', status:'Late'}
+      ]},
+      {name:'Prof. Cruz', dept:'Education', classes:[
+        {class:'ED201', schedule:'MWF 9-10am', in:'09:05', out:'10:00', status:'Late'},
+        {class:'ED202', schedule:'TTh 11-12pm', in:'—', out:'—', status:'Absent'}
+      ]},
+      {name:'Prof. Reyes', dept:'Business', classes:[
+        {class:'BS101', schedule:'MWF 1-2pm', in:'—', out:'—', status:'Absent'}
+      ]}
+    ];
+
+    function renderLogs(){
+      const tbody = document.getElementById('logsBody');
+      tbody.innerHTML='';
+      let search=document.getElementById('logSearch').value.toLowerCase();
+      let filter=document.getElementById('logFilter').value;
+      facultyLogs.filter(f=>(!search||(f.name.toLowerCase().includes(search)||f.date.includes(search)))&&(!filter||f.status===filter))
+        .forEach(f=>{
+          const tr=document.createElement('tr');
+          tr.innerHTML=`<td>${f.name}</td><td>${f.date}</td><td>${f.in}</td><td>${f.out}</td><td><span class="status ${f.status.toLowerCase()}">${f.status}</span></td>`;
+          tbody.appendChild(tr);
+        });
+    }
+
+    function renderFacultyList(){
+      const tbody = document.getElementById('facultyBody');
+      tbody.innerHTML='';
+      let search=document.getElementById('facultySearch').value.toLowerCase();
+      facultyList.filter(f=>!search||f.name.toLowerCase().includes(search)).forEach(f=>{
+        const tr=document.createElement('tr');
+        const btn = `<button onclick="openModal('${f.name}')">View Classes</button>`;
+        tr.innerHTML=`<td>${f.name}</td><td>${f.dept}</td><td>${btn}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function openModal(facultyName){
+      const modal = document.getElementById('classModal');
+      const modalTitle = document.getElementById('modalFacultyName');
+      const tbody = document.getElementById('classBody');
+      const faculty = facultyList.find(f=>f.name===facultyName);
+      modalTitle.textContent = faculty.name;
+      tbody.innerHTML='';
+      faculty.classes.forEach(c=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML=`<td>${c.class}</td><td>${c.schedule}</td><td>${c.in}</td><td>${c.out}</td><td><span class="status ${c.status.toLowerCase()}">${c.status}</span></td>`;
+        tbody.appendChild(tr);
+      });
+      modal.classList.add('active');
+    }
+
+    document.getElementById('closeModal').addEventListener('click',()=>document.getElementById('classModal').classList.remove('active'));
+    document.getElementById('facultySearch').addEventListener('input',renderFacultyList);
+
+    renderLogs();
+    renderFacultyList();
+
+    // Status Breakdown Chart
+    const statusCtx=document.getElementById('statusBreakdown').getContext('2d');
+    const breakdownChart=new Chart(statusCtx,{
+      type:'doughnut',
+      data:{labels:['Present','Late','Absent'],datasets:[{data:[3,1,1],backgroundColor:['#16a34a','#f59e0b','#ef4444']}]},
+      options:{plugins:{legend:{position:'bottom'}}}
+    });
+  </script>
+</body>
+</html>

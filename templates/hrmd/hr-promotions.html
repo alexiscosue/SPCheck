@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SPCheck — Admin Promotion Dashboard</title>
+
+  <!-- Fonts, Icons, and CSS -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='img/logo.png') }}">
+  <style>
+</style>
+
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <img src="{{ url_for('static', filename='img/logo.png') }}" alt="SPC Logo">
+      <div style="display:flex;flex-direction:column">
+        <div class="title">SPCheck</div>
+        <div style="font-size:12px;color:var(--muted)">Admin Panel</div>
+      </div>
+    </div>
+
+    <nav class="menu" aria-label="Main menu">
+      <a href="{{ url_for('hr_dashboard') }}"><i class='bx bx-grid-alt'></i><span>Dashboard</span></a>
+      <a href="{{ url_for('hr_employees') }}"><i class='bx bx-user'></i><span>Employees</span></a>
+      <a href="{{ url_for('hr_evaluations') }}"><i class='bx bx-bar-chart'></i><span>Evaluations</span></a>
+      <a href="{{ url_for('hr_attendance') }}"><i class='bx bx-calendar-check'></i><span>Attendance</span></a>
+      <a href="{{ url_for('hr_promotions') }}" class="active"><i class='bx bx-award'></i><span>Promotions</span></a>
+      <a href="{{ url_for('hr_settings') }}"><i class='bx bx-cog'></i><span>Settings</span></a>
+
+      <div class="bottom">
+        <a href="{{ url_for('login') }}" style="color:#b91c1c"><i class='bx bx-log-out'></i><span>Logout</span></a>
+      </div>
+    </nav>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="topbar">
+      <button class="toggle" id="btnToggle"><i class='bx bx-menu'></i></button>
+      <h2 style="margin-left:10px">Promotion & Regularization Requests</h2>
+      <div class="actions" style="margin-left:auto">
+        <div class="notif" title="Notifications" aria-live="polite">
+          <i class='bx bx-bell' style="font-size:20px;color:var(--muted)"></i>
+          <div class="badge" id="notifBadge">6</div>
+        </div>
+
+        <div class="profile" title="Admin profile">
+          <img src="{{ url_for('static', filename='img/people.png') }}" alt="SPC Logo">
+          <div style="text-align:left">
+            <div style="font-weight:700">Bella Hadid</div>
+            <div style="font-size:12px;color:var(--muted)">HR • Admin</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section class="grid">
+
+      <!-- Summary KPI -->
+      <div class="kpis card">
+        <div class="kpi card">
+          <div class="icon promo"><i class='bx bx-award'></i></div>
+          <div>
+            <div class="title">Pending Requests</div>
+            <div class="value">6</div>
+          </div>
+        </div>
+        <div class="kpi card">
+          <div class="icon eval"><i class='bx bx-check-circle'></i></div>
+          <div>
+            <div class="title">Approved This Month</div>
+            <div class="value">3</div>
+          </div>
+        </div>
+        <div class="kpi card">
+          <div class="icon fac"><i class='bx bx-user'></i></div>
+          <div>
+            <div class="title">Regularized Faculty</div>
+            <div class="value">145</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="filters" style="grid-column:1/-1">
+        <input type="text" id="searchName" placeholder="Search by faculty name">
+        <select id="filterDept">
+          <option value="">All Departments</option>
+          <option value="IT">IT</option>
+          <option value="CS">CS</option>
+        </select>
+        <select id="filterStatus">
+          <option value="">All Status</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
+      </div>
+
+      <!-- Tabs for Promotions & Regularizations -->
+      <div class="card" style="grid-column:1 / -1; padding:20px">
+        <div class="tabs_profile">
+          <div class="tab active" data-tab="promotions">Promotions</div>
+          <div class="tab" data-tab="regularizations">Regularizations</div>
+        </div>
+
+        <!-- Promotions Table -->
+        <div class="tab-content active" id="promotions">
+          <div class="table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Faculty</th>
+                  <th>Dept</th>
+                  <th>Current Rank</th>
+                  <th>Requested</th>
+                  <th>Status</th>
+                  <th>Submitted</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="promotionsBody">
+                <tr data-status="Pending HR Review">
+                  <td style="display:flex;gap:10px;align-items:center">
+                    <img src="../img/people.png" style="width:36px;height:36px;border-radius:6px;object-fit:cover">
+                    Dr. Maria Cruz
+                  </td>
+                  <td>Education</td>
+                  <td>Assistant Professor</td>
+                  <td>Promotion (Assoc Prof)</td>
+                  <td><span class="status pending">HR Review</span></td>
+                  <td>2025-09-01</td>
+                  <td><button class="btn-action review-btn" style="background:#f1c40f;color:#111">Review</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Regularizations Table -->
+        <div class="tab-content" id="regularizations">
+          <div class="table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Faculty</th>
+                  <th>Dept</th>
+                  <th>Current Rank</th>
+                  <th>Eligibility Date</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="display:flex;gap:10px;align-items:center">
+                    <img src="../img/people.png" style="width:36px;height:36px;border-radius:6px;object-fit:cover">
+                    Dr. Carlos Santos
+                  </td>
+                  <td>IT</td>
+                  <td>Instructor</td>
+                  <td>2025-10-01</td>
+                  <td><span class="status ok">Eligible</span></td>
+                  <td><button class="btn-action review-btn" style="background:#f1c40f;color:#111">Review</button></td>
+                </tr>
+                <tr>
+                  <td style="display:flex;gap:10px;align-items:center">
+                    <img src="../img/people.png" style="width:36px;height:36px;border-radius:6px;object-fit:cover">
+                    Prof. Ana dela Cruz
+                  </td>
+                  <td>Education</td>
+                  <td>Assistant Professor</td>
+                  <td>2025-10-05</td>
+                  <td><span class="status ok">Eligible</span></td>
+                  <td><button class="btn-action review-btn" style="background:#f1c40f;color:#111">Review</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+  </div>
+
+  <div class="hr-modal-wrapper" id="hrReviewModal">
+  <div class="hr-modal-content">
+    <div class="hr-banner"></div>
+
+    <div class="hr-profile-header">
+      <img src="../img/people.png" alt="Faculty" class="hr-profile-img">
+      <div class="hr-profile-info">
+        <h2 id="modalFacultyName">Dr. Maria Cruz</h2>
+        <p>Assistant Professor • Education Department</p>
+        <p>Applied for promotion to Associate Professor.</p>
+
+        <div class="hr-profile-contact">
+          <span><i class='bx bx-envelope'></i> Email: mcruz@spc.edu.ph</span>
+          <span><i class='bx bx-phone'></i> Contact: +63 912 345 6789</span>
+        </div>
+
+        <div class="hr-profile-status">
+          <strong>Submission Status:</strong> Pending HR Review
+        </div>
+      </div>
+    </div>
+
+    <div class="hr-documents">
+      <h3>Uploaded Documents</h3>
+      <div class="hr-stats">
+        <div class="hr-stat-card"><a href="#"><i class='bx bx-file'></i> Cover Letter</a></div>
+        <div class="hr-stat-card"><a href="#"><i class='bx bx-file'></i> Resume</a></div>
+        <div class="hr-stat-card"><a href="#"><i class='bx bx-file'></i> Eval Report</a></div>
+      </div>
+
+      <textarea id="hrNotes" placeholder="Add notes (optional)"></textarea>
+    </div>
+
+    <div class="hr-modal-footer">
+      <button id="rejectBtn" class="btn reject">Reject</button>
+      <button id="forwardBtn" class="btn forward">Forward to VPAA</button>
+      <button id="viewProfileBtn" class="btn btn-view">View Profile</button>
+      <button id="closeModal" class="btn close">Close</button>
+    </div>
+  </div>
+</div>
+
+  <script>
+    const sidebar = document.getElementById('sidebar');
+    const btnToggle = document.getElementById('btnToggle');
+    btnToggle.addEventListener('click', () => sidebar.classList.toggle('collapsed'));
+
+    // Tabs
+    const tabs = document.querySelectorAll('.tab');
+    const contents = document.querySelectorAll('.tab-content');
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const target = tab.getAttribute('data-tab');
+        contents.forEach(c => c.classList.remove('active'));
+        document.getElementById(target).classList.add('active');
+      });
+    });
+
+     // HR Review Modal Logic
+const reviewModal = document.getElementById('hrReviewModal'); // fixed ID
+const closeModal = document.getElementById('closeModal');
+let currentRow = null;
+
+// Open modal
+document.querySelectorAll('.review-btn').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    currentRow = e.target.closest('tr');
+    const facultyName = currentRow.children[0].textContent.trim();
+    document.getElementById('modalFacultyName').textContent = facultyName;
+    reviewModal.style.display = 'flex';
+  });
+});
+
+// Close modal
+closeModal.addEventListener('click', () => reviewModal.style.display = 'none');
+
+// Reject
+document.getElementById('rejectBtn').addEventListener('click', () => {
+  if(currentRow){
+    currentRow.querySelector('.status').textContent = 'Rejected';
+    currentRow.querySelector('.status').className = 'status rejected';
+    currentRow.querySelector('.btn-action').textContent = 'View';
+    currentRow.querySelector('.btn-action').disabled = true;
+  }
+  reviewModal.style.display = 'none';
+});
+
+// Forward to VPAA
+document.getElementById('forwardBtn').addEventListener('click', () => {
+  if(currentRow){
+    currentRow.querySelector('.status').textContent = 'VPAA Review';
+    currentRow.querySelector('.status').className = 'status warn';
+    currentRow.querySelector('.btn-action').textContent = 'Pending';
+    currentRow.querySelector('.btn-action').disabled = true;
+  }
+  reviewModal.style.display = 'none';
+});
+
+// Close modal if click outside content
+window.addEventListener('click', (e) => {
+  if(e.target === reviewModal) reviewModal.style.display = 'none';
+});
+  </script>
+</body>
+</html>

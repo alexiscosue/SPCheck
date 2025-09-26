@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Faculty Login | St. Peter's College</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='img/logo.png') }}">
+</head>
+<body>
+  <div class="login-card">
+    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="SPC Logo">
+    <h2>SPCheck</h2>
+    
+    {% if error %}
+    <div class="error-message" style="color: red; margin-bottom: 15px; text-align: center; padding: 10px; background-color: #ffe6e6; border-radius: 5px; border: 1px solid red;">
+      {{ error }}
+    </div>
+    {% endif %}
+    
+    <form action="{{ url_for('login') }}" method="POST">
+      <div class="input-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" placeholder="Enter your email" required>
+      </div>
+      <div class="input-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" placeholder="Enter your password" required>
+      </div>
+      <button type="submit" class="btn-login">Login</button>
+    </form>
+    <div class="footer">
+      <p>Forgot your password? <a href="{{ url_for('reset_password') }}">Reset here</a></p>
+    </div>
+  
+  </div>
+</body>
+</html>

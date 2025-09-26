@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SPCheck — Settings</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='img/logo.png') }}">
+
+<style>
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="brand">
+    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="SPC Logo">
+    <div>
+      <div class="title">SPCheck</div>
+      <div style="font-size:12px;color:#888">Admin Panel</div>
+    </div>
+  </div>
+    <nav class="menu" aria-label="Main menu">
+      <a href="{{ url_for('hr_dashboard') }}"><i class='bx bx-grid-alt'></i><span>Dashboard</span></a>
+      <a href="{{ url_for('hr_employees') }}"><i class='bx bx-user'></i><span>Employees</span></a>
+      <a href="{{ url_for('hr_evaluations') }}"><i class='bx bx-bar-chart'></i><span>Evaluations</span></a>
+      <a href="{{ url_for('hr_attendance') }}"><i class='bx bx-calendar-check'></i><span>Attendance</span></a>
+      <a href="{{ url_for('hr_promotions') }}"><i class='bx bx-award'></i><span>Promotions</span></a>
+      <a href="{{ url_for('hr_settings') }}" class="active"><i class='bx bx-cog'></i><span>Settings</span></a>
+
+      <div class="bottom">
+        <a href="{{ url_for('login') }}" style="color:#b91c1c"><i class='bx bx-log-out'></i><span>Logout</span></a>
+      </div>
+    </nav>
+</aside>
+
+<!-- Main Settings Content -->
+<div class="main hr-settings">
+    <div class="topbar">
+      <button class="toggle" id="btnToggle"><i class='bx bx-menu'></i></button>
+      <h2 style="margin-left:10px">Settings</h2>
+      <div class="actions" style="margin-left:auto">
+        <div class="notif" title="Notifications" aria-live="polite">
+          <i class='bx bx-bell' style="font-size:20px;color:var(--muted)"></i>
+          <div class="badge" id="notifBadge">6</div>
+        </div>
+
+        <div class="profile" title="Admin profile">
+          <img src="{{ url_for('static', filename='img/people.png') }}" alt="SPC Logo">
+          <div style="text-align:left">
+            <div style="font-weight:700">Bella Hadid</div>
+            <div style="font-size:12px;color:var(--muted)">HR • Admin</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tablink active" data-tab="personal">Personal Info</button>
+    <button class="tablink" data-tab="password">Password</button>
+    <button class="tablink" data-tab="system">System Config</button>
+    <button class="tablink" data-tab="security">Security</button>
+  </div>
+
+  <div id="personal" class="tab-content" style="display:block">
+    <form>
+      <label>First Name</label>
+      <input type="text" value="Juan">
+      <label>Last Name</label>
+      <input type="text" value="Santos">
+      <label>Email Address</label>
+      <input type="email" value="jsantos@spc.edu.ph">
+      <label>Contact Number</label>
+      <input type="text" value="+63 912 345 6789">
+      <label>Profile Picture</label>
+      <input type="file">
+      <button type="submit" class="btn-primary" onclick="showToast(event)">Save Changes</button>
+    </form>
+  </div>
+
+  <div id="password" class="tab-content">
+    <form>
+      <label>Current Password</label>
+      <input type="password">
+      <label>New Password</label>
+      <input type="password">
+      <label>Confirm New Password</label>
+      <input type="password">
+      <button type="submit" class="btn-primary" onclick="showToast(event)">Update Password</button>
+    </form>
+  </div>
+
+  <div id="system" class="tab-content">
+    <form>
+      <label>Grading Scale</label>
+      <select>
+        <option>1–4</option>
+        <option>1–5</option>
+      </select>
+      <label>Flag Threshold</label>
+      <input type="number" min="1" placeholder="E.g., 2">
+      <button type="submit" class="btn-primary" onclick="showToast(event)">Save</button>
+    </form>
+    <h4 style="margin-top:20px">Departments & Roles</h4>
+    <button class="btn-primary" style="margin-bottom:10px">Manage Departments</button>
+    <table class="table">
+      <thead><tr><th>Department</th><th>Role</th><th>Actions</th></tr></thead>
+      <tbody>
+        <tr><td>IT</td><td>Admin</td><td>Edit</td></tr>
+        <tr><td>CS</td><td>HR Staff</td><td>Edit</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div id="security" class="tab-content">
+    <h4>User Roles</h4>
+    <button class="btn-primary">Manage Access</button>
+    <h4 style="margin-top:20px">Audit Logs</h4>
+    <table class="table">
+      <thead><tr><th>User</th><th>Action</th><th>Date</th></tr></thead>
+      <tbody>
+        <tr><td>jsantos</td><td>Changed password</td><td>2025-09-22</td></tr>
+      </tbody>
+    </table>
+    <h4 style="margin-top:20px">Session Management</h4>
+    <label>Force logout all devices</label>
+    <label class="switch"><input type="checkbox"><span class="slider"></span></label>
+  </div>
+</div>
+
+<div class="toast" id="toast">Changes saved successfully!</div>
+
+<script>
+// Sidebar toggle
+document.getElementById('btnToggle').addEventListener('click', () => {
+  document.querySelector('.sidebar').classList.toggle('collapsed');
+});
+
+// Tabs scoped to HR Settings
+document.querySelectorAll('.hr-settings .tablink').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.hr-settings .tablink').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.hr-settings .tab-content').forEach(c => c.style.display='none');
+    document.getElementById(btn.dataset.tab).style.display='block';
+  });
+});
+
+// Toast
+function showToast(e){
+  e.preventDefault();
+  const toast = document.querySelector('.hr-settings .toast');
+  toast.style.display='block';
+  setTimeout(()=>{toast.style.display='none';}, 2500);
+}
+</script>
+
+</body>
+</html>

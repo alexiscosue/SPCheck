@@ -1,0 +1,223 @@
+{% extends "faculty&dean/base.html" %}
+
+{% block title %}My Attendance{% endblock %}
+
+{% block page_title %}My Attendance{% endblock %}
+
+{% block content %}
+<section class="grid">
+  <!-- KPI Cards -->
+  <div class="kpis card">
+    <div class="kpi card"><div class="icon eval"><i class='bx bx-check-circle'></i></div><div><div class="title">Attendance %</div><div class="value">94%</div></div></div>
+    <div class="kpi card"><div class="icon promo"><i class='bx bx-time'></i></div><div><div class="title">Late Count</div><div class="value">3</div></div></div>
+    <div class="kpi card"><div class="icon att"><i class='bx bx-x-circle'></i></div><div><div class="title">Absences</div><div class="value">1</div></div></div>
+    <div class="kpi card"><div class="icon fac"><i class='bx bx-calendar-event'></i></div><div><div class="title">Total Classes</div><div class="value">45</div></div></div>
+  </div>
+
+  <!-- Tabs + Content -->
+  <div class="chart-large card">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="logs">Recent Logs</button>
+      <button class="tab-btn" data-tab="classes">Per-Class Attendance</button>
+      <button class="tab-btn" data-tab="calendar">Calendar View</button>
+    </div>
+
+    <!-- Recent Logs -->
+    <div id="logs" class="tab-content active">
+      <div class="search-filter">
+        <input type="text" id="logSearch" placeholder="Search by date...">
+        <select id="logFilter"><option value="">All Status</option><option>Present</option><option>Late</option><option>Absent</option></select>
+      </div>
+      <div class="table">
+        <table>
+          <thead><tr><th>Date</th><th>Time In</th><th>Time Out</th><th>Status</th></tr></thead>
+          <tbody id="logsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Per-Class Attendance -->
+    <div id="classes" class="tab-content">
+      <div class="search-filter">
+        <input type="text" id="classSearch" placeholder="Search by class...">
+        <select id="classFilter"><option value="">All Status</option><option>Present</option><option>Late</option><option>Absent</option></select>
+      </div>
+      <div class="table">
+        <table>
+          <thead><tr><th>Class</th><th>Date</th><th>Time In</th><th>Status</th></tr></thead>
+          <tbody id="classAttendanceBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Calendar -->
+    <div id="calendar" class="tab-content">
+      <div class="calendar-header">
+        <button id="prevMonth">‹</button>
+        <h3 id="monthLabel"></h3>
+        <button id="nextMonth">›</button>
+      </div>
+      <div class="calendar-grid" id="calendarGrid"></div>
+    </div>
+
+    <!-- RFID Simulation -->
+    <button class="rfid-btn" id="rfidBtn">Simulate RFID Tap</button>
+  </div>
+
+  <!-- Status Breakdown -->
+  <div class="chart-side">
+    <div class="chart-card card">
+      <div class="card-header"><i class='bx bx-pie-chart-alt'></i>Status Breakdown</div>
+      <canvas id="statusBreakdown" height="160"></canvas>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  // Tabs
+  document.querySelectorAll('.tab-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  // Data
+  let logs = [
+    {date:'2025-09-01', in:'08:00', out:'12:00', status:'Present'},
+    {date:'2025-09-02', in:'08:15', out:'12:00', status:'Late'},
+    {date:'2025-09-03', in:'08:00', out:'12:00', status:'Present'},
+    {date:'2025-09-04', in:'—', out:'—', status:'Absent'},
+    {date:'2025-09-05', in:'08:05', out:'12:00', status:'Present'}
+  ];
+
+  let classAttendance = [
+    {className:'DB Systems', date:'2025-09-01', timeIn:'08:00', status:'Present'},
+    {className:'Web Dev', date:'2025-09-01', timeIn:'08:15', status:'Late'},
+    {className:'Capstone', date:'2025-09-01', timeIn:'—', status:'Absent'},
+    {className:'DB Systems', date:'2025-09-02', timeIn:'08:02', status:'Present'},
+    {className:'Web Dev', date:'2025-09-02', timeIn:'08:00', status:'Present'},
+    {className:'Capstone', date:'2025-09-02', timeIn:'08:10', status:'Late'}
+  ];
+
+  // Render Logs
+  function renderLogs(){
+    const tbody = document.getElementById('logsBody');
+    tbody.innerHTML='';
+    let search = document.getElementById('logSearch').value.toLowerCase();
+    let filter = document.getElementById('logFilter').value;
+    logs.filter(l=>(!search||l.date.includes(search))&&(!filter||l.status===filter))
+    .forEach(l=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${l.date}</td><td>${l.in}</td><td>${l.out}</td><td><span class="status ${l.status.toLowerCase()}">${l.status}</span></td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Render Class Attendance
+  function renderClasses(){
+    const tbody = document.getElementById('classAttendanceBody');
+    tbody.innerHTML='';
+    let search = document.getElementById('classSearch').value.toLowerCase();
+    let filter = document.getElementById('classFilter').value;
+    classAttendance.filter(c=>(!search||c.className.toLowerCase().includes(search))&&(!filter||c.status===filter))
+    .forEach(c=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${c.className}</td><td>${c.date}</td><td>${c.timeIn}</td><td><span class="status ${c.status.toLowerCase()}">${c.status}</span></td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Calendar with Month/Year
+  let currentDate = new Date();
+
+  function renderCalendar(){
+    const cal = document.getElementById('calendarGrid');
+    const monthLabel = document.getElementById('monthLabel');
+    cal.innerHTML = '';
+
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    monthLabel.textContent = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+    // Weekday headers
+    const weekdays = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    weekdays.forEach(day=>{
+      let div = document.createElement('div');
+      div.className = 'weekday';
+      div.textContent = day;
+      cal.appendChild(div);
+    });
+
+    // Empty slots before first day
+    for(let i=0;i<firstDay;i++){
+      let empty = document.createElement('div');
+      empty.className = 'empty';
+      cal.appendChild(empty);
+    }
+
+    // Days of month
+    for(let i=1;i<=daysInMonth;i++){
+      let entry = logs.find(l => {
+        let d = new Date(l.date);
+        return d.getDate()===i && d.getMonth()===month && d.getFullYear()===year;
+      });
+
+      let div = document.createElement('div');
+      div.textContent = i;
+      div.classList.add('day');
+      if(entry) div.classList.add(entry.status.toLowerCase());
+      cal.appendChild(div);
+    }
+  }
+
+  // Navigation
+  document.getElementById('prevMonth').addEventListener('click',()=>{
+    currentDate.setMonth(currentDate.getMonth()-1);
+    renderCalendar();
+  });
+  document.getElementById('nextMonth').addEventListener('click',()=>{
+    currentDate.setMonth(currentDate.getMonth()+1);
+    renderCalendar();
+  });
+
+  // Filters
+  document.getElementById('logSearch').addEventListener('input',renderLogs);
+  document.getElementById('logFilter').addEventListener('change',renderLogs);
+  document.getElementById('classSearch').addEventListener('input',renderClasses);
+  document.getElementById('classFilter').addEventListener('change',renderClasses);
+
+  renderLogs(); renderClasses(); renderCalendar();
+
+  // Status Breakdown Chart
+  const statusCtx=document.getElementById('statusBreakdown').getContext('2d');
+  const breakdownChart=new Chart(statusCtx,{
+    type:'doughnut',
+    data:{labels:['Present','Late','Absent'],datasets:[{data:[41,3,1],backgroundColor:['#16a34a','#f59e0b','#ef4444']}]},
+    options:{onClick:(e,els)=>{
+      if(els.length){
+        const label=breakdownChart.data.labels[els[0].index];
+        document.getElementById('logFilter').value=label;
+        renderLogs();
+      }
+    },plugins:{legend:{position:'bottom'}}}
+  });
+
+  // RFID Simulation
+  document.getElementById('rfidBtn').addEventListener('click',()=>{
+    let today='2025-09-'+String(Math.floor(Math.random()*30+1)).padStart(2,'0');
+    let statuses=['Present','Late','Absent'];
+    let status=statuses[Math.floor(Math.random()*3)];
+    let newLog={date:today,in:status==='Absent'?'—':'08:0'+Math.floor(Math.random()*9),out:status==='Absent'?'—':'12:00',status};
+    logs.push(newLog);
+    renderLogs(); renderCalendar();
+  });
+</script>
+{% endblock %}

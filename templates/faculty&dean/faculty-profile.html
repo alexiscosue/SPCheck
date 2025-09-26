@@ -1,0 +1,138 @@
+{% extends "faculty&dean/base.html" %}
+
+{% block title %}My Profile{% endblock %}
+
+{% block page_title %}My Profile{% endblock %}
+
+{% block content %}
+<!-- Profile Header -->
+<section class="card profile-overview">
+  <div class="profile-banner"></div>
+
+  <div class="profile-header">
+    <img src="../img/people.png" alt="Faculty" class="profile-img">
+
+    <div class="profile-info">
+      <h2 class="profile-name">Prof. Juan Santos</h2>
+      <p class="profile-title">Assistant Professor • IT Department</p>
+      <p class="profile-bio">Passionate about Software Engineering, AI in Education, and Community Engagement.</p>
+
+      <div class="profile-contact">
+         <span><i class='bx bx-envelope'></i><strong> Email:</strong> jsantos@spc.edu.ph</span>
+        <span><i class='bx bx-phone'></i><span><strong> Contact:</strong> +63 912 345 6789</span>
+      </div>
+
+      <div class="profile-status">
+        <strong>Employment Status:</strong> Probationary (Year 2 of 3)
+      </div>
+    </div>
+  </div>
+</section>
+
+    </section>
+
+    <!-- Tabs -->
+    <div class="tabs_profile">
+      <div class="tab active" data-tab="overview">Overview</div>
+      <div class="tab" data-tab="credentials-docs">Credentials</div>
+      <div class="tab" data-tab="teaching-courses">Teaching</div>
+      <div class="tab" data-tab="research-achievements">Research & Achievements</div>
+      <div class="tab" data-tab="trainings-seminars">Trainings</div>
+    </div>
+
+    <!-- Tab Content -->
+
+    <!-- Overview -->
+    <div id="overview" class="tab-content active">
+  <div class="career-overview-card">
+  <div class="career-overview-header">
+    <h3>Career Overview</h3>
+    <button class="btn-edit"><i class='bx bx-edit'></i> Edit</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat-card">
+      <h3>4.6</h3>
+      <p>Avg. Eval Rating</p>
+    </div>
+    <div class="stat-card">
+      <h3>8</h3>
+      <p>Years Teaching</p>
+    </div>
+    <div class="stat-card">
+      <h3>3</h3>
+      <p>Research Publications</p>
+    </div>
+    <div class="stat-card">
+      <h3>66%</h3>
+      <p>Probation Completion</p>
+    </div>
+  </div>
+
+  <p style="margin-top:20px">
+    Prof. Santos is an Assistant Professor with specialization in <strong>Software Engineering</strong>. 
+    He is currently on his <strong>2nd year of probationary status</strong> and is active in both teaching and community extension programs.
+  </p>
+</div>
+
+</div>
+
+
+    <!-- Credentials & Documents -->
+    <div id="credentials-docs" class="tab-content">
+      <div class="card">
+        <h3>Credentials & Documents</h3>
+        <p style="font-size:13px;color:var(--muted)">Licenses, degrees, certifications, and uploaded files</p>
+      </div>
+    </div>
+
+    <!-- Teaching & Courses -->
+    <div id="teaching-courses" class="tab-content">
+      <div class="card">
+        <h3>Teaching & Courses</h3>
+        <p style="font-size:13px;color:var(--muted)">Subjects handled and load history</p>
+      </div>
+    </div>
+
+    <!-- Research & Achievements -->
+    <div id="research-achievements" class="tab-content">
+      <div class="card">
+        <h3>Research & Achievements</h3>
+        <p style="font-size:13px;color:var(--muted)">Publications, papers, awards, recognitions</p>
+      </div>
+    </div>
+
+    <!-- Evaluations -->
+    <div id="evaluations" class="tab-content">
+      <div class="card">
+        <h3>Evaluations</h3>
+        <p style="font-size:13px;color:var(--muted)">Evaluation results and history</p>
+      </div>
+    </div>
+
+    <!-- Trainings & Seminars -->
+    <div id="trainings-seminars" class="tab-content">
+      <div class="card">
+        <h3>Trainings & Seminars</h3>
+        <p style="font-size:13px;color:var(--muted)">Workshops, CPD credits, certificates</p>
+      </div>
+    </div>
+
+  </div>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script>
+    // Tabs
+    const tabs = document.querySelectorAll('.tab');
+    const contents = document.querySelectorAll('.tab-content');
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        contents.forEach(c => c.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(tab.dataset.tab).classList.add('active');
+      });
+    });
+  </script>
+{% endblock %}
