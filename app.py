@@ -29,20 +29,27 @@ ROLE_REDIRECTS = {
     20004: ('vppres', 'vp_promotions')
 }
 
-# Helper function to get faculty info
-def get_faculty_info(user_id):
-    """Get faculty information from database"""
+# Helper function to get personnel info (works for all roles)
+def get_personnel_info(user_id):
+    """Get personnel information from personnel and college tables"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # This is a placeholder query - adjust according to your actual database schema
+        # Join personnel and college tables to get complete personnel info
         cursor.execute("""
             SELECT 
-                COALESCE(first_name || ' ' || last_name, 'Prof. Santos') as full_name,
-                COALESCE(department, 'IT Department') as department
-            FROM users 
-            WHERE user_id = %s
+                p.firstname,
+                p.lastname,
+                p.honorifics,
+                c.collegename,
+                p.employee_no,
+                p.employmentstatus,
+                r.rolename
+            FROM personnel p
+            LEFT JOIN college c ON p.college_id = c.college_id
+            LEFT JOIN roles r ON p.role_id = r.role_id
+            WHERE p.user_id = %s
         """, (user_id,))
         
         result = cursor.fetchone()
@@ -50,18 +57,49 @@ def get_faculty_info(user_id):
         conn.close()
         
         if result:
+            firstname, lastname, honorifics, collegename, employee_no, employment_status, rolename = result
+            
+            # Format the full name with honorifics at the end
+            if honorifics:
+                full_name = f"{firstname} {lastname}, {honorifics}"
+            else:
+                full_name = f"{firstname} {lastname}"
+            
             return {
-                'faculty_name': result[0],
-                'department': result[1]
+                'personnel_name': full_name,
+                'faculty_name': full_name,  # For backward compatibility with faculty templates
+                'hr_name': full_name,       # For HR templates
+                'vp_name': full_name,       # For VP templates
+                'college': collegename or 'College of Computer Studies',
+                'employee_no': employee_no,
+                'employment_status': employment_status,
+                'firstname': firstname,
+                'lastname': lastname,
+                'honorifics': honorifics,
+                'role_name': rolename or 'Staff'
             }
     except Exception as e:
-        print(f"Error getting faculty info: {e}")
+        print(f"Error getting personnel info: {e}")
     
     # Default values if query fails or no data found
     return {
+        'personnel_name': 'Staff Member',
         'faculty_name': 'Prof. Santos',
-        'department': 'IT Department'
+        'hr_name': 'HR Staff',
+        'vp_name': 'VP Admin',
+        'college': 'College of Computer Studies',
+        'employee_no': None,
+        'employment_status': 'Active',
+        'firstname': 'Staff',
+        'lastname': 'Member',
+        'honorifics': None,
+        'role_name': 'Staff'
     }
+
+# Backward compatibility - keep the old function name
+def get_faculty_info(user_id):
+    """Get faculty information - wrapper for get_personnel_info"""
+    return get_personnel_info(user_id)
 
 # Authentication decorator
 def require_auth(allowed_roles):
@@ -181,48 +219,57 @@ def faculty_settings():
 @app.route('/hr_dashboard')
 @require_auth([20003])
 def hr_dashboard():
-    return render_template('hrmd/hr-dashboard.html')
+    personnel_info = get_personnel_info(session['user_id'])
+    return render_template('hrmd/hr-dashboard.html', **personnel_info)
 
 @app.route('/hr_employees')
 @require_auth([20003])
 def hr_employees():
-    return render_template('hrmd/hr-employees.html')
+    personnel_info = get_personnel_info(session['user_id'])
+    return render_template('hrmd/hr-employees.html', **personnel_info)
 
 @app.route('/hr_evaluations')
 @require_auth([20003])
 def hr_evaluations():
-    return render_template('hrmd/hr-evaluations.html')
+    personnel_info = get_personnel_info(session['user_id'])
+    return render_template('hrmd/hr-evaluations.html', **personnel_info)
 
 @app.route('/hr_attendance')
 @require_auth([20003])
 def hr_attendance():
-    return render_template('hrmd/hr-attendance.html')
+    personnel_info = get_personnel_info(session['user_id'])
+    return render_template('hrmd/hr-attendance.html', **personnel_info)
 
 @app.route('/hr_promotions')
 @require_auth([20003])
 def hr_promotions():
-    return render_template('hrmd/hr-promotions.html')
+    personnel_info = get_personnel_info(session['user_id'])
+    return render_template('hrmd/hr-promotions.html', **personnel_info)
 
 @app.route('/hr_settings')
 @require_auth([20003])
 def hr_settings():
-    return render_template('hrmd/hr-settings.html')
+    personnel_info = get_personnel_info(session['user_id'])
+    return render_template('hrmd/hr-settings.html', **personnel_info)
 
 # VP/President routes
 @app.route('/vp_promotions')
 @require_auth([20004])
 def vp_promotions():
-    return render_template('vp&pres/vp-promotion.html')
+    personnel_info = get_personnel_info(session['user_id'])
+    return render_template('vp&pres/vp-promotion.html', **personnel_info)
 
 @app.route('/vp_profile')
 @require_auth([20004])
 def vp_profile():
-    return render_template('vp&pres/vp-profile.html')
+    personnel_info = get_personnel_info(session['user_id'])
+    return render_template('vp&pres/vp-profile.html', **personnel_info)
 
 @app.route('/vp_settings')
 @require_auth([20004])
 def vp_settings():
-    return render_template('vp&pres/vp-settings.html')
+    personnel_info = get_personnel_info(session['user_id'])
+    return render_template('vp&pres/vp-settings.html', **personnel_info)
 
 @app.route('/logout')
 def logout():

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>SPCheck — {% block title %}HR Portal{% endblock %}</title>
+  <title>SPCheck â€" {% block title %}HR Portal{% endblock %}</title>
   
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
   <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
@@ -65,8 +65,8 @@
         <div class="profile" title="HR profile">
           <img src="{{ url_for('static', filename='img/people.png') }}" alt="Profile">
           <div style="text-align:left">
-            <div style="font-weight:700">{{ hr_name | default('Bella Hadid') }}</div>
-            <div style="font-size:12px;color:var(--muted)">HR • Admin</div>
+            <div style="font-weight:700">{{ hr_name }}</div>
+            <div style="font-size:12px;color:var(--muted)">{{ college }}</div>
           </div>
         </div>
       </div>
