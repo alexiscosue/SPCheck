@@ -117,6 +117,179 @@ def require_auth(allowed_roles):
         return wrapper
     return decorator
 
+# API Routes for Faculty Attendance
+@app.route('/api/faculty/attendance')
+@require_auth([20001, 20002])
+def api_faculty_attendance():
+    """API endpoint to get faculty attendance data"""
+    try:
+        user_id = session['user_id']
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get personnel_id for the current user
+        cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
+        personnel_result = cursor.fetchone()
+        
+        if not personnel_result:
+            return {'success': False, 'error': 'Personnel record not found'}
+        
+        personnel_id = personnel_result[0]
+        
+        # Get attendance logs with class information
+        cursor.execute("""
+            SELECT 
+                a.attendance_id,
+                a.attendancestatus,
+                a.timein,
+                a.timeout,
+                s.subjectname,
+                sub.subjectcode,
+                sch.classday_1,
+                sch.classday_2
+            FROM attendance a
+            LEFT JOIN schedule sch ON a.class_id = sch.class_id
+            LEFT JOIN subjects sub ON sch.subject_id = sub.subject_id
+            LEFT JOIN subjects s ON sch.subject_id = s.subject_id
+            WHERE a.personnel_id = %s
+            ORDER BY a.timein DESC
+        """, (personnel_id,))
+        
+        attendance_records = cursor.fetchall()
+        
+        # Process attendance logs
+        attendance_logs = []
+        class_attendance = []
+        status_counts = {'present': 0, 'late': 0, 'absent': 0}
+        
+        for record in attendance_records:
+            attendance_id, status, timein, timeout, subject_name, subject_code, classday_1, classday_2 = record
+            
+            # Format dates and times
+            date_str = timein.strftime('%Y-%m-%d') if timein else 'N/A'
+            time_in_str = timein.strftime('%H:%M') if timein else '—'
+            time_out_str = timeout.strftime('%H:%M') if timeout else '—'
+            
+            # Create log entry
+            log_entry = {
+                'date': date_str,
+                'time_in': time_in_str,
+                'time_out': time_out_str,
+                'status': status.capitalize(),
+                'class_name': f"{subject_code} - {subject_name}" if subject_code and subject_name else 'N/A'
+            }
+            attendance_logs.append(log_entry)
+            
+            # Create class attendance entry
+            class_entry = {
+                'class_name': f"{subject_code} - {subject_name}" if subject_code and subject_name else 'N/A',
+                'date': date_str,
+                'time_in': time_in_str,
+                'status': status.capitalize()
+            }
+            class_attendance.append(class_entry)
+            
+            # Count statuses
+            if status.lower() == 'present':
+                status_counts['present'] += 1
+            elif status.lower() == 'late':
+                status_counts['late'] += 1
+            elif status.lower() == 'absent':
+                status_counts['absent'] += 1
+        
+        # Calculate KPIs
+        total_records = len(attendance_records)
+        attendance_percent = round((status_counts['present'] + status_counts['late']) / total_records * 100, 1) if total_records > 0 else 0
+        
+        kpis = {
+            'attendance_percent': f'{attendance_percent}%',
+            'late_count': status_counts['late'],
+            'absence_count': status_counts['absent'],
+            'total_classes': total_records
+        }
+        
+        cursor.close()
+        conn.close()
+        
+        return {
+            'success': True,
+            'attendance_logs': attendance_logs,
+            'class_attendance': class_attendance,
+            'status_breakdown': status_counts,
+            'kpis': kpis
+        }
+        
+    except Exception as e:
+        print(f"Error fetching attendance data: {e}")
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/faculty/simulate-rfid', methods=['POST'])
+@require_auth([20001, 20002])
+def api_simulate_rfid():
+    """API endpoint to simulate RFID tap for testing"""
+    try:
+        user_id = session['user_id']
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get personnel_id for the current user
+        cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
+        personnel_result = cursor.fetchone()
+        
+        if not personnel_result:
+            return {'success': False, 'error': 'Personnel record not found'}
+        
+        personnel_id = personnel_result[0]
+        
+        # Get a random class for the faculty member
+        cursor.execute("""
+            SELECT class_id FROM schedule 
+            WHERE personnel_id = %s 
+            ORDER BY RANDOM() 
+            LIMIT 1
+        """, (personnel_id,))
+        
+        class_result = cursor.fetchone()
+        
+        if not class_result:
+            return {'success': False, 'error': 'No classes found for this faculty member'}
+        
+        class_id = class_result[0]
+        
+        # Simulate random status (Present, Late, or Absent)
+        import random
+        statuses = ['Present', 'Late', 'Absent']
+        status = random.choice(statuses)
+        
+        # Get current time in Philippines timezone
+        philippines_tz = pytz.timezone('Asia/Manila')
+        current_time = datetime.now(philippines_tz).replace(microsecond=0)
+        
+        # For absent, don't set timein/timeout
+        if status == 'Absent':
+            timein = None
+            timeout = None
+        else:
+            # For present/late, set realistic times
+            timein = current_time.replace(hour=8, minute=random.randint(0, 30 if status == 'Late' else 5))
+            timeout = timein.replace(hour=12, minute=0)
+        
+        # Insert simulated attendance record
+        cursor.execute("""
+            INSERT INTO attendance (personnel_id, class_id, attendancestatus, timein, timeout)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (personnel_id, class_id, status, timein, timeout))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        return {'success': True, 'message': f'Simulated {status} attendance record created'}
+        
+    except Exception as e:
+        print(f"Error simulating RFID: {e}")
+        return {'success': False, 'error': str(e)}
+
 # Login route
 @app.route('/', methods=['GET', 'POST'])
 def login():
