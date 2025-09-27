@@ -1,171 +1,118 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>SPCheck — VP Admin Promotion Approvals</title>
+{% extends "vp&pres/vp-base.html" %}
 
-  <!-- Fonts & Icons -->
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-  <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='img/logo.png') }}">
-  <style>
-    
-  </style>
-</head>
-<body>
+{% block title %}Dashboard{% endblock %}
 
-  <!-- Sidebar -->
-  <aside class="sidebar" id="sidebar">
-    <div class="brand">
-      <img src="{{ url_for('static', filename='img/logo.png') }}" alt="SPC Logo">
-      <div style="display:flex;flex-direction:column">
-        <div class="title">SPCheck</div>
-        <div style="font-size:12px;color:var(--muted)">VP Admin Portal</div>
-      </div>
-    </div>
-    <nav class="menu">
-      <a href="{{ url_for('vp_promotions') }}" class="active"><i class='bx bx-award'></i><span>Promotions</span></a>
-      <a href="{{ url_for('vp_profile') }}"><i class='bx bx-user'></i><span>My Profile</span></a>
-      <a href="{{ url_for('vp_settings') }}"><i class='bx bx-cog'></i><span>Settings</span></a>
-      <div class="bottom">
-          <a href="{{ url_for('login') }}" style="color:#b91c1c"><i class='bx bx-log-out'></i><span>Logout</span></a>
-      </div>
-  </nav>
-  </aside>
+{% block page_title %}Faculty Promotions{% endblock %}
 
-  <!-- Main -->
-  <div class="main">
-    <div class="topbar">
-      <button class="toggle" id="btnToggle"><i class='bx bx-menu'></i></button>
-      <h2 style="margin-left:10px">Promotion & Regularization Approvals</h2>
-      <div class="actions" style="margin-left:auto">
-        <div class="notif" title="Notifications" aria-live="polite">
-          <i class='bx bx-bell' style="font-size:20px;color:var(--muted)"></i>
-          <div class="badge" id="notifBadge">6</div>
-        </div>
-
-        <div class="profile" title="Admin profile">
-          <img src="{{ url_for('static', filename='img/people.png') }}" alt="SPC Logo">
-          <div style="text-align:left">
-            <div style="font-weight:700">Diane Ayson</div>
-            <div style="font-size:12px;color:var(--muted)">VP Admin</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <section class="grid">
-      <!-- Filters -->
-      <div class="filters" style="grid-column:1/-1">
-        <input type="text" id="searchName" placeholder="Search by faculty name">
-        <select id="filterDept">
-          <option value="">All Departments</option>
-          <option value="IT">IT</option>
-          <option value="CS">CS</option>
-        </select>
-        <select id="filterStatus">
-          <option value="">All Status</option>
-          <option value="pending">Pending</option>
-          <option value="approved">Approved</option>
-          <option value="rejected">Rejected</option>
-        </select>
-      </div>
-
-      <!-- Tabs for Promotions & Regularizations -->
-      <div class="card" style="grid-column:1 / -1; padding:20px">
-        <div class="tabs_profile">
-          <div class="tab active" data-tab="promotions">Promotions</div>
-          <div class="tab" data-tab="regularizations">Regularizations</div>
-        </div>
-
-        <!-- Promotions Table -->
-        <div class="tab-content active" id="promotions">
-          <div class="table">
-            <table>
-              <thead>
-                <tr>
-                  <th>Faculty</th>
-                  <th>Dept</th>
-                  <th>Current Rank</th>
-                  <th>Requested</th>
-                  <th>Status</th>
-                  <th>Submitted</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="promotionsBody">
-                <tr data-status="Pending HR Review">
-                  <td style="display:flex;gap:10px;align-items:center">
-                    <img src="../img/people.png" style="width:36px;height:36px;border-radius:6px;object-fit:cover">
-                    Dr. Maria Cruz
-                  </td>
-                  <td>Education</td>
-                  <td>Assistant Professor</td>
-                  <td>Promotion (Assoc Prof)</td>
-                  <td><span class="status pending">VPAA Review</span></td>
-                  <td>2025-09-01</td>
-                  <td><button class="btn-action review-btn" style="background:#f1c40f;color:#111">Review</button></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Regularizations Table -->
-        <div class="tab-content" id="regularizations">
-          <div class="table">
-            <table>
-              <thead>
-                <tr>
-                  <th>Faculty</th>
-                  <th>Dept</th>
-                  <th>Current Rank</th>
-                  <th>Eligibility Date</th>
-                  <th>Status</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td style="display:flex;gap:10px;align-items:center">
-                    <img src="../img/people.png" style="width:36px;height:36px;border-radius:6px;object-fit:cover">
-                    Dr. Carlos Santos
-                  </td>
-                  <td>IT</td>
-                  <td>Instructor</td>
-                  <td>2025-10-01</td>
-                  <td><span class="status ok">VPAA Review</span></td>
-                  <td><button class="btn-action review-btn" style="background:#f1c40f;color:#111">Review</button></td>
-                </tr>
-                <tr>
-                  <td style="display:flex;gap:10px;align-items:center">
-                    <img src="../img/people.png" style="width:36px;height:36px;border-radius:6px;object-fit:cover">
-                    Prof. Ana dela Cruz
-                  </td>
-                  <td>Education</td>
-                  <td>Assistant Professor</td>
-                  <td>2025-10-05</td>
-                  <td><span class="status ok">Eligible</span></td>
-                  <td><button class="btn-action review-btn" style="background:#f1c40f;color:#111">Review</button></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-      </div>
-
-    </section>
+{% block content %}
+<section class="grid">
+  <!-- Filters -->
+  <div class="filters" style="grid-column:1/-1">
+    <input type="text" id="searchName" placeholder="Search by faculty name">
+    <select id="filterDept">
+      <option value="">All Departments</option>
+      <option value="IT">IT</option>
+      <option value="CS">CS</option>
+    </select>
+    <select id="filterStatus">
+      <option value="">All Status</option>
+      <option value="pending">Pending</option>
+      <option value="approved">Approved</option>
+      <option value="rejected">Rejected</option>
+    </select>
   </div>
 
-  <div class="hr-modal-wrapper" id="hrReviewModal">
+  <!-- Tabs for Promotions & Regularizations -->
+  <div class="card" style="grid-column:1 / -1; padding:20px">
+    <div class="tabs_profile">
+      <div class="tab active" data-tab="promotions">Promotions</div>
+      <div class="tab" data-tab="regularizations">Regularizations</div>
+    </div>
+
+    <!-- Promotions Table -->
+    <div class="tab-content active" id="promotions">
+      <div class="table">
+        <table>
+          <thead>
+            <tr>
+              <th>Faculty</th>
+              <th>Dept</th>
+              <th>Current Rank</th>
+              <th>Requested</th>
+              <th>Status</th>
+              <th>Submitted</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="promotionsBody">
+            <tr data-status="Pending HR Review">
+              <td style="display:flex;gap:10px;align-items:center">
+                <img src="{{ url_for('static', filename='img/people.png') }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover">
+                Dr. Maria Cruz
+              </td>
+              <td>Education</td>
+              <td>Assistant Professor</td>
+              <td>Promotion (Assoc Prof)</td>
+              <td><span class="status pending">VPAA Review</span></td>
+              <td>2025-09-01</td>
+              <td><button class="btn-action review-btn" style="background:#f1c40f;color:#111">Review</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Regularizations Table -->
+    <div class="tab-content" id="regularizations">
+      <div class="table">
+        <table>
+          <thead>
+            <tr>
+              <th>Faculty</th>
+              <th>Dept</th>
+              <th>Current Rank</th>
+              <th>Eligibility Date</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="display:flex;gap:10px;align-items:center">
+                <img src="{{ url_for('static', filename='img/people.png') }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover">
+                Dr. Carlos Santos
+              </td>
+              <td>IT</td>
+              <td>Instructor</td>
+              <td>2025-10-01</td>
+              <td><span class="status ok">VPAA Review</span></td>
+              <td><button class="btn-action review-btn" style="background:#f1c40f;color:#111">Review</button></td>
+            </tr>
+            <tr>
+              <td style="display:flex;gap:10px;align-items:center">
+                <img src="{{ url_for('static', filename='img/people.png') }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover">
+                Prof. Ana dela Cruz
+              </td>
+              <td>Education</td>
+              <td>Assistant Professor</td>
+              <td>2025-10-05</td>
+              <td><span class="status ok">Eligible</span></td>
+              <td><button class="btn-action review-btn" style="background:#f1c40f;color:#111">Review</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- VP Review Modal -->
+<div class="hr-modal-wrapper" id="hrReviewModal">
   <div class="hr-modal-content">
     <div class="hr-banner"></div>
 
     <div class="hr-profile-header">
-      <img src="../img/people.png" alt="Faculty" class="hr-profile-img">
+      <img src="{{ url_for('static', filename='img/people.png') }}" alt="Faculty" class="hr-profile-img">
       <div class="hr-profile-info">
         <h2 id="modalFacultyName">Dr. Maria Cruz</h2>
         <p>Assistant Professor • Education Department</p>
@@ -177,7 +124,7 @@
         </div>
 
         <div class="hr-profile-status">
-          <strong>Submission Status:</strong> Pending HR Review
+          <strong>Submission Status:</strong> Pending VP Review
         </div>
       </div>
     </div>
@@ -195,33 +142,31 @@
 
     <div class="hr-modal-footer">
       <button id="rejectBtn" class="btn reject">Reject</button>
-      <button id="forwardBtn" class="btn forward">Forward to VPAA</button>
+      <button id="approveBtn" class="btn forward">Approve</button>
       <button id="viewProfileBtn" class="btn btn-view">View Profile</button>
       <button id="closeModal" class="btn close">Close</button>
     </div>
   </div>
 </div>
+{% endblock %}
 
-  <script>
-    const sidebar = document.getElementById('sidebar');
-    const btnToggle = document.getElementById('btnToggle');
-    btnToggle.addEventListener('click', () => sidebar.classList.toggle('collapsed'));
+{% block extra_scripts %}
+<script>
+// Tabs
+const tabs = document.querySelectorAll('.tab');
+const contents = document.querySelectorAll('.tab-content');
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    tabs.forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const target = tab.getAttribute('data-tab');
+    contents.forEach(c => c.classList.remove('active'));
+    document.getElementById(target).classList.add('active');
+  });
+});
 
-    // Tabs
-    const tabs = document.querySelectorAll('.tab');
-    const contents = document.querySelectorAll('.tab-content');
-    tabs.forEach(tab => {
-      tab.addEventListener('click', () => {
-        tabs.forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        const target = tab.getAttribute('data-tab');
-        contents.forEach(c => c.classList.remove('active'));
-        document.getElementById(target).classList.add('active');
-      });
-    });
-
-     // HR Review Modal Logic
-const reviewModal = document.getElementById('hrReviewModal'); // fixed ID
+// VP Review Modal Logic
+const reviewModal = document.getElementById('hrReviewModal');
 const closeModal = document.getElementById('closeModal');
 let currentRow = null;
 
@@ -249,12 +194,12 @@ document.getElementById('rejectBtn').addEventListener('click', () => {
   reviewModal.style.display = 'none';
 });
 
-// Forward to VPAA
-document.getElementById('forwardBtn').addEventListener('click', () => {
+// Approve (VP has final approval authority)
+document.getElementById('approveBtn').addEventListener('click', () => {
   if(currentRow){
-    currentRow.querySelector('.status').textContent = 'VPAA Review';
-    currentRow.querySelector('.status').className = 'status warn';
-    currentRow.querySelector('.btn-action').textContent = 'Pending';
+    currentRow.querySelector('.status').textContent = 'Approved';
+    currentRow.querySelector('.status').className = 'status ok';
+    currentRow.querySelector('.btn-action').textContent = 'Completed';
     currentRow.querySelector('.btn-action').disabled = true;
   }
   reviewModal.style.display = 'none';
@@ -264,6 +209,5 @@ document.getElementById('forwardBtn').addEventListener('click', () => {
 window.addEventListener('click', (e) => {
   if(e.target === reviewModal) reviewModal.style.display = 'none';
 });
-  </script>
-</body>
-</html>
+</script>
+{% endblock %}
