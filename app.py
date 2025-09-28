@@ -117,7 +117,6 @@ def require_auth(allowed_roles):
         return wrapper
     return decorator
 
-# API Routes for Faculty Attendance
 @app.route('/api/faculty/attendance')
 @require_auth([20001, 20002])
 def api_faculty_attendance():
@@ -136,76 +135,202 @@ def api_faculty_attendance():
         
         personnel_id = personnel_result[0]
         
-        # Get attendance logs with class information
+        # Get current academic calendar
+        cursor.execute("""
+            SELECT acadcalendar_id, semesterstart, semesterend 
+            FROM acadcalendar 
+            WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+            ORDER BY semesterstart DESC
+            LIMIT 1
+        """)
+        academic_calendar = cursor.fetchone()
+        
+        if not academic_calendar:
+            return {'success': False, 'error': 'No active academic calendar found'}
+        
+        acadcalendar_id, semester_start, semester_end = academic_calendar
+        
+        # Get all scheduled classes for this faculty including class section
         cursor.execute("""
             SELECT 
-                a.attendance_id,
+                sch.class_id,
+                sch.classday_1,
+                sch.starttime_1,
+                sch.endtime_1,
+                sch.classday_2,
+                sch.starttime_2,
+                sch.endtime_2,
+                sub.subjectcode,
+                sub.subjectname,
+                sch.classsection
+            FROM schedule sch
+            JOIN subjects sub ON sch.subject_id = sub.subject_id
+            WHERE sch.personnel_id = %s AND sch.acadcalendar_id = %s
+        """, (personnel_id, acadcalendar_id))
+        
+        scheduled_classes = cursor.fetchall()
+        
+        # Get existing attendance records including class section
+        cursor.execute("""
+            SELECT 
+                a.class_id,
                 a.attendancestatus,
                 a.timein,
                 a.timeout,
-                s.subjectname,
                 sub.subjectcode,
-                sch.classday_1,
-                sch.classday_2
+                sub.subjectname,
+                sch.classsection
             FROM attendance a
-            LEFT JOIN schedule sch ON a.class_id = sch.class_id
-            LEFT JOIN subjects sub ON sch.subject_id = sub.subject_id
-            LEFT JOIN subjects s ON sch.subject_id = s.subject_id
+            JOIN schedule sch ON a.class_id = sch.class_id
+            JOIN subjects sub ON sch.subject_id = sub.subject_id
             WHERE a.personnel_id = %s
-            ORDER BY a.timein DESC
+            ORDER BY COALESCE(a.timein, CURRENT_TIMESTAMP) DESC
         """, (personnel_id,))
         
         attendance_records = cursor.fetchall()
         
-        # Process attendance logs
+        # Create a map of existing attendance by class_id and date
+        attendance_map = {}
+        for record in attendance_records:
+            class_id, status, timein, timeout, subject_code, subject_name, class_section = record
+            if timein:
+                date_key = f"{class_id}_{timein.date()}"
+            else:
+                # For absent records, we need to find the corresponding scheduled date
+                # This will be handled when we process scheduled classes
+                date_key = f"{class_id}_absent_{len(attendance_map)}"
+            
+            attendance_map[date_key] = {
+                'class_id': class_id,
+                'status': status,
+                'timein': timein,
+                'timeout': timeout,
+                'subject_code': subject_code,
+                'subject_name': subject_name,
+                'class_section': class_section
+            }
+        
+        # Generate all expected class dates and cross-reference with attendance
         attendance_logs = []
         class_attendance = []
         status_counts = {'present': 0, 'late': 0, 'absent': 0}
         
-        for record in attendance_records:
-            attendance_id, status, timein, timeout, subject_name, subject_code, classday_1, classday_2 = record
+        from datetime import datetime, timedelta
+        
+        # Get Philippines timezone
+        philippines_tz = pytz.timezone('Asia/Manila')
+        current_date = datetime.now(philippines_tz).date()
+        
+        for scheduled_class in scheduled_classes:
+            class_id, day1, start1, end1, day2, start2, end2, subject_code, subject_name, class_section = scheduled_class
             
-            # Format dates and times
-            date_str = timein.strftime('%Y-%m-%d') if timein else 'N/A'
-            time_in_str = timein.strftime('%H:%M') if timein else '—'
-            time_out_str = timeout.strftime('%H:%M') if timeout else '—'
+            class_name = f"{subject_code} - {subject_name}"
             
-            # Create log entry
-            log_entry = {
-                'date': date_str,
-                'time_in': time_in_str,
-                'time_out': time_out_str,
-                'status': status.capitalize(),
-                'class_name': f"{subject_code} - {subject_name}" if subject_code and subject_name else 'N/A'
-            }
-            attendance_logs.append(log_entry)
-            
-            # Create class attendance entry
-            class_entry = {
-                'class_name': f"{subject_code} - {subject_name}" if subject_code and subject_name else 'N/A',
-                'date': date_str,
-                'time_in': time_in_str,
-                'status': status.capitalize()
-            }
-            class_attendance.append(class_entry)
-            
-            # Count statuses
-            if status.lower() == 'present':
-                status_counts['present'] += 1
-            elif status.lower() == 'late':
-                status_counts['late'] += 1
-            elif status.lower() == 'absent':
-                status_counts['absent'] += 1
+            # Process both class days (day1 and day2)
+            for day, start_time, end_time in [(day1, start1, end1), (day2, start2, end2)]:
+                if not day:  # Skip if no second day
+                    continue
+                
+                # Find all dates for this day of week since semester start
+                weekday_map = {
+                    'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3,
+                    'Friday': 4, 'Saturday': 5, 'Sunday': 6
+                }
+                
+                target_weekday = weekday_map.get(day)
+                if target_weekday is None:
+                    continue
+                
+                # Start from semester start date
+                check_date = semester_start
+                
+                # Find first occurrence of this weekday
+                days_ahead = target_weekday - check_date.weekday()
+                if days_ahead <= 0:  # Target day already happened this week
+                    days_ahead += 7
+                check_date += timedelta(days=days_ahead)
+                
+                # If the first occurrence is before semester start, move to next week
+                if check_date < semester_start:
+                    check_date += timedelta(days=7)
+                
+                # Generate all class dates until current date
+                while check_date <= current_date and check_date <= semester_end:
+                    date_key = f"{class_id}_{check_date}"
+                    
+                    # Check if attendance record exists for this date
+                    found_record = None
+                    for key, record in attendance_map.items():
+                        if record['class_id'] == class_id:
+                            if record['timein'] and record['timein'].date() == check_date:
+                                found_record = record
+                                break
+                            elif not record['timein'] and record['status'] == 'Absent':
+                                # This could be our absent record for this date
+                                found_record = record
+                                break
+                    
+                    if found_record:
+                        # Use existing attendance record
+                        status = found_record['status']
+                        timein = found_record['timein']
+                        timeout = found_record['timeout']
+                        record_class_section = found_record['class_section']
+                        
+                        time_in_str = timein.strftime('%H:%M') if timein else '—'
+                        time_out_str = timeout.strftime('%H:%M') if timeout else '—'
+                    else:
+                        # No attendance record found - mark as absent
+                        status = 'Absent'
+                        time_in_str = '—'
+                        time_out_str = '—'
+                        record_class_section = class_section
+                    
+                    # Create log entry
+                    log_entry = {
+                        'date': check_date.strftime('%Y-%m-%d'),
+                        'time_in': time_in_str,
+                        'time_out': time_out_str,
+                        'status': status.capitalize(),
+                        'class_name': class_name,
+                        'class_section': record_class_section or 'N/A'
+                    }
+                    attendance_logs.append(log_entry)
+                    
+                    # Create class attendance entry
+                    class_entry = {
+                        'class_name': class_name,
+                        'class_section': record_class_section or 'N/A',
+                        'date': check_date.strftime('%Y-%m-%d'),
+                        'time_in': time_in_str,
+                        'status': status.capitalize()
+                    }
+                    class_attendance.append(class_entry)
+                    
+                    # Count statuses
+                    if status.lower() == 'present':
+                        status_counts['present'] += 1
+                    elif status.lower() == 'late':
+                        status_counts['late'] += 1
+                    elif status.lower() == 'absent':
+                        status_counts['absent'] += 1
+                    
+                    # Move to next week
+                    check_date += timedelta(days=7)
+        
+        # Sort logs by date (most recent first)
+        attendance_logs.sort(key=lambda x: x['date'], reverse=True)
+        class_attendance.sort(key=lambda x: x['date'], reverse=True)
         
         # Calculate KPIs
-        total_records = len(attendance_records)
-        attendance_percent = round((status_counts['present'] + status_counts['late']) / total_records * 100, 1) if total_records > 0 else 0
+        total_classes = len(attendance_logs)
+        attendance_percent = round((status_counts['present'] + status_counts['late']) / total_classes * 100, 1) if total_classes > 0 else 0
         
         kpis = {
             'attendance_percent': f'{attendance_percent}%',
             'late_count': status_counts['late'],
             'absence_count': status_counts['absent'],
-            'total_classes': total_records
+            'total_classes': total_classes
         }
         
         cursor.close()

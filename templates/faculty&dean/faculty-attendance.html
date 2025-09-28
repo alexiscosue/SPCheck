@@ -30,7 +30,7 @@
       </div>
       <div class="table">
         <table>
-          <thead><tr><th>Date</th><th>Class</th><th>Time In</th><th>Time Out</th><th>Status</th></tr></thead>
+          <thead><tr><th>Date</th><th>Class</th><th>Section</th><th>Time In</th><th>Time Out</th><th>Status</th></tr></thead>
           <tbody id="logsBody"></tbody>
         </table>
       </div>
@@ -44,7 +44,7 @@
       </div>
       <div class="table">
         <table>
-          <thead><tr><th>Class</th><th>Date</th><th>Time In</th><th>Status</th></tr></thead>
+          <thead><tr><th>Class</th><th>Section</th><th>Date</th><th>Time In</th><th>Status</th></tr></thead>
           <tbody id="classAttendanceBody"></tbody>
         </table>
       </div>
@@ -58,6 +58,20 @@
         <button id="nextMonth">›</button>
       </div>
       <div class="calendar-grid" id="calendarGrid"></div>
+      <div class="calendar-legend">
+        <div class="legend-item">
+          <span class="legend-dot present"></span>
+          <span>Present</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-dot late"></span>
+          <span>Late</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-dot absent"></span>
+          <span>Absent</span>
+        </div>
+      </div>
     </div>
 
     <!-- RFID Simulation -->
@@ -72,6 +86,10 @@
     </div>
   </div>
 </section>
+
+<style>
+  
+</style>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -136,7 +154,7 @@
     logs.filter(l=>(!search||l.date.includes(search))&&(!filter||l.status===filter))
     .forEach(l=>{
       const tr=document.createElement('tr');
-      tr.innerHTML=`<td>${l.date}</td><td>${l.class_name || 'N/A'}</td><td>${l.time_in || '—'}</td><td>${l.time_out || '—'}</td><td><span class="status ${l.status.toLowerCase()}">${l.status}</span></td>`;
+      tr.innerHTML=`<td>${l.date}</td><td>${l.class_name || 'N/A'}</td><td>${l.class_section || 'N/A'}</td><td>${l.time_in || '—'}</td><td>${l.time_out || '—'}</td><td><span class="status ${l.status.toLowerCase()}">${l.status}</span></td>`;
       tbody.appendChild(tr);
     });
   }
@@ -151,12 +169,12 @@
     classAttendance.filter(c=>(!search||c.class_name.toLowerCase().includes(search))&&(!filter||c.status===filter))
     .forEach(c=>{
       const tr=document.createElement('tr');
-      tr.innerHTML=`<td>${c.class_name}</td><td>${c.date}</td><td>${c.time_in || '—'}</td><td><span class="status ${c.status.toLowerCase()}">${c.status}</span></td>`;
+      tr.innerHTML=`<td>${c.class_name}</td><td>${c.class_section || 'N/A'}</td><td>${c.date}</td><td>${c.time_in || '—'}</td><td><span class="status ${c.status.toLowerCase()}">${c.status}</span></td>`;
       tbody.appendChild(tr);
     });
   }
 
-  // Calendar with Month/Year
+  // Calendar with Month/Year and dots
   let currentDate = new Date();
 
   function renderCalendar(){
@@ -187,17 +205,51 @@
       cal.appendChild(empty);
     }
 
-    // Days of month
+    // Days of month with dots for multiple attendance records
     for(let i=1;i<=daysInMonth;i++){
-      let entry = logs.find(l => {
+      // Find all logs for this day
+      let dayLogs = logs.filter(l => {
         let d = new Date(l.date);
         return d.getDate()===i && d.getMonth()===month && d.getFullYear()===year;
       });
 
       let div = document.createElement('div');
-      div.textContent = i;
       div.classList.add('day');
-      if(entry) div.classList.add(entry.status.toLowerCase());
+      
+      // Day number
+      let dayNumber = document.createElement('div');
+      dayNumber.className = 'day-number';
+      dayNumber.textContent = i;
+      div.appendChild(dayNumber);
+
+      // Dots container
+      let dotsContainer = document.createElement('div');
+      dotsContainer.className = 'dots-container';
+
+      // Create dots for each attendance record
+      dayLogs.forEach(log => {
+        let dot = document.createElement('span');
+        dot.className = `status-dot ${log.status.toLowerCase()}`;
+        
+        // Create tooltip
+        let tooltip = document.createElement('div');
+        tooltip.className = 'dot-tooltip';
+        tooltip.innerHTML = `<strong>${log.status}</strong><br>${log.class_name || 'N/A'}<br>${log.class_section || 'N/A'}`;
+        
+        // Add hover events
+        dot.addEventListener('mouseenter', () => {
+          tooltip.classList.add('show');
+        });
+        
+        dot.addEventListener('mouseleave', () => {
+          tooltip.classList.remove('show');
+        });
+        
+        dot.appendChild(tooltip);
+        dotsContainer.appendChild(dot);
+      });
+
+      div.appendChild(dotsContainer);
       cal.appendChild(div);
     }
   }
