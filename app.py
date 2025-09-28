@@ -733,6 +733,273 @@ def api_faculty_attendance_by_semester(semester_id):
         print(f"Error fetching attendance data for semester {semester_id}: {e}")
         return {'success': False, 'error': str(e)}
 
+# Add these new API routes to your app.py file
+
+@app.route('/api/faculty/dashboard')
+@require_auth([20001, 20002])
+def api_faculty_dashboard():
+    """API endpoint to get faculty dashboard data"""
+    try:
+        user_id = session['user_id']
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get personnel_id for the current user
+        cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
+        personnel_result = cursor.fetchone()
+        
+        if not personnel_result:
+            return {'success': False, 'error': 'Personnel record not found'}
+        
+        personnel_id = personnel_result[0]
+        
+        # Get current academic calendar
+        cursor.execute("""
+            SELECT acadcalendar_id, semester, acadyear, semesterstart, semesterend 
+            FROM acadcalendar 
+            WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+            ORDER BY semesterstart DESC
+            LIMIT 1
+        """)
+        academic_calendar = cursor.fetchone()
+        
+        if not academic_calendar:
+            return {'success': False, 'error': 'No active academic calendar found'}
+        
+        acadcalendar_id, semester_name, acad_year, semester_start, semester_end = academic_calendar
+        
+        # Calculate attendance rate for current semester
+        attendance_rate = calculate_attendance_rate(cursor, personnel_id, acadcalendar_id, semester_start, semester_end)
+        
+        # Get class schedule for current week
+        class_schedule = get_weekly_class_schedule(cursor, personnel_id, acadcalendar_id)
+        
+        # Get teaching load (total units)
+        teaching_load = get_teaching_load(cursor, personnel_id, acadcalendar_id)
+        
+        cursor.close()
+        conn.close()
+        
+        return {
+            'success': True,
+            'attendance_rate': attendance_rate,
+            'class_schedule': class_schedule,
+            'teaching_load': teaching_load,
+            'semester_info': {
+                'name': semester_name,
+                'year': acad_year,
+                'display': f"{semester_name}, AY {acad_year}"
+            }
+        }
+        
+    except Exception as e:
+        print(f"Error fetching dashboard data: {e}")
+        return {'success': False, 'error': str(e)}
+
+def calculate_attendance_rate(cursor, personnel_id, acadcalendar_id, semester_start, semester_end):
+    """Calculate attendance rate for current semester"""
+    try:
+        from datetime import datetime, timedelta
+        import pytz
+        
+        # Get Philippines timezone
+        philippines_tz = pytz.timezone('Asia/Manila')
+        current_date = datetime.now(philippines_tz).date()
+        
+        # Get all scheduled classes for this faculty in current semester
+        cursor.execute("""
+            SELECT 
+                sch.class_id,
+                sch.classday_1,
+                sch.classday_2
+            FROM schedule sch
+            WHERE sch.personnel_id = %s AND sch.acadcalendar_id = %s
+        """, (personnel_id, acadcalendar_id))
+        
+        scheduled_classes = cursor.fetchall()
+        
+        # Get existing attendance records for current semester
+        cursor.execute("""
+            SELECT 
+                a.class_id,
+                a.attendancestatus,
+                a.timein
+            FROM attendance a
+            JOIN schedule sch ON a.class_id = sch.class_id
+            WHERE a.personnel_id = %s AND sch.acadcalendar_id = %s
+        """, (personnel_id, acadcalendar_id))
+        
+        attendance_records = cursor.fetchall()
+        
+        # Create attendance map
+        attendance_map = {}
+        for record in attendance_records:
+            class_id, status, timein = record
+            if timein:
+                date_key = f"{class_id}_{timein.date()}"
+                attendance_map[date_key] = status
+        
+        # Count total expected classes and attendance
+        total_classes = 0
+        present_late_count = 0
+        
+        weekday_map = {
+            'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3,
+            'Friday': 4, 'Saturday': 5, 'Sunday': 6
+        }
+        
+        for scheduled_class in scheduled_classes:
+            class_id, day1, day2 = scheduled_class
+            
+            # Process both class days
+            for day in [day1, day2]:
+                if not day:
+                    continue
+                
+                target_weekday = weekday_map.get(day)
+                if target_weekday is None:
+                    continue
+                
+                # Find first occurrence of this weekday after semester start
+                check_date = semester_start
+                days_ahead = target_weekday - check_date.weekday()
+                if days_ahead <= 0:
+                    days_ahead += 7
+                check_date += timedelta(days=days_ahead)
+                
+                if check_date < semester_start:
+                    check_date += timedelta(days=7)
+                
+                # Count classes until current date
+                end_date = min(current_date, semester_end)
+                while check_date <= end_date:
+                    total_classes += 1
+                    
+                    # Check attendance for this date
+                    date_key = f"{class_id}_{check_date}"
+                    if date_key in attendance_map:
+                        status = attendance_map[date_key].lower()
+                        if status in ['present', 'late']:
+                            present_late_count += 1
+                    # If no record exists, assume absent (don't count towards present/late)
+                    
+                    check_date += timedelta(days=7)
+        
+        # Calculate attendance rate
+        if total_classes > 0:
+            attendance_rate = round((present_late_count / total_classes) * 100)
+        else:
+            attendance_rate = 0
+        
+        return {
+            'percentage': attendance_rate,
+            'total_classes': total_classes,
+            'present_late': present_late_count
+        }
+        
+    except Exception as e:
+        print(f"Error calculating attendance rate: {e}")
+        return {'percentage': 0, 'total_classes': 0, 'present_late': 0}
+
+def get_weekly_class_schedule(cursor, personnel_id, acadcalendar_id):
+    """Get class schedule for current week"""
+    try:
+        from datetime import datetime, timedelta
+        import pytz
+        
+        # Get Philippines timezone
+        philippines_tz = pytz.timezone('Asia/Manila')
+        current_date = datetime.now(philippines_tz).date()
+        
+        # Get start of current week (Monday)
+        days_since_monday = current_date.weekday()
+        week_start = current_date - timedelta(days=days_since_monday)
+        
+        # Get all scheduled classes for this faculty
+        cursor.execute("""
+            SELECT 
+                sch.class_id,
+                sch.classday_1,
+                sch.starttime_1,
+                sch.endtime_1,
+                sch.classday_2,
+                sch.starttime_2,
+                sch.endtime_2,
+                sch.classroom,
+                sch.classsection,
+                sub.subjectcode,
+                sub.subjectname
+            FROM schedule sch
+            JOIN subjects sub ON sch.subject_id = sub.subject_id
+            WHERE sch.personnel_id = %s AND sch.acadcalendar_id = %s
+            ORDER BY sch.starttime_1, sch.starttime_2
+        """, (personnel_id, acadcalendar_id))
+        
+        scheduled_classes = cursor.fetchall()
+        
+        weekly_schedule = []
+        
+        for scheduled_class in scheduled_classes:
+            (class_id, day1, start1, end1, day2, start2, end2, 
+             classroom, section, subject_code, subject_name) = scheduled_class
+            
+            class_name = f"{subject_code} - {subject_name}"
+            
+            # Process first class day
+            if day1 and start1 and end1:
+                weekly_schedule.append({
+                    'class_name': class_name,
+                    'subject_code': subject_code,
+                    'subject_name': subject_name,
+                    'section': section or 'N/A',
+                    'day': day1,
+                    'start_time': start1.strftime('%H:%M') if start1 else 'N/A',
+                    'end_time': end1.strftime('%H:%M') if end1 else 'N/A',
+                    'time_display': f"{start1.strftime('%H:%M')}-{end1.strftime('%H:%M')}" if start1 and end1 else 'N/A',
+                    'classroom': classroom or 'N/A'
+                })
+            
+            # Process second class day
+            if day2 and start2 and end2:
+                weekly_schedule.append({
+                    'class_name': class_name,
+                    'subject_code': subject_code,
+                    'subject_name': subject_name,
+                    'section': section or 'N/A',
+                    'day': day2,
+                    'start_time': start2.strftime('%H:%M') if start2 else 'N/A',
+                    'end_time': end2.strftime('%H:%M') if end2 else 'N/A',
+                    'time_display': f"{start2.strftime('%H:%M')}-{end2.strftime('%H:%M')}" if start2 and end2 else 'N/A',
+                    'classroom': classroom or 'N/A'
+                })
+        
+        # Sort by day and time
+        day_order = {'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6, 'Sunday': 7}
+        weekly_schedule.sort(key=lambda x: (day_order.get(x['day'], 8), x['start_time']))
+        
+        return weekly_schedule
+        
+    except Exception as e:
+        print(f"Error getting weekly class schedule: {e}")
+        return []
+
+def get_teaching_load(cursor, personnel_id, acadcalendar_id):
+    """Get total teaching load in units"""
+    try:
+        cursor.execute("""
+            SELECT COALESCE(SUM(sub.units), 0) as total_units
+            FROM schedule sch
+            JOIN subjects sub ON sch.subject_id = sub.subject_id
+            WHERE sch.personnel_id = %s AND sch.acadcalendar_id = %s
+        """, (personnel_id, acadcalendar_id))
+        
+        result = cursor.fetchone()
+        return int(result[0]) if result and result[0] else 0
+        
+    except Exception as e:
+        print(f"Error getting teaching load: {e}")
+        return 0
+
 # Login route
 @app.route('/', methods=['GET', 'POST'])
 def login():

@@ -13,7 +13,7 @@
       <div class="icon att"><i class='bx bx-check-shield'></i></div>
       <div>
         <div class="title">Attendance Rate</div>
-        <div class="value">96% <i class='bx bx-up-arrow-alt' style="color:#16a34a"></i></div>
+        <div class="value" id="attendanceRate">Loading... <i class='bx bx-loader-alt bx-spin'></i></div>
       </div>
     </div>
 
@@ -37,7 +37,7 @@
       <div class="icon fac"><i class='bx bx-book'></i></div>
       <div>
         <div class="title">Teaching Load</div>
-        <div class="value">12 Units</div>
+        <div class="value" id="teachingLoad">Loading...</div>
       </div>
     </div>
   </div>
@@ -86,27 +86,9 @@
         <i class='bx bx-calendar'></i>
         <span>Class Schedule</span>
       </div>
-      <div class="card-body">
-        <div class="schedule-item">
-          <div>
-            <div class="class-name">DB Systems</div>
-            <div class="class-room">LS221</div>
-          </div>
-          <div class="class-time">9:45-11:00AM</div>
-        </div>
-        <div class="schedule-item">
-          <div>
-            <div class="class-name">Web Dev</div>
-            <div class="class-room">SJ301</div>
-          </div>
-          <div class="class-time">11:00-12:30PM</div>
-        </div>
-        <div class="schedule-item">
-          <div>
-            <div class="class-name">Capstone</div>
-            <div class="class-room">GK306</div>
-          </div>
-          <div class="class-time">1:45-3:00PM</div>
+      <div class="card-body" id="classScheduleBody">
+        <div class="schedule-loading" style="text-align: center; padding: 1rem; color: #6b7280;">
+          <i class='bx bx-loader-alt bx-spin'></i> Loading schedule...
         </div>
       </div>
     </div>
@@ -116,7 +98,110 @@
 
 {% block extra_scripts %}
 <script>
-  // Charts
+  // Global variables for dashboard data
+  let dashboardData = null;
+
+  // Fetch dashboard data from API
+  async function fetchDashboardData() {
+    try {
+      const response = await fetch('/api/faculty/dashboard');
+      const data = await response.json();
+      
+      if (data.success) {
+        dashboardData = data;
+        updateDashboardDisplay();
+      } else {
+        console.error('Failed to fetch dashboard data:', data.error);
+        showErrorState();
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      showErrorState();
+    }
+  }
+
+  // Update dashboard display with fetched data
+  function updateDashboardDisplay() {
+    if (!dashboardData) return;
+    
+    // Update attendance rate
+    const attendanceRateElement = document.getElementById('attendanceRate');
+    const attendanceRate = dashboardData.attendance_rate.percentage;
+    const trend = attendanceRate >= 95 ? 'up-arrow-alt' : attendanceRate >= 85 ? 'right-arrow-alt' : 'down-arrow-alt';
+    const trendColor = attendanceRate >= 95 ? '#16a34a' : attendanceRate >= 85 ? '#f59e0b' : '#ef4444';
+    
+    attendanceRateElement.innerHTML = `${attendanceRate}% <i class='bx bx-${trend}' style="color:${trendColor}"></i>`;
+    
+    // Update teaching load
+    const teachingLoadElement = document.getElementById('teachingLoad');
+    teachingLoadElement.textContent = `${dashboardData.teaching_load}.0 Units`;
+    
+    // Update class schedule
+    updateClassSchedule();
+  }
+
+  // Update class schedule display
+  function updateClassSchedule() {
+    const scheduleBody = document.getElementById('classScheduleBody');
+    const schedule = dashboardData.class_schedule;
+    
+    if (!schedule || schedule.length === 0) {
+      scheduleBody.innerHTML = '<div style="text-align: center; padding: 1rem; color: #6b7280;">No classes scheduled</div>';
+      return;
+    }
+    
+    // Group classes by day for better display
+    const today = new Date().toLocaleString('en-US', { weekday: 'long' });
+    const todayClasses = schedule.filter(cls => cls.day === today);
+    const otherClasses = schedule.filter(cls => cls.day !== today);
+    
+    let scheduleHTML = '';
+    
+    // Show today's classes first
+    if (todayClasses.length > 0) {
+      scheduleHTML += '<div style="font-size: 12px; font-weight: 600; color: #16a34a; margin-bottom: 8px;">TODAY</div>';
+      todayClasses.forEach(cls => {
+        scheduleHTML += `
+          <div class="schedule-item" style="border-left: 3px solid #16a34a;">
+            <div>
+              <div class="class-name">${cls.subject_code}</div>
+              <div class="class-room">${cls.classroom} (${cls.section})</div>
+            </div>
+            <div class="class-time">${cls.time_display}</div>
+          </div>
+        `;
+      });
+      
+      if (otherClasses.length > 0) {
+        scheduleHTML += '<div style="font-size: 12px; font-weight: 600; color: #6b7280; margin: 12px 0 8px 0;">THIS WEEK</div>';
+      }
+    }
+    
+    // Show other classes (limit to next few for space)
+    const displayClasses = otherClasses.slice(0, Math.max(0, 4 - todayClasses.length));
+    displayClasses.forEach(cls => {
+      scheduleHTML += `
+        <div class="schedule-item">
+          <div>
+            <div class="class-name">${cls.subject_code}</div>
+            <div class="class-room">${cls.classroom} (${cls.section})</div>
+          </div>
+          <div class="class-time">${cls.day}<br>${cls.time_display}</div>
+        </div>
+      `;
+    });
+    
+    scheduleBody.innerHTML = scheduleHTML;
+  }
+
+  // Show error state
+  function showErrorState() {
+    document.getElementById('attendanceRate').innerHTML = 'Error <i class="bx bx-error-circle" style="color:#ef4444"></i>';
+    document.getElementById('teachingLoad').textContent = 'Error loading';
+    document.getElementById('classScheduleBody').innerHTML = '<div style="text-align: center; padding: 1rem; color: #ef4444;">Error loading schedule</div>';
+  }
+
+  // Static Charts (keeping original dummy data as requested)
   const myAttendanceCtx = document.getElementById('myAttendanceChart').getContext('2d');
   new Chart(myAttendanceCtx, {
     type: 'line',
@@ -135,6 +220,14 @@
       datasets:[{ label:'Average Score', data:[4.5,4.3,4.2], backgroundColor:['#3b82f6','#10b981','#f1c40f'] }]
     },
     options:{ responsive:true, plugins:{ legend:{ display:false } }, scales:{ y:{ min:0, max:5, ticks:{ stepSize:1 } } } }
+  });
+
+  // Initialize dashboard data on page load
+  document.addEventListener('DOMContentLoaded', function() {
+    fetchDashboardData();
+    
+    // Refresh data every 5 minutes
+    setInterval(fetchDashboardData, 5 * 60 * 1000);
   });
 </script>
 {% endblock %}
