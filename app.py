@@ -415,6 +415,324 @@ def api_simulate_rfid():
         print(f"Error simulating RFID: {e}")
         return {'success': False, 'error': str(e)}
 
+# Add these new routes to your app.py file
+
+@app.route('/api/faculty/semesters')
+@require_auth([20001, 20002])
+def api_faculty_semesters():
+    """API endpoint to get available semesters"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get all available semesters, ordered by academic year and semester
+        cursor.execute("""
+            SELECT 
+                acadcalendar_id,
+                semester,
+                acadyear,
+                semesterstart,
+                semesterend
+            FROM acadcalendar 
+            ORDER BY acadyear DESC, 
+                     CASE 
+                         WHEN semester LIKE '%First%' THEN 1
+                         WHEN semester LIKE '%Second%' THEN 2
+                         ELSE 3
+                     END
+        """)
+        
+        semesters = cursor.fetchall()
+        
+        # Format the semesters for dropdown
+        semester_options = []
+        current_semester_id = None
+        
+        for sem in semesters:
+            acadcalendar_id, semester, acadyear, start_date, end_date = sem
+            
+            # Create display text
+            display_text = f"{semester}, AY {acadyear}"
+            
+            # Check if this is the current semester
+            from datetime import date
+            today = date.today()
+            is_current = start_date <= today <= end_date
+            
+            if is_current and current_semester_id is None:
+                current_semester_id = acadcalendar_id
+            
+            semester_options.append({
+                'id': acadcalendar_id,
+                'text': display_text,
+                'is_current': is_current,
+                'start_date': start_date.isoformat(),
+                'end_date': end_date.isoformat()
+            })
+        
+        cursor.close()
+        conn.close()
+        
+        return {
+            'success': True,
+            'semesters': semester_options,
+            'current_semester_id': current_semester_id
+        }
+        
+    except Exception as e:
+        print(f"Error fetching semesters: {e}")
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/faculty/attendance/<int:semester_id>')
+@require_auth([20001, 20002])
+def api_faculty_attendance_by_semester(semester_id):
+    """API endpoint to get faculty attendance data for specific semester"""
+    try:
+        user_id = session['user_id']
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get personnel_id for the current user
+        cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
+        personnel_result = cursor.fetchone()
+        
+        if not personnel_result:
+            return {'success': False, 'error': 'Personnel record not found'}
+        
+        personnel_id = personnel_result[0]
+        
+        # Get specific academic calendar
+        cursor.execute("""
+            SELECT acadcalendar_id, semester, acadyear, semesterstart, semesterend 
+            FROM acadcalendar 
+            WHERE acadcalendar_id = %s
+        """, (semester_id,))
+        academic_calendar = cursor.fetchone()
+        
+        if not academic_calendar:
+            return {'success': False, 'error': 'Academic calendar not found'}
+        
+        acadcalendar_id, semester_name, acad_year, semester_start, semester_end = academic_calendar
+        
+        # Get all scheduled classes for this faculty in this semester
+        cursor.execute("""
+            SELECT 
+                sch.class_id,
+                sch.classday_1,
+                sch.starttime_1,
+                sch.endtime_1,
+                sch.classday_2,
+                sch.starttime_2,
+                sch.endtime_2,
+                sub.subjectcode,
+                sub.subjectname,
+                sub.units,
+                sch.classsection
+            FROM schedule sch
+            JOIN subjects sub ON sch.subject_id = sub.subject_id
+            WHERE sch.personnel_id = %s AND sch.acadcalendar_id = %s
+        """, (personnel_id, acadcalendar_id))
+        
+        scheduled_classes = cursor.fetchall()
+        
+        # Get existing attendance records for this semester
+        cursor.execute("""
+            SELECT 
+                a.class_id,
+                a.attendancestatus,
+                a.timein,
+                a.timeout,
+                sub.subjectcode,
+                sub.subjectname,
+                sch.classsection
+            FROM attendance a
+            JOIN schedule sch ON a.class_id = sch.class_id
+            JOIN subjects sub ON sch.subject_id = sub.subject_id
+            WHERE a.personnel_id = %s AND sch.acadcalendar_id = %s
+            ORDER BY COALESCE(a.timein, CURRENT_TIMESTAMP) DESC
+        """, (personnel_id, acadcalendar_id))
+        
+        attendance_records = cursor.fetchall()
+        
+        # Create a map of existing attendance by class_id and date
+        attendance_map = {}
+        for record in attendance_records:
+            class_id, status, timein, timeout, subject_code, subject_name, class_section = record
+            if timein:
+                date_key = f"{class_id}_{timein.date()}"
+            else:
+                # For absent records without timein
+                date_key = f"{class_id}_absent_{len(attendance_map)}"
+            
+            attendance_map[date_key] = {
+                'class_id': class_id,
+                'status': status,
+                'timein': timein,
+                'timeout': timeout,
+                'subject_code': subject_code,
+                'subject_name': subject_name,
+                'class_section': class_section
+            }
+        
+        # Generate all expected class dates and cross-reference with attendance
+        attendance_logs = []
+        class_attendance = []
+        status_counts = {'present': 0, 'late': 0, 'absent': 0}
+        unique_sections = set()
+        total_units = 0
+        
+        from datetime import datetime, timedelta
+        import pytz
+        
+        # Get Philippines timezone
+        philippines_tz = pytz.timezone('Asia/Manila')
+        current_date = datetime.now(philippines_tz).date()
+        
+        for scheduled_class in scheduled_classes:
+            class_id, day1, start1, end1, day2, start2, end2, subject_code, subject_name, units, class_section = scheduled_class
+            
+            class_name = f"{subject_code} - {subject_name}"
+            
+            # Count unique sections and units
+            section_key = f"{subject_code}_{class_section}"
+            if section_key not in unique_sections:
+                unique_sections.add(section_key)
+                total_units += units or 3
+            
+            # Process both class days (day1 and day2)
+            for day, start_time, end_time in [(day1, start1, end1), (day2, start2, end2)]:
+                if not day:  # Skip if no second day
+                    continue
+                
+                # Find all dates for this day of week within semester
+                weekday_map = {
+                    'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3,
+                    'Friday': 4, 'Saturday': 5, 'Sunday': 6
+                }
+                
+                target_weekday = weekday_map.get(day)
+                if target_weekday is None:
+                    continue
+                
+                # Start from semester start date
+                check_date = semester_start
+                
+                # Find first occurrence of this weekday
+                days_ahead = target_weekday - check_date.weekday()
+                if days_ahead <= 0:
+                    days_ahead += 7
+                check_date += timedelta(days=days_ahead)
+                
+                # If the first occurrence is before semester start, move to next week
+                if check_date < semester_start:
+                    check_date += timedelta(days=7)
+                
+                # Generate all class dates within semester bounds and up to current date
+                end_date = min(current_date, semester_end)
+                while check_date <= end_date:
+                    date_key = f"{class_id}_{check_date}"
+                    
+                    # Check if attendance record exists for this date
+                    found_record = None
+                    for key, record in attendance_map.items():
+                        if record['class_id'] == class_id:
+                            if record['timein'] and record['timein'].date() == check_date:
+                                found_record = record
+                                break
+                            elif not record['timein'] and record['status'] == 'Absent':
+                                # This could be our absent record for this date
+                                found_record = record
+                                break
+                    
+                    if found_record:
+                        # Use existing attendance record
+                        status = found_record['status']
+                        timein = found_record['timein']
+                        timeout = found_record['timeout']
+                        record_class_section = found_record['class_section']
+                        
+                        time_in_str = timein.strftime('%H:%M') if timein else '—'
+                        time_out_str = timeout.strftime('%H:%M') if timeout else '—'
+                    else:
+                        # No attendance record found - mark as absent
+                        status = 'Absent'
+                        time_in_str = '—'
+                        time_out_str = '—'
+                        record_class_section = class_section
+                    
+                    # Create log entry
+                    log_entry = {
+                        'date': check_date.strftime('%Y-%m-%d'),
+                        'time_in': time_in_str,
+                        'time_out': time_out_str,
+                        'status': status.capitalize(),
+                        'class_name': class_name,
+                        'class_section': record_class_section or 'N/A'
+                    }
+                    attendance_logs.append(log_entry)
+                    
+                    # Create class attendance entry
+                    class_entry = {
+                        'class_name': class_name,
+                        'class_section': record_class_section or 'N/A',
+                        'date': check_date.strftime('%Y-%m-%d'),
+                        'time_in': time_in_str,
+                        'status': status.capitalize()
+                    }
+                    class_attendance.append(class_entry)
+                    
+                    # Count statuses
+                    if status.lower() == 'present':
+                        status_counts['present'] += 1
+                    elif status.lower() == 'late':
+                        status_counts['late'] += 1
+                    elif status.lower() == 'absent':
+                        status_counts['absent'] += 1
+                    
+                    # Move to next week
+                    check_date += timedelta(days=7)
+        
+        # Sort logs by date (most recent first)
+        attendance_logs.sort(key=lambda x: x['date'], reverse=True)
+        class_attendance.sort(key=lambda x: x['date'], reverse=True)
+        
+        # Calculate KPIs
+        total_classes = len(attendance_logs)
+        attendance_percent = round((status_counts['present'] + status_counts['late']) / total_classes * 100, 1) if total_classes > 0 else 0
+        
+        kpis = {
+            'attendance_percent': f'{attendance_percent}%',
+            'late_count': status_counts['late'],
+            'absence_count': status_counts['absent'],
+            'total_classes': total_classes,
+            'sections_count': len(unique_sections),
+            'total_units': total_units
+        }
+        
+        # Add semester info
+        semester_info = {
+            'id': acadcalendar_id,
+            'name': semester_name,
+            'year': acad_year,
+            'display': f"{semester_name}, AY {acad_year}"
+        }
+        
+        cursor.close()
+        conn.close()
+        
+        return {
+            'success': True,
+            'attendance_logs': attendance_logs,
+            'class_attendance': class_attendance,
+            'status_breakdown': status_counts,
+            'kpis': kpis,
+            'semester_info': semester_info
+        }
+        
+    except Exception as e:
+        print(f"Error fetching attendance data for semester {semester_id}: {e}")
+        return {'success': False, 'error': str(e)}
+
 # Login route
 @app.route('/', methods=['GET', 'POST'])
 def login():

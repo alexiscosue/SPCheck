@@ -229,10 +229,18 @@ body {
 }
 
 /* KPI cards */
+/* KPI cards - default behavior (for pages without semester selection) */
 .kpis {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+/* KPI cards - specific to pages WITH semester selection */
+.kpis:has(.semester-selection) {
+  display: flex;
+  flex-direction: column;
   gap: 16px;
 }
 
@@ -242,6 +250,7 @@ body {
   gap: 12px;
   padding: 14px;
   border-radius: 12px;
+  min-width: 0;
 }
 
 .kpi .icon {
@@ -252,6 +261,11 @@ body {
   align-items: center;
   justify-content: center;
   color: #fff;
+  flex-shrink: 0;
+}
+
+.kpi > div {
+  min-width: 0;
 }
 
 .kpi .title {
@@ -264,10 +278,95 @@ body {
   font-size: 20px;
 }
 
+.icon.sections { background: linear-gradient(135deg,#8b5cf6,#a855f7); }
 .icon.att { background: linear-gradient(135deg,var(--spc-maroon),var(--spc-maroon-dark)); }
 .icon.fac { background: linear-gradient(135deg,#3b82f6,#60a5fa); }
 .icon.eval { background: linear-gradient(135deg,#10b981,#34d399); }
 .icon.promo { background: linear-gradient(135deg,var(--spc-gold),#f59e0b); color: #111; }
+
+.semester-selection {
+  width: 100%;
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.semester-selection label {
+  display: block;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.semester-dropdown {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #d1d5db;
+  border-radius: 6px;
+  background: white;
+  font-size: 14px;
+  color: #374151;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.semester-dropdown:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.semester-dropdown:hover {
+  border-color: #9ca3af;
+}
+
+.kpi-cards-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: nowrap;
+}
+
+.kpi-cards-row .kpi {
+  flex: 1;
+  min-width: 160px;
+}
+
+@media (max-width:1100px) {
+  .kpis { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+}
+
+@media (max-width:720px) {
+  .kpis { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+  
+  .kpi-cards-row {
+    flex-wrap: wrap;
+  }
+  
+  .kpi-cards-row .kpi {
+    flex: 1 1 calc(50% - 8px);
+  }
+  
+  .semester-selection {
+    padding: 12px;
+  }
+  
+  .semester-dropdown {
+    font-size: 13px;
+  }
+}
+
+.semester-dropdown[disabled] {
+  background-color: #f9fafb;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+.semester-dropdown option[data-current="true"] {
+  font-weight: bold;
+  background-color: #dbeafe;
+}
 
 /* Charts area */
 .chart-large {
@@ -522,6 +621,7 @@ th {
 
 .search-filter { display:flex; justify-content:space-between; margin-bottom:10px; gap:8px; }
 .search-filter input, .search-filter select { padding:6px; border:1px solid #ccc; border-radius:6px; }
+.search-filter input {  flex: 1; }
 
 .calendar { display:grid; grid-template-columns: repeat(7,1fr); gap:5px; text-align:center; }
 .calendar div { padding:10px; border:1px solid #ddd; border-radius:6px; }
@@ -1855,4 +1955,45 @@ th {
 
   .legend-dot.absent {
     background-color: #ef4444;
+  }
+
+  .pagination-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .pagination-btn, .calendar-nav-btn {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #ddd;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.2s;
+  }
+
+  .pagination-btn:hover:not(:disabled), .calendar-nav-btn:hover {
+    background-color: #f8f9fa;
+  }
+
+  .pagination-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  #pageInfo {
+    font-size: 0.9rem;
+    color: #666;
+    font-weight: 500;
+  }
+
+  .calendar-header {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
   }
