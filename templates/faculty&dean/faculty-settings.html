@@ -9,64 +9,174 @@
   <!-- Tabs -->
   <div class="tabs">
     <button class="tablink active" data-tab="personal">Personal Info</button>
+    <button class="tablink" data-tab="documents">Documents</button>
     <button class="tablink" data-tab="password">Password</button>
   </div>
 
+  <!-- Personal Info Tab -->
   <div class="tab-content" id="personal" style="display:block">
-    <form class="grid">
-      <div>
-        <label>First Name</label>
-        <input type="text" value="Juan">
+    <form id="personalForm" class="grid">
+      <div style="grid-column: span 2;">
+        <label><i class="fas fa-phone"></i> Contact Number</label>
+        <input type="text" id="phone" name="phone" placeholder="e.g., +63 9123456789" maxlength="14" pattern="\+63 9[0-9]{9}">
+        <small style="display: block; margin-top: 5px; color: #666;">Format: +63 9XX XXX XXXX (10 digits starting with 9)</small>
       </div>
-      <div>
-        <label>Last Name</label>
-        <input type="text" value="Santos">
-      </div>
-      <div>
-        <label>Email Address</label>
-        <input type="email" value="jsantos@spc.edu.ph">
-      </div>
-      <div>
-        <label>Contact Number</label>
-        <input type="text" value="+63 912 345 6789">
-      </div>
-      <div>
-        <label>Profile Picture</label>
-        <input type="file">
+      <div style="grid-column: span 2;">
+        <label><i class="fas fa-user"></i> Bio</label>
+        <textarea id="bio" name="bio" rows="4" placeholder="Brief description about yourself..."></textarea>
       </div>
       <div style="grid-column:span 2; text-align:right;">
-        <button type="submit" class="btn-primary" onclick="showToast(event)">Save Changes</button>
+        <button type="submit" class="btn-primary">
+          <i class="fas fa-save"></i> Save Changes
+        </button>
       </div>
     </form>
   </div>
 
+  <!-- Documents Tab -->
+  <div class="tab-content" id="documents">
+    <form id="documentsForm" class="grid" enctype="multipart/form-data">
+      
+      <!-- Profile Picture -->
+      <div style="grid-column: span 2;">
+        <label><i class="fas fa-user-circle"></i> Profile Picture</label>
+        <div class="upload-field">
+          <label for="profilepic" style="cursor: pointer;">
+            <i class="fas fa-camera"></i>
+            <span id="profilepic-label">Choose profile picture...</span>
+          </label>
+          <input type="file" id="profilepic" name="profilepic" accept="image/*" onchange="updateFileName(this, 'profilepic-label')">
+        </div>
+        <div id="current-profilepic" style="margin-top: 10px; display: none;">
+          <img id="profilepic-preview" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 2px solid #ddd;">
+          <p style="margin: 5px 0; font-size: 12px; color: #666;">Current profile picture</p>
+        </div>
+      </div>
+
+      <!-- Licenses -->
+      <div style="grid-column: span 2;">
+        <label><i class="fas fa-certificate"></i> Licenses</label>
+        <div class="upload-field">
+          <label for="licenses" style="cursor: pointer;">
+            <i class="fas fa-file-upload"></i>
+            <span>Upload licenses (PDF, images)...</span>
+          </label>
+          <input type="file" id="licenses" name="licenses" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'licenses-list', 'licenses')">
+        </div>
+        <div id="licenses-list" class="file-list"></div>
+      </div>
+
+      <!-- Degrees -->
+      <div style="grid-column: span 2;">
+        <label><i class="fas fa-graduation-cap"></i> Degrees</label>
+        <div class="upload-field">
+          <label for="degrees" style="cursor: pointer;">
+            <i class="fas fa-file-upload"></i>
+            <span>Upload degrees (PDF, images)...</span>
+          </label>
+          <input type="file" id="degrees" name="degrees" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'degrees-list', 'degrees')">
+        </div>
+        <div id="degrees-list" class="file-list"></div>
+      </div>
+
+      <!-- Certificates -->
+      <div style="grid-column: span 2;">
+        <label><i class="fas fa-award"></i> Certificates</label>
+        <div class="upload-field">
+          <label for="certificates" style="cursor: pointer;">
+            <i class="fas fa-file-upload"></i>
+            <span>Upload certificates (PDF, images)...</span>
+          </label>
+          <input type="file" id="certificates" name="certificates" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'certificates-list', 'certificates')">
+        </div>
+        <div id="certificates-list" class="file-list"></div>
+      </div>
+
+      <!-- Publications -->
+      <div style="grid-column: span 2;">
+        <label><i class="fas fa-book"></i> Publications</label>
+        <div class="upload-field">
+          <label for="publications" style="cursor: pointer;">
+            <i class="fas fa-file-upload"></i>
+            <span>Upload publications (PDF, documents)...</span>
+          </label>
+          <input type="file" id="publications" name="publications" multiple accept=".pdf,.doc,.docx" onchange="updateMultiFileNames(this, 'publications-list', 'publications')">
+        </div>
+        <div id="publications-list" class="file-list"></div>
+      </div>
+
+      <!-- Awards -->
+      <div style="grid-column: span 2;">
+        <label><i class="fas fa-trophy"></i> Awards</label>
+        <div class="upload-field">
+          <label for="awards" style="cursor: pointer;">
+            <i class="fas fa-file-upload"></i>
+            <span>Upload awards (PDF, images)...</span>
+          </label>
+          <input type="file" id="awards" name="awards" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'awards-list', 'awards')">
+        </div>
+        <div id="awards-list" class="file-list"></div>
+      </div>
+
+      <div style="grid-column:span 2; text-align:right;">
+        <button type="submit" class="btn-primary">
+          <i class="fas fa-upload"></i> Update Documents
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Password Tab -->
   <div class="tab-content" id="password">
-    <form class="grid">
+    <form id="passwordForm" class="grid">
       <div>
-        <label>Current Password</label>
-        <input type="password">
+        <label><i class="fas fa-lock"></i> Current Password</label>
+        <input type="password" id="current_password" name="current_password" required>
       </div>
       <div>
-        <label>New Password</label>
-        <input type="password">
+        <label><i class="fas fa-key"></i> New Password</label>
+        <input type="password" id="new_password" name="new_password" required minlength="6">
       </div>
       <div>
-        <label>Confirm New Password</label>
-        <input type="password">
+        <label><i class="fas fa-check-circle"></i> Confirm New Password</label>
+        <input type="password" id="confirm_password" name="confirm_password" required>
       </div>
       <div style="grid-column:span 2; text-align:right;">
-        <button type="submit" class="btn-primary" onclick="showToast(event)">Update Password</button>
+        <button type="submit" class="btn-primary">
+          <i class="fas fa-shield-alt"></i> Update Password
+        </button>
       </div>
     </form>
   </div>
 </div>
 
 <div class="toast" id="toast">Changes saved successfully!</div>
+
+<!-- Loading indicator -->
+<div id="loading" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 20px; border-radius: 8px; z-index: 1000;">
+  <i class="fas fa-spinner fa-spin"></i> <span id="loading-text">Loading...</span>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
-// Tabs
+let currentProfile = {};
+let documentFileNames = {
+  licenses: [],
+  degrees: [],
+  certificates: [],
+  publications: [],
+  awards: []
+};
+let documentsToDelete = {
+  licenses: [],
+  degrees: [],
+  certificates: [],
+  publications: [],
+  awards: []
+};
+
+// Tab functionality
 document.querySelectorAll('.faculty-settings .tablink').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.faculty-settings .tablink').forEach(b => b.classList.remove('active'));
@@ -76,12 +186,395 @@ document.querySelectorAll('.faculty-settings .tablink').forEach(btn => {
   });
 });
 
-// Toast
-function showToast(e){
+// Phone number input formatting and validation
+const phoneInput = document.getElementById('phone');
+
+phoneInput.addEventListener('input', function(e) {
+  let value = e.target.value;
+  
+  // Always keep +63 prefix
+  if (!value.startsWith('+63 ')) {
+    value = '+63 ';
+  }
+  
+  // Remove everything except digits after +63 
+  let digits = value.slice(4).replace(/\D/g, '');
+  
+  // Limit to 10 digits
+  if (digits.length > 10) {
+    digits = digits.slice(0, 10);
+  }
+  
+  // Update the input value
+  e.target.value = '+63 ' + digits;
+});
+
+phoneInput.addEventListener('blur', function(e) {
+  let value = e.target.value;
+  let digits = value.slice(4).replace(/\D/g, '');
+  
+  // Format as +63 900 000 0000 if valid
+  if (digits.length === 10 && digits.startsWith('9')) {
+    e.target.value = '+63 ' + digits.slice(0, 3) + ' ' + digits.slice(3, 6) + ' ' + digits.slice(6, 10);
+  } else {
+    e.target.value = '+63 ' + digits;
+  }
+});
+
+phoneInput.addEventListener('focus', function(e) {
+  // Remove spacing but keep +63 prefix when focusing
+  let digits = e.target.value.slice(4).replace(/\s/g, '');
+  e.target.value = '+63 ' + digits;
+});
+
+// Load profile data on page load
+document.addEventListener('DOMContentLoaded', loadProfileData);
+
+async function loadProfileData() {
+  try {
+    showLoading(true, 'Loading profile data...');
+    const response = await fetch('/api/faculty/profile');
+    const data = await response.json();
+    
+    if (data.success) {
+      currentProfile = data.profile;
+      populateForm();
+    } else {
+      showToast('Error loading profile data: ' + data.error, 'error');
+    }
+  } catch (error) {
+    console.error('Error loading profile:', error);
+    showToast('Failed to load profile data', 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+function populateForm() {
+  // Personal info - format phone number
+  let phone = currentProfile.phone || '+63 ';
+  
+  // Remove any existing spaces after +63
+  if (phone.startsWith('+63 ')) {
+    let digits = phone.slice(4).replace(/\s/g, '');
+    if (digits.length === 10 && digits.startsWith('9')) {
+      phone = '+63 ' + digits.slice(0, 3) + ' ' + digits.slice(3, 6) + ' ' + digits.slice(6, 10);
+    }
+  } else if (phone.startsWith('+63')) {
+    // Handle case without space after +63
+    let digits = phone.slice(3).replace(/\s/g, '');
+    if (digits.length === 10 && digits.startsWith('9')) {
+      phone = '+63 ' + digits.slice(0, 3) + ' ' + digits.slice(3, 6) + ' ' + digits.slice(6, 10);
+    }
+  }
+  
+  document.getElementById('phone').value = phone;
+  document.getElementById('bio').value = currentProfile.bio || '';
+  
+  // Profile picture
+  if (currentProfile.profilepic) {
+    const preview = document.getElementById('profilepic-preview');
+    preview.src = 'data:image/jpeg;base64,' + currentProfile.profilepic;
+    document.getElementById('current-profilepic').style.display = 'block';
+  }
+  
+  // Document lists with filenames - fixed key names
+  ['licenses', 'degrees', 'certificates', 'publications', 'awards'].forEach(docType => {
+    // Get filenames from profile data using correct key
+    const filenames = currentProfile[docType + '_filename'] || [];
+    documentFileNames[docType] = filenames;
+    displayExistingDocuments(docType, currentProfile[docType] || [], filenames);
+  });
+}
+
+function displayExistingDocuments(docType, documents, filenames) {
+  const listElement = document.getElementById(docType + '-list');
+  if (!listElement) return;
+  
+  listElement.innerHTML = '';
+  
+  documents.forEach((doc, index) => {
+    // Skip if marked for deletion
+    if (documentsToDelete[docType].includes(index)) return;
+    
+    // Use actual filename if available, otherwise generate default name
+    const filename = filenames[index] || `${docType.charAt(0).toUpperCase() + docType.slice(1)}_Document_${index + 1}`;
+    
+    const fileItem = document.createElement('div');
+    fileItem.className = 'file-item';
+    fileItem.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 8px; background: #f0f0f0; border-radius: 6px; margin-top: 8px;';
+    
+    // Determine icon based on file extension
+    const ext = filename.split('.').pop().toLowerCase();
+    let icon = 'fa-file';
+    if (['pdf'].includes(ext)) icon = 'fa-file-pdf';
+    else if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) icon = 'fa-file-image';
+    else if (['doc', 'docx'].includes(ext)) icon = 'fa-file-word';
+    
+    fileItem.innerHTML = `
+      <i class="fas ${icon}" style="color: #666;"></i>
+      <span style="flex: 1; font-size: 13px; word-break: break-all;">${filename}</span>
+      <button type="button" onclick="markDocumentForDeletion('${docType}', ${index})" 
+              style="background: none; border: none; color: #999; cursor: pointer; font-size: 18px; padding: 0; line-height: 1;">
+        ×
+      </button>
+    `;
+    listElement.appendChild(fileItem);
+  });
+}
+
+function markDocumentForDeletion(docType, index) {
+  // Add to deletion list
+  if (!documentsToDelete[docType].includes(index)) {
+    documentsToDelete[docType].push(index);
+  }
+  
+  // Re-render the document list to hide deleted items
+  const filenames = currentProfile[docType + '_filename'] || [];
+  displayExistingDocuments(docType, currentProfile[docType] || [], filenames);
+}
+
+// File upload handlers
+function updateFileName(input, labelId) {
+  const label = document.getElementById(labelId);
+  if (input.files.length > 0) {
+    label.textContent = input.files[0].name;
+  } else {
+    label.textContent = 'Choose profile picture...';
+  }
+}
+
+function updateMultiFileNames(input, listId, docType) {
+  const listElement = document.getElementById(listId);
+  
+  // Don't clear existing documents, just add new upload previews
+  if (input.files.length > 0) {
+    Array.from(input.files).forEach((file, index) => {
+      const fileItem = document.createElement('div');
+      fileItem.className = 'file-item';
+      fileItem.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 8px; background: #e8f5e8; border-radius: 6px; margin-top: 8px;';
+      
+      // Determine icon based on file extension
+      const ext = file.name.split('.').pop().toLowerCase();
+      let icon = 'fa-file';
+      if (['pdf'].includes(ext)) icon = 'fa-file-pdf';
+      else if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) icon = 'fa-file-image';
+      else if (['doc', 'docx'].includes(ext)) icon = 'fa-file-word';
+      
+      fileItem.innerHTML = `
+        <i class="fas ${icon}" style="color: #059669;"></i>
+        <span style="flex: 1; font-size: 13px; word-break: break-all;">${file.name}</span>
+        <span style="font-size: 11px; color: #666;">${(file.size / 1024).toFixed(1)} KB</span>
+      `;
+      listElement.appendChild(fileItem);
+    });
+  }
+}
+
+// Form submissions
+document.getElementById('personalForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  
+  // Get phone number - keep the +63 prefix, remove other spaces
+  let phone = document.getElementById('phone').value;
+  let digits = phone.slice(4).replace(/\s/g, '');
+  
+  // Validate phone number
+  if (phone && (!phone.startsWith('+63 ') || digits.length !== 10 || !digits.startsWith('9') || !/^\d+$/.test(digits))) {
+    showToast('Phone number must be +63 followed by 10 digits starting with 9', 'error');
+    return;
+  }
+  
+  // Send as "+63 9XXXXXXXXX" (no spaces in between)
+  const formData = {
+    phone: phone ? '+63 ' + digits : '',
+    bio: document.getElementById('bio').value
+  };
+  
+  try {
+    showLoading(true, 'Updating personal information...');
+    const response = await fetch('/api/faculty/profile/personal', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(formData)
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast('Personal information updated successfully');
+      // Reload to ensure data persistence
+      await loadProfileData();
+    } else {
+      showToast('Error: ' + data.error, 'error');
+    }
+  } catch (error) {
+    console.error('Error updating personal info:', error);
+    showToast('Failed to update personal information', 'error');
+  } finally {
+    showLoading(false);
+  }
+});
+
+document.getElementById('documentsForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  try {
+    showLoading(true, 'Processing documents...');
+    
+    // First, delete all marked documents
+    for (const docType of ['licenses', 'degrees', 'certificates', 'publications', 'awards']) {
+      if (documentsToDelete[docType].length > 0) {
+        // Sort indices in descending order to delete from highest to lowest
+        // This prevents index shifting issues
+        const sortedIndices = documentsToDelete[docType].sort((a, b) => b - a);
+        
+        for (const index of sortedIndices) {
+          const response = await fetch(`/api/faculty/profile/document/${docType}/${index}`, {
+            method: 'DELETE'
+          });
+          const data = await response.json();
+          
+          if (!data.success) {
+            throw new Error(`Failed to delete ${docType} document: ${data.error}`);
+          }
+        }
+      }
+    }
+    
+    // Then, upload new documents
+    const formData = new FormData(e.target);
+    
+    // Add filenames as metadata
+    ['licenses', 'degrees', 'certificates', 'publications', 'awards'].forEach(docType => {
+      const files = document.getElementById(docType).files;
+      if (files.length > 0) {
+        const filenames = Array.from(files).map(f => f.name);
+        formData.append(docType + '_filenames', JSON.stringify(filenames));
+      }
+    });
+    
+    const response = await fetch('/api/faculty/profile/documents', {
+      method: 'POST',
+      body: formData
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast('Documents updated successfully');
+      
+      // Clear the deletion tracking
+      documentsToDelete = {
+        licenses: [],
+        degrees: [],
+        certificates: [],
+        publications: [],
+        awards: []
+      };
+      
+      // Reload to show updated documents
+      await loadProfileData();
+      
+      // Clear file inputs
+      ['profilepic', 'licenses', 'degrees', 'certificates', 'publications', 'awards'].forEach(id => {
+        const input = document.getElementById(id);
+        if (input) {
+          input.value = '';
+          // Clear the preview lists for new uploads
+          const listId = id + '-list';
+          const list = document.getElementById(listId);
+          if (list) {
+            // Keep existing documents, clear only new upload previews
+            const newUploads = list.querySelectorAll('.file-item[style*="e8f5e8"]');
+            newUploads.forEach(item => item.remove());
+          }
+        }
+      });
+      // Reset profile picture label
+      document.getElementById('profilepic-label').textContent = 'Choose profile picture...';
+    } else {
+      showToast('Error: ' + data.error, 'error');
+    }
+  } catch (error) {
+    console.error('Error updating documents:', error);
+    showToast('Failed to update documents: ' + error.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+});
+
+document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  const currentPassword = document.getElementById('current_password').value;
+  const newPassword = document.getElementById('new_password').value;
+  const confirmPassword = document.getElementById('confirm_password').value;
+  
+  if (newPassword !== confirmPassword) {
+    showToast('New passwords do not match', 'error');
+    return;
+  }
+  
+  if (newPassword.length < 6) {
+    showToast('Password must be at least 6 characters long', 'error');
+    return;
+  }
+  
+  const formData = {
+    current_password: currentPassword,
+    new_password: newPassword,
+    confirm_password: confirmPassword
+  };
+  
+  try {
+    showLoading(true, 'Updating password...');
+    const response = await fetch('/api/faculty/profile/password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(formData)
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast('Password updated successfully');
+      document.getElementById('passwordForm').reset();
+    } else {
+      showToast('Error: ' + data.error, 'error');
+    }
+  } catch (error) {
+    console.error('Error updating password:', error);
+    showToast('Failed to update password', 'error');
+  } finally {
+    showLoading(false);
+  }
+});
+
+// Utility functions
+function showToast(message, type = 'success') {
   const toast = document.getElementById('toast');
-  toast.style.display='block';
-  setTimeout(()=>{toast.style.display='none';}, 2500);
+  toast.textContent = message;
+  toast.style.background = type === 'error' ? '#ef4444' : '#10b981';
+  toast.style.display = 'block';
+  setTimeout(() => {
+    toast.style.display = 'none';
+  }, 3000);
+}
+
+function showLoading(show, text = 'Loading...') {
+  const loading = document.getElementById('loading');
+  const loadingText = document.getElementById('loading-text');
+  if (show) {
+    loadingText.textContent = text;
+    loading.style.display = 'block';
+  } else {
+    loading.style.display = 'none';
+  }
 }
 </script>
 {% endblock %}

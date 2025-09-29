@@ -44,7 +44,6 @@ def get_personnel_info(user_id):
                 p.honorifics,
                 c.collegename,
                 p.employee_no,
-                p.employmentstatus,
                 r.rolename
             FROM personnel p
             LEFT JOIN college c ON p.college_id = c.college_id
@@ -57,7 +56,7 @@ def get_personnel_info(user_id):
         conn.close()
         
         if result:
-            firstname, lastname, honorifics, collegename, employee_no, employment_status, rolename = result
+            firstname, lastname, honorifics, collegename, employee_no, rolename = result
             
             # Format the full name with honorifics at the end
             if honorifics:
@@ -72,7 +71,6 @@ def get_personnel_info(user_id):
                 'vp_name': full_name,       # For VP templates
                 'college': collegename or 'College of Computer Studies',
                 'employee_no': employee_no,
-                'employment_status': employment_status,
                 'firstname': firstname,
                 'lastname': lastname,
                 'honorifics': honorifics,
@@ -89,7 +87,6 @@ def get_personnel_info(user_id):
         'vp_name': 'VP Admin',
         'college': 'College of Computer Studies',
         'employee_no': None,
-        'employment_status': 'Active',
         'firstname': 'Staff',
         'lastname': 'Member',
         'honorifics': None,
@@ -999,6 +996,409 @@ def get_teaching_load(cursor, personnel_id, acadcalendar_id):
     except Exception as e:
         print(f"Error getting teaching load: {e}")
         return 0
+
+# REPLACE the existing faculty profile API routes in your app.py with these updated versions
+# Using your exact column names: licensesnames, degreesnames, etc.
+
+@app.route('/api/faculty/profile')
+@require_auth([20001, 20002])
+def api_get_faculty_profile():
+    """API endpoint to get faculty profile data"""
+    try:
+        user_id = session['user_id']
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get personnel_id for the current user
+        cursor.execute("SELECT personnel_id, phone FROM personnel WHERE user_id = %s", (user_id,))
+        personnel_result = cursor.fetchone()
+        
+        if not personnel_result:
+            cursor.close()
+            conn.close()
+            return {'success': False, 'error': 'Personnel record not found'}
+        
+        personnel_id, phone = personnel_result
+        
+        # Get profile data including filenames
+        cursor.execute("""
+            SELECT bio, profilepic, 
+                   licenses, degrees, certificates, publications, awards,
+                   licensesname, degreesname, certificatesname, 
+                   publicationsname, awardsname
+            FROM profile 
+            WHERE personnel_id = %s
+        """, (personnel_id,))
+        
+        profile_result = cursor.fetchone()
+        
+        if profile_result:
+            (bio, profilepic, licenses, degrees, certificates, publications, awards,
+             licenses_fn, degrees_fn, certificates_fn, publications_fn, awards_fn) = profile_result
+        else:
+            # Create empty profile if doesn't exist
+            cursor.execute("""
+                INSERT INTO profile (
+                    personnel_id, bio, profilepic, 
+                    licenses, degrees, certificates, publications, awards,
+                    licensesname, degreesname, certificatesname,
+                    publicationsname, awardsname
+                )
+                VALUES (%s, '', NULL, 
+                        ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[],
+                        ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[])
+                RETURNING bio, profilepic, 
+                          licenses, degrees, certificates, publications, awards,
+                          licensesname, degreesname, certificatesname,
+                          publicationsname, awardsname
+            """, (personnel_id,))
+            conn.commit()
+            (bio, profilepic, licenses, degrees, certificates, publications, awards,
+             licenses_fn, degrees_fn, certificates_fn, publications_fn, awards_fn) = cursor.fetchone()
+        
+        # Convert bytea to base64 for frontend
+        import base64
+        profile_data = {
+            'phone': str(phone) if phone else '',
+            'bio': bio or '',
+            'profilepic': None,
+            'licenses': [],
+            'degrees': [],
+            'certificates': [],
+            'publications': [],
+            'awards': [],
+            'licenses_filename': licenses_fn or [],
+            'degrees_filename': degrees_fn or [],
+            'certificates_filename': certificates_fn or [],
+            'publications_filename': publications_fn or [],
+            'awards_filename': awards_fn or []
+        }
+        
+        # Convert profile picture to base64
+        if profilepic:
+            profile_data['profilepic'] = base64.b64encode(bytes(profilepic)).decode('utf-8')
+        
+        # Convert document arrays to base64
+        for doc_type in ['licenses', 'degrees', 'certificates', 'publications', 'awards']:
+            doc_array = locals()[doc_type]
+            if doc_array and len(doc_array) > 0:
+                profile_data[doc_type] = [base64.b64encode(bytes(doc)).decode('utf-8') for doc in doc_array]
+        
+        cursor.close()
+        conn.close()
+        
+        return {'success': True, 'profile': profile_data}
+        
+    except Exception as e:
+        print(f"Error fetching profile data: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/faculty/profile/personal', methods=['POST'])
+@require_auth([20001, 20002])
+def api_update_personal_info():
+    """API endpoint to update personal information"""
+    try:
+        user_id = session['user_id']
+        data = request.get_json()
+        
+        phone_str = data.get('phone', '').strip()
+        bio = data.get('bio', '').strip()
+        
+        # Convert phone to integer (extract digits only)
+        phone = None
+        if phone_str:
+            phone_digits = ''.join(filter(str.isdigit, phone_str))
+            if phone_digits:
+                phone = int(phone_digits)
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get personnel_id
+        cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
+        personnel_result = cursor.fetchone()
+        
+        if not personnel_result:
+            cursor.close()
+            conn.close()
+            return {'success': False, 'error': 'Personnel record not found'}
+        
+        personnel_id = personnel_result[0]
+        
+        # Update phone in personnel table
+        cursor.execute("""
+            UPDATE personnel SET phone = %s WHERE personnel_id = %s
+        """, (phone, personnel_id))
+        
+        # Check if profile exists
+        cursor.execute("SELECT profile_id FROM profile WHERE personnel_id = %s", (personnel_id,))
+        profile_exists = cursor.fetchone()
+        
+        if profile_exists:
+            # Update existing profile
+            cursor.execute("""
+                UPDATE profile SET bio = %s WHERE personnel_id = %s
+            """, (bio, personnel_id))
+        else:
+            # Insert new profile
+            cursor.execute("""
+                INSERT INTO profile (
+                    personnel_id, bio, profilepic, 
+                    licenses, degrees, certificates, publications, awards,
+                    licensesname, degreesname, certificatesname,
+                    publicationsname, awardsname
+                )
+                VALUES (%s, %s, NULL, 
+                        ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[],
+                        ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[])
+            """, (personnel_id, bio))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        print(f"Personal info updated for personnel_id: {personnel_id}")
+        return {'success': True, 'message': 'Personal information updated successfully'}
+        
+    except Exception as e:
+        print(f"Error updating personal info: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/faculty/profile/documents', methods=['POST'])
+@require_auth([20001, 20002])
+def api_update_documents():
+    """API endpoint to update document uploads"""
+    try:
+        user_id = session['user_id']
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get personnel_id
+        cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
+        personnel_result = cursor.fetchone()
+        
+        if not personnel_result:
+            cursor.close()
+            conn.close()
+            return {'success': False, 'error': 'Personnel record not found'}
+        
+        personnel_id = personnel_result[0]
+        
+        # Ensure profile exists
+        cursor.execute("SELECT profile_id FROM profile WHERE personnel_id = %s", (personnel_id,))
+        profile_exists = cursor.fetchone()
+        
+        if not profile_exists:
+            cursor.execute("""
+                INSERT INTO profile (
+                    personnel_id, bio, profilepic, 
+                    licenses, degrees, certificates, publications, awards,
+                    licensesname, degreesname, certificatesname,
+                    publicationsname, awardsname
+                )
+                VALUES (%s, '', NULL, 
+                        ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[],
+                        ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[])
+            """, (personnel_id,))
+            conn.commit()
+        
+        # Handle profile picture upload
+        if 'profilepic' in request.files:
+            file = request.files['profilepic']
+            if file and file.filename:
+                profilepic_data = file.read()
+                cursor.execute("""
+                    UPDATE profile SET profilepic = %s WHERE personnel_id = %s
+                """, (profilepic_data, personnel_id))
+                conn.commit()
+                print(f"Profile picture updated: {len(profilepic_data)} bytes, filename: {file.filename}")
+        
+        # Mapping for database column names
+        column_mapping = {
+            'licenses': 'licensesname',
+            'degrees': 'degreesname',
+            'certificates': 'certificatesname',
+            'publications': 'publicationsname',
+            'awards': 'awardsname'
+        }
+        
+        # Handle document arrays with filenames stored in database
+        for doc_type in ['licenses', 'degrees', 'certificates', 'publications', 'awards']:
+            files = request.files.getlist(doc_type)
+            
+            if files and any(f.filename for f in files):
+                # Read all files and their names
+                doc_array = []
+                filenames = []
+                
+                for f in files:
+                    if f.filename:
+                        doc_array.append(f.read())
+                        filenames.append(f.filename)
+                
+                if doc_array:
+                    # Get the correct column name for filenames
+                    filename_col = column_mapping[doc_type]
+                    
+                    # Update database with documents AND filenames
+                    cursor.execute(f"""
+                        UPDATE profile 
+                        SET {doc_type} = %s, {filename_col} = %s 
+                        WHERE personnel_id = %s
+                    """, (doc_array, filenames, personnel_id))
+                    conn.commit()
+                    
+                    print(f"Updated {doc_type}: {len(doc_array)} documents")
+                    print(f"Filenames stored in {filename_col}: {filenames}")
+        
+        cursor.close()
+        conn.close()
+        
+        return {'success': True, 'message': 'Documents updated successfully'}
+        
+    except Exception as e:
+        print(f"Error updating documents: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/faculty/profile/password', methods=['POST'])
+@require_auth([20001, 20002])
+def api_update_password():
+    """API endpoint to update password"""
+    try:
+        user_id = session['user_id']
+        data = request.get_json()
+        
+        current_password = data.get('current_password', '')
+        new_password = data.get('new_password', '')
+        confirm_password = data.get('confirm_password', '')
+        
+        # Validate passwords
+        if not current_password or not new_password or not confirm_password:
+            return {'success': False, 'error': 'All password fields are required'}
+        
+        if new_password != confirm_password:
+            return {'success': False, 'error': 'New passwords do not match'}
+        
+        if len(new_password) < 6:
+            return {'success': False, 'error': 'Password must be at least 6 characters long'}
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Verify current password
+        cursor.execute("SELECT password FROM users WHERE user_id = %s", (user_id,))
+        current_pass_result = cursor.fetchone()
+        
+        if not current_pass_result or current_pass_result[0] != current_password:
+            cursor.close()
+            conn.close()
+            return {'success': False, 'error': 'Current password is incorrect'}
+        
+        # Update password
+        cursor.execute("""
+            UPDATE users SET password = %s WHERE user_id = %s
+        """, (new_password, user_id))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        print(f"Password updated for user_id: {user_id}")
+        return {'success': True, 'message': 'Password updated successfully'}
+        
+    except Exception as e:
+        print(f"Error updating password: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/faculty/profile/document/<doc_type>/<int:index>', methods=['DELETE'])
+@require_auth([20001, 20002])
+def api_delete_document(doc_type, index):
+    """API endpoint to delete a specific document from an array"""
+    try:
+        user_id = session['user_id']
+        
+        if doc_type not in ['licenses', 'degrees', 'certificates', 'publications', 'awards']:
+            return {'success': False, 'error': 'Invalid document type'}
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get personnel_id
+        cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
+        personnel_result = cursor.fetchone()
+        
+        if not personnel_result:
+            cursor.close()
+            conn.close()
+            return {'success': False, 'error': 'Personnel record not found'}
+        
+        personnel_id = personnel_result[0]
+        
+        # Mapping for database column names
+        column_mapping = {
+            'licenses': 'licensesname',
+            'degrees': 'degreesname',
+            'certificates': 'certificatesname',
+            'publications': 'publicationsname',
+            'awards': 'awardsname'
+        }
+        
+        filename_col = column_mapping[doc_type]
+        
+        # Get current document array AND filenames
+        cursor.execute(f"""
+            SELECT {doc_type}, {filename_col} 
+            FROM profile 
+            WHERE personnel_id = %s
+        """, (personnel_id,))
+        doc_result = cursor.fetchone()
+        
+        if not doc_result or not doc_result[0] or len(doc_result[0]) == 0:
+            cursor.close()
+            conn.close()
+            return {'success': False, 'error': 'No documents found'}
+        
+        doc_array = list(doc_result[0])
+        filenames = list(doc_result[1]) if doc_result[1] else []
+        
+        if index < 0 or index >= len(doc_array):
+            cursor.close()
+            conn.close()
+            return {'success': False, 'error': 'Invalid document index'}
+        
+        # Remove document and filename at index
+        deleted_filename = filenames[index] if index < len(filenames) else f"Document_{index+1}"
+        doc_array.pop(index)
+        if index < len(filenames):
+            filenames.pop(index)
+        
+        # Update database
+        cursor.execute(f"""
+            UPDATE profile 
+            SET {doc_type} = %s, {filename_col} = %s 
+            WHERE personnel_id = %s
+        """, (doc_array, filenames, personnel_id))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        print(f"Deleted {doc_type} document '{deleted_filename}' at index {index}")
+        return {'success': True, 'message': 'Document deleted successfully'}
+        
+    except Exception as e:
+        print(f"Error deleting document: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
 
 # Login route
 @app.route('/', methods=['GET', 'POST'])
