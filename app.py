@@ -1106,12 +1106,25 @@ def api_update_personal_info():
         phone_str = data.get('phone', '').strip()
         bio = data.get('bio', '').strip()
         
-        # Convert phone to integer (extract digits only)
+        # Store phone as string in format: +63 9XXXXXXXXX (no spaces between digits)
         phone = None
-        if phone_str:
-            phone_digits = ''.join(filter(str.isdigit, phone_str))
-            if phone_digits:
-                phone = int(phone_digits)
+        if phone_str and phone_str != '+63 ' and phone_str != '+63':
+            # Remove all spaces from input
+            phone_clean = phone_str.replace(' ', '')
+            
+            # Check if it starts with +63
+            if phone_clean.startswith('+63'):
+                # Extract digits after +63
+                phone_digits = phone_clean[3:]
+                
+                # Validate: must be 10 digits starting with 9
+                if len(phone_digits) == 10 and phone_digits[0] == '9' and phone_digits.isdigit():
+                    # Store as: +63 9XXXXXXXXX (space after +63, no spaces between digits)
+                    phone = '+63 ' + phone_digits
+                else:
+                    return {'success': False, 'error': 'Phone number must be +63 followed by 10 digits starting with 9'}
+            else:
+                return {'success': False, 'error': 'Phone number must start with +63'}
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -1127,7 +1140,7 @@ def api_update_personal_info():
         
         personnel_id = personnel_result[0]
         
-        # Update phone in personnel table
+        # Update phone in personnel table (as string)
         cursor.execute("""
             UPDATE personnel SET phone = %s WHERE personnel_id = %s
         """, (phone, personnel_id))
@@ -1159,7 +1172,7 @@ def api_update_personal_info():
         cursor.close()
         conn.close()
         
-        print(f"Personal info updated for personnel_id: {personnel_id}")
+        print(f"Personal info updated for personnel_id: {personnel_id}, phone: {phone}")
         return {'success': True, 'message': 'Personal information updated successfully'}
         
     except Exception as e:
@@ -1299,6 +1312,12 @@ def api_update_password():
             cursor.close()
             conn.close()
             return {'success': False, 'error': 'Current password is incorrect'}
+        
+        # Check if new password is same as current password
+        if current_password == new_password:
+            cursor.close()
+            conn.close()
+            return {'success': False, 'error': 'New password cannot be the same as current password'}
         
         # Update password
         cursor.execute("""

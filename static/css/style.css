@@ -1996,3 +1996,61 @@ to { opacity: 1; }
   gap: 1rem;
   margin-bottom: 1rem;
 }
+/* Password Section Styles */
+.password-field-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-field-wrapper input {
+  width: 100%;
+  padding: 12px 45px 12px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.3s;
+}
+
+.password-field-wrapper input:focus {
+  outline: none;
+  border-color: #8b1538;
+}
+
+.password-field-wrapper .toggle-password {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-top: -5px; 
+  cursor: pointer;
+  color: #666;
+  font-size: 16px;
+  transition: color 0.3s;
+  z-index: 1;
+}
+
+.password-field-wrapper .toggle-password:hover {
+  color: #8b1538;
+}
+
+/* Password validation messages */
+.password-error {
+  display: none;
+  color: #ef4444;
+  font-size: 13px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #fef2f2;
+  border-radius: 6px;
+  border-left: 3px solid #ef4444;
+  line-height: 1.5;
+}
+
+.password-error i {
+  margin-right: 6px;
+}
+
+.password-error.show {
+  display: block;
+}

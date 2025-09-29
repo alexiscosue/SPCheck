@@ -18,8 +18,8 @@
     <form id="personalForm" class="grid">
       <div style="grid-column: span 2;">
         <label><i class="fas fa-phone"></i> Contact Number</label>
-        <input type="text" id="phone" name="phone" placeholder="e.g., +63 9123456789" maxlength="14" pattern="\+63 9[0-9]{9}">
-        <small style="display: block; margin-top: 5px; color: #666;">Format: +63 9XX XXX XXXX (10 digits starting with 9)</small>
+        <input type="text" id="phone" name="phone" placeholder="e.g., +63 9123456789" maxlength="14">
+        <small style="display: block; margin-top: 5px; color: #666;">Format: +63 9XXXXXXXXX (10 digits starting with 9)</small>
       </div>
       <div style="grid-column: span 2;">
         <label><i class="fas fa-user"></i> Bio</label>
@@ -129,18 +129,44 @@
   <!-- Password Tab -->
   <div class="tab-content" id="password">
     <form id="passwordForm" class="grid">
-      <div>
+      <!-- First Row: Current Password (full width) -->
+      <div style="grid-column: span 2;">
         <label><i class="fas fa-lock"></i> Current Password</label>
-        <input type="password" id="current_password" name="current_password" required>
+        <div class="password-field-wrapper">
+          <input type="password" id="current_password" name="current_password" required>
+          <i class="fas fa-eye-slash toggle-password" onclick="togglePasswordVisibility('current_password')"></i>
+        </div>
       </div>
+      
+      <!-- Second Row: New Password Fields (two columns) -->
       <div>
         <label><i class="fas fa-key"></i> New Password</label>
-        <input type="password" id="new_password" name="new_password" required minlength="6">
+        <div class="password-field-wrapper">
+          <input type="password" id="new_password" name="new_password" required minlength="6">
+          <i class="fas fa-eye-slash toggle-password" onclick="togglePasswordVisibility('new_password')"></i>
+        </div>
       </div>
       <div>
         <label><i class="fas fa-check-circle"></i> Confirm New Password</label>
-        <input type="password" id="confirm_password" name="confirm_password" required>
+        <div class="password-field-wrapper">
+          <input type="password" id="confirm_password" name="confirm_password" required>
+          <i class="fas fa-eye-slash toggle-password" onclick="togglePasswordVisibility('confirm_password')"></i>
+        </div>
       </div>
+      
+      <!-- Validation Messages -->
+      <div style="grid-column: span 2;">
+        <div id="password-error-current" class="password-error">
+          <i class="fas fa-exclamation-circle"></i> Invalid current password. Please enter your correct current password.
+        </div>
+        <div id="password-error-match" class="password-error">
+          <i class="fas fa-exclamation-circle"></i> New passwords do not match. Please ensure both fields are identical.
+        </div>
+        <div id="password-error-same" class="password-error">
+          <i class="fas fa-exclamation-circle"></i> New password cannot be the same as your current password.
+        </div>
+      </div>
+      
       <div style="grid-column:span 2; text-align:right;">
         <button type="submit" class="btn-primary">
           <i class="fas fa-shield-alt"></i> Update Password
@@ -186,7 +212,7 @@ document.querySelectorAll('.faculty-settings .tablink').forEach(btn => {
   });
 });
 
-// Phone number input formatting and validation
+// Phone number input formatting - simple version without extra spacing
 const phoneInput = document.getElementById('phone');
 
 phoneInput.addEventListener('input', function(e) {
@@ -205,26 +231,75 @@ phoneInput.addEventListener('input', function(e) {
     digits = digits.slice(0, 10);
   }
   
-  // Update the input value
+  // Update the input value - NO FORMATTING, just +63 followed by digits
   e.target.value = '+63 ' + digits;
 });
 
-phoneInput.addEventListener('blur', function(e) {
-  let value = e.target.value;
-  let digits = value.slice(4).replace(/\D/g, '');
+// Toggle password visibility
+function togglePasswordVisibility(inputId) {
+  const input = document.getElementById(inputId);
+  const icon = input.parentElement.querySelector('.toggle-password');
   
-  // Format as +63 900 000 0000 if valid
-  if (digits.length === 10 && digits.startsWith('9')) {
-    e.target.value = '+63 ' + digits.slice(0, 3) + ' ' + digits.slice(3, 6) + ' ' + digits.slice(6, 10);
+  if (input.type === 'password') {
+    input.type = 'text';
+    icon.classList.remove('fa-eye-slash');
+    icon.classList.add('fa-eye');
   } else {
-    e.target.value = '+63 ' + digits;
+    input.type = 'password';
+    icon.classList.remove('fa-eye');
+    icon.classList.add('fa-eye-slash');
+  }
+}
+
+// Hide all password error messages
+function hidePasswordErrors() {
+  document.querySelectorAll('.password-error').forEach(el => {
+    el.classList.remove('show');
+  });
+}
+
+// Show specific password error
+function showPasswordError(errorType) {
+  hidePasswordErrors();
+  const errorEl = document.getElementById('password-error-' + errorType);
+  if (errorEl) {
+    errorEl.classList.add('show');
+  }
+}
+
+// Real-time validation for password fields
+document.getElementById('new_password').addEventListener('input', function() {
+  hidePasswordErrors();
+  
+  const currentPassword = document.getElementById('current_password').value;
+  const newPassword = this.value;
+  const confirmPassword = document.getElementById('confirm_password').value;
+  
+  // Check if new password is same as current
+  if (newPassword && currentPassword && newPassword === currentPassword) {
+    showPasswordError('same');
+  }
+  
+  // Check if passwords match (only if confirm field has content)
+  if (confirmPassword && newPassword !== confirmPassword) {
+    showPasswordError('match');
   }
 });
 
-phoneInput.addEventListener('focus', function(e) {
-  // Remove spacing but keep +63 prefix when focusing
-  let digits = e.target.value.slice(4).replace(/\s/g, '');
-  e.target.value = '+63 ' + digits;
+document.getElementById('confirm_password').addEventListener('input', function() {
+  hidePasswordErrors();
+  
+  const newPassword = document.getElementById('new_password').value;
+  const confirmPassword = this.value;
+  
+  // Check if passwords match
+  if (confirmPassword && newPassword !== confirmPassword) {
+    showPasswordError('match');
+  }
+});
+
+document.getElementById('current_password').addEventListener('input', function() {
+  hidePasswordErrors();
 });
 
 // Load profile data on page load
@@ -251,23 +326,8 @@ async function loadProfileData() {
 }
 
 function populateForm() {
-  // Personal info - format phone number
+  // Personal info - NO FORMATTING, just display as stored
   let phone = currentProfile.phone || '+63 ';
-  
-  // Remove any existing spaces after +63
-  if (phone.startsWith('+63 ')) {
-    let digits = phone.slice(4).replace(/\s/g, '');
-    if (digits.length === 10 && digits.startsWith('9')) {
-      phone = '+63 ' + digits.slice(0, 3) + ' ' + digits.slice(3, 6) + ' ' + digits.slice(6, 10);
-    }
-  } else if (phone.startsWith('+63')) {
-    // Handle case without space after +63
-    let digits = phone.slice(3).replace(/\s/g, '');
-    if (digits.length === 10 && digits.startsWith('9')) {
-      phone = '+63 ' + digits.slice(0, 3) + ' ' + digits.slice(3, 6) + ' ' + digits.slice(6, 10);
-    }
-  }
-  
   document.getElementById('phone').value = phone;
   document.getElementById('bio').value = currentProfile.bio || '';
   
@@ -278,9 +338,8 @@ function populateForm() {
     document.getElementById('current-profilepic').style.display = 'block';
   }
   
-  // Document lists with filenames - fixed key names
+  // Document lists with filenames
   ['licenses', 'degrees', 'certificates', 'publications', 'awards'].forEach(docType => {
-    // Get filenames from profile data using correct key
     const filenames = currentProfile[docType + '_filename'] || [];
     documentFileNames[docType] = filenames;
     displayExistingDocuments(docType, currentProfile[docType] || [], filenames);
@@ -372,22 +431,24 @@ function updateMultiFileNames(input, listId, docType) {
 }
 
 // Form submissions
+// Personal Info Form
 document.getElementById('personalForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   
-  // Get phone number - keep the +63 prefix, remove other spaces
-  let phone = document.getElementById('phone').value;
-  let digits = phone.slice(4).replace(/\s/g, '');
+  // Get phone number - keep as is, no formatting
+  let phone = document.getElementById('phone').value.trim();
   
-  // Validate phone number
-  if (phone && (!phone.startsWith('+63 ') || digits.length !== 10 || !digits.startsWith('9') || !/^\d+$/.test(digits))) {
-    showToast('Phone number must be +63 followed by 10 digits starting with 9', 'error');
-    return;
+  // Basic validation - must be +63 followed by space and 10 digits starting with 9
+  if (phone && phone !== '+63 ') {
+    let digits = phone.slice(4).replace(/\s/g, '');
+    if (!phone.startsWith('+63 ') || digits.length !== 10 || !digits.startsWith('9') || !/^\d+$/.test(digits)) {
+      showToast('Phone number must be +63 followed by 10 digits starting with 9', 'error');
+      return;
+    }
   }
   
-  // Send as "+63 9XXXXXXXXX" (no spaces in between)
   const formData = {
-    phone: phone ? '+63 ' + digits : '',
+    phone: phone,
     bio: document.getElementById('bio').value
   };
   
@@ -404,20 +465,23 @@ document.getElementById('personalForm').addEventListener('submit', async (e) => 
     const data = await response.json();
     
     if (data.success) {
-      showToast('Personal information updated successfully');
+      showLoading(true, 'Personal information updated successfully');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      showLoading(false);
       // Reload to ensure data persistence
       await loadProfileData();
     } else {
+      showLoading(false);
       showToast('Error: ' + data.error, 'error');
     }
   } catch (error) {
+    showLoading(false);
     console.error('Error updating personal info:', error);
     showToast('Failed to update personal information', 'error');
-  } finally {
-    showLoading(false);
   }
 });
 
+// Documents Form
 document.getElementById('documentsForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   
@@ -428,7 +492,6 @@ document.getElementById('documentsForm').addEventListener('submit', async (e) =>
     for (const docType of ['licenses', 'degrees', 'certificates', 'publications', 'awards']) {
       if (documentsToDelete[docType].length > 0) {
         // Sort indices in descending order to delete from highest to lowest
-        // This prevents index shifting issues
         const sortedIndices = documentsToDelete[docType].sort((a, b) => b - a);
         
         for (const index of sortedIndices) {
@@ -464,7 +527,9 @@ document.getElementById('documentsForm').addEventListener('submit', async (e) =>
     const data = await response.json();
     
     if (data.success) {
-      showToast('Documents updated successfully');
+      showLoading(true, 'Documents updated successfully');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      showLoading(false);
       
       // Clear the deletion tracking
       documentsToDelete = {
@@ -496,25 +561,35 @@ document.getElementById('documentsForm').addEventListener('submit', async (e) =>
       // Reset profile picture label
       document.getElementById('profilepic-label').textContent = 'Choose profile picture...';
     } else {
+      showLoading(false);
       showToast('Error: ' + data.error, 'error');
     }
   } catch (error) {
+    showLoading(false);
     console.error('Error updating documents:', error);
     showToast('Failed to update documents: ' + error.message, 'error');
-  } finally {
-    showLoading(false);
   }
 });
 
+// Password Form
 document.getElementById('passwordForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  
+  // Hide all errors first
+  hidePasswordErrors();
   
   const currentPassword = document.getElementById('current_password').value;
   const newPassword = document.getElementById('new_password').value;
   const confirmPassword = document.getElementById('confirm_password').value;
   
+  // Client-side validation
   if (newPassword !== confirmPassword) {
-    showToast('New passwords do not match', 'error');
+    showPasswordError('match');
+    return;
+  }
+  
+  if (newPassword === currentPassword) {
+    showPasswordError('same');
     return;
   }
   
@@ -542,16 +617,28 @@ document.getElementById('passwordForm').addEventListener('submit', async (e) => 
     const data = await response.json();
     
     if (data.success) {
-      showToast('Password updated successfully');
+      showLoading(true, 'Password changed successfully');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      showLoading(false);
       document.getElementById('passwordForm').reset();
+      hidePasswordErrors();
     } else {
-      showToast('Error: ' + data.error, 'error');
+      showLoading(false);
+      // Handle server-side errors
+      if (data.error.toLowerCase().includes('current password is incorrect')) {
+        showPasswordError('current');
+      } else if (data.error.toLowerCase().includes('do not match')) {
+        showPasswordError('match');
+      } else if (data.error.toLowerCase().includes('cannot be the same')) {
+        showPasswordError('same');
+      } else {
+        showToast('Error: ' + data.error, 'error');
+      }
     }
   } catch (error) {
+    showLoading(false);
     console.error('Error updating password:', error);
     showToast('Failed to update password', 'error');
-  } finally {
-    showLoading(false);
   }
 });
 
