@@ -31,12 +31,12 @@ ROLE_REDIRECTS = {
 
 # Helper function to get personnel info (works for all roles)
 def get_personnel_info(user_id):
-    """Get personnel information from personnel and college tables"""
+    """Get personnel information from personnel, college, profile, and users tables"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Join personnel and college tables to get complete personnel info
+        # Join personnel, college, profile, and users tables to get complete personnel info
         cursor.execute("""
             SELECT 
                 p.firstname,
@@ -44,10 +44,15 @@ def get_personnel_info(user_id):
                 p.honorifics,
                 c.collegename,
                 p.employee_no,
-                r.rolename
+                r.rolename,
+                u.email,
+                pr.position,
+                pr.employmentstatus
             FROM personnel p
             LEFT JOIN college c ON p.college_id = c.college_id
             LEFT JOIN roles r ON p.role_id = r.role_id
+            LEFT JOIN users u ON p.user_id = u.user_id
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
             WHERE p.user_id = %s
         """, (user_id,))
         
@@ -56,7 +61,7 @@ def get_personnel_info(user_id):
         conn.close()
         
         if result:
-            firstname, lastname, honorifics, collegename, employee_no, rolename = result
+            firstname, lastname, honorifics, collegename, employee_no, rolename, email, position, employmentstatus = result
             
             # Format the full name with honorifics at the end
             if honorifics:
@@ -74,7 +79,10 @@ def get_personnel_info(user_id):
                 'firstname': firstname,
                 'lastname': lastname,
                 'honorifics': honorifics,
-                'role_name': rolename or 'Staff'
+                'role_name': rolename or 'Staff',
+                'email': email or 'email@spc.edu.ph',
+                'position': position or 'Faculty Member',
+                'employment_status': employmentstatus or 'Active'
             }
     except Exception as e:
         print(f"Error getting personnel info: {e}")
@@ -90,7 +98,10 @@ def get_personnel_info(user_id):
         'firstname': 'Staff',
         'lastname': 'Member',
         'honorifics': None,
-        'role_name': 'Staff'
+        'role_name': 'Staff',
+        'email': 'email@spc.edu.ph',
+        'position': 'Faculty Member',
+        'employment_status': 'Active'
     }
 
 # Backward compatibility - keep the old function name
@@ -1184,7 +1195,7 @@ def api_update_personal_info():
 @app.route('/api/faculty/profile/documents', methods=['POST'])
 @require_auth([20001, 20002])
 def api_update_documents():
-    """API endpoint to update document uploads"""
+    """API endpoint to update document uploads - APPENDS new files to existing ones"""
     try:
         user_id = session['user_id']
         conn = get_db_connection()
@@ -1219,7 +1230,7 @@ def api_update_documents():
             """, (personnel_id,))
             conn.commit()
         
-        # Handle profile picture upload
+        # Handle profile picture upload (this replaces the old one)
         if 'profilepic' in request.files:
             file = request.files['profilepic']
             if file and file.filename:
@@ -1239,34 +1250,48 @@ def api_update_documents():
             'awards': 'awardsname'
         }
         
-        # Handle document arrays with filenames stored in database
+        # Handle document arrays - APPEND new files to existing ones
         for doc_type in ['licenses', 'degrees', 'certificates', 'publications', 'awards']:
             files = request.files.getlist(doc_type)
             
             if files and any(f.filename for f in files):
-                # Read all files and their names
-                doc_array = []
-                filenames = []
+                # Get existing documents and filenames first
+                filename_col = column_mapping[doc_type]
+                cursor.execute(f"""
+                    SELECT {doc_type}, {filename_col}
+                    FROM profile 
+                    WHERE personnel_id = %s
+                """, (personnel_id,))
+                existing_result = cursor.fetchone()
+                
+                # Start with existing documents
+                existing_docs = list(existing_result[0]) if existing_result and existing_result[0] else []
+                existing_filenames = list(existing_result[1]) if existing_result and existing_result[1] else []
+                
+                # Read new files and append to existing
+                new_docs = []
+                new_filenames = []
                 
                 for f in files:
                     if f.filename:
-                        doc_array.append(f.read())
-                        filenames.append(f.filename)
+                        new_docs.append(f.read())
+                        new_filenames.append(f.filename)
                 
-                if doc_array:
-                    # Get the correct column name for filenames
-                    filename_col = column_mapping[doc_type]
+                if new_docs:
+                    # Combine existing and new
+                    combined_docs = existing_docs + new_docs
+                    combined_filenames = existing_filenames + new_filenames
                     
-                    # Update database with documents AND filenames
+                    # Update database with combined arrays
                     cursor.execute(f"""
                         UPDATE profile 
                         SET {doc_type} = %s, {filename_col} = %s 
                         WHERE personnel_id = %s
-                    """, (doc_array, filenames, personnel_id))
+                    """, (combined_docs, combined_filenames, personnel_id))
                     conn.commit()
                     
-                    print(f"Updated {doc_type}: {len(doc_array)} documents")
-                    print(f"Filenames stored in {filename_col}: {filenames}")
+                    print(f"Appended to {doc_type}: {len(new_docs)} new documents (total now: {len(combined_docs)})")
+                    print(f"New filenames: {new_filenames}")
         
         cursor.close()
         conn.close()
@@ -1483,9 +1508,7 @@ def reset_password():
 @require_auth([20001, 20002])
 def faculty_dashboard():
     faculty_info = get_faculty_info(session['user_id'])
-    return render_template('faculty&dean/faculty-dashboard.html', 
-                         email=session['email'],
-                         **faculty_info)
+    return render_template('faculty&dean/faculty-dashboard.html', **faculty_info)
 
 @app.route('/faculty_attendance')
 @require_auth([20001, 20002])
