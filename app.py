@@ -158,7 +158,7 @@ def api_faculty_attendance():
         
         acadcalendar_id, semester_start, semester_end = academic_calendar
         
-        # Get all scheduled classes for this faculty including class section
+        # Get all scheduled classes for this faculty including class section and classroom
         cursor.execute("""
             SELECT 
                 sch.class_id,
@@ -170,7 +170,8 @@ def api_faculty_attendance():
                 sch.endtime_2,
                 sub.subjectcode,
                 sub.subjectname,
-                sch.classsection
+                sch.classsection,
+                sch.classroom
             FROM schedule sch
             JOIN subjects sub ON sch.subject_id = sub.subject_id
             WHERE sch.personnel_id = %s AND sch.acadcalendar_id = %s
@@ -178,7 +179,7 @@ def api_faculty_attendance():
         
         scheduled_classes = cursor.fetchall()
         
-        # Get existing attendance records including class section
+        # Get existing attendance records including class section and classroom
         cursor.execute("""
             SELECT 
                 a.class_id,
@@ -187,7 +188,8 @@ def api_faculty_attendance():
                 a.timeout,
                 sub.subjectcode,
                 sub.subjectname,
-                sch.classsection
+                sch.classsection,
+                sch.classroom
             FROM attendance a
             JOIN schedule sch ON a.class_id = sch.class_id
             JOIN subjects sub ON sch.subject_id = sub.subject_id
@@ -200,12 +202,10 @@ def api_faculty_attendance():
         # Create a map of existing attendance by class_id and date
         attendance_map = {}
         for record in attendance_records:
-            class_id, status, timein, timeout, subject_code, subject_name, class_section = record
+            class_id, status, timein, timeout, subject_code, subject_name, class_section, classroom = record
             if timein:
                 date_key = f"{class_id}_{timein.date()}"
             else:
-                # For absent records, we need to find the corresponding scheduled date
-                # This will be handled when we process scheduled classes
                 date_key = f"{class_id}_absent_{len(attendance_map)}"
             
             attendance_map[date_key] = {
@@ -215,7 +215,8 @@ def api_faculty_attendance():
                 'timeout': timeout,
                 'subject_code': subject_code,
                 'subject_name': subject_name,
-                'class_section': class_section
+                'class_section': class_section,
+                'classroom': classroom
             }
         
         # Generate all expected class dates and cross-reference with attendance
@@ -230,16 +231,15 @@ def api_faculty_attendance():
         current_date = datetime.now(philippines_tz).date()
         
         for scheduled_class in scheduled_classes:
-            class_id, day1, start1, end1, day2, start2, end2, subject_code, subject_name, class_section = scheduled_class
+            class_id, day1, start1, end1, day2, start2, end2, subject_code, subject_name, class_section, classroom = scheduled_class
             
             class_name = f"{subject_code} - {subject_name}"
             
             # Process both class days (day1 and day2)
             for day, start_time, end_time in [(day1, start1, end1), (day2, start2, end2)]:
-                if not day:  # Skip if no second day
+                if not day:
                     continue
                 
-                # Find all dates for this day of week since semester start
                 weekday_map = {
                     'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3,
                     'Friday': 4, 'Saturday': 5, 'Sunday': 6
@@ -249,24 +249,18 @@ def api_faculty_attendance():
                 if target_weekday is None:
                     continue
                 
-                # Start from semester start date
                 check_date = semester_start
-                
-                # Find first occurrence of this weekday
                 days_ahead = target_weekday - check_date.weekday()
-                if days_ahead <= 0:  # Target day already happened this week
+                if days_ahead <= 0:
                     days_ahead += 7
                 check_date += timedelta(days=days_ahead)
                 
-                # If the first occurrence is before semester start, move to next week
                 if check_date < semester_start:
                     check_date += timedelta(days=7)
                 
-                # Generate all class dates until current date
                 while check_date <= current_date and check_date <= semester_end:
                     date_key = f"{class_id}_{check_date}"
                     
-                    # Check if attendance record exists for this date
                     found_record = None
                     for key, record in attendance_map.items():
                         if record['class_id'] == class_id:
@@ -274,41 +268,40 @@ def api_faculty_attendance():
                                 found_record = record
                                 break
                             elif not record['timein'] and record['status'] == 'Absent':
-                                # This could be our absent record for this date
                                 found_record = record
                                 break
                     
                     if found_record:
-                        # Use existing attendance record
                         status = found_record['status']
                         timein = found_record['timein']
                         timeout = found_record['timeout']
                         record_class_section = found_record['class_section']
+                        record_classroom = found_record['classroom']
                         
                         time_in_str = timein.strftime('%H:%M') if timein else '—'
                         time_out_str = timeout.strftime('%H:%M') if timeout else '—'
                     else:
-                        # No attendance record found - mark as absent
                         status = 'Absent'
                         time_in_str = '—'
                         time_out_str = '—'
                         record_class_section = class_section
+                        record_classroom = classroom
                     
-                    # Create log entry
                     log_entry = {
                         'date': check_date.strftime('%Y-%m-%d'),
                         'time_in': time_in_str,
                         'time_out': time_out_str,
                         'status': status.capitalize(),
                         'class_name': class_name,
-                        'class_section': record_class_section or 'N/A'
+                        'class_section': record_class_section or 'N/A',
+                        'classroom': record_classroom or 'N/A'
                     }
                     attendance_logs.append(log_entry)
                     
-                    # Create class attendance entry
                     class_entry = {
                         'class_name': class_name,
                         'class_section': record_class_section or 'N/A',
+                        'classroom': record_classroom or 'N/A',
                         'date': check_date.strftime('%Y-%m-%d'),
                         'time_in': time_in_str,
                         'status': status.capitalize()
@@ -323,7 +316,6 @@ def api_faculty_attendance():
                     elif status.lower() == 'absent':
                         status_counts['absent'] += 1
                     
-                    # Move to next week
                     check_date += timedelta(days=7)
         
         # Sort logs by date (most recent first)
@@ -522,7 +514,7 @@ def api_faculty_attendance_by_semester(semester_id):
         
         acadcalendar_id, semester_name, acad_year, semester_start, semester_end = academic_calendar
         
-        # Get all scheduled classes for this faculty in this semester
+        # Get all scheduled classes for this faculty in this semester including classroom
         cursor.execute("""
             SELECT 
                 sch.class_id,
@@ -535,7 +527,8 @@ def api_faculty_attendance_by_semester(semester_id):
                 sub.subjectcode,
                 sub.subjectname,
                 sub.units,
-                sch.classsection
+                sch.classsection,
+                sch.classroom
             FROM schedule sch
             JOIN subjects sub ON sch.subject_id = sub.subject_id
             WHERE sch.personnel_id = %s AND sch.acadcalendar_id = %s
@@ -543,7 +536,7 @@ def api_faculty_attendance_by_semester(semester_id):
         
         scheduled_classes = cursor.fetchall()
         
-        # Get existing attendance records for this semester
+        # Get existing attendance records for this semester including classroom
         cursor.execute("""
             SELECT 
                 a.class_id,
@@ -552,7 +545,8 @@ def api_faculty_attendance_by_semester(semester_id):
                 a.timeout,
                 sub.subjectcode,
                 sub.subjectname,
-                sch.classsection
+                sch.classsection,
+                sch.classroom
             FROM attendance a
             JOIN schedule sch ON a.class_id = sch.class_id
             JOIN subjects sub ON sch.subject_id = sub.subject_id
@@ -565,11 +559,10 @@ def api_faculty_attendance_by_semester(semester_id):
         # Create a map of existing attendance by class_id and date
         attendance_map = {}
         for record in attendance_records:
-            class_id, status, timein, timeout, subject_code, subject_name, class_section = record
+            class_id, status, timein, timeout, subject_code, subject_name, class_section, classroom = record
             if timein:
                 date_key = f"{class_id}_{timein.date()}"
             else:
-                # For absent records without timein
                 date_key = f"{class_id}_absent_{len(attendance_map)}"
             
             attendance_map[date_key] = {
@@ -579,7 +572,8 @@ def api_faculty_attendance_by_semester(semester_id):
                 'timeout': timeout,
                 'subject_code': subject_code,
                 'subject_name': subject_name,
-                'class_section': class_section
+                'class_section': class_section,
+                'classroom': classroom
             }
         
         # Generate all expected class dates and cross-reference with attendance
@@ -597,7 +591,7 @@ def api_faculty_attendance_by_semester(semester_id):
         current_date = datetime.now(philippines_tz).date()
         
         for scheduled_class in scheduled_classes:
-            class_id, day1, start1, end1, day2, start2, end2, subject_code, subject_name, units, class_section = scheduled_class
+            class_id, day1, start1, end1, day2, start2, end2, subject_code, subject_name, units, class_section, classroom = scheduled_class
             
             class_name = f"{subject_code} - {subject_name}"
             
@@ -609,10 +603,9 @@ def api_faculty_attendance_by_semester(semester_id):
             
             # Process both class days (day1 and day2)
             for day, start_time, end_time in [(day1, start1, end1), (day2, start2, end2)]:
-                if not day:  # Skip if no second day
+                if not day:
                     continue
                 
-                # Find all dates for this day of week within semester
                 weekday_map = {
                     'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3,
                     'Friday': 4, 'Saturday': 5, 'Sunday': 6
@@ -622,16 +615,12 @@ def api_faculty_attendance_by_semester(semester_id):
                 if target_weekday is None:
                     continue
                 
-                # Start from semester start date
                 check_date = semester_start
-                
-                # Find first occurrence of this weekday
                 days_ahead = target_weekday - check_date.weekday()
                 if days_ahead <= 0:
                     days_ahead += 7
                 check_date += timedelta(days=days_ahead)
                 
-                # If the first occurrence is before semester start, move to next week
                 if check_date < semester_start:
                     check_date += timedelta(days=7)
                 
@@ -640,7 +629,6 @@ def api_faculty_attendance_by_semester(semester_id):
                 while check_date <= end_date:
                     date_key = f"{class_id}_{check_date}"
                     
-                    # Check if attendance record exists for this date
                     found_record = None
                     for key, record in attendance_map.items():
                         if record['class_id'] == class_id:
@@ -648,41 +636,40 @@ def api_faculty_attendance_by_semester(semester_id):
                                 found_record = record
                                 break
                             elif not record['timein'] and record['status'] == 'Absent':
-                                # This could be our absent record for this date
                                 found_record = record
                                 break
                     
                     if found_record:
-                        # Use existing attendance record
                         status = found_record['status']
                         timein = found_record['timein']
                         timeout = found_record['timeout']
                         record_class_section = found_record['class_section']
+                        record_classroom = found_record['classroom']
                         
                         time_in_str = timein.strftime('%H:%M') if timein else '—'
                         time_out_str = timeout.strftime('%H:%M') if timeout else '—'
                     else:
-                        # No attendance record found - mark as absent
                         status = 'Absent'
                         time_in_str = '—'
                         time_out_str = '—'
                         record_class_section = class_section
+                        record_classroom = classroom
                     
-                    # Create log entry
                     log_entry = {
                         'date': check_date.strftime('%Y-%m-%d'),
                         'time_in': time_in_str,
                         'time_out': time_out_str,
                         'status': status.capitalize(),
                         'class_name': class_name,
-                        'class_section': record_class_section or 'N/A'
+                        'class_section': record_class_section or 'N/A',
+                        'classroom': record_classroom or 'N/A'
                     }
                     attendance_logs.append(log_entry)
                     
-                    # Create class attendance entry
                     class_entry = {
                         'class_name': class_name,
                         'class_section': record_class_section or 'N/A',
+                        'classroom': record_classroom or 'N/A',
                         'date': check_date.strftime('%Y-%m-%d'),
                         'time_in': time_in_str,
                         'status': status.capitalize()
@@ -697,7 +684,6 @@ def api_faculty_attendance_by_semester(semester_id):
                     elif status.lower() == 'absent':
                         status_counts['absent'] += 1
                     
-                    # Move to next week
                     check_date += timedelta(days=7)
         
         # Sort logs by date (most recent first)
@@ -917,11 +903,32 @@ def get_weekly_class_schedule(cursor, personnel_id, acadcalendar_id):
         
         # Get Philippines timezone
         philippines_tz = pytz.timezone('Asia/Manila')
-        current_date = datetime.now(philippines_tz).date()
+        current_datetime = datetime.now(philippines_tz)
+        current_date = current_datetime.date()
         
-        # Get start of current week (Monday)
-        days_since_monday = current_date.weekday()
-        week_start = current_date - timedelta(days=days_since_monday)
+        # Get current day name
+        current_day = current_date.strftime('%A')
+        
+        # Helper function to convert 24-hour time to 12-hour AM/PM format
+        def format_time_ampm(time_val):
+            if not time_val:
+                return 'N/A'
+            
+            # Handle both string and time object
+            if hasattr(time_val, 'strftime'):
+                time_str = time_val.strftime('%H:%M')
+            else:
+                time_str = str(time_val)[:5]
+            
+            # Parse hours and minutes
+            try:
+                hours, minutes = map(int, time_str.split(':'))
+                period = 'AM' if hours < 12 else 'PM'
+                display_hour = hours if hours <= 12 else hours - 12
+                display_hour = 12 if display_hour == 0 else display_hour
+                return f"{display_hour}:{minutes:02d} {period}"
+            except:
+                return time_str
         
         # Get all scheduled classes for this faculty
         cursor.execute("""
@@ -945,6 +952,14 @@ def get_weekly_class_schedule(cursor, personnel_id, acadcalendar_id):
         
         scheduled_classes = cursor.fetchall()
         
+        # Calculate days until Saturday
+        current_weekday = current_date.weekday()  # Monday=0, Sunday=6
+        days_until_saturday = (5 - current_weekday) % 7  # Saturday=5
+        saturday_date = current_date + timedelta(days=days_until_saturday)
+        
+        # Map day names to check if they're within current week (up to Saturday)
+        day_order = {'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3, 'Friday': 4, 'Saturday': 5, 'Sunday': 6}
+        
         weekly_schedule = []
         
         for scheduled_class in scheduled_classes:
@@ -955,40 +970,59 @@ def get_weekly_class_schedule(cursor, personnel_id, acadcalendar_id):
             
             # Process first class day
             if day1 and start1 and end1:
+                start1_str = format_time_ampm(start1)
+                end1_str = format_time_ampm(end1)
+                
+                # Check if this day is within current week (today to Saturday)
+                day1_num = day_order.get(day1, -1)
+                is_this_week = current_weekday <= day1_num <= 5  # Up to Saturday
+                
                 weekly_schedule.append({
                     'class_name': class_name,
                     'subject_code': subject_code,
                     'subject_name': subject_name,
                     'section': section or 'N/A',
                     'day': day1,
-                    'start_time': start1.strftime('%H:%M') if start1 else 'N/A',
-                    'end_time': end1.strftime('%H:%M') if end1 else 'N/A',
-                    'time_display': f"{start1.strftime('%H:%M')}-{end1.strftime('%H:%M')}" if start1 and end1 else 'N/A',
-                    'classroom': classroom or 'N/A'
+                    'start_time': start1_str,
+                    'end_time': end1_str,
+                    'time_display': f"{start1_str}-{end1_str}",
+                    'classroom': classroom or 'N/A',
+                    'is_today': day1 == current_day,
+                    'is_this_week': is_this_week
                 })
             
             # Process second class day
             if day2 and start2 and end2:
+                start2_str = format_time_ampm(start2)
+                end2_str = format_time_ampm(end2)
+                
+                # Check if this day is within current week (today to Saturday)
+                day2_num = day_order.get(day2, -1)
+                is_this_week = current_weekday <= day2_num <= 5  # Up to Saturday
+                
                 weekly_schedule.append({
                     'class_name': class_name,
                     'subject_code': subject_code,
                     'subject_name': subject_name,
                     'section': section or 'N/A',
                     'day': day2,
-                    'start_time': start2.strftime('%H:%M') if start2 else 'N/A',
-                    'end_time': end2.strftime('%H:%M') if end2 else 'N/A',
-                    'time_display': f"{start2.strftime('%H:%M')}-{end2.strftime('%H:%M')}" if start2 and end2 else 'N/A',
-                    'classroom': classroom or 'N/A'
+                    'start_time': start2_str,
+                    'end_time': end2_str,
+                    'time_display': f"{start2_str}-{end2_str}",
+                    'classroom': classroom or 'N/A',
+                    'is_today': day2 == current_day,
+                    'is_this_week': is_this_week
                 })
         
         # Sort by day and time
-        day_order = {'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6, 'Sunday': 7}
         weekly_schedule.sort(key=lambda x: (day_order.get(x['day'], 8), x['start_time']))
         
         return weekly_schedule
         
     except Exception as e:
         print(f"Error getting weekly class schedule: {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 def get_teaching_load(cursor, personnel_id, acadcalendar_id):

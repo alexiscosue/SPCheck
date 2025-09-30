@@ -56,79 +56,83 @@
     </div>
   </div>
 
-  <!-- Tabs + Content -->
-  <div class="chart-large card">
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="logs">Attendance Records</button>
-      <button class="tab-btn" data-tab="calendar">Calendar View</button>
-    </div>
+  <!-- Main Content Area with Sidebar Layout -->
+  <div class="attendance-layout" style="grid-column: 1 / -1;">
+    <!-- Left: Tabs + Content -->
+    <div class="attendance-main card">
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="logs">Attendance Records</button>
+        <button class="tab-btn" data-tab="calendar">Calendar View</button>
+      </div>
 
-    <!-- Combined Attendance Records -->
-    <div id="logs" class="tab-content active">
-      <div class="search-filter">
-        <input type="text" id="logSearch" placeholder="Search by class, section, or date...">
-        <select id="logFilter">
-          <option value="">All Status</option>
-          <option>Present</option>
-          <option>Late</option>
-          <option>Absent</option>
-        </select>
-      </div>
-      <div class="pagination-controls">
-        <button id="prevPage" class="pagination-btn">‹</button>
-        <span id="pageInfo">1 of 1 (0 records)</span>
-        <button id="nextPage" class="pagination-btn">›</button>
-      </div>
-      <div class="table">
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Class</th>
-              <th>Section</th>
-              <th>Time In</th>
-              <th>Time Out</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="logsBody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Calendar -->
-    <div id="calendar" class="tab-content">
-      <div class="calendar-header">
-        <button id="prevMonth" class="calendar-nav-btn">‹</button>
-        <h3 id="monthLabel"></h3>
-        <button id="nextMonth" class="calendar-nav-btn">›</button>
-      </div>
-      <div class="calendar-grid" id="calendarGrid"></div>
-      <div class="calendar-legend">
-        <div class="legend-item">
-          <span class="legend-dot present"></span>
-          <span>Present</span>
+      <!-- Combined Attendance Records -->
+      <div id="logs" class="tab-content active">
+        <div class="search-filter">
+          <input type="text" id="logSearch" placeholder="Search by class, section, room, or date...">
+          <select id="logFilter">
+            <option value="">All Status</option>
+            <option>Present</option>
+            <option>Late</option>
+            <option>Absent</option>
+          </select>
         </div>
-        <div class="legend-item">
-          <span class="legend-dot late"></span>
-          <span>Late</span>
+        <div class="pagination-controls">
+          <button id="prevPage" class="pagination-btn">‹</button>
+          <span id="pageInfo">1 of 1 (0 records)</span>
+          <button id="nextPage" class="pagination-btn">›</button>
         </div>
-        <div class="legend-item">
-          <span class="legend-dot absent"></span>
-          <span>Absent</span>
+        <div class="table">
+          <table class="attendance-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Class</th>
+                <th>Room</th>
+                <th>Section</th>
+                <th>Time In</th>
+                <th>Time Out</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="logsBody"></tbody>
+          </table>
         </div>
       </div>
+
+      <!-- Calendar -->
+      <div id="calendar" class="tab-content">
+        <div class="calendar-header">
+          <button id="prevMonth" class="calendar-nav-btn">‹</button>
+          <h3 id="monthLabel"></h3>
+          <button id="nextMonth" class="calendar-nav-btn">›</button>
+        </div>
+        <div class="calendar-grid" id="calendarGrid"></div>
+        <div class="calendar-legend">
+          <div class="legend-item">
+            <span class="legend-dot present"></span>
+            <span>Present</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot late"></span>
+            <span>Late</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot absent"></span>
+            <span>Absent</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- RFID Simulation -->
+      <button class="rfid-btn" id="rfidBtn">Simulate RFID Tap</button>
     </div>
 
-    <!-- RFID Simulation -->
-    <button class="rfid-btn" id="rfidBtn">Simulate RFID Tap</button>
-  </div>
-
-  <!-- Status Breakdown -->
-  <div class="chart-side">
-    <div class="chart-card card">
-      <div class="card-header"><i class='bx bx-pie-chart-alt'></i>Status Breakdown</div>
-      <canvas id="statusBreakdown" height="160"></canvas>
+    <!-- Right: Status Breakdown (Smaller) -->
+    <div class="attendance-sidebar">
+      <div class="chart-card card">
+        <div class="card-header"><i class='bx bx-pie-chart-alt'></i>Status Breakdown</div>
+        <canvas id="statusBreakdown" height="200"></canvas>
+      </div>
     </div>
   </div>
 </section>
@@ -254,7 +258,7 @@
     document.getElementById('totalClasses').textContent = '0';
     
     // Clear table
-    document.getElementById('logsBody').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: #6b7280;">No attendance data available for selected semester</td></tr>';
+    document.getElementById('logsBody').innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #6b7280;">No attendance data available for selected semester</td></tr>';
     
     // Clear calendar
     document.getElementById('calendarGrid').innerHTML = '';
@@ -294,19 +298,20 @@
     document.getElementById('totalClasses').textContent = totalClasses;
   }
 
-  // Render Combined Logs (enhanced with class/section search)
+  // Render Combined Logs (enhanced with class/section/room search)
   function renderLogs(){
     const tbody = document.getElementById('logsBody');
     tbody.innerHTML='';
     let search = document.getElementById('logSearch').value.toLowerCase();
     let filter = document.getElementById('logFilter').value;
     
-    // Filter records based on search (class, section, or date) and status filter
+    // Filter records based on search (class, section, room, or date) and status filter
     filteredLogs = logs.filter(l => {
       const searchMatch = !search || 
         l.date.includes(search) ||
         (l.class_name && l.class_name.toLowerCase().includes(search)) ||
-        (l.class_section && l.class_section.toLowerCase().includes(search));
+        (l.class_section && l.class_section.toLowerCase().includes(search)) ||
+        (l.classroom && l.classroom.toLowerCase().includes(search));
       
       const filterMatch = !filter || l.status === filter;
       
@@ -327,12 +332,12 @@
       const message = filteredLogs.length === 0 && (search || filter) ? 
         'No records match your search criteria' : 
         'No attendance data available for selected semester';
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 2rem; color: #6b7280;">${message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #6b7280;">${message}</td></tr>`;
     } else {
       // Render current page records
       currentPageRecords.forEach(l=>{
         const tr=document.createElement('tr');
-        tr.innerHTML=`<td>${l.date}</td><td>${l.class_name || 'N/A'}</td><td>${l.class_section || 'N/A'}</td><td>${l.time_in || '—'}</td><td>${l.time_out || '—'}</td><td><span class="status ${l.status.toLowerCase()}">${l.status}</span></td>`;
+        tr.innerHTML=`<td>${l.date}</td><td>${l.class_name || 'N/A'}</td><td>${l.classroom || 'N/A'}</td><td>${l.class_section || 'N/A'}</td><td>${l.time_in || '—'}</td><td>${l.time_out || '—'}</td><td><span class="status ${l.status.toLowerCase()}">${l.status}</span></td>`;
         tbody.appendChild(tr);
       });
     }
@@ -430,7 +435,7 @@
         // Create tooltip
         let tooltip = document.createElement('div');
         tooltip.className = 'dot-tooltip';
-        tooltip.innerHTML = `<strong>${record.status}</strong><br>${record.class_name || 'N/A'}<br>${record.class_section || 'N/A'}`;
+        tooltip.innerHTML = `<strong>${record.status}</strong><br>${record.class_name || 'N/A'}<br>${record.classroom || 'N/A'}<br>${record.class_section || 'N/A'}`;
         
         // Add hover events
         dot.addEventListener('mouseenter', () => {

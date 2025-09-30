@@ -617,7 +617,7 @@ th {
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 
-.search-filter { display:flex; justify-content:space-between; margin-bottom:10px; gap:8px; }
+.search-filter { display:flex; justify-content:space-between; margin-bottom:10px; margin-top: 10px; gap:8px; }
 .search-filter input, .search-filter select { padding:6px; border:1px solid #ccc; border-radius:6px; }
 .search-filter input {  flex: 1; }
 
@@ -2187,4 +2187,38 @@ to { opacity: 1; }
   object-fit: cover;
   border: 4px solid white;
   box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+/* Attendance page specific layout */
+.attendance-layout {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 18px;
+}
+
+.attendance-main {
+  min-width: 0; /* Allows proper flex shrinking */
+}
+
+.attendance-sidebar {
+  width: 280px;
+}
+
+/* Center table headers */
+.attendance-table th {
+  text-align: center;
+}
+
+.attendance-table td {
+  text-align: center;
+}
+
+/* Responsive adjustment */
+@media (max-width: 1100px) {
+  .attendance-layout {
+    grid-template-columns: 1fr;
+  }
+  
+  .attendance-sidebar {
+    width: 100%;
+  }
 }

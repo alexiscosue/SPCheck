@@ -84,7 +84,7 @@
     <div class="card schedule">
       <div class="card-header">
         <i class='bx bx-calendar'></i>
-        <span>Class Schedule Today</span>
+        <span>Class Schedule</span>
       </div>
       <div class="card-body" id="classScheduleBody">
         <div class="schedule-loading" style="text-align: center; padding: 1rem; color: #6b7280;">
@@ -150,10 +150,9 @@
       return;
     }
     
-    // Group classes by day for better display
-    const today = new Date().toLocaleString('en-US', { weekday: 'long' });
-    const todayClasses = schedule.filter(cls => cls.day === today);
-    const otherClasses = schedule.filter(cls => cls.day !== today);
+    // Filter for today's classes and this week's classes (up to Saturday)
+    const todayClasses = schedule.filter(cls => cls.is_today);
+    const thisWeekClasses = schedule.filter(cls => cls.is_this_week && !cls.is_today);
     
     let scheduleHTML = '';
     
@@ -164,7 +163,7 @@
         scheduleHTML += `
           <div class="schedule-item" style="border-left: 3px solid #16a34a;">
             <div>
-              <div class="class-name">${cls.subject_code}</div>
+              <div class="class-name">${cls.subject_code} - ${cls.subject_name}</div>
               <div class="class-room">${cls.classroom} (${cls.section})</div>
             </div>
             <div class="class-time">${cls.time_display}</div>
@@ -172,24 +171,37 @@
         `;
       });
       
-      if (otherClasses.length > 0) {
+      if (thisWeekClasses.length > 0) {
+        scheduleHTML += '<div style="font-size: 12px; font-weight: 600; color: #6b7280; margin: 12px 0 8px 0;">THIS WEEK</div>';
+      }
+    } else {
+      // No classes today, show message
+      scheduleHTML += '<div style="font-size: 12px; font-weight: 600; color: #6b7280; margin-bottom: 8px;">TODAY</div>';
+      scheduleHTML += '<div style="text-align: center; padding: 1rem; color: #9ca3af; font-size: 13px;">No classes today</div>';
+      
+      if (thisWeekClasses.length > 0) {
         scheduleHTML += '<div style="font-size: 12px; font-weight: 600; color: #6b7280; margin: 12px 0 8px 0;">THIS WEEK</div>';
       }
     }
     
-    // Show other classes (limit to next few for space)
-    const displayClasses = otherClasses.slice(0, Math.max(0, 4 - todayClasses.length));
+    // Show this week's classes (up to Saturday, limit to next few for space)
+    const displayClasses = thisWeekClasses.slice(0, Math.max(0, 5 - todayClasses.length));
     displayClasses.forEach(cls => {
       scheduleHTML += `
         <div class="schedule-item">
           <div>
-            <div class="class-name">${cls.subject_code}</div>
+            <div class="class-name">${cls.subject_code} - ${cls.subject_name}</div>
             <div class="class-room">${cls.classroom} (${cls.section})</div>
           </div>
-          <div class="class-time">${cls.day}<br>${cls.time_display}</div>
+          <div class="class-time" style="text-align: right;">${cls.day}<br>${cls.time_display}</div>
         </div>
       `;
     });
+    
+    // If no classes at all this week
+    if (todayClasses.length === 0 && thisWeekClasses.length === 0) {
+      scheduleHTML = '<div style="text-align: center; padding: 1rem; color: #6b7280;">No classes scheduled this week</div>';
+    }
     
     scheduleBody.innerHTML = scheduleHTML;
   }
