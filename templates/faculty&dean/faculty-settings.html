@@ -55,67 +55,87 @@
 
       <!-- Licenses -->
       <div style="grid-column: span 2;">
-        <label><i class="fas fa-certificate"></i> Licenses</label>
-        <div class="upload-field">
-          <label for="licenses" style="cursor: pointer;">
-            <i class="fas fa-file-upload"></i>
-            <span>Upload licenses (PDF, images)...</span>
-          </label>
-          <input type="file" id="licenses" name="licenses" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'licenses-list', 'licenses')">
+        <div class="document-section">
+          <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-certificate"></i> Licenses</h4>
+          <div class="upload-field">
+            <label for="licenses" style="cursor: pointer;">
+              <i class="fas fa-file-upload"></i>
+              <span>Upload licenses (PDF, images)...</span>
+            </label>
+            <input type="file" id="licenses" name="licenses" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'licenses-list', 'licenses')">
+          </div>
+          <div id="licenses-display" class="documents-grid">
+            <p style="color:var(--muted);">No licenses uploaded yet.</p>
+          </div>
         </div>
-        <div id="licenses-list" class="file-list"></div>
       </div>
 
       <!-- Degrees -->
       <div style="grid-column: span 2;">
-        <label><i class="fas fa-graduation-cap"></i> Degrees</label>
-        <div class="upload-field">
-          <label for="degrees" style="cursor: pointer;">
-            <i class="fas fa-file-upload"></i>
-            <span>Upload degrees (PDF, images)...</span>
-          </label>
-          <input type="file" id="degrees" name="degrees" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'degrees-list', 'degrees')">
+        <div class="document-section" style="margin-top:30px;">
+          <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-graduation-cap"></i> Degrees</h4>
+          <div class="upload-field">
+            <label for="degrees" style="cursor: pointer;">
+              <i class="fas fa-file-upload"></i>
+              <span>Upload degrees (PDF, images)...</span>
+            </label>
+            <input type="file" id="degrees" name="degrees" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'degrees-list', 'degrees')">
+          </div>
+          <div id="degrees-display" class="documents-grid">
+            <p style="color:var(--muted);">No degrees uploaded yet.</p>
+          </div>
         </div>
-        <div id="degrees-list" class="file-list"></div>
       </div>
 
       <!-- Certificates -->
       <div style="grid-column: span 2;">
-        <label><i class="fas fa-award"></i> Certificates</label>
-        <div class="upload-field">
-          <label for="certificates" style="cursor: pointer;">
-            <i class="fas fa-file-upload"></i>
-            <span>Upload certificates (PDF, images)...</span>
-          </label>
-          <input type="file" id="certificates" name="certificates" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'certificates-list', 'certificates')">
+        <div class="document-section" style="margin-top:30px;">
+          <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-award"></i> Certificates</h4>
+          <div class="upload-field">
+            <label for="certificates" style="cursor: pointer;">
+              <i class="fas fa-file-upload"></i>
+              <span>Upload certificates (PDF, images)...</span>
+            </label>
+            <input type="file" id="certificates" name="certificates" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'certificates-list', 'certificates')">
+          </div>
+          <div id="certificates-display" class="documents-grid">
+            <p style="color:var(--muted);">No certificates uploaded yet.</p>
+          </div>
         </div>
-        <div id="certificates-list" class="file-list"></div>
       </div>
 
       <!-- Publications -->
       <div style="grid-column: span 2;">
-        <label><i class="fas fa-book"></i> Publications</label>
-        <div class="upload-field">
-          <label for="publications" style="cursor: pointer;">
-            <i class="fas fa-file-upload"></i>
-            <span>Upload publications (PDF, documents)...</span>
-          </label>
-          <input type="file" id="publications" name="publications" multiple accept=".pdf,.doc,.docx" onchange="updateMultiFileNames(this, 'publications-list', 'publications')">
+        <div class="document-section" style="margin-top:30px;">
+          <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-book"></i> Publications</h4>
+          <div class="upload-field">
+            <label for="publications" style="cursor: pointer;">
+              <i class="fas fa-file-upload"></i>
+              <span>Upload publications (PDF, documents)...</span>
+            </label>
+            <input type="file" id="publications" name="publications" multiple accept=".pdf,.doc,.docx" onchange="updateMultiFileNames(this, 'publications-list', 'publications')">
+          </div>
+          <div id="publications-display" class="documents-grid">
+            <p style="color:var(--muted);">No publications uploaded yet.</p>
+          </div>
         </div>
-        <div id="publications-list" class="file-list"></div>
       </div>
 
       <!-- Awards -->
       <div style="grid-column: span 2;">
-        <label><i class="fas fa-trophy"></i> Awards</label>
-        <div class="upload-field">
-          <label for="awards" style="cursor: pointer;">
-            <i class="fas fa-file-upload"></i>
-            <span>Upload awards (PDF, images)...</span>
-          </label>
-          <input type="file" id="awards" name="awards" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'awards-list', 'awards')">
+        <div class="document-section" style="margin-top:30px;">
+          <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-trophy"></i> Awards</h4>
+          <div class="upload-field">
+            <label for="awards" style="cursor: pointer;">
+              <i class="fas fa-file-upload"></i>
+              <span>Upload awards (PDF, images)...</span>
+            </label>
+            <input type="file" id="awards" name="awards" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'awards-list', 'awards')">
+          </div>
+          <div id="awards-display" class="documents-grid">
+            <p style="color:var(--muted);">No awards uploaded yet.</p>
+          </div>
         </div>
-        <div id="awards-list" class="file-list"></div>
       </div>
 
       <div style="grid-column:span 2; text-align:right;">
@@ -182,6 +202,22 @@
 <div id="loading" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 20px; border-radius: 8px; z-index: 1000;">
   <i class="fas fa-spinner fa-spin"></i> <span id="loading-text">Loading...</span>
 </div>
+
+<!-- Document Viewer Modal -->
+<div id="document-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="modal-title">Document Viewer</h3>
+      <span class="close" onclick="closeDocumentModal()">&times;</span>
+    </div>
+    <div class="modal-body">
+      <div id="document-container" style="width:100%;height:75vh;overflow:auto;background:#f5f5f5;border-radius:8px;">
+        <iframe id="document-viewer" style="width:100%;height:100%;border:none;display:none;"></iframe>
+        <img id="image-viewer" style="max-width:100%;height:auto;display:none;margin:0 auto;">
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -202,7 +238,6 @@ let documentsToDelete = {
   awards: []
 };
 
-// Tab functionality
 document.querySelectorAll('.faculty-settings .tablink').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.faculty-settings .tablink').forEach(b => b.classList.remove('active'));
@@ -212,30 +247,22 @@ document.querySelectorAll('.faculty-settings .tablink').forEach(btn => {
   });
 });
 
-// Phone number input formatting - simple version without extra spacing
-const phoneInput = document.getElementById('phone');
 
+const phoneInput = document.getElementById('phone');
 phoneInput.addEventListener('input', function(e) {
   let value = e.target.value;
   
-  // Always keep +63 prefix
   if (!value.startsWith('+63 ')) {
     value = '+63 ';
   }
-  
-  // Remove everything except digits after +63 
   let digits = value.slice(4).replace(/\D/g, '');
   
-  // Limit to 10 digits
   if (digits.length > 10) {
     digits = digits.slice(0, 10);
   }
-  
-  // Update the input value - NO FORMATTING, just +63 followed by digits
   e.target.value = '+63 ' + digits;
 });
 
-// Toggle password visibility
 function togglePasswordVisibility(inputId) {
   const input = document.getElementById(inputId);
   const icon = input.parentElement.querySelector('.toggle-password');
@@ -251,14 +278,12 @@ function togglePasswordVisibility(inputId) {
   }
 }
 
-// Hide all password error messages
 function hidePasswordErrors() {
   document.querySelectorAll('.password-error').forEach(el => {
     el.classList.remove('show');
   });
 }
 
-// Show specific password error
 function showPasswordError(errorType) {
   hidePasswordErrors();
   const errorEl = document.getElementById('password-error-' + errorType);
@@ -267,7 +292,6 @@ function showPasswordError(errorType) {
   }
 }
 
-// Real-time validation for password fields
 document.getElementById('new_password').addEventListener('input', function() {
   hidePasswordErrors();
   
@@ -275,12 +299,10 @@ document.getElementById('new_password').addEventListener('input', function() {
   const newPassword = this.value;
   const confirmPassword = document.getElementById('confirm_password').value;
   
-  // Check if new password is same as current
   if (newPassword && currentPassword && newPassword === currentPassword) {
     showPasswordError('same');
   }
   
-  // Check if passwords match (only if confirm field has content)
   if (confirmPassword && newPassword !== confirmPassword) {
     showPasswordError('match');
   }
@@ -292,7 +314,6 @@ document.getElementById('confirm_password').addEventListener('input', function()
   const newPassword = document.getElementById('new_password').value;
   const confirmPassword = this.value;
   
-  // Check if passwords match
   if (confirmPassword && newPassword !== confirmPassword) {
     showPasswordError('match');
   }
@@ -302,7 +323,6 @@ document.getElementById('current_password').addEventListener('input', function()
   hidePasswordErrors();
 });
 
-// Load profile data on page load
 document.addEventListener('DOMContentLoaded', loadProfileData);
 
 async function loadProfileData() {
@@ -326,74 +346,90 @@ async function loadProfileData() {
 }
 
 function populateForm() {
-  // Personal info - NO FORMATTING, just display as stored
   let phone = currentProfile.phone || '+63 ';
   document.getElementById('phone').value = phone;
   document.getElementById('bio').value = currentProfile.bio || '';
   
-  // Profile picture
   if (currentProfile.profilepic) {
     const preview = document.getElementById('profilepic-preview');
     preview.src = 'data:image/jpeg;base64,' + currentProfile.profilepic;
     document.getElementById('current-profilepic').style.display = 'block';
   }
   
-  // Document lists with filenames
-  ['licenses', 'degrees', 'certificates', 'publications', 'awards'].forEach(docType => {
-    const filenames = currentProfile[docType + '_filename'] || [];
-    documentFileNames[docType] = filenames;
-    displayExistingDocuments(docType, currentProfile[docType] || [], filenames);
-  });
+  displayDocuments('licenses', currentProfile.licenses || [], currentProfile.licenses_filename || []);
+  displayDocuments('degrees', currentProfile.degrees || [], currentProfile.degrees_filename || []);
+  displayDocuments('certificates', currentProfile.certificates || [], currentProfile.certificates_filename || []);
+  displayDocuments('publications', currentProfile.publications || [], currentProfile.publications_filename || []);
+  displayDocuments('awards', currentProfile.awards || [], currentProfile.awards_filename || []);
 }
 
-function displayExistingDocuments(docType, documents, filenames) {
-  const listElement = document.getElementById(docType + '-list');
-  if (!listElement) return;
+function displayDocuments(docType, documents, filenames) {
+  const displayElement = document.getElementById(docType + '-display');
+  if (!displayElement) return;
   
-  listElement.innerHTML = '';
+  if (!documents || documents.length === 0) {
+    displayElement.innerHTML = `<p style="color:var(--muted);">No ${docType} uploaded yet.</p>`;
+    return;
+  }
+  
+  displayElement.innerHTML = '';
   
   documents.forEach((doc, index) => {
-    // Skip if marked for deletion
     if (documentsToDelete[docType].includes(index)) return;
     
-    // Use actual filename if available, otherwise generate default name
-    const filename = filenames[index] || `${docType.charAt(0).toUpperCase() + docType.slice(1)}_Document_${index + 1}`;
-    
-    const fileItem = document.createElement('div');
-    fileItem.className = 'file-item';
-    fileItem.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 8px; background: #f0f0f0; border-radius: 6px; margin-top: 8px;';
-    
-    // Determine icon based on file extension
+    const filename = filenames[index] || `${docType}_${index + 1}`;
     const ext = filename.split('.').pop().toLowerCase();
-    let icon = 'fa-file';
-    if (['pdf'].includes(ext)) icon = 'fa-file-pdf';
-    else if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) icon = 'fa-file-image';
-    else if (['doc', 'docx'].includes(ext)) icon = 'fa-file-word';
     
-    fileItem.innerHTML = `
-      <i class="fas ${icon}" style="color: #666;"></i>
-      <span style="flex: 1; font-size: 13px; word-break: break-all;">${filename}</span>
-      <button type="button" onclick="markDocumentForDeletion('${docType}', ${index})" 
-              style="background: none; border: none; color: #999; cursor: pointer; font-size: 18px; padding: 0; line-height: 1;">
+    let icon = 'fa-file';
+    if (['pdf'].includes(ext)) {
+      icon = 'fa-file-pdf';
+    } else if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
+      icon = 'fa-file-image';
+    } else if (['doc', 'docx'].includes(ext)) {
+      icon = 'fa-file-word';
+    }
+    
+    const card = document.createElement('div');
+    card.className = 'document-card';
+    card.style.position = 'relative'; 
+    card.onclick = () => viewDocument(doc, filename, ext);
+    
+    card.innerHTML = `
+      <i class="fas ${icon} document-icon"></i>
+      <div class="document-name">${filename}</div>
+      <button type="button" 
+              style="position: absolute; top: 8px; right: 8px; background: none; border: none; color: #666; font-size: 16px; cursor: pointer; padding: 0; width: auto; height: auto;"
+              onclick="markDocumentForDeletion('${docType}', ${index}, event)">
         ×
       </button>
     `;
-    listElement.appendChild(fileItem);
+    
+    displayElement.appendChild(card);
   });
 }
 
-function markDocumentForDeletion(docType, index) {
-  // Add to deletion list
+function markDocumentForDeletion(docType, index, event) {
+  event.stopPropagation();
+  
   if (!documentsToDelete[docType].includes(index)) {
     documentsToDelete[docType].push(index);
   }
   
-  // Re-render the document list to hide deleted items
   const filenames = currentProfile[docType + '_filename'] || [];
-  displayExistingDocuments(docType, currentProfile[docType] || [], filenames);
+  displayDocuments(docType, currentProfile[docType] || [], filenames);
 }
 
-// File upload handlers
+function markDocumentForDeletion(docType, index, event) {
+  event.stopPropagation(); 
+  
+  if (!documentsToDelete[docType].includes(index)) {
+    documentsToDelete[docType].push(index);
+  }
+  
+  const filenames = currentProfile[docType + '_filename'] || [];
+  displayDocuments(docType, currentProfile[docType] || [], filenames);
+}
+
 function updateFileName(input, labelId) {
   const label = document.getElementById(labelId);
   if (input.files.length > 0) {
@@ -404,41 +440,213 @@ function updateFileName(input, labelId) {
 }
 
 function updateMultiFileNames(input, listId, docType) {
-  const listElement = document.getElementById(listId);
+  const displayElement = document.getElementById(docType + '-display');
   
-  // Don't clear existing documents, just add new upload previews
+  if (input.files.length > 0) {
+    const noDocumentsMsg = displayElement.querySelector('p[style*="color:var(--muted)"]');
+    if (noDocumentsMsg) {
+      noDocumentsMsg.remove();
+    }
+  }
+  
   if (input.files.length > 0) {
     Array.from(input.files).forEach((file, index) => {
-      const fileItem = document.createElement('div');
-      fileItem.className = 'file-item';
-      fileItem.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 8px; background: #e8f5e8; border-radius: 6px; margin-top: 8px;';
-      
-      // Determine icon based on file extension
       const ext = file.name.split('.').pop().toLowerCase();
-      let icon = 'fa-file';
-      if (['pdf'].includes(ext)) icon = 'fa-file-pdf';
-      else if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) icon = 'fa-file-image';
-      else if (['doc', 'docx'].includes(ext)) icon = 'fa-file-word';
       
-      fileItem.innerHTML = `
-        <i class="fas ${icon}" style="color: #059669;"></i>
-        <span style="flex: 1; font-size: 13px; word-break: break-all;">${file.name}</span>
-        <span style="font-size: 11px; color: #666;">${(file.size / 1024).toFixed(1)} KB</span>
+      let icon = 'fa-file';
+      if (['pdf'].includes(ext)) {
+        icon = 'fa-file-pdf';
+      } else if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
+        icon = 'fa-file-image';
+      } else if (['doc', 'docx'].includes(ext)) {
+        icon = 'fa-file-word';
+      }
+      
+      const card = document.createElement('div');
+      card.className = 'document-card';
+      card.style.background = '#e8f5e8';
+      card.style.borderColor = '#059669';
+      card.style.position = 'relative';
+      card.dataset.fileIndex = index;
+      card.dataset.fileName = file.name;
+      
+      card.innerHTML = `
+        <i class="fas ${icon} document-icon"></i>
+        <div class="document-name">${file.name}</div>
+        <div style="font-size: 11px; color: #666; margin-top: 5px;">${(file.size / 1024).toFixed(1)} KB</div>
+        <button type="button" 
+                style="position: absolute; top: 8px; right: 8px; background: none; border: none; color: #666; font-size: 16px; cursor: pointer; padding: 0; width: auto; height: auto;"
+                onclick="removeNewUpload('${docType}', ${index}, this)">
+          ×
+        </button>
       `;
-      listElement.appendChild(fileItem);
+      
+      displayElement.appendChild(card);
     });
   }
 }
 
-// Form submissions
-// Personal Info Form
+function removeNewUpload(docType, fileIndex, buttonElement) {
+  const input = document.getElementById(docType);
+  const displayElement = document.getElementById(docType + '-display');
+  
+  if (!input.files || input.files.length === 0) return;
+  const filesArray = Array.from(input.files);
+  filesArray.splice(fileIndex, 1);
+  
+  const dt = new DataTransfer();
+  filesArray.forEach(file => dt.items.add(file));
+  input.files = dt.files;
+  
+  const card = buttonElement.closest('.document-card');
+  card.remove();
+  
+  const existingCards = displayElement.querySelectorAll('.document-card');
+  const newUploadCards = displayElement.querySelectorAll('.document-card[style*="e8f5e8"]');
+  
+  if (existingCards.length === 0 && newUploadCards.length === 0) {
+    displayElement.innerHTML = `<p style="color:var(--muted);">No ${docType} uploaded yet.</p>`;
+  }
+  
+  if (newUploadCards.length === 0) {
+    // This will be handled by the next file selection
+  }
+}
+
+function viewDocument(docBase64, filename, ext) {
+  const modal = document.getElementById('document-modal');
+  const title = document.getElementById('modal-title');
+  const iframe = document.getElementById('document-viewer');
+  const img = document.getElementById('image-viewer');
+  const container = document.getElementById('document-container');
+  
+  title.textContent = filename;
+  iframe.style.display = 'none';
+  img.style.display = 'none';
+  iframe.src = '';
+  img.src = '';
+  
+  if (['jpg', 'jpeg', 'png', 'gif'].includes(ext.toLowerCase())) {
+    img.style.display = 'block';
+    img.style.margin = '0 auto';
+    container.style.textAlign = 'center';
+    container.style.padding = '20px';
+    container.style.overflow = 'auto';
+    img.src = 'data:image/' + ext + ';base64,' + docBase64;
+  } else if (ext.toLowerCase() === 'pdf') {
+    iframe.style.display = 'block';
+    container.style.textAlign = 'left';
+    container.style.padding = '0';
+    container.style.overflow = 'hidden';
+    iframe.src = 'data:application/pdf;base64,' + docBase64 + '#view=FitH&toolbar=1';
+  } else {
+    iframe.style.display = 'block';
+    container.style.textAlign = 'left';
+    container.style.padding = '0';
+    container.style.overflow = 'auto';
+
+    try {
+      const blob = base64ToBlob(docBase64, getMimeType(ext));
+      const url = URL.createObjectURL(blob);
+      iframe.src = url;
+      
+      iframe.onerror = function() {
+        container.innerHTML = `
+          <div style="padding:40px;text-align:center;">
+            <i class="fas fa-exclamation-circle" style="font-size:48px;color:#999;margin-bottom:20px;"></i>
+            <p style="color:#666;margin-bottom:20px;">Cannot preview this file type in browser.</p>
+            <button onclick="downloadDocument('${docBase64}', '${filename}', '${ext}')" 
+                    style="padding:10px 20px;background:var(--spc-maroon);color:white;border:none;border-radius:6px;cursor:pointer;">
+              <i class="fas fa-download"></i> Download File
+            </button>
+          </div>
+        `;
+      };
+    } catch (error) {
+      container.innerHTML = `
+        <div style="padding:40px;text-align:center;">
+          <i class="fas fa-exclamation-circle" style="font-size:48px;color:#999;margin-bottom:20px;"></i>
+          <p style="color:#666;margin-bottom:20px;">Error loading document.</p>
+          <button onclick="downloadDocument('${docBase64}', '${filename}', '${ext}')" 
+                  style="padding:10px 20px;background:var(--spc-maroon);color:white;border:none;border-radius:6px;cursor:pointer;">
+            <i class="fas fa-download"></i> Download File
+          </button>
+        </div>
+      `;
+    }
+  }
+  
+  modal.style.display = 'block';
+}
+
+function downloadDocument(docBase64, filename, ext) {
+  try {
+    const blob = base64ToBlob(docBase64, getMimeType(ext));
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Error downloading document:', error);
+    alert('Failed to download document');
+  }
+}
+
+function closeDocumentModal() {
+  const modal = document.getElementById('document-modal');
+  const iframe = document.getElementById('document-viewer');
+  const img = document.getElementById('image-viewer');
+  const container = document.getElementById('document-container');
+  
+  modal.style.display = 'none';
+  iframe.src = '';
+  img.src = '';
+  iframe.style.display = 'none';
+  img.style.display = 'none';
+  container.style.overflow = 'auto';
+  container.style.padding = '0';
+}
+
+window.onclick = function(event) {
+  const modal = document.getElementById('document-modal');
+  if (event.target == modal) {
+    closeDocumentModal();
+  }
+}
+
+function base64ToBlob(base64, mimeType) {
+  const byteCharacters = atob(base64);
+  const byteArrays = [];
+  
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteArrays.push(byteCharacters.charCodeAt(i));
+  }
+  
+  return new Blob([new Uint8Array(byteArrays)], { type: mimeType });
+}
+
+function getMimeType(ext) {
+  const mimeTypes = {
+    'pdf': 'application/pdf',
+    'doc': 'application/msword',
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif'
+  };
+  return mimeTypes[ext] || 'application/octet-stream';
+}
+
 document.getElementById('personalForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   
-  // Get phone number - keep as is, no formatting
   let phone = document.getElementById('phone').value.trim();
   
-  // Basic validation - must be +63 followed by space and 10 digits starting with 9
   if (phone && phone !== '+63 ') {
     let digits = phone.slice(4).replace(/\s/g, '');
     if (!phone.startsWith('+63 ') || digits.length !== 10 || !digits.startsWith('9') || !/^\d+$/.test(digits)) {
@@ -468,7 +676,6 @@ document.getElementById('personalForm').addEventListener('submit', async (e) => 
       showLoading(true, 'Personal information updated successfully');
       await new Promise(resolve => setTimeout(resolve, 2000));
       showLoading(false);
-      // Reload to ensure data persistence
       await loadProfileData();
     } else {
       showLoading(false);
@@ -481,17 +688,26 @@ document.getElementById('personalForm').addEventListener('submit', async (e) => 
   }
 });
 
-// Documents Form
 document.getElementById('documentsForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   
   try {
     showLoading(true, 'Processing documents...');
+
+    const hasNewUploads = ['licenses', 'degrees', 'certificates', 'publications', 'awards'].some(docType => {
+      const input = document.getElementById(docType);
+      return input.files && input.files.length > 0;
+    });
     
-    // First, delete all marked documents
+    const hasDeletions = Object.values(documentsToDelete).some(arr => arr.length > 0);
+    
+    if (!hasNewUploads && !hasDeletions) {
+      showToast('No changes to update', 'info');
+      return;
+    }
+
     for (const docType of ['licenses', 'degrees', 'certificates', 'publications', 'awards']) {
       if (documentsToDelete[docType].length > 0) {
-        // Sort indices in descending order to delete from highest to lowest
         const sortedIndices = documentsToDelete[docType].sort((a, b) => b - a);
         
         for (const index of sortedIndices) {
@@ -507,10 +723,8 @@ document.getElementById('documentsForm').addEventListener('submit', async (e) =>
       }
     }
     
-    // Then, upload new documents
     const formData = new FormData(e.target);
     
-    // Add filenames as metadata
     ['licenses', 'degrees', 'certificates', 'publications', 'awards'].forEach(docType => {
       const files = document.getElementById(docType).files;
       if (files.length > 0) {
@@ -531,7 +745,6 @@ document.getElementById('documentsForm').addEventListener('submit', async (e) =>
       await new Promise(resolve => setTimeout(resolve, 2000));
       showLoading(false);
       
-      // Clear the deletion tracking
       documentsToDelete = {
         licenses: [],
         degrees: [],
@@ -540,25 +753,19 @@ document.getElementById('documentsForm').addEventListener('submit', async (e) =>
         awards: []
       };
       
-      // Reload to show updated documents
       await loadProfileData();
       
-      // Clear file inputs
       ['profilepic', 'licenses', 'degrees', 'certificates', 'publications', 'awards'].forEach(id => {
         const input = document.getElementById(id);
         if (input) {
           input.value = '';
-          // Clear the preview lists for new uploads
-          const listId = id + '-list';
-          const list = document.getElementById(listId);
-          if (list) {
-            // Keep existing documents, clear only new upload previews
-            const newUploads = list.querySelectorAll('.file-item[style*="e8f5e8"]');
+          const displayElement = document.getElementById(id + '-display');
+          if (displayElement) {
+            const newUploads = displayElement.querySelectorAll('.document-card[style*="e8f5e8"]');
             newUploads.forEach(item => item.remove());
           }
         }
       });
-      // Reset profile picture label
       document.getElementById('profilepic-label').textContent = 'Choose profile picture...';
     } else {
       showLoading(false);
@@ -571,18 +778,15 @@ document.getElementById('documentsForm').addEventListener('submit', async (e) =>
   }
 });
 
-// Password Form
 document.getElementById('passwordForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   
-  // Hide all errors first
   hidePasswordErrors();
   
   const currentPassword = document.getElementById('current_password').value;
   const newPassword = document.getElementById('new_password').value;
   const confirmPassword = document.getElementById('confirm_password').value;
   
-  // Client-side validation
   if (newPassword !== confirmPassword) {
     showPasswordError('match');
     return;
@@ -624,7 +828,6 @@ document.getElementById('passwordForm').addEventListener('submit', async (e) => 
       hidePasswordErrors();
     } else {
       showLoading(false);
-      // Handle server-side errors
       if (data.error.toLowerCase().includes('current password is incorrect')) {
         showPasswordError('current');
       } else if (data.error.toLowerCase().includes('do not match')) {
@@ -642,7 +845,6 @@ document.getElementById('passwordForm').addEventListener('submit', async (e) => 
   }
 });
 
-// Utility functions
 function showToast(message, type = 'success') {
   const toast = document.getElementById('toast');
   toast.textContent = message;
@@ -663,5 +865,14 @@ function showLoading(show, text = 'Loading...') {
     loading.style.display = 'none';
   }
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+  const allDeleteButtons = document.querySelectorAll('button[onclick*="markDocumentForDeletion"], button[onclick*="removeNewUpload"]');
+  allDeleteButtons.forEach(btn => {
+    if (!btn.closest('.document-card')) {
+      btn.remove();
+    }
+  });
+});
 </script>
 {% endblock %}

@@ -415,8 +415,6 @@ def api_simulate_rfid():
         print(f"Error simulating RFID: {e}")
         return {'success': False, 'error': str(e)}
 
-# Add these new routes to your app.py file
-
 @app.route('/api/faculty/semesters')
 @require_auth([20001, 20002])
 def api_faculty_semesters():
@@ -727,7 +725,187 @@ def api_faculty_attendance_by_semester(semester_id):
         print(f"Error fetching attendance data for semester {semester_id}: {e}")
         return {'success': False, 'error': str(e)}
 
-# Add these new API routes to your app.py file
+@app.route('/api/faculty/teaching-schedule/<int:semester_id>')
+@require_auth([20001, 20002])
+def api_faculty_teaching_schedule(semester_id):
+    """API endpoint to get faculty teaching schedule as a timetable"""
+    try:
+        user_id = session['user_id']
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get personnel_id for the current user
+        cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
+        personnel_result = cursor.fetchone()
+        
+        if not personnel_result:
+            return {'success': False, 'error': 'Personnel record not found'}
+        
+        personnel_id = personnel_result[0]
+        
+        # Get specific academic calendar
+        cursor.execute("""
+            SELECT acadcalendar_id, semester, acadyear
+            FROM acadcalendar 
+            WHERE acadcalendar_id = %s
+        """, (semester_id,))
+        academic_calendar = cursor.fetchone()
+        
+        if not academic_calendar:
+            return {'success': False, 'error': 'Academic calendar not found'}
+        
+        acadcalendar_id, semester_name, acad_year = academic_calendar
+        
+        # Get all scheduled classes for this faculty in this semester
+        cursor.execute("""
+            SELECT 
+                sch.classday_1,
+                sch.starttime_1,
+                sch.endtime_1,
+                sch.classday_2,
+                sch.starttime_2,
+                sch.endtime_2,
+                sub.subjectcode,
+                sch.classroom,
+                sch.classsection
+            FROM schedule sch
+            JOIN subjects sub ON sch.subject_id = sub.subject_id
+            WHERE sch.personnel_id = %s AND sch.acadcalendar_id = %s
+        """, (personnel_id, acadcalendar_id))
+        
+        scheduled_classes = cursor.fetchall()
+        
+        # Helper function to format time to 12-hour AM/PM - FIXED TIMEZONE HANDLING
+        def format_time_12hr(time_val):
+            if not time_val:
+                return None
+            
+            # Handle timezone-aware datetime objects
+            if hasattr(time_val, 'tzinfo') and time_val.tzinfo is not None:
+                # Convert to Philippines timezone
+                ph_tz = pytz.timezone('Asia/Manila')
+                time_val = time_val.astimezone(ph_tz)
+                time_str = time_val.strftime('%H:%M')
+            elif hasattr(time_val, 'strftime'):
+                # Already local time or naive datetime
+                time_str = time_val.strftime('%H:%M')
+            else:
+                # String time
+                time_str = str(time_val)[:5]
+            
+            try:
+                hours, minutes = map(int, time_str.split(':'))
+                period = 'AM' if hours < 12 else 'PM'
+                display_hour = hours if hours <= 12 else hours - 12
+                display_hour = 12 if display_hour == 0 else display_hour
+                return f"{display_hour}:{minutes:02d} {period}"
+            except:
+                return time_str
+        
+        # Helper function to map time to time slot - IMPROVED MAPPING
+        def get_time_slot(start_time, end_time):
+            if not start_time or not end_time:
+                return None
+            
+            start_str = format_time_12hr(start_time)
+            end_str = format_time_12hr(end_time)
+            
+            if not start_str or not end_str:
+                return None
+            
+            time_slot = f"{start_str} - {end_str}"
+            
+            # Map to standard time slots with more flexible matching
+            time_slot_mapping = {
+                '7:30 AM - 9:00 AM': '7:30 AM - 9:00 AM',
+                '9:15 AM - 10:45 AM': '9:15 AM - 10:45 AM', 
+                '11:00 AM - 12:30 PM': '11:00 AM - 12:30 PM',
+                '12:45 PM - 2:15 PM': '12:45 PM - 2:15 PM',
+                '2:30 PM - 4:00 PM': '2:30 PM - 4:00 PM',
+                '4:15 PM - 5:45 PM': '4:15 PM - 5:45 PM',
+                '6:00 PM - 7:30 PM': '6:00 PM - 7:30 PM'
+            }
+            
+            # Try exact match first
+            if time_slot in time_slot_mapping:
+                return time_slot_mapping[time_slot]
+            
+            # Try to match based on start time (for flexibility)
+            start_time_only = start_str
+            for slot in time_slot_mapping.keys():
+                if slot.startswith(start_time_only):
+                    return slot
+            
+            # Return the original time slot if no match found
+            return time_slot
+        
+        # Build timetable structure
+        timetable = {}
+        days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+        
+        # Initialize timetable with empty time slots for all days
+        for day in days:
+            timetable[day] = {
+                '7:30 AM - 9:00 AM': None,
+                '9:15 AM - 10:45 AM': None,
+                '11:00 AM - 12:30 PM': None,
+                '12:45 PM - 2:15 PM': None,
+                '2:30 PM - 4:00 PM': None,
+                '4:15 PM - 5:45 PM': None,
+                '6:00 PM - 7:30 PM': None
+            }
+        
+        # Populate timetable with classes - FIXED: Process both class days properly
+        for scheduled_class in scheduled_classes:
+            (day1, start1, end1, day2, start2, end2, 
+             subject_code, classroom, section) = scheduled_class
+            
+            print(f"DEBUG: Processing class - Day1: {day1}, Start1: {start1}, End1: {end1}, Day2: {day2}, Start2: {start2}, End2: {end2}")
+            
+            # Process first class day
+            if day1 and start1 and end1:
+                time_slot = get_time_slot(start1, end1)
+                if time_slot and day1 in timetable:
+                    timetable[day1][time_slot] = {
+                        'subject_code': subject_code,
+                        'classroom': classroom or 'TBA',
+                        'section': section or 'N/A'
+                    }
+                    print(f"DEBUG: Added to timetable - {day1} at {time_slot}: {subject_code}")
+            
+            # Process second class day  
+            if day2 and start2 and end2:
+                time_slot = get_time_slot(start2, end2)
+                if time_slot and day2 in timetable:
+                    timetable[day2][time_slot] = {
+                        'subject_code': subject_code,
+                        'classroom': classroom or 'TBA',
+                        'section': section or 'N/A'
+                    }
+                    print(f"DEBUG: Added to timetable - {day2} at {time_slot}: {subject_code}")
+        
+        # Semester info
+        semester_info = {
+            'id': acadcalendar_id,
+            'name': semester_name,
+            'year': acad_year,
+            'display': f"{semester_name}, {acad_year}"
+        }
+        
+        cursor.close()
+        conn.close()
+        
+        return {
+            'success': True,
+            'timetable': timetable,
+            'semester_info': semester_info
+        }
+        
+    except Exception as e:
+        print(f"Error fetching teaching schedule for semester {semester_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
 
 @app.route('/api/faculty/dashboard')
 @require_auth([20001, 20002])
@@ -1042,13 +1220,10 @@ def get_teaching_load(cursor, personnel_id, acadcalendar_id):
         print(f"Error getting teaching load: {e}")
         return 0
 
-# REPLACE the existing faculty profile API routes in your app.py with these updated versions
-# Using your exact column names: licensesnames, degreesnames, etc.
-
 @app.route('/api/faculty/profile')
 @require_auth([20001, 20002])
 def api_get_faculty_profile():
-    """API endpoint to get faculty profile data"""
+    """API endpoint to get faculty profile data - AUTO CREATES PROFILE IF NOT EXISTS"""
     try:
         user_id = session['user_id']
         conn = get_db_connection()
@@ -1077,29 +1252,41 @@ def api_get_faculty_profile():
         
         profile_result = cursor.fetchone()
         
-        if profile_result:
-            (bio, profilepic, licenses, degrees, certificates, publications, awards,
-             licenses_fn, degrees_fn, certificates_fn, publications_fn, awards_fn) = profile_result
-        else:
-            # Create empty profile if doesn't exist
+        # AUTO CREATE PROFILE IF NOT EXISTS
+        if not profile_result:
+            print(f"Profile not found for personnel_id: {personnel_id}. Creating new profile...")
+            
+            # Get the maximum profile_id to generate the next one
+            cursor.execute("SELECT COALESCE(MAX(profile_id), 90000) FROM profile")
+            max_profile_id = cursor.fetchone()[0]
+            new_profile_id = max_profile_id + 1
+            
+            # Create new profile with empty/default values
             cursor.execute("""
                 INSERT INTO profile (
-                    personnel_id, bio, profilepic, 
+                    profile_id, personnel_id, bio, profilepic, 
                     licenses, degrees, certificates, publications, awards,
                     licensesname, degreesname, certificatesname,
-                    publicationsname, awardsname
+                    publicationsname, awardsname,
+                    employmentstatus, position
                 )
-                VALUES (%s, '', NULL, 
+                VALUES (%s, %s, '', NULL, 
                         ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[],
-                        ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[])
+                        ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[],
+                        'Active', 'Faculty Member')
                 RETURNING bio, profilepic, 
                           licenses, degrees, certificates, publications, awards,
                           licensesname, degreesname, certificatesname,
                           publicationsname, awardsname
-            """, (personnel_id,))
+            """, (new_profile_id, personnel_id))
             conn.commit()
-            (bio, profilepic, licenses, degrees, certificates, publications, awards,
-             licenses_fn, degrees_fn, certificates_fn, publications_fn, awards_fn) = cursor.fetchone()
+            
+            profile_result = cursor.fetchone()
+            print(f"New profile created with ID: {new_profile_id} for personnel_id: {personnel_id}")
+        
+        # Now profile_result should exist
+        (bio, profilepic, licenses, degrees, certificates, publications, awards,
+         licenses_fn, degrees_fn, certificates_fn, publications_fn, awards_fn) = profile_result
         
         # Convert bytea to base64 for frontend
         import base64
@@ -1143,7 +1330,7 @@ def api_get_faculty_profile():
 @app.route('/api/faculty/profile/personal', methods=['POST'])
 @require_auth([20001, 20002])
 def api_update_personal_info():
-    """API endpoint to update personal information"""
+    """API endpoint to update personal information - AUTO CREATES PROFILE IF NOT EXISTS"""
     try:
         user_id = session['user_id']
         data = request.get_json()
@@ -1200,18 +1387,29 @@ def api_update_personal_info():
                 UPDATE profile SET bio = %s WHERE personnel_id = %s
             """, (bio, personnel_id))
         else:
+            # AUTO CREATE PROFILE IF NOT EXISTS
+            print(f"Profile not found for personnel_id: {personnel_id}. Creating new profile...")
+            
+            # Get the maximum profile_id to generate the next one
+            cursor.execute("SELECT COALESCE(MAX(profile_id), 90000) FROM profile")
+            max_profile_id = cursor.fetchone()[0]
+            new_profile_id = max_profile_id + 1
+            
             # Insert new profile
             cursor.execute("""
                 INSERT INTO profile (
-                    personnel_id, bio, profilepic, 
+                    profile_id, personnel_id, bio, profilepic, 
                     licenses, degrees, certificates, publications, awards,
                     licensesname, degreesname, certificatesname,
-                    publicationsname, awardsname
+                    publicationsname, awardsname,
+                    employmentstatus, position
                 )
-                VALUES (%s, %s, NULL, 
+                VALUES (%s, %s, %s, NULL, 
                         ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[],
-                        ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[])
-            """, (personnel_id, bio))
+                        ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[],
+                        'Active', 'Faculty Member')
+            """, (new_profile_id, personnel_id, bio))
+            print(f"New profile created with ID: {new_profile_id} for personnel_id: {personnel_id}")
         
         conn.commit()
         cursor.close()
@@ -1229,7 +1427,7 @@ def api_update_personal_info():
 @app.route('/api/faculty/profile/documents', methods=['POST'])
 @require_auth([20001, 20002])
 def api_update_documents():
-    """API endpoint to update document uploads - APPENDS new files to existing ones"""
+    """API endpoint to update document uploads - AUTO CREATES PROFILE IF NOT EXISTS"""
     try:
         user_id = session['user_id']
         conn = get_db_connection()
@@ -1246,23 +1444,34 @@ def api_update_documents():
         
         personnel_id = personnel_result[0]
         
-        # Ensure profile exists
+        # Check if profile exists
         cursor.execute("SELECT profile_id FROM profile WHERE personnel_id = %s", (personnel_id,))
         profile_exists = cursor.fetchone()
         
         if not profile_exists:
+            # AUTO CREATE PROFILE IF NOT EXISTS
+            print(f"Profile not found for personnel_id: {personnel_id}. Creating new profile...")
+            
+            # Get the maximum profile_id to generate the next one
+            cursor.execute("SELECT COALESCE(MAX(profile_id), 90000) FROM profile")
+            max_profile_id = cursor.fetchone()[0]
+            new_profile_id = max_profile_id + 1
+            
             cursor.execute("""
                 INSERT INTO profile (
-                    personnel_id, bio, profilepic, 
+                    profile_id, personnel_id, bio, profilepic, 
                     licenses, degrees, certificates, publications, awards,
                     licensesname, degreesname, certificatesname,
-                    publicationsname, awardsname
+                    publicationsname, awardsname,
+                    employmentstatus, position
                 )
-                VALUES (%s, '', NULL, 
+                VALUES (%s, %s, '', NULL, 
                         ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[],
-                        ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[])
-            """, (personnel_id,))
+                        ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[],
+                        'Active', 'Faculty Member')
+            """, (new_profile_id, personnel_id))
             conn.commit()
+            print(f"New profile created with ID: {new_profile_id} for personnel_id: {personnel_id}")
         
         # Handle profile picture upload (this replaces the old one)
         if 'profilepic' in request.files:

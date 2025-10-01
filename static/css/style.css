@@ -2188,7 +2188,7 @@ to { opacity: 1; }
   border: 4px solid white;
   box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 }
-/* Attendance page specific layout */
+
 .attendance-layout {
   display: grid;
   grid-template-columns: 1fr 280px;
@@ -2196,14 +2196,13 @@ to { opacity: 1; }
 }
 
 .attendance-main {
-  min-width: 0; /* Allows proper flex shrinking */
+  min-width: 0; 
 }
 
 .attendance-sidebar {
   width: 280px;
 }
 
-/* Center table headers */
 .attendance-table th {
   text-align: center;
 }
@@ -2212,7 +2211,6 @@ to { opacity: 1; }
   text-align: center;
 }
 
-/* Responsive adjustment */
 @media (max-width: 1100px) {
   .attendance-layout {
     grid-template-columns: 1fr;
@@ -2222,3 +2220,158 @@ to { opacity: 1; }
     width: 100%;
   }
 }
+
+/* Timetable Styles */
+.timetable-container {
+  overflow-x: auto;
+  margin-top: 20px;
+}
+
+.timetable {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.timetable th {
+  background: #f3f4f6;
+  color: #374151;
+  padding: 15px 10px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 14px;
+  border: 1px solid #e5e7eb;
+}
+
+.timetable td {
+  border: 1px solid #e5e7eb;
+  padding: 0;
+  text-align: center;
+  vertical-align: middle;
+  height: 50px;
+  min-height: 50px;
+  max-height: 50px;
+  position: relative;
+  background: #fafafa;
+}
+
+.timetable td.time-cell {
+  background: #f9fafb;
+  font-weight: 600;
+  color: #6b7280;
+  font-size: 12px;
+  padding: 10px;
+  width: 140px;
+  min-width: 140px;
+}
+
+.timetable td.class-cell {
+  background: white;
+  padding: 4px; 
+}
+
+.class-block {
+  background: #e5e7eb; 
+  padding: 10px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  transition: background-color 0.2s ease; 
+  border: 1px solid #d1d5db;
+}
+
+.class-block:hover {
+  background: #d1d5db; 
+  border-color: #9ca3af; 
+}
+
+.class-block .subject-code {
+  font-weight: 700;
+  font-size: 13px;
+  color: #374151;
+  margin-bottom: 3px;
+}
+
+.class-block .room-section {
+  font-size: 11px;
+  color: #6b7280; 
+  font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  .timetable {
+    font-size: 11px;
+  }
+  
+  .timetable th, .timetable td {
+    padding: 8px 5px;
+  }
+  
+  .class-block {
+    padding: 5px;
+  }
+  
+  .class-block .subject-code {
+    font-size: 11px;
+  }
+  
+  .class-block .room-section {
+    font-size: 9px;
+  }
+}
+
+/* Upload fields */
+.upload-field { 
+  display:flex; 
+  align-items:center; 
+  justify-content:space-between; 
+  background:#f9f9f9; 
+  border: 2px dashed #d1d5db;
+  border-radius:8px; 
+  padding:10px 14px; 
+  cursor:pointer; 
+  margin-top:10px;
+  transition: all 0.2s ease;
+}
+.upload-field input[type="file"] { display:none; }
+.upload-field label { flex:1; display:flex; align-items:center; gap:8px; font-weight:500; cursor:pointer; }
+.upload-field:hover {
+  background: #f0f0f0;
+  border-color: #7b1113;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+/* Document delete button styles */
+.document-card .delete-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0;
+  width: auto;
+  height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+}
+
+.document-card .delete-btn:hover {
+  color: #333;
+}
+
+.profile .delete-btn,
+.topbar .delete-btn,
+.actions .delete-btn {
+  display: none !important;
+}
+
