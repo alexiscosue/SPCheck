@@ -5,189 +5,562 @@
 {% block page_title %}Faculty Attendance{% endblock %}
 
 {% block content %}
-    <section class="grid" aria-live="polite">
-      <div class="kpis card" style="padding:16px">
-        <div class="kpi card" style="gap:14px">
-          <div class="icon fac"><i class='bx bx-check-shield' style="font-size:20px"></i></div>
-          <div>
-            <div class="title">Total Faculty</div>
-            <div class="value" id="kpi-att">52</div>
-          </div>
-        </div>
-
-        <div class="kpi card" style="gap:14px">
-          <div class="icon eval"><i class='bx bx-user'></i></div>
-          <div>
-            <div class="title">Present Today</div>
-            <div class="value" id="kpi-fac">20</div>
-          </div>
-        </div>
-
-        <div class="kpi card" style="gap:14px">
-          <div class="icon promo"><i class='bx bx-check-circle'></i></div>
-          <div>
-            <div class="title">Late today</div>
-            <div class="value" id="kpi-eval">3</div>
-          </div>
-        </div>
-
-        <div class="kpi card" style="gap:14px">
-          <div class="icon att"><i class='bx bx-award'></i></div>
-          <div>
-            <div class="title">Absent Today</div>
-            <div class="value" id="kpi-promo">2</div>
-          </div>
-        </div>
+<section class="grid" aria-live="polite">
+  <div class="kpis card" style="padding:16px">
+    <div class="kpi card" style="gap:14px">
+      <div class="icon fac"><i class='bx bx-check-shield' style="font-size:20px"></i></div>
+      <div>
+        <div class="title">Total Faculty</div>
+        <div class="value" id="kpi-att">0</div>
       </div>
+    </div>
 
-      <!-- Faculty Attendance Logs -->
-      <div class="chart-large card">
-        <div class="tabs">
-          <button class="tab-btn active" data-tab="logs">All Faculty Logs</button>
-          <button class="tab-btn" data-tab="classes">View Classes</button>
-        </div>
-
-        <!-- All Faculty Logs -->
-        <div id="logs" class="tab-content active">
-          <div class="search-filter">
-            <input type="text" id="logSearch" placeholder="Search by name or date...">
-            <select id="logFilter"><option value="">All Status</option><option>Present</option><option>Late</option><option>Absent</option></select>
-          </div>
-          <div class="table">
-            <table>
-              <thead><tr><th>Name</th><th>Date</th><th>Time In</th><th>Time Out</th><th>Status</th></tr></thead>
-              <tbody id="logsBody"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- View Classes Tab -->
-        <div id="classes" class="tab-content">
-          <div class="search-filter">
-            <input type="text" id="facultySearch" placeholder="Search faculty...">
-          </div>
-          <div class="table">
-            <table>
-              <thead><tr><th>Faculty</th><th>Department</th><th>Action</th></tr></thead>
-              <tbody id="facultyBody"></tbody>
-            </table>
-          </div>
-        </div>
+    <div class="kpi card" style="gap:14px">
+      <div class="icon eval"><i class='bx bx-user'></i></div>
+      <div>
+        <div class="title">Present Today</div>
+        <div class="value" id="kpi-fac">0</div>
       </div>
-      
+    </div>
 
-      <!-- Status Breakdown -->
-      <div class="chart-side">
-        <div class="chart-card card">
-          <div class="card-header"><i class='bx bx-pie-chart-alt'></i>Status Breakdown</div>
-          <canvas id="statusBreakdown" height="160"></canvas>
-        </div>
+    <div class="kpi card" style="gap:14px">
+      <div class="icon promo"><i class='bx bx-check-circle'></i></div>
+      <div>
+        <div class="title">Late today</div>
+        <div class="value" id="kpi-eval">0</div>
       </div>
-    </section>
-  </div>
+    </div>
 
-  <!-- Per-Class Attendance Modal -->
-  <div class="modal" id="classModal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3 id="modalFacultyName">Faculty Name</h3>
-        <span class="close-btn" id="closeModal">&times;</span>
-      </div>
-      <div class="table">
-        <table>
-          <thead><tr><th>Class</th><th>Schedule</th><th>Time In</th><th>Time Out</th><th>Status</th></tr></thead>
-          <tbody id="classBody"></tbody>
-        </table>
+    <div class="kpi card" style="gap:14px">
+      <div class="icon att"><i class='bx bx-award'></i></div>
+      <div>
+        <div class="title">Absent Today</div>
+        <div class="value" id="kpi-promo">0</div>
       </div>
     </div>
   </div>
-  {% endblock %}
 
-  {% block extra_scripts %}
-  <script>
-    // Tabs
-    document.querySelectorAll('.tab-btn').forEach(btn=>{
-      btn.addEventListener('click',()=>{
-        document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById(btn.dataset.tab).classList.add('active');
-      });
+  <!-- Main Content Area with Sidebar Layout -->
+  <div class="hr-attendance-layout" style="grid-column: 1 / -1;">
+    <!-- Left: Tabs + Content -->
+    <div class="hr-attendance-main card">
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="logs">All Faculty Logs</button>
+        <button class="tab-btn" data-tab="classes">View Classes</button>
+      </div>
+
+      <!-- All Faculty Logs -->
+      <div id="logs" class="tab-content active">
+        <div class="search-filter">
+          <input type="text" id="logSearch" placeholder="Search by name, date, or room...">
+          <select id="logFilter">
+            <option value="">All Status</option>
+            <option>Present</option>
+            <option>Late</option>
+            <option>Absent</option>
+          </select>
+        </div>
+        <div class="hr-pagination-controls">
+          <button id="prevPage" class="hr-pagination-btn">‹</button>
+          <span id="pageInfo">0 records</span>
+          <button id="nextPage" class="hr-pagination-btn">›</button>
+        </div>
+        <div class="table">
+          <table class="hr-attendance-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Date</th>
+                <th>Room</th>
+                <th>Time In</th>
+                <th>Time Out</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="logsBody">
+              <tr><td colspan="6" style="text-align: center; padding: 2rem; color: #6b7280;">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- View Classes Tab -->
+      <div id="classes" class="tab-content">
+        <div class="search-filter">
+          <input type="text" id="facultySearch" placeholder="Search faculty...">
+        </div>
+        <div class="hr-pagination-controls">
+          <button id="prevPageClasses" class="hr-pagination-btn">‹</button>
+          <span id="pageInfoClasses">0 records</span>
+          <button id="nextPageClasses" class="hr-pagination-btn">›</button>
+        </div>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Faculty</th>
+                <th>College</th>
+                <th>Teaching Load</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="facultyBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Status Breakdown (Smaller) -->
+    <div class="hr-attendance-sidebar">
+      <div class="chart-card card">
+        <div class="card-header"><i class='bx bx-pie-chart-alt'></i>Status Breakdown</div>
+        <canvas id="statusBreakdown" height="200"></canvas>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Per-Class Attendance Modal -->
+<div class="modal" id="classModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="modalFacultyName">Faculty Name</h3>
+      <span class="close-btn" id="closeModal">&times;</span>
+    </div>
+    <div class="table">
+      <table>
+        <thead><tr><th>Class</th><th>Schedule</th><th>Time In</th><th>Time Out</th><th>Status</th></tr></thead>
+        <tbody id="classBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script>
+  document.querySelectorAll('.tab-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.tab).classList.add('active');
     });
+  });
 
-    // Sample data
-    let facultyLogs = [
-      {name:'Prof. Santos', date:'2025-09-22', in:'08:00', out:'12:00', status:'Present'},
-      {name:'Prof. Cruz', date:'2025-09-22', in:'08:10', out:'12:00', status:'Late'},
-      {name:'Prof. Reyes', date:'2025-09-22', in:'—', out:'—', status:'Absent'}
-    ];
+  let facultyLogs = [];
+  let facultyList = [];
+  let currentPage = 1;
+  let recordsPerPage = 10;
+  let filteredLogs = [];
+  let statusBreakdown = { present: 0, late: 0, absent: 0 };
+  let currentPageClasses = 1;
+  let filteredFaculty = [];
 
-    let facultyList = [
-      {name:'Prof. Santos', dept:'IT', classes:[
-        {class:'CS101', schedule:'MWF 8-9am', in:'08:00', out:'09:00', status:'Present'},
-        {class:'CS102', schedule:'TTh 10-11am', in:'10:05', out:'11:00', status:'Late'}
-      ]},
-      {name:'Prof. Cruz', dept:'Education', classes:[
-        {class:'ED201', schedule:'MWF 9-10am', in:'09:05', out:'10:00', status:'Late'},
-        {class:'ED202', schedule:'TTh 11-12pm', in:'—', out:'—', status:'Absent'}
-      ]},
-      {name:'Prof. Reyes', dept:'Business', classes:[
-        {class:'BS101', schedule:'MWF 1-2pm', in:'—', out:'—', status:'Absent'}
-      ]}
-    ];
-
-    function renderLogs(){
-      const tbody = document.getElementById('logsBody');
-      tbody.innerHTML='';
-      let search=document.getElementById('logSearch').value.toLowerCase();
-      let filter=document.getElementById('logFilter').value;
-      facultyLogs.filter(f=>(!search||(f.name.toLowerCase().includes(search)||f.date.includes(search)))&&(!filter||f.status===filter))
-        .forEach(f=>{
-          const tr=document.createElement('tr');
-          tr.innerHTML=`<td>${f.name}</td><td>${f.date}</td><td>${f.in}</td><td>${f.out}</td><td><span class="status ${f.status.toLowerCase()}">${f.status}</span></td>`;
-          tbody.appendChild(tr);
-        });
+  async function fetchFacultyAttendance() {
+    try {
+      const response = await fetch('/api/hr/faculty-attendance');
+      const data = await response.json();
+      
+      if (data.success) {
+        facultyLogs = data.attendance_logs || [];
+        statusBreakdown = data.status_breakdown || { present: 0, late: 0, absent: 0 };
+        
+        updateKPICards(data.kpis || {});
+        
+        currentPage = 1;
+        renderLogs();
+        updateStatusChart();
+      } else {
+        console.error('Failed to fetch attendance data:', data.error);
+        clearDisplays();
+      }
+    } catch (error) {
+      console.error('Error fetching attendance data:', error);
+      clearDisplays();
     }
+  }
 
-    function renderFacultyList(){
-      const tbody = document.getElementById('facultyBody');
-      tbody.innerHTML='';
-      let search=document.getElementById('facultySearch').value.toLowerCase();
-      facultyList.filter(f=>!search||f.name.toLowerCase().includes(search)).forEach(f=>{
-        const tr=document.createElement('tr');
-        const btn = `<button onclick="openModal('${f.name}')">View Classes</button>`;
-        tr.innerHTML=`<td>${f.name}</td><td>${f.dept}</td><td>${btn}</td>`;
-        tbody.appendChild(tr);
-      });
+  async function fetchFacultyList() {
+    try {
+      const response = await fetch('/api/hr/faculty-list');
+      const data = await response.json();
+      
+      if (data.success) {
+        facultyList = data.faculty_list || [];
+        console.log('Loaded faculty list:', facultyList.length, 'faculty members');
+        currentPageClasses = 1;
+        renderFacultyList();
+      } else {
+        console.error('Failed to fetch faculty list:', data.error);
+        renderFacultyList();
+      }
+    } catch (error) {
+      console.error('Error fetching faculty list:', error);
+      renderFacultyList(); 
     }
+  }
 
-    function openModal(facultyName){
-      const modal = document.getElementById('classModal');
-      const modalTitle = document.getElementById('modalFacultyName');
-      const tbody = document.getElementById('classBody');
-      const faculty = facultyList.find(f=>f.name===facultyName);
-      modalTitle.textContent = faculty.name;
-      tbody.innerHTML='';
-      faculty.classes.forEach(c=>{
+  function clearDisplays() {
+    document.getElementById('kpi-att').textContent = '0';
+    document.getElementById('kpi-fac').textContent = '0';
+    document.getElementById('kpi-eval').textContent = '0';
+    document.getElementById('kpi-promo').textContent = '0';
+    
+    document.getElementById('logsBody').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: #6b7280;">No attendance data available</td></tr>';
+    
+    if (window.breakdownChart) {
+      window.breakdownChart.destroy();
+    }
+    
+    updatePaginationControls(1, 1, 0);
+  }
+
+  function updateKPICards(kpis) {
+    document.getElementById('kpi-att').textContent = kpis.total_faculty || 0;
+    document.getElementById('kpi-fac').textContent = kpis.present_today || 0;
+    document.getElementById('kpi-eval').textContent = kpis.late_today || 0;
+    document.getElementById('kpi-promo').textContent = kpis.absent_today || 0;
+  }
+
+  function renderLogs(){
+    const tbody = document.getElementById('logsBody');
+    tbody.innerHTML='';
+    let search = document.getElementById('logSearch').value.toLowerCase();
+    let filter = document.getElementById('logFilter').value;
+    
+    filteredLogs = facultyLogs.filter(f => {
+      const searchMatch = !search || 
+        f.name.toLowerCase().includes(search) ||
+        f.date.includes(search) ||
+        (f.room && f.room.toLowerCase().includes(search));
+      
+      const filterMatch = !filter || f.status === filter;
+      
+      return searchMatch && filterMatch;
+    });
+    
+    const totalRecords = filteredLogs.length;
+    const totalPages = Math.ceil(totalRecords / recordsPerPage);
+    const startIndex = (currentPage - 1) * recordsPerPage;
+    const endIndex = startIndex + recordsPerPage;
+    const currentPageRecords = filteredLogs.slice(startIndex, endIndex);
+    
+    if (currentPageRecords.length === 0) {
+      const message = filteredLogs.length === 0 && (search || filter) ? 
+        'No records match your search criteria' : 
+        'No attendance data available';
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 2rem; color: #6b7280;">${message}</td></tr>`;
+    } else {
+      currentPageRecords.forEach(f=>{
         const tr = document.createElement('tr');
-        tr.innerHTML=`<td>${c.class}</td><td>${c.schedule}</td><td>${c.in}</td><td>${c.out}</td><td><span class="status ${c.status.toLowerCase()}">${c.status}</span></td>`;
+        tr.innerHTML = `<td>${f.name}</td><td>${f.date}</td><td>${f.room || 'N/A'}</td><td>${f.time_in}</td><td>${f.time_out}</td><td><span class="status ${f.status.toLowerCase()}">${f.status}</span></td>`;
         tbody.appendChild(tr);
       });
-      modal.classList.add('active');
     }
+    
+    updatePaginationControls(currentPage, totalPages, totalRecords);
+  }
 
-    document.getElementById('closeModal').addEventListener('click',()=>document.getElementById('classModal').classList.remove('active'));
-    document.getElementById('facultySearch').addEventListener('input',renderFacultyList);
+  function updatePaginationControls(page, totalPages, totalRecords) {
+    const pageInfo = document.getElementById('pageInfo');
+    const prevBtn = document.getElementById('prevPage');
+    const nextBtn = document.getElementById('nextPage');
+    
+    if (totalRecords === 0) {
+      pageInfo.textContent = '0 records';
+    } else {
+      const startRecord = ((page - 1) * recordsPerPage) + 1;
+      const endRecord = Math.min(page * recordsPerPage, totalRecords);
+      pageInfo.textContent = `${startRecord} - ${endRecord} of ${totalRecords} records`;
+    }
+    
+    prevBtn.disabled = page <= 1;
+    nextBtn.disabled = page >= totalPages || totalPages === 0;
+  }
 
-    renderLogs();
-    renderFacultyList();
+  function goToPage(page) {
+    const totalPages = Math.ceil(filteredLogs.length / recordsPerPage);
+    if (page >= 1 && page <= totalPages) {
+      currentPage = page;
+      renderLogs();
+    }
+  }
 
-    // Status Breakdown Chart
-    const statusCtx=document.getElementById('statusBreakdown').getContext('2d');
-    const breakdownChart=new Chart(statusCtx,{
-      type:'doughnut',
-      data:{labels:['Present','Late','Absent'],datasets:[{data:[3,1,1],backgroundColor:['#16a34a','#f59e0b','#ef4444']}]},
-      options:{plugins:{legend:{position:'bottom'}}}
+  function renderFacultyList(){
+    const tbody = document.getElementById('facultyBody');
+    tbody.innerHTML='';
+    let search = document.getElementById('facultySearch').value.toLowerCase();
+    
+    if (facultyList.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 2rem; color: #6b7280;">Loading faculty list...</td></tr>';
+      return;
+    }
+    
+    filteredFaculty = facultyList.filter(f => 
+      !search || 
+      f.name.toLowerCase().includes(search) || 
+      (f.college && f.college.toLowerCase().includes(search))
+    );
+    
+    const totalRecordsClasses = filteredFaculty.length;
+    const totalPagesClasses = Math.ceil(totalRecordsClasses / recordsPerPage);
+    const startIndexClasses = (currentPageClasses - 1) * recordsPerPage;
+    const endIndexClasses = startIndexClasses + recordsPerPage;
+    const currentPageFaculty = filteredFaculty.slice(startIndexClasses, endIndexClasses);
+    
+    if (currentPageFaculty.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 2rem; color: #6b7280;">No faculty match your search</td></tr>';
+    } else {
+      currentPageFaculty.forEach(faculty => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${faculty.name}</td>
+          <td>${faculty.college || 'N/A'}</td>
+          <td>${faculty.teaching_load || 0} units</td>
+          <td><button class="btn-action" onclick="toggleSchedule(${faculty.personnel_id})">View Classes</button></td>
+        `;
+        tbody.appendChild(row);
+        
+        const scheduleRow = document.createElement('tr');
+        scheduleRow.id = `schedule-${faculty.personnel_id}`;
+        scheduleRow.style.display = 'none';
+        scheduleRow.innerHTML = `
+          <td colspan="4">
+            <div class="faculty-schedule-container" id="schedule-content-${faculty.personnel_id}">
+              <div style="text-align: center; padding: 2rem; color: #6b7280;">
+                <i class='bx bx-loader-circle bx-spin'></i> Loading schedule...
+              </div>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(scheduleRow);
+      });
+    }
+    
+    updatePaginationControlsClasses(currentPageClasses, totalPagesClasses, totalRecordsClasses);
+  }
+
+  function updatePaginationControlsClasses(page, totalPages, totalRecords) {
+    const pageInfo = document.getElementById('pageInfoClasses');
+    const prevBtn = document.getElementById('prevPageClasses');
+    const nextBtn = document.getElementById('nextPageClasses');
+    
+    if (totalRecords === 0) {
+      pageInfo.textContent = '0 records';
+    } else {
+      const startRecord = ((page - 1) * recordsPerPage) + 1;
+      const endRecord = Math.min(page * recordsPerPage, totalRecords);
+      pageInfo.textContent = `${startRecord} - ${endRecord} of ${totalRecords} records`;
+    }
+    
+    prevBtn.disabled = page <= 1;
+    nextBtn.disabled = page >= totalPages || totalPages === 0;
+  }
+
+  function goToPageClasses(page) {
+    const totalPages = Math.ceil(filteredFaculty.length / recordsPerPage);
+    if (page >= 1 && page <= totalPages) {
+      currentPageClasses = page;
+      renderFacultyList();
+    }
+  }
+
+  async function toggleSchedule(personnelId) {
+    const scheduleRow = document.getElementById(`schedule-${personnelId}`);
+    const scheduleContent = document.getElementById(`schedule-content-${personnelId}`);
+    
+    if (scheduleRow.style.display === 'none') {
+      scheduleRow.style.display = '';
+      
+      if (!scheduleContent.classList.contains('loaded')) {
+        await loadFacultySchedule(personnelId, scheduleContent);
+      }
+    } else {
+      scheduleRow.style.display = 'none';
+    }
+  }
+
+  async function loadFacultySchedule(personnelId, container) {
+    try {
+      const response = await fetch(`/api/hr/faculty-schedule/${personnelId}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        displayFacultySchedule(data, container);
+        container.classList.add('loaded');
+      } else {
+        container.innerHTML = `
+          <div style="text-align: center; padding: 2rem; color: #ef4444;">
+            <i class='bx bx-error'></i> Error loading schedule
+          </div>
+        `;
+      }
+    } catch (error) {
+      console.error('Error loading faculty schedule:', error);
+      container.innerHTML = `
+        <div style="text-align: center; padding: 2rem; color: #ef4444;">
+          <i class='bx bx-error'></i> Error loading schedule
+        </div>
+      `;
+    }
+  }
+
+  function displayFacultySchedule(data, container) {
+    const timetable = data.timetable;
+    const semesterInfo = data.semester_info;
+    
+    let html = `
+      <div class="hr-schedule-header">
+        <h4>${semesterInfo.display}</h4>
+      </div>
+      <div class="hr-timetable-container">
+        <table class="hr-timetable">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Monday</th>
+              <th>Tuesday</th>
+              <th>Wednesday</th>
+              <th>Thursday</th>
+              <th>Friday</th>
+              <th>Saturday</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+    
+    const timeSlots = [
+      '7:30 AM - 9:00 AM',
+      '9:15 AM - 10:45 AM', 
+      '11:00 AM - 12:30 PM',
+      '12:45 PM - 2:15 PM',
+      '2:30 PM - 4:00 PM',
+      '4:15 PM - 5:45 PM',
+      '6:00 PM - 7:30 PM'
+    ];
+    
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    
+    timeSlots.forEach(timeSlot => {
+      html += `<tr><td class="hr-time-cell">${timeSlot}</td>`;
+      
+      days.forEach(day => {
+        const classInfo = timetable[day] && timetable[day][timeSlot];
+        
+        if (classInfo) {
+          html += `
+            <td class="hr-class-cell">
+              <div class="hr-class-block">
+                <div class="hr-subject-code">${classInfo.subject_code}</div>
+                <div class="hr-room-section">${classInfo.classroom} • ${classInfo.section}</div>
+              </div>
+            </td>
+          `;
+        } else {
+          html += '<td class="hr-class-cell"></td>';
+        }
+      });
+      
+      html += '</tr>';
     });
-  </script>
+    
+    html += `
+          </tbody>
+        </table>
+      </div>
+    `;
+    
+    container.innerHTML = html;
+  }
+
+  function openModal(facultyName){
+    const modal = document.getElementById('classModal');
+    const modalTitle = document.getElementById('modalFacultyName');
+    const tbody = document.getElementById('classBody');
+    
+    modalTitle.textContent = facultyName;
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem; color: #6b7280;">Class schedule data not available</td></tr>';
+    modal.classList.add('active');
+  }
+
+  document.getElementById('closeModal').addEventListener('click',()=>document.getElementById('classModal').classList.remove('active'));
+  document.getElementById('facultySearch').addEventListener('input', () => {
+    currentPageClasses = 1; 
+    renderFacultyList();
+  });
+
+  document.getElementById('logSearch').addEventListener('input', () => {
+    currentPage = 1; 
+    renderLogs();
+  });
+  document.getElementById('logFilter').addEventListener('change', () => {
+    currentPage = 1; 
+    renderLogs();
+  });
+
+  document.getElementById('prevPage').addEventListener('click', () => {
+    goToPage(currentPage - 1);
+  });
+  document.getElementById('nextPage').addEventListener('click', () => {
+    goToPage(currentPage + 1);
+  });
+
+  document.getElementById('prevPageClasses').addEventListener('click', () => {
+    goToPageClasses(currentPageClasses - 1);
+  });
+  document.getElementById('nextPageClasses').addEventListener('click', () => {
+    goToPageClasses(currentPageClasses + 1);
+  });
+
+  document.addEventListener('DOMContentLoaded', () => {
+    fetchFacultyAttendance();
+    fetchFacultyList();
+  });
+
+  let breakdownChart = null;
+
+  function updateStatusChart() {
+    const statusCtx = document.getElementById('statusBreakdown').getContext('2d');
+    
+    if (breakdownChart) {
+      breakdownChart.destroy();
+    }
+    
+    const totalRecords = statusBreakdown.present + statusBreakdown.late + statusBreakdown.absent;
+    if (totalRecords === 0) {
+      statusCtx.clearRect(0, 0, statusCtx.canvas.width, statusCtx.canvas.height);
+      statusCtx.font = '16px Arial';
+      statusCtx.fillStyle = '#6b7280';
+      statusCtx.textAlign = 'center';
+      statusCtx.fillText('No data available', statusCtx.canvas.width / 2, statusCtx.canvas.height / 2);
+      return;
+    }
+    
+    breakdownChart = new Chart(statusCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Present', 'Late', 'Absent'],
+        datasets: [{
+          data: [statusBreakdown.present, statusBreakdown.late, statusBreakdown.absent],
+          backgroundColor: ['#16a34a', '#f59e0b', '#ef4444']
+        }]
+      },
+      options: {
+        onClick: (e, els) => {
+          if(els.length){
+            const label = breakdownChart.data.labels[els[0].index];
+            document.getElementById('logFilter').value = label;
+            currentPage = 1;
+            renderLogs();
+          }
+        },
+        plugins: {
+          legend: { position: 'bottom' }
+        }
+      }
+    });
+  }
+</script>
 {% endblock %}

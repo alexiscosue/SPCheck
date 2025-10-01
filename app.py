@@ -1686,6 +1686,412 @@ def api_delete_document(doc_type, index):
         import traceback
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
+    
+@app.route('/api/hr/faculty-attendance')
+@require_auth([20003])
+def api_hr_faculty_attendance():
+    """API endpoint to get all faculty and dean attendance data for HR"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get current academic calendar
+        cursor.execute("""
+            SELECT acadcalendar_id, semesterstart, semesterend 
+            FROM acadcalendar 
+            WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+            ORDER BY semesterstart DESC
+            LIMIT 1
+        """)
+        academic_calendar = cursor.fetchone()
+        
+        if not academic_calendar:
+            cursor.close()
+            conn.close()
+            return {'success': False, 'error': 'No active academic calendar found'}
+        
+        acadcalendar_id, semester_start, semester_end = academic_calendar
+        
+        # Get all faculty and dean (role_id 20001 and 20002) with count
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM personnel p
+            WHERE p.role_id IN (20001, 20002)
+        """)
+        total_faculty = cursor.fetchone()[0]
+        
+        # Get all attendance records for faculty and dean with personnel names
+        cursor.execute("""
+            SELECT 
+                p.firstname,
+                p.lastname,
+                p.honorifics,
+                a.attendancestatus,
+                a.timein,
+                a.timeout,
+                sch.classroom
+            FROM attendance a
+            JOIN schedule sch ON a.class_id = sch.class_id
+            JOIN personnel p ON a.personnel_id = p.personnel_id
+            WHERE p.role_id IN (20001, 20002)
+            AND sch.acadcalendar_id = %s
+            ORDER BY a.timein DESC
+        """, (acadcalendar_id,))
+        
+        attendance_records = cursor.fetchall()
+        
+        # Build attendance logs with faculty names
+        attendance_logs = []
+        status_counts = {'present': 0, 'late': 0, 'absent': 0}
+        
+        # Philippines timezone
+        philippines_tz = pytz.timezone('Asia/Manila')
+        today = datetime.now(philippines_tz).date()
+        
+        # Today's stats
+        present_today = 0
+        late_today = 0
+        absent_today = 0
+        
+        # Process attendance records
+        for record in attendance_records:
+            firstname, lastname, honorifics, status, timein, timeout, classroom = record
+            
+            # Format faculty name
+            if honorifics:
+                faculty_name = f"{firstname} {lastname}, {honorifics}"
+            else:
+                faculty_name = f"{firstname} {lastname}"
+            
+            # Format date and times
+            if timein:
+                # Handle timezone-aware datetime
+                if hasattr(timein, 'tzinfo') and timein.tzinfo is not None:
+                    timein_local = timein.astimezone(philippines_tz)
+                else:
+                    timein_local = philippines_tz.localize(timein) if timein.tzinfo is None else timein
+                
+                date_str = timein_local.strftime('%Y-%m-%d')
+                # Format time in 12-hour with AM/PM
+                time_in_str = timein_local.strftime('%I:%M %p')
+                
+                # Check if this is today's record
+                if timein_local.date() == today:
+                    status_lower = status.lower()
+                    if status_lower == 'present':
+                        present_today += 1
+                    elif status_lower == 'late':
+                        late_today += 1
+                    elif status_lower == 'absent':
+                        absent_today += 1
+            else:
+                # For absent records without timein
+                date_str = today.strftime('%Y-%m-%d')
+                time_in_str = '—'
+                absent_today += 1
+            
+            # Format timeout
+            if timeout:
+                if hasattr(timeout, 'tzinfo') and timeout.tzinfo is not None:
+                    timeout_local = timeout.astimezone(philippines_tz)
+                else:
+                    timeout_local = philippines_tz.localize(timeout) if timeout.tzinfo is None else timeout
+                # Format time in 12-hour with AM/PM
+                time_out_str = timeout_local.strftime('%I:%M %p')
+            else:
+                time_out_str = '—'
+            
+            log_entry = {
+                'name': faculty_name,
+                'date': date_str,
+                'room': classroom or 'N/A',
+                'time_in': time_in_str,
+                'time_out': time_out_str,
+                'status': status.capitalize()
+            }
+            attendance_logs.append(log_entry)
+            
+            # Count statuses (all records)
+            status_lower = status.lower()
+            if status_lower == 'present':
+                status_counts['present'] += 1
+            elif status_lower == 'late':
+                status_counts['late'] += 1
+            elif status_lower == 'absent':
+                status_counts['absent'] += 1
+        
+        kpis = {
+            'total_faculty': total_faculty,
+            'present_today': present_today,
+            'late_today': late_today,
+            'absent_today': absent_today
+        }
+        
+        cursor.close()
+        conn.close()
+        
+        return {
+            'success': True,
+            'attendance_logs': attendance_logs,
+            'status_breakdown': status_counts,
+            'kpis': kpis
+        }
+        
+    except Exception as e:
+        print(f"Error fetching HR faculty attendance data: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/hr/faculty-list')
+@require_auth([20003])
+def api_hr_faculty_list():
+    """API endpoint to get all faculty and dean list with teaching load - EXCLUDES HR"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get current academic calendar
+        cursor.execute("""
+            SELECT acadcalendar_id, semesterstart, semesterend 
+            FROM acadcalendar 
+            WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+            ORDER BY semesterstart DESC
+            LIMIT 1
+        """)
+        academic_calendar = cursor.fetchone()
+        
+        if not academic_calendar:
+            cursor.close()
+            conn.close()
+            return {'success': False, 'error': 'No active academic calendar found'}
+        
+        acadcalendar_id, semester_start, semester_end = academic_calendar
+        
+        # Get ONLY faculty (20001) and dean (20002) - STRICTLY EXCLUDE HR (20003) and all others
+        cursor.execute("""
+            SELECT 
+                p.personnel_id,
+                p.firstname,
+                p.lastname,
+                p.honorifics,
+                p.role_id,
+                c.collegename,
+                COALESCE(SUM(sub.units), 0) as total_units
+            FROM personnel p
+            LEFT JOIN college c ON p.college_id = c.college_id
+            LEFT JOIN schedule sch ON p.personnel_id = sch.personnel_id AND sch.acadcalendar_id = %s
+            LEFT JOIN subjects sub ON sch.subject_id = sub.subject_id
+            WHERE p.role_id IN (20001, 20002)  -- ONLY faculty and dean
+            GROUP BY p.personnel_id, p.firstname, p.lastname, p.honorifics, p.role_id, c.collegename
+            ORDER BY p.lastname, p.firstname
+        """, (acadcalendar_id,))
+        
+        faculty_records = cursor.fetchall()
+        
+        faculty_list = []
+        for record in faculty_records:
+            personnel_id, firstname, lastname, honorifics, role_id, collegename, total_units = record
+            
+            # Format faculty name
+            if honorifics:
+                faculty_name = f"{firstname} {lastname}, {honorifics}"
+            else:
+                faculty_name = f"{firstname} {lastname}"
+            
+            faculty_list.append({
+                'personnel_id': personnel_id,
+                'name': faculty_name,
+                'college': collegename or 'N/A',
+                'teaching_load': int(total_units),
+                'role_id': role_id
+            })
+        
+        cursor.close()
+        conn.close()
+        
+        return {
+            'success': True,
+            'faculty_list': faculty_list
+        }
+        
+    except Exception as e:
+        print(f"Error fetching faculty list: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/hr/faculty-schedule/<int:personnel_id>')
+@require_auth([20003])
+def api_hr_faculty_schedule(personnel_id):
+    """API endpoint to get faculty teaching schedule for HR view"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get current academic calendar
+        cursor.execute("""
+            SELECT acadcalendar_id, semester, acadyear
+            FROM acadcalendar 
+            WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+            ORDER BY semesterstart DESC
+            LIMIT 1
+        """)
+        academic_calendar = cursor.fetchone()
+        
+        if not academic_calendar:
+            cursor.close()
+            conn.close()
+            return {'success': False, 'error': 'No active academic calendar found'}
+        
+        acadcalendar_id, semester_name, acad_year = academic_calendar
+        
+        # Get all scheduled classes for this faculty in current semester
+        cursor.execute("""
+            SELECT 
+                sch.classday_1,
+                sch.starttime_1,
+                sch.endtime_1,
+                sch.classday_2,
+                sch.starttime_2,
+                sch.endtime_2,
+                sub.subjectcode,
+                sch.classroom,
+                sch.classsection
+            FROM schedule sch
+            JOIN subjects sub ON sch.subject_id = sub.subject_id
+            WHERE sch.personnel_id = %s AND sch.acadcalendar_id = %s
+        """, (personnel_id, acadcalendar_id))
+        
+        scheduled_classes = cursor.fetchall()
+        
+        # Helper function to format time to 12-hour AM/PM
+        def format_time_12hr(time_val):
+            if not time_val:
+                return None
+            
+            # Handle timezone-aware datetime objects
+            if hasattr(time_val, 'tzinfo') and time_val.tzinfo is not None:
+                # Convert to Philippines timezone
+                ph_tz = pytz.timezone('Asia/Manila')
+                time_val = time_val.astimezone(ph_tz)
+                time_str = time_val.strftime('%H:%M')
+            elif hasattr(time_val, 'strftime'):
+                # Already local time or naive datetime
+                time_str = time_val.strftime('%H:%M')
+            else:
+                # String time
+                time_str = str(time_val)[:5]
+            
+            try:
+                hours, minutes = map(int, time_str.split(':'))
+                period = 'AM' if hours < 12 else 'PM'
+                display_hour = hours if hours <= 12 else hours - 12
+                display_hour = 12 if display_hour == 0 else display_hour
+                return f"{display_hour}:{minutes:02d} {period}"
+            except:
+                return time_str
+        
+        # Helper function to map time to time slot
+        def get_time_slot(start_time, end_time):
+            if not start_time or not end_time:
+                return None
+            
+            start_str = format_time_12hr(start_time)
+            end_str = format_time_12hr(end_time)
+            
+            if not start_str or not end_str:
+                return None
+            
+            time_slot = f"{start_str} - {end_str}"
+            
+            # Map to standard time slots
+            time_slot_mapping = {
+                '7:30 AM - 9:00 AM': '7:30 AM - 9:00 AM',
+                '9:15 AM - 10:45 AM': '9:15 AM - 10:45 AM', 
+                '11:00 AM - 12:30 PM': '11:00 AM - 12:30 PM',
+                '12:45 PM - 2:15 PM': '12:45 PM - 2:15 PM',
+                '2:30 PM - 4:00 PM': '2:30 PM - 4:00 PM',
+                '4:15 PM - 5:45 PM': '4:15 PM - 5:45 PM',
+                '6:00 PM - 7:30 PM': '6:00 PM - 7:30 PM'
+            }
+            
+            # Try exact match first
+            if time_slot in time_slot_mapping:
+                return time_slot_mapping[time_slot]
+            
+            # Try to match based on start time
+            start_time_only = start_str
+            for slot in time_slot_mapping.keys():
+                if slot.startswith(start_time_only):
+                    return slot
+            
+            # Return the original time slot if no match found
+            return time_slot
+        
+        # Build timetable structure
+        timetable = {}
+        days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+        
+        # Initialize timetable with empty time slots for all days
+        for day in days:
+            timetable[day] = {
+                '7:30 AM - 9:00 AM': None,
+                '9:15 AM - 10:45 AM': None,
+                '11:00 AM - 12:30 PM': None,
+                '12:45 PM - 2:15 PM': None,
+                '2:30 PM - 4:00 PM': None,
+                '4:15 PM - 5:45 PM': None,
+                '6:00 PM - 7:30 PM': None
+            }
+        
+        # Populate timetable with classes
+        for scheduled_class in scheduled_classes:
+            (day1, start1, end1, day2, start2, end2, 
+             subject_code, classroom, section) = scheduled_class
+            
+            # Process first class day
+            if day1 and start1 and end1:
+                time_slot = get_time_slot(start1, end1)
+                if time_slot and day1 in timetable:
+                    timetable[day1][time_slot] = {
+                        'subject_code': subject_code,
+                        'classroom': classroom or 'TBA',
+                        'section': section or 'N/A'
+                    }
+            
+            # Process second class day  
+            if day2 and start2 and end2:
+                time_slot = get_time_slot(start2, end2)
+                if time_slot and day2 in timetable:
+                    timetable[day2][time_slot] = {
+                        'subject_code': subject_code,
+                        'classroom': classroom or 'TBA',
+                        'section': section or 'N/A'
+                    }
+        
+        # Semester info
+        semester_info = {
+            'id': acadcalendar_id,
+            'name': semester_name,
+            'year': acad_year,
+            'display': f"{semester_name}, {acad_year}"
+        }
+        
+        cursor.close()
+        conn.close()
+        
+        return {
+            'success': True,
+            'timetable': timetable,
+            'semester_info': semester_info
+        }
+        
+    except Exception as e:
+        print(f"Error fetching faculty schedule for personnel {personnel_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
 
 # Login route
 @app.route('/', methods=['GET', 'POST'])
