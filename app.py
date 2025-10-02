@@ -81,7 +81,7 @@ def get_personnel_info(user_id):
                 'honorifics': honorifics,
                 'role_name': rolename or 'Staff',
                 'email': email or 'email@spc.edu.ph',
-                'position': position or 'Faculty Member',
+                'position': position or 'Full-Time Employee',
                 'employment_status': employmentstatus or 'Active'
             }
     except Exception as e:
@@ -1221,7 +1221,7 @@ def get_teaching_load(cursor, personnel_id, acadcalendar_id):
         return 0
 
 @app.route('/api/faculty/profile')
-@require_auth([20001, 20002])
+@require_auth([20001, 20002, 20003])
 def api_get_faculty_profile():
     """API endpoint to get faculty profile data - AUTO CREATES PROFILE IF NOT EXISTS"""
     try:
@@ -1327,8 +1327,81 @@ def api_get_faculty_profile():
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
 
+@app.route('/api/faculty/profile/stats')
+@require_auth([20001, 20002, 20003, 20004])
+def api_get_profile_stats():
+    """API endpoint to get profile statistics - works for faculty, dean, HR, and VP"""
+    try:
+        user_id = session['user_id']
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get personnel_id for the current user
+        cursor.execute("SELECT personnel_id, hiredate FROM personnel WHERE user_id = %s", (user_id,))
+        personnel_result = cursor.fetchone()
+        
+        if not personnel_result:
+            cursor.close()
+            conn.close()
+            return {'success': False, 'error': 'Personnel record not found'}
+        
+        personnel_id, hire_date = personnel_result
+        
+        # Calculate years of service from hire date
+        years_of_service = 0
+        if hire_date:
+            from datetime import datetime
+            today = datetime.now().date()
+            years_of_service = today.year - hire_date.year
+            # Adjust if birthday hasn't occurred this year
+            if today.month < hire_date.month or (today.month == hire_date.month and today.day < hire_date.day):
+                years_of_service -= 1
+        
+        # Get profile data to count documents
+        cursor.execute("""
+            SELECT 
+                certificates, publications, awards
+            FROM profile 
+            WHERE personnel_id = %s
+        """, (personnel_id,))
+        
+        profile_result = cursor.fetchone()
+        
+        # Count documents
+        certificates_count = 0
+        publications_count = 0
+        awards_count = 0
+        
+        if profile_result:
+            certificates, publications, awards = profile_result
+            
+            if certificates:
+                certificates_count = len(certificates)
+            if publications:
+                publications_count = len(publications)
+            if awards:
+                awards_count = len(awards)
+        
+        cursor.close()
+        conn.close()
+        
+        stats = {
+            'years_of_service': years_of_service,
+            'professional_certifications': certificates_count,
+            'research_publications': publications_count,
+            'awards_count': awards_count
+        }
+        
+        return {'success': True, 'stats': stats}
+        
+    except Exception as e:
+        print(f"Error fetching profile stats: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
 @app.route('/api/faculty/profile/personal', methods=['POST'])
-@require_auth([20001, 20002])
+@require_auth([20001, 20002, 20003])
 def api_update_personal_info():
     """API endpoint to update personal information - AUTO CREATES PROFILE IF NOT EXISTS"""
     try:
@@ -1425,7 +1498,7 @@ def api_update_personal_info():
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/faculty/profile/documents', methods=['POST'])
-@require_auth([20001, 20002])
+@require_auth([20001, 20002, 20003])
 def api_update_documents():
     """API endpoint to update document uploads - AUTO CREATES PROFILE IF NOT EXISTS"""
     try:
@@ -1548,7 +1621,7 @@ def api_update_documents():
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/faculty/profile/password', methods=['POST'])
-@require_auth([20001, 20002])
+@require_auth([20001, 20002, 20003])
 def api_update_password():
     """API endpoint to update password"""
     try:
@@ -1606,7 +1679,7 @@ def api_update_password():
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/faculty/profile/document/<doc_type>/<int:index>', methods=['DELETE'])
-@require_auth([20001, 20002])
+@require_auth([20001, 20002, 20003])
 def api_delete_document(doc_type, index):
     """API endpoint to delete a specific document from an array"""
     try:
@@ -2219,6 +2292,12 @@ def hr_attendance():
 def hr_promotions():
     personnel_info = get_personnel_info(session['user_id'])
     return render_template('hrmd/hr-promotions.html', **personnel_info)
+
+@app.route('/hr_profile')
+@require_auth([20003])
+def hr_profile():
+    personnel_info = get_personnel_info(session['user_id'])
+    return render_template('hrmd/hr-profile.html', **personnel_info)
 
 @app.route('/hr_settings')
 @require_auth([20003])

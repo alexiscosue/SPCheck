@@ -8,6 +8,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
   <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='img/logo.png') }}">
   
@@ -39,6 +40,9 @@
       </a>
       <a href="{{ url_for('hr_promotions') }}" {% if request.endpoint == 'hr_promotions' %}class="active"{% endif %}>
         <i class='bx bx-award'></i><span>Promotions</span>
+      </a>
+      <a href="{{ url_for('hr_profile') }}" {% if request.endpoint == 'hr_profile' %}class="active"{% endif %}>
+        <i class='bx bx-user-circle'></i><span>My Profile</span>
       </a>
       <a href="{{ url_for('hr_settings') }}" {% if request.endpoint == 'hr_settings' %}class="active"{% endif %}>
         <i class='bx bx-cog'></i><span>Settings</span>

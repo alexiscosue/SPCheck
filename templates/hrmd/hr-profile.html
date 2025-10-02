@@ -1,4 +1,4 @@
-{% extends "faculty&dean/faculty-base.html" %}
+{% extends "hrmd/hr-base.html" %}
 
 {% block title %}My Profile{% endblock %}
 
@@ -10,10 +10,10 @@
   <div class="profile-banner"></div>
 
   <div class="profile-header">
-    <img id="profile-picture" src="../img/people.png" alt="Faculty" class="profile-img">
+    <img id="profile-picture" src="../img/people.png" alt="HR Staff" class="profile-img">
 
     <div class="profile-info">
-      <h2 class="profile-name">{{ faculty_name }}</h2>
+      <h2 class="profile-name">{{ hr_name }}</h2>
       <p class="profile-title">{{ college }}</p>
 
       <div class="profile-contact">
@@ -39,7 +39,6 @@
   <div class="tab active" data-tab="overview">Overview</div>
   <div class="tab" data-tab="credentials-docs">Credentials</div>
   <div class="tab" data-tab="research-achievements">Research & Achievements</div>
-  <div class="tab" data-tab="teaching-courses">Teaching</div>
 </div>
 
 <!-- Tab Content -->
@@ -51,27 +50,24 @@
       <h3>Career Overview</h3>
     </div>
 
+    <!-- In the Overview tab -->
     <div class="stats">
-      <div class="stat-card">
-        <h3>4.6</h3>
-        <p>Avg. Eval Rating</p>
-      </div>
-      <div class="stat-card">
+    <div class="stat-card">
         <h3 id="years-service">0</h3>
         <p>Years of Service</p>
-      </div>
-      <div class="stat-card">
-        <h3 id="research-pubs">0</h3>
-        <p>Research Publications</p>
-      </div>
-      <div class="stat-card">
+    </div>
+    <div class="stat-card">
         <h3 id="professional-certs">0</h3>
         <p>Professional Certifications</p>
-      </div>
-      <div class="stat-card">
+    </div>
+    <div class="stat-card">
+        <h3 id="research-pubs">0</h3>
+        <p>Research Publications</p>
+    </div>
+    <div class="stat-card">
         <h3 id="awards-count">0</h3>
         <p>Awards & Recognitions</p>
-      </div>
+    </div>
     </div>
 
     <p style="margin-top:20px" id="bio-display">
@@ -136,27 +132,6 @@
   </div>
 </div>
 
-<!-- Teaching & Courses -->
-<div id="teaching-courses" class="tab-content">
-  <div class="card">
-    <h3>Teaching & Courses</h3>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:20px;">Current and past teaching assignments</p>
-    
-    <!-- Semester Navigation -->
-    <div class="calendar-header" style="margin:20px 0;">
-      <button id="prev-semester-btn" onclick="changeSemester('prev')" class="calendar-nav-btn">‹</button>
-      <h4 id="semester-title" style="margin:0;color:var(--text);font-size:16px;font-weight:600;">
-        Loading...
-      </h4>
-      <button id="next-semester-btn" onclick="changeSemester('next')" class="calendar-nav-btn">›</button>
-    </div>
-
-    <div id="teaching-display">
-      <p style="color:var(--muted);text-align:center;padding:20px;">Loading schedule...</p>
-    </div>
-  </div>
-</div>
-
 <!-- Document Viewer Modal -->
 <div id="document-modal" class="modal">
   <div class="modal-content">
@@ -182,13 +157,10 @@
 {% block extra_scripts %}
 <script>
 let currentProfile = {};
-let allSemesters = [];
-let currentSemesterIndex = 0;
 
 // Load profile data on page load
 document.addEventListener('DOMContentLoaded', function() {
   loadProfileData();
-  loadSemesters();
 });
 
 async function loadProfileData() {
@@ -224,130 +196,6 @@ async function loadProfileData() {
   }
 }
 
-async function loadSemesters() {
-  try {
-    const response = await fetch('/api/faculty/semesters');
-    const data = await response.json();
-    
-    if (data.success && data.semesters.length > 0) {
-      allSemesters = data.semesters;
-      
-      // Find current semester index
-      currentSemesterIndex = allSemesters.findIndex(s => s.is_current);
-      if (currentSemesterIndex === -1) currentSemesterIndex = 0;
-      
-      // Load schedule for current semester
-      loadSchedule(allSemesters[currentSemesterIndex].id);
-    } else {
-      document.getElementById('teaching-display').innerHTML = 
-        '<p style="color:var(--muted);text-align:center;padding:20px;">No semesters available.</p>';
-    }
-  } catch (error) {
-    console.error('Error loading semesters:', error);
-    document.getElementById('teaching-display').innerHTML = 
-      '<p style="color:#e53e3e;text-align:center;padding:20px;">Error loading semesters.</p>';
-  }
-}
-
-async function loadSchedule(semesterId) {
-  try {
-    showLoading(true);
-    const response = await fetch(`/api/faculty/teaching-schedule/${semesterId}`);
-    const data = await response.json();
-    
-    if (data.success) {
-      displaySchedule(data);
-    } else {
-      document.getElementById('teaching-display').innerHTML = 
-        '<p style="color:#e53e3e;text-align:center;padding:20px;">Error loading schedule.</p>';
-    }
-  } catch (error) {
-    console.error('Error loading schedule:', error);
-    document.getElementById('teaching-display').innerHTML = 
-      '<p style="color:#e53e3e;text-align:center;padding:20px;">Error loading schedule.</p>';
-  } finally {
-    showLoading(false);
-  }
-}
-
-function displaySchedule(data) {
-  const semesterInfo = data.semester_info;
-  const timetable = data.timetable;
-  
-  // Update semester title
-  document.getElementById('semester-title').textContent = semesterInfo.display;
-  
-  // Update navigation buttons - FIXED: Left arrow goes to older semesters (higher index), Right arrow goes to newer semesters (lower index)
-  document.getElementById('prev-semester-btn').disabled = currentSemesterIndex <= 0;
-  document.getElementById('next-semester-btn').disabled = currentSemesterIndex >= allSemesters.length - 1;
-  
-  // Build timetable HTML
-  let html = '<div class="timetable-container"><table class="timetable">';
-  
-  // Header row
-  html += '<thead><tr><th>Time</th>';
-  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  days.forEach(day => {
-    html += `<th>${day}</th>`;
-  });
-  html += '</tr></thead><tbody>';
-  
-  // Time slots
-  const timeSlots = [
-    '7:30 AM - 9:00 AM',
-    '9:15 AM - 10:45 AM',
-    '11:00 AM - 12:30 PM',
-    '12:45 PM - 2:15 PM',
-    '2:30 PM - 4:00 PM',
-    '4:15 PM - 5:45 PM',
-    '6:00 PM - 7:30 PM'
-  ];
-  
-  timeSlots.forEach(timeSlot => {
-    html += `<tr><td class="time-cell">${timeSlot}</td>`;
-    
-    days.forEach(day => {
-      const classInfo = timetable[day] && timetable[day][timeSlot];
-      
-      if (classInfo) {
-        html += `
-          <td class="class-cell">
-            <div class="class-block">
-              <div class="subject-code">${classInfo.subject_code}</div>
-              <div class="room-section">${classInfo.classroom} • ${classInfo.section}</div>
-            </div>
-          </td>
-        `;
-      } else {
-        html += '<td class="class-cell"></td>';
-      }
-    });
-    
-    html += '</tr>';
-  });
-  
-  html += '</tbody></table></div>';
-  
-  document.getElementById('teaching-display').innerHTML = html;
-}
-
-function changeSemester(direction) {
-  // FIXED NAVIGATION: 
-  // LEFT arrow (prev) goes to OLDER semesters (lower index/more recent)
-  // RIGHT arrow (next) goes to NEWER semesters (higher index/less recent)
-  let newIndex;
-  if (direction === 'prev') {
-    newIndex = currentSemesterIndex - 1; // Go to older semester
-  } else {
-    newIndex = currentSemesterIndex + 1; // Go to newer semester
-  }
-  
-  if (newIndex >= 0 && newIndex < allSemesters.length) {
-    currentSemesterIndex = newIndex;
-    loadSchedule(allSemesters[currentSemesterIndex].id);
-  }
-}
-
 function displayProfile() {
   // Display profile picture
   if (currentProfile.profilepic) {
@@ -355,7 +203,7 @@ function displayProfile() {
   }
   
   // Display bio in overview only
-  const bio = currentProfile.bio || 'Passionate educator and researcher.';
+  const bio = currentProfile.bio || 'Dedicated HR professional committed to supporting faculty development and institutional excellence.';
   document.getElementById('bio-display').textContent = bio;
   
   // Display phone number

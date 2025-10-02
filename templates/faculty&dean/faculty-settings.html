@@ -367,7 +367,10 @@ function displayDocuments(docType, documents, filenames) {
   const displayElement = document.getElementById(docType + '-display');
   if (!displayElement) return;
   
-  if (!documents || documents.length === 0) {
+  const existingDocuments = documents.filter((doc, index) => !documentsToDelete[docType].includes(index));
+  const newUploadCards = displayElement.querySelectorAll('.document-card[style*="e8f5e8"]');
+  
+  if ((!existingDocuments || existingDocuments.length === 0) && newUploadCards.length === 0) {
     displayElement.innerHTML = `<p style="color:var(--muted);">No ${docType} uploaded yet.</p>`;
     return;
   }
@@ -406,21 +409,14 @@ function displayDocuments(docType, documents, filenames) {
     
     displayElement.appendChild(card);
   });
+  
+  newUploadCards.forEach(card => {
+    displayElement.appendChild(card);
+  });
 }
 
 function markDocumentForDeletion(docType, index, event) {
   event.stopPropagation();
-  
-  if (!documentsToDelete[docType].includes(index)) {
-    documentsToDelete[docType].push(index);
-  }
-  
-  const filenames = currentProfile[docType + '_filename'] || [];
-  displayDocuments(docType, currentProfile[docType] || [], filenames);
-}
-
-function markDocumentForDeletion(docType, index, event) {
-  event.stopPropagation(); 
   
   if (!documentsToDelete[docType].includes(index)) {
     documentsToDelete[docType].push(index);
@@ -448,6 +444,9 @@ function updateMultiFileNames(input, listId, docType) {
       noDocumentsMsg.remove();
     }
   }
+  
+  const existingNewUploads = displayElement.querySelectorAll('.document-card[style*="e8f5e8"]');
+  existingNewUploads.forEach(card => card.remove());
   
   if (input.files.length > 0) {
     Array.from(input.files).forEach((file, index) => {
@@ -483,6 +482,16 @@ function updateMultiFileNames(input, listId, docType) {
       
       displayElement.appendChild(card);
     });
+  } else {
+    const existingDocuments = currentProfile[docType] || [];
+    const existingDocumentsNotDeleted = existingDocuments.filter((doc, index) => !documentsToDelete[docType].includes(index));
+    
+    if (existingDocumentsNotDeleted.length === 0) {
+      displayElement.innerHTML = `<p style="color:var(--muted);">No ${docType} uploaded yet.</p>`;
+    } else {
+      const filenames = currentProfile[docType + '_filename'] || [];
+      displayDocuments(docType, existingDocuments, filenames);
+    }
   }
 }
 
@@ -501,15 +510,12 @@ function removeNewUpload(docType, fileIndex, buttonElement) {
   const card = buttonElement.closest('.document-card');
   card.remove();
   
-  const existingCards = displayElement.querySelectorAll('.document-card');
-  const newUploadCards = displayElement.querySelectorAll('.document-card[style*="e8f5e8"]');
+  const existingDocuments = currentProfile[docType] || [];
+  const existingDocumentsNotDeleted = existingDocuments.filter((doc, index) => !documentsToDelete[docType].includes(index));
+  const remainingNewUploads = displayElement.querySelectorAll('.document-card[style*="e8f5e8"]');
   
-  if (existingCards.length === 0 && newUploadCards.length === 0) {
+  if (existingDocumentsNotDeleted.length === 0 && remainingNewUploads.length === 0) {
     displayElement.innerHTML = `<p style="color:var(--muted);">No ${docType} uploaded yet.</p>`;
-  }
-  
-  if (newUploadCards.length === 0) {
-    // This will be handled by the next file selection
   }
 }
 
