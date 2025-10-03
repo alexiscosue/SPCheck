@@ -29,7 +29,7 @@
       <a href="{{ url_for('hr_dashboard') }}" {% if request.endpoint == 'hr_dashboard' %}class="active"{% endif %}>
         <i class='bx bx-grid-alt'></i><span>Dashboard</span>
       </a>
-      <a href="{{ url_for('hr_employees') }}" {% if request.endpoint == 'hr_employees' %}class="active"{% endif %}>
+      <a href="{{ url_for('hr_employees_return') }}" {% if request.endpoint in ['hr_employees', 'hr_employees_return'] %}class="active"{% endif %}>
         <i class='bx bx-user'></i><span>Employees</span>
       </a>
       <a href="{{ url_for('hr_evaluations') }}" {% if request.endpoint == 'hr_evaluations' %}class="active"{% endif %}>
@@ -81,7 +81,6 @@
 
   <!-- Base JavaScript -->
   <script>
-    // Sidebar toggle
     const sidebar = document.getElementById('sidebar');
     const btnToggle = document.getElementById('btnToggle');
     btnToggle.addEventListener('click', () => sidebar.classList.toggle('collapsed'));

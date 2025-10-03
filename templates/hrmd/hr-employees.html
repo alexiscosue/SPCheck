@@ -7,113 +7,236 @@
 {% block content %}
 <!-- Search & Filters -->
 <div class="filters">
-  <input type="text" id="searchInput" placeholder="Search by name...">
-  <select id="deptFilter">
-    <option>All Departments</option>
-    <option>Education</option>
-    <option>IT</option>
-    <option>Business</option>
+  <input type="text" id="searchInput" placeholder="Search by Name, Role, Position, Status, Phone...">
+  <select id="collegeFilter">
+    <option value="all">All Colleges</option>
+    <!-- College options will be populated from database -->
   </select>
   <select id="statusFilter">
-    <option>All Status</option>
-    <option>Probationary</option>
-    <option>Regular</option>
-    <option>Tenured</option>
+    <option value="all">All Status</option>
+    <option value="Active">Active</option>
+    <option value="Probationary">Probationary</option>
+    <option value="Regular">Regular</option>
+    <option value="Tenured">Tenured</option>
   </select>
 </div>
 
 <!-- Employees Table -->
 <div class="card" style="padding:16px;">
-  <table class="employee-table">
+  <div class="hr-pagination-controls">
+    <button id="prevPage" class="hr-pagination-btn">‹</button>
+    <span id="pageInfo">0 records</span>
+    <button id="nextPage" class="hr-pagination-btn">›</button>
+  </div>
+  <table class="employee-table" style="table-layout: fixed; width: 100%;">
     <thead>
       <tr>
-        <th>Profile</th>
-        <th>Department</th>
-        <th>Position</th>
-        <th>Status</th>
-        <th>Email</th>
-        <th>Phone</th>
-        <th>Action</th>
+        <th style="width: 150px; ">Name</th>
+        <th style="width: 160px; ">College</th>
+        <th style="width: 60px; ">Role</th>
+        <th style="width: 120px; ">Position</th>
+        <th style="width: 150px; ">Status</th>
+        <th style="width: 180px; ">Email</th>
+        <th style="width: 110px; ">Phone</th>
+        <th style="width: 60px; ">Action</th>
       </tr>
     </thead>
-    <tbody id="employeeTableBody"></tbody>
+    <tbody id="employeeTableBody" style="text-align: center;"></tbody>
   </table>
-</div>
-
-<!-- Employee Detail Modal -->
-<div class="modal" id="employeeModal">
-  <div class="modal-content">
-    <button class="modal-close" id="closeModal">&times;</button>
-    <div class="profile-section">
-      <img id="modalImg" src="" alt="Employee">
-      <div class="info">
-        <div class="name" id="modalName"></div>
-        <div class="dept" id="modalDept"></div>
-      </div>
-    </div>
-    <div class="section">
-      <h4>Position</h4>
-      <p id="modalPosition"></p>
-    </div>
-    <div class="section">
-      <h4>Status</h4>
-      <p id="modalStatus"></p>
-    </div>
-    <div class="section">
-      <h4>Contact Information</h4>
-      <p id="modalEmail"></p>
-      <p id="modalPhone"></p>
-    </div>
-  </div>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
-// Demo data
-const employeeData = [
-  {name:"Dr. Maria Cruz", dept:"Education", position:"Dean", status:"Regular", email:"mcruz@spc.edu", phone:"0917-123-4567", img:"{{ url_for('static', filename='img/people.png') }}"},
-  {name:"Mr. John Santos", dept:"IT", position:"Faculty", status:"Probationary", email:"jsantos@spc.edu", phone:"0919-987-6543", img:"{{ url_for('static', filename='img/people.png') }}"},
-  {name:"Ms. Ana Reyes", dept:"Business", position:"Faculty", status:"Regular", email:"areyes@spc.edu", phone:"0998-222-3333", img:"{{ url_for('static', filename='img/people.png') }}"}
-];
+// Pagination variables
+let currentPage = 1;
+const recordsPerPage = 10;
+let filteredEmployees = [];
+let allEmployees = [];
 
-// Populate table
-function populateTable() {
+// Fetch real data from API
+async function fetchEmployeesData() {
+  try {
+    const response = await fetch('/api/hr/employees-list');
+    const data = await response.json();
+    
+    if (data.success) {
+      return data.employees;
+    } else {
+      console.error('Error fetching employees:', data.error);
+      return [];
+    }
+  } catch (error) {
+    console.error('Error fetching employees:', error);
+    return [];
+  }
+}
+
+// Fetch colleges from database
+async function fetchColleges() {
+  try {
+    const response = await fetch('/api/hr/colleges-list');
+    const data = await response.json();
+    
+    if (data.success) {
+      return data.colleges;
+    } else {
+      console.error('Error fetching colleges:', data.error);
+      return [];
+    }
+  } catch (error) {
+    console.error('Error fetching colleges:', error);
+    return [];
+  }
+}
+
+// Populate table with real data
+async function populateTable() {
+  allEmployees = await fetchEmployeesData();
+  const colleges = await fetchColleges();
+  
+  // Populate college filter
+  const collegeFilter = document.getElementById('collegeFilter');
+  collegeFilter.innerHTML = '<option value="all">All Colleges</option>';
+  colleges.forEach(college => {
+    const option = document.createElement('option');
+    option.value = college.collegename;
+    option.textContent = college.collegename;
+    collegeFilter.appendChild(option);
+  });
+  
+  currentPage = 1;
+  renderEmployees();
+}
+
+// Render employees with pagination
+function renderEmployees() {
   const tbody = document.getElementById('employeeTableBody');
   tbody.innerHTML = '';
   
-  employeeData.forEach(emp => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="profile-cell"><img src="${emp.img}" alt=""><span>${emp.name}</span></td>
-      <td>${emp.dept}</td>
-      <td>${emp.position}</td>
-      <td><span class="kpi-status ${emp.status.toLowerCase()}">${emp.status}</span></td>
-      <td>${emp.email}</td>
-      <td>${emp.phone}</td>
-      <td><button class="btn-action" onclick="openModal('${emp.name}','${emp.dept}','${emp.position}','${emp.status}','${emp.email}','${emp.phone}','${emp.img}')">View</button></td>
-    `;
-    tbody.appendChild(tr);
+  const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+  const collegeValue = document.getElementById('collegeFilter').value;
+  const statusValue = document.getElementById('statusFilter').value;
+  
+  // Filter employees
+  filteredEmployees = allEmployees.filter(emp => {
+    const matchesSearch = searchTerm === '' || 
+      emp.name.toLowerCase().includes(searchTerm) ||
+      emp.role.toLowerCase().includes(searchTerm) ||
+      emp.position.toLowerCase().includes(searchTerm) ||
+      emp.status.toLowerCase().includes(searchTerm) ||
+      emp.phone.toLowerCase().includes(searchTerm);
+    
+    const matchesCollege = collegeValue === 'all' || emp.college === collegeValue;
+    
+    // Status filter - partial matching (e.g., "probationary" matches "probationary (year 2 of 3)")
+    const matchesStatus = statusValue === 'all' || 
+      emp.status.toLowerCase().includes(statusValue.toLowerCase());
+    
+    return matchesSearch && matchesCollege && matchesStatus;
+  });
+  
+  const totalRecords = filteredEmployees.length;
+  const totalPages = Math.ceil(totalRecords / recordsPerPage);
+  const startIndex = (currentPage - 1) * recordsPerPage;
+  const endIndex = startIndex + recordsPerPage;
+  const currentPageEmployees = filteredEmployees.slice(startIndex, endIndex);
+  
+  if (currentPageEmployees.length === 0) {
+    const message = filteredEmployees.length === 0 && (searchTerm || collegeValue !== 'all' || statusValue !== 'all') ? 
+      'No records match your search criteria' : 
+      'No employee data available';
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 2rem; color: #6b7280;">${message}</td></tr>`;
+  } else {
+    currentPageEmployees.forEach(emp => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${emp.name}</td>
+        <td>${emp.college}</td>
+        <td>${emp.role}</td>
+        <td>${emp.position}</td>
+        <td>${emp.status}</td>
+        <td>${emp.email}</td>
+        <td>${emp.phone}</td>
+        <td><button class="btn-action" onclick="viewEmployeeProfile(${emp.personnel_id}, '${emp.role}')">View</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+  
+  updatePaginationControls(currentPage, totalPages, totalRecords);
+}
+
+// Update pagination controls
+function updatePaginationControls(page, totalPages, totalRecords) {
+  const pageInfo = document.getElementById('pageInfo');
+  const prevBtn = document.getElementById('prevPage');
+  const nextBtn = document.getElementById('nextPage');
+  
+  if (totalRecords === 0) {
+    pageInfo.textContent = '0 records';
+  } else {
+    const startRecord = ((page - 1) * recordsPerPage) + 1;
+    const endRecord = Math.min(page * recordsPerPage, totalRecords);
+    pageInfo.textContent = `${startRecord} - ${endRecord} of ${totalRecords} records`;
+  }
+  
+  prevBtn.disabled = page <= 1;
+  nextBtn.disabled = page >= totalPages || totalPages === 0;
+}
+
+// Navigate to page
+function goToPage(page) {
+  const totalPages = Math.ceil(filteredEmployees.length / recordsPerPage);
+  if (page >= 1 && page <= totalPages) {
+    currentPage = page;
+    renderEmployees();
+  }
+}
+
+// View employee profile - redirect to appropriate profile page
+function viewEmployeeProfile(personnelId, role) {
+  // Determine which profile page to redirect to based on role
+  let profileUrl;
+  if (role === 'HR') {
+    profileUrl = '/hr_employee_profile/' + personnelId;
+  } else {
+    profileUrl = '/faculty_employee_profile/' + personnelId;
+  }
+  
+  // Redirect to the profile page
+  window.location.href = profileUrl;
+}
+
+// Setup filters and event listeners
+function setupFilters() {
+  const searchInput = document.getElementById('searchInput');
+  const collegeFilter = document.getElementById('collegeFilter');
+  const statusFilter = document.getElementById('statusFilter');
+  
+  function applyFilters() {
+    currentPage = 1;
+    renderEmployees();
+  }
+  
+  searchInput.addEventListener('input', applyFilters);
+  collegeFilter.addEventListener('change', applyFilters);
+  statusFilter.addEventListener('change', applyFilters);
+  
+  // Pagination event listeners
+  document.getElementById('prevPage').addEventListener('click', () => {
+    goToPage(currentPage - 1);
+  });
+  
+  document.getElementById('nextPage').addEventListener('click', () => {
+    goToPage(currentPage + 1);
   });
 }
 
-// Modal functions
-function openModal(name, dept, position, status, email, phone, img) {
-  document.getElementById('modalName').textContent = name;
-  document.getElementById('modalDept').textContent = dept;
-  document.getElementById('modalPosition').textContent = position;
-  document.getElementById('modalStatus').textContent = status;
-  document.getElementById('modalEmail').textContent = email;
-  document.getElementById('modalPhone').textContent = phone;
-  document.getElementById('modalImg').src = img;
-  document.getElementById('employeeModal').style.display = 'flex';
-}
-
-document.getElementById('closeModal').addEventListener('click', () => {
-  document.getElementById('employeeModal').style.display = 'none';
-});
-
 // Initialize
-populateTable();
+document.addEventListener('DOMContentLoaded', async () => {
+  await populateTable();
+  setupFilters();
+});
 </script>
 {% endblock %}

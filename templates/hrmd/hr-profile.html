@@ -1,8 +1,8 @@
 {% extends "hrmd/hr-base.html" %}
 
-{% block title %}My Profile{% endblock %}
+{% block title %}{% if is_hr_viewing %}{{ firstname }}'s Profile{% else %}My Profile{% endif %}{% endblock %}
 
-{% block page_title %}My Profile{% endblock %}
+{% block page_title %}{% if is_hr_viewing %}{{ firstname }}'s Profile{% else %}My Profile{% endif %}{% endblock %}
 
 {% block content %}
 <!-- Profile Header -->

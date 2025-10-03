@@ -82,7 +82,7 @@ def get_personnel_info(user_id):
                 'role_name': rolename or 'Staff',
                 'email': email or 'email@spc.edu.ph',
                 'position': position or 'Full-Time Employee',
-                'employment_status': employmentstatus or 'Active'
+                'employment_status': employmentstatus or 'Regular'
             }
     except Exception as e:
         print(f"Error getting personnel info: {e}")
@@ -100,8 +100,8 @@ def get_personnel_info(user_id):
         'honorifics': None,
         'role_name': 'Staff',
         'email': 'email@spc.edu.ph',
-        'position': 'Faculty Member',
-        'employment_status': 'Active'
+        'position': 'Full-Time Employee',
+        'employment_status': 'Regular'
     }
 
 # Backward compatibility - keep the old function name
@@ -416,7 +416,7 @@ def api_simulate_rfid():
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/faculty/semesters')
-@require_auth([20001, 20002])
+@require_auth([20001, 20002, 20003])
 def api_faculty_semesters():
     """API endpoint to get available semesters"""
     try:
@@ -482,7 +482,7 @@ def api_faculty_semesters():
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/faculty/attendance/<int:semester_id>')
-@require_auth([20001, 20002])
+@require_auth([20001, 20002, 20003])
 def api_faculty_attendance_by_semester(semester_id):
     """API endpoint to get faculty attendance data for specific semester"""
     try:
@@ -726,22 +726,30 @@ def api_faculty_attendance_by_semester(semester_id):
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/faculty/teaching-schedule/<int:semester_id>')
-@require_auth([20001, 20002])
+@require_auth([20001, 20002, 20003])
 def api_faculty_teaching_schedule(semester_id):
     """API endpoint to get faculty teaching schedule as a timetable"""
     try:
-        user_id = session['user_id']
+        # Check if we're viewing another employee's profile (HR use case)
+        viewing_personnel_id = session.get('viewing_personnel_id')
+        if viewing_personnel_id:
+            personnel_id = viewing_personnel_id
+        else:
+            # Normal case - get logged in user's data
+            user_id = session['user_id']
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
+            personnel_result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            
+            if not personnel_result:
+                return {'success': False, 'error': 'Personnel record not found'}
+            personnel_id = personnel_result[0]
+        
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        # Get personnel_id for the current user
-        cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
-        personnel_result = cursor.fetchone()
-        
-        if not personnel_result:
-            return {'success': False, 'error': 'Personnel record not found'}
-        
-        personnel_id = personnel_result[0]
         
         # Get specific academic calendar
         cursor.execute("""
@@ -1220,25 +1228,39 @@ def get_teaching_load(cursor, personnel_id, acadcalendar_id):
         print(f"Error getting teaching load: {e}")
         return 0
 
+# Modified API endpoints to support viewing other profiles
 @app.route('/api/faculty/profile')
 @require_auth([20001, 20002, 20003])
 def api_get_faculty_profile():
     """API endpoint to get faculty profile data - AUTO CREATES PROFILE IF NOT EXISTS"""
     try:
-        user_id = session['user_id']
+        # Check if we're viewing another employee's profile (HR use case)
+        viewing_personnel_id = session.get('viewing_personnel_id')
+        if viewing_personnel_id:
+            user_id = viewing_personnel_id
+            # Use the viewing_personnel_id directly as personnel_id for query
+            personnel_id = viewing_personnel_id
+        else:
+            # Normal case - get logged in user's data
+            user_id = session['user_id']
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
+            personnel_result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            
+            if not personnel_result:
+                return {'success': False, 'error': 'Personnel record not found'}
+            personnel_id = personnel_result[0]
+        
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get personnel_id for the current user
-        cursor.execute("SELECT personnel_id, phone FROM personnel WHERE user_id = %s", (user_id,))
-        personnel_result = cursor.fetchone()
-        
-        if not personnel_result:
-            cursor.close()
-            conn.close()
-            return {'success': False, 'error': 'Personnel record not found'}
-        
-        personnel_id, phone = personnel_result
+        # Get phone from personnel table
+        cursor.execute("SELECT phone FROM personnel WHERE personnel_id = %s", (personnel_id,))
+        phone_result = cursor.fetchone()
+        phone = phone_result[0] if phone_result else None
         
         # Get profile data including filenames
         cursor.execute("""
@@ -1252,8 +1274,8 @@ def api_get_faculty_profile():
         
         profile_result = cursor.fetchone()
         
-        # AUTO CREATE PROFILE IF NOT EXISTS
-        if not profile_result:
+        # AUTO CREATE PROFILE IF NOT EXISTS (only for logged-in user, not for viewed profiles)
+        if not profile_result and not viewing_personnel_id:
             print(f"Profile not found for personnel_id: {personnel_id}. Creating new profile...")
             
             # Get the maximum profile_id to generate the next one
@@ -1273,7 +1295,7 @@ def api_get_faculty_profile():
                 VALUES (%s, %s, '', NULL, 
                         ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[],
                         ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[],
-                        'Active', 'Faculty Member')
+                        'Regular', 'Full-Time Employee')
                 RETURNING bio, profilepic, 
                           licenses, degrees, certificates, publications, awards,
                           licensesname, degreesname, certificatesname,
@@ -1332,20 +1354,36 @@ def api_get_faculty_profile():
 def api_get_profile_stats():
     """API endpoint to get profile statistics - works for faculty, dean, HR, and VP"""
     try:
-        user_id = session['user_id']
+        # Check if we're viewing another employee's profile (HR use case)
+        viewing_personnel_id = session.get('viewing_personnel_id')
+        if viewing_personnel_id:
+            personnel_id = viewing_personnel_id
+        else:
+            # Normal case - get logged in user's data
+            user_id = session['user_id']
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT personnel_id, hiredate FROM personnel WHERE user_id = %s", (user_id,))
+            personnel_result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            
+            if not personnel_result:
+                return {'success': False, 'error': 'Personnel record not found'}
+            personnel_id, hire_date = personnel_result
+        
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get personnel_id for the current user
-        cursor.execute("SELECT personnel_id, hiredate FROM personnel WHERE user_id = %s", (user_id,))
-        personnel_result = cursor.fetchone()
-        
-        if not personnel_result:
-            cursor.close()
-            conn.close()
-            return {'success': False, 'error': 'Personnel record not found'}
-        
-        personnel_id, hire_date = personnel_result
+        # Get personnel hire date if not already retrieved
+        if not viewing_personnel_id:
+            cursor.execute("SELECT hiredate FROM personnel WHERE personnel_id = %s", (personnel_id,))
+            hire_date_result = cursor.fetchone()
+            hire_date = hire_date_result[0] if hire_date_result else None
+        else:
+            cursor.execute("SELECT hiredate FROM personnel WHERE personnel_id = %s", (personnel_id,))
+            hire_date_result = cursor.fetchone()
+            hire_date = hire_date_result[0] if hire_date_result else None
         
         # Calculate years of service from hire date
         years_of_service = 0
@@ -1480,7 +1518,7 @@ def api_update_personal_info():
                 VALUES (%s, %s, %s, NULL, 
                         ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[],
                         ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[],
-                        'Active', 'Faculty Member')
+                        'Regular', 'Full-Time Employee)
             """, (new_profile_id, personnel_id, bio))
             print(f"New profile created with ID: {new_profile_id} for personnel_id: {personnel_id}")
         
@@ -1541,7 +1579,7 @@ def api_update_documents():
                 VALUES (%s, %s, '', NULL, 
                         ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[],
                         ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[],
-                        'Active', 'Faculty Member')
+                        'Regular', 'Full-Time Employee')
             """, (new_profile_id, personnel_id))
             conn.commit()
             print(f"New profile created with ID: {new_profile_id} for personnel_id: {personnel_id}")
@@ -2166,6 +2204,402 @@ def api_hr_faculty_schedule(personnel_id):
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
 
+@app.route('/api/hr/employees-list')
+@require_auth([20003])
+def api_hr_employees_list():
+    """API endpoint to get all employees data for HR directory"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get all personnel with their college, role, and profile information
+        cursor.execute("""
+            SELECT 
+                p.personnel_id,
+                p.firstname,
+                p.lastname,
+                p.honorifics,
+                p.employee_no,
+                p.phone,
+                c.collegename,
+                r.rolename,
+                pr.position,
+                pr.employmentstatus,
+                u.email
+            FROM personnel p
+            LEFT JOIN college c ON p.college_id = c.college_id
+            LEFT JOIN roles r ON p.role_id = r.role_id
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            LEFT JOIN users u ON p.user_id = u.user_id
+            ORDER BY p.lastname, p.firstname
+        """)
+        
+        employees = cursor.fetchall()
+        
+        employees_list = []
+        for emp in employees:
+            (personnel_id, firstname, lastname, honorifics, employee_no, 
+             phone, collegename, rolename, position, employmentstatus, email) = emp
+            
+            # Format the full name with honorifics
+            if honorifics:
+                full_name = f"{firstname} {lastname}, {honorifics}"
+            else:
+                full_name = f"{firstname} {lastname}"
+            
+            # Format phone number if exists
+            phone_formatted = str(phone) if phone else "N/A"
+            if phone_formatted.startswith('+63 ') and len(phone_formatted) > 4:
+                digits = phone_formatted[4:]
+                if len(digits) == 10:
+                    phone_formatted = f"+63 {digits[:3]} {digits[3:6]} {digits[6:]}"
+            
+            # Convert role display names
+            role_display = rolename or 'N/A'
+            if role_display == 'hrmd':
+                role_display = 'HR'
+            elif role_display == 'faculty':
+                role_display = 'Faculty'
+            elif role_display == 'dean':
+                role_display = 'Dean'
+            elif role_display == 'vppres':
+                role_display = 'Admin'
+            
+            employees_list.append({
+                'personnel_id': personnel_id,
+                'name': full_name,
+                'college': collegename or 'N/A',
+                'role': role_display,
+                'position': position or 'N/A',
+                'status': employmentstatus or 'N/A',
+                'email': email or 'N/A',
+                'phone': phone_formatted,
+                'employee_no': employee_no or 'N/A'
+            })
+        
+        cursor.close()
+        conn.close()
+        
+        return {
+            'success': True,
+            'employees': employees_list
+        }
+        
+    except Exception as e:
+        print(f"Error fetching employees list: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@app.route('/hr_employee_profile/<int:personnel_id>')
+@require_auth([20003])
+def hr_employee_profile(personnel_id):
+    """HR view of employee profile"""
+    try:
+        # Get the target employee's information
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                p.firstname,
+                p.lastname,
+                p.honorifics,
+                c.collegename,
+                p.employee_no,
+                r.rolename,
+                u.email,
+                pr.position,
+                pr.employmentstatus
+            FROM personnel p
+            LEFT JOIN college c ON p.college_id = c.college_id
+            LEFT JOIN roles r ON p.role_id = r.role_id
+            LEFT JOIN users u ON p.user_id = u.user_id
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            WHERE p.personnel_id = %s
+        """, (personnel_id,))
+        
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        if result:
+            firstname, lastname, honorifics, collegename, employee_no, rolename, email, position, employmentstatus = result
+            
+            # Format the full name with honorifics at the end
+            if honorifics:
+                full_name = f"{firstname} {lastname}, {honorifics}"
+            else:
+                full_name = f"{firstname} {lastname}"
+            
+            employee_info = {
+                'hr_name': full_name,
+                'college': collegename or 'College of Computer Studies',
+                'employee_no': employee_no,
+                'email': email or 'email@spc.edu.ph',
+                'position': position or 'Full-Time Employee',
+                'employment_status': employmentstatus or 'Regular',
+                'firstname': firstname,
+                'is_hr_viewing': True  # Flag to indicate HR is viewing
+            }
+            
+            # Store the target personnel_id in session for API calls
+            session['viewing_personnel_id'] = personnel_id
+            
+            return render_template('hrmd/hr-profile.html', **employee_info)
+        else:
+            return "Employee not found", 404
+            
+    except Exception as e:
+        print(f"Error loading employee profile: {e}")
+        return "Error loading profile", 500
+
+@app.route('/faculty_employee_profile/<int:personnel_id>')
+@require_auth([20003])
+def faculty_employee_profile(personnel_id):
+    """HR view of faculty/dean profile"""
+    try:
+        # Get the target employee's information
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                p.firstname,
+                p.lastname,
+                p.honorifics,
+                c.collegename,
+                p.employee_no,
+                r.rolename,
+                u.email,
+                pr.position,
+                pr.employmentstatus
+            FROM personnel p
+            LEFT JOIN college c ON p.college_id = c.college_id
+            LEFT JOIN roles r ON p.role_id = r.role_id
+            LEFT JOIN users u ON p.user_id = u.user_id
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            WHERE p.personnel_id = %s
+        """, (personnel_id,))
+        
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        if result:
+            firstname, lastname, honorifics, collegename, employee_no, rolename, email, position, employmentstatus = result
+            
+            # Format the full name with honorifics at the end
+            if honorifics:
+                full_name = f"{firstname} {lastname}, {honorifics}"
+            else:
+                full_name = f"{firstname} {lastname}"
+            
+            employee_info = {
+                'faculty_name': full_name,
+                'college': collegename or 'College of Computer Studies',
+                'employee_no': employee_no,
+                'email': email or 'email@spc.edu.ph',
+                'position': position or 'Full-Time Employee',
+                'employment_status': employmentstatus or 'Regular',
+                'firstname': firstname,
+                'is_hr_viewing': True  # Flag to indicate HR is viewing
+            }
+            
+            # Store the target personnel_id in session for API calls
+            session['viewing_personnel_id'] = personnel_id
+            
+            return render_template('faculty&dean/faculty-profile.html', **employee_info)
+        else:
+            return "Employee not found", 404
+            
+    except Exception as e:
+        print(f"Error loading employee profile: {e}")
+        return "Error loading profile", 500
+
+# Modified API endpoints to support viewing other profiles
+@app.route('/api/hr/employee/profile/<int:personnel_id>')
+@require_auth([20003])
+def api_hr_employee_profile(personnel_id):
+    """API endpoint to get employee profile data for HR viewing"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get profile data including filenames for the target employee
+        cursor.execute("""
+            SELECT bio, profilepic, 
+                   licenses, degrees, certificates, publications, awards,
+                   licensesname, degreesname, certificatesname, 
+                   publicationsname, awardsname
+            FROM profile 
+            WHERE personnel_id = %s
+        """, (personnel_id,))
+        
+        profile_result = cursor.fetchone()
+        
+        # Convert bytea to base64 for frontend
+        import base64
+        profile_data = {
+            'bio': '',
+            'profilepic': None,
+            'licenses': [],
+            'degrees': [],
+            'certificates': [],
+            'publications': [],
+            'awards': [],
+            'licenses_filename': [],
+            'degrees_filename': [],
+            'certificates_filename': [],
+            'publications_filename': [],
+            'awards_filename': []
+        }
+        
+        if profile_result:
+            (bio, profilepic, licenses, degrees, certificates, publications, awards,
+             licenses_fn, degrees_fn, certificates_fn, publications_fn, awards_fn) = profile_result
+            
+            profile_data['bio'] = bio or ''
+            
+            # Convert profile picture to base64
+            if profilepic:
+                profile_data['profilepic'] = base64.b64encode(bytes(profilepic)).decode('utf-8')
+            
+            # Convert document arrays to base64
+            for doc_type in ['licenses', 'degrees', 'certificates', 'publications', 'awards']:
+                doc_array = locals()[doc_type]
+                if doc_array and len(doc_array) > 0:
+                    profile_data[doc_type] = [base64.b64encode(bytes(doc)).decode('utf-8') for doc in doc_array]
+            
+            # Add filenames
+            profile_data['licenses_filename'] = licenses_fn or []
+            profile_data['degrees_filename'] = degrees_fn or []
+            profile_data['certificates_filename'] = certificates_fn or []
+            profile_data['publications_filename'] = publications_fn or []
+            profile_data['awards_filename'] = awards_fn or []
+        
+        cursor.close()
+        conn.close()
+        
+        return {'success': True, 'profile': profile_data}
+        
+    except Exception as e:
+        print(f"Error fetching employee profile data: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/hr/employee/profile/stats/<int:personnel_id>')
+@require_auth([20003])
+def api_hr_employee_profile_stats(personnel_id):
+    """API endpoint to get employee profile statistics for HR viewing"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get personnel hire date
+        cursor.execute("SELECT hiredate FROM personnel WHERE personnel_id = %s", (personnel_id,))
+        personnel_result = cursor.fetchone()
+        
+        if not personnel_result:
+            cursor.close()
+            conn.close()
+            return {'success': False, 'error': 'Personnel record not found'}
+        
+        hire_date = personnel_result[0]
+        
+        # Calculate years of service from hire date
+        years_of_service = 0
+        if hire_date:
+            from datetime import datetime
+            today = datetime.now().date()
+            years_of_service = today.year - hire_date.year
+            # Adjust if birthday hasn't occurred this year
+            if today.month < hire_date.month or (today.month == hire_date.month and today.day < hire_date.day):
+                years_of_service -= 1
+        
+        # Get profile data to count documents
+        cursor.execute("""
+            SELECT 
+                certificates, publications, awards
+            FROM profile 
+            WHERE personnel_id = %s
+        """, (personnel_id,))
+        
+        profile_result = cursor.fetchone()
+        
+        # Count documents
+        certificates_count = 0
+        publications_count = 0
+        awards_count = 0
+        
+        if profile_result:
+            certificates, publications, awards = profile_result
+            
+            if certificates:
+                certificates_count = len(certificates)
+            if publications:
+                publications_count = len(publications)
+            if awards:
+                awards_count = len(awards)
+        
+        cursor.close()
+        conn.close()
+        
+        stats = {
+            'years_of_service': years_of_service,
+            'professional_certifications': certificates_count,
+            'research_publications': publications_count,
+            'awards_count': awards_count
+        }
+        
+        return {'success': True, 'stats': stats}
+        
+    except Exception as e:
+        print(f"Error fetching employee profile stats: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/hr/colleges-list')
+@require_auth([20003])
+def api_hr_colleges_list():
+    """API endpoint to get all colleges for filter dropdown"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get all colleges
+        cursor.execute("""
+            SELECT college_id, collegename 
+            FROM college 
+            ORDER BY collegename
+        """)
+        
+        colleges = cursor.fetchall()
+        
+        colleges_list = []
+        for college in colleges:
+            college_id, collegename = college
+            colleges_list.append({
+                'college_id': college_id,
+                'collegename': collegename
+            })
+        
+        cursor.close()
+        conn.close()
+        
+        return {
+            'success': True,
+            'colleges': colleges_list
+        }
+        
+    except Exception as e:
+        print(f"Error fetching colleges list: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
 # Login route
 @app.route('/', methods=['GET', 'POST'])
 def login():
@@ -2274,6 +2708,12 @@ def hr_dashboard():
 def hr_employees():
     personnel_info = get_personnel_info(session['user_id'])
     return render_template('hrmd/hr-employees.html', **personnel_info)
+
+@app.route('/hr_employees_return')
+@require_auth([20003])
+def hr_employees_return():
+    session.pop('viewing_personnel_id', None)
+    return redirect(url_for('hr_employees'))
 
 @app.route('/hr_evaluations')
 @require_auth([20003])

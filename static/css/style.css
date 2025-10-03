@@ -1067,7 +1067,7 @@ form input, form select {
 }
 .employee-table th, .employee-table td {
   padding: 10px 12px;
-  text-align: left;
+  text-align: center; 
   border-bottom: 1px solid rgba(0,0,0,0.04);
   font-size: 14px;
 }
