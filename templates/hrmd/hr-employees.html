@@ -48,13 +48,11 @@
 
 {% block extra_scripts %}
 <script>
-// Pagination variables
 let currentPage = 1;
 const recordsPerPage = 10;
 let filteredEmployees = [];
 let allEmployees = [];
 
-// Fetch real data from API
 async function fetchEmployeesData() {
   try {
     const response = await fetch('/api/hr/employees-list');
@@ -72,7 +70,6 @@ async function fetchEmployeesData() {
   }
 }
 
-// Fetch colleges from database
 async function fetchColleges() {
   try {
     const response = await fetch('/api/hr/colleges-list');
@@ -90,12 +87,10 @@ async function fetchColleges() {
   }
 }
 
-// Populate table with real data
 async function populateTable() {
   allEmployees = await fetchEmployeesData();
   const colleges = await fetchColleges();
   
-  // Populate college filter
   const collegeFilter = document.getElementById('collegeFilter');
   collegeFilter.innerHTML = '<option value="all">All Colleges</option>';
   colleges.forEach(college => {
@@ -109,7 +104,6 @@ async function populateTable() {
   renderEmployees();
 }
 
-// Render employees with pagination
 function renderEmployees() {
   const tbody = document.getElementById('employeeTableBody');
   tbody.innerHTML = '';
@@ -118,7 +112,6 @@ function renderEmployees() {
   const collegeValue = document.getElementById('collegeFilter').value;
   const statusValue = document.getElementById('statusFilter').value;
   
-  // Filter employees
   filteredEmployees = allEmployees.filter(emp => {
     const matchesSearch = searchTerm === '' || 
       emp.name.toLowerCase().includes(searchTerm) ||
@@ -128,8 +121,6 @@ function renderEmployees() {
       emp.phone.toLowerCase().includes(searchTerm);
     
     const matchesCollege = collegeValue === 'all' || emp.college === collegeValue;
-    
-    // Status filter - partial matching (e.g., "probationary" matches "probationary (year 2 of 3)")
     const matchesStatus = statusValue === 'all' || 
       emp.status.toLowerCase().includes(statusValue.toLowerCase());
     
@@ -167,7 +158,6 @@ function renderEmployees() {
   updatePaginationControls(currentPage, totalPages, totalRecords);
 }
 
-// Update pagination controls
 function updatePaginationControls(page, totalPages, totalRecords) {
   const pageInfo = document.getElementById('pageInfo');
   const prevBtn = document.getElementById('prevPage');
@@ -185,7 +175,6 @@ function updatePaginationControls(page, totalPages, totalRecords) {
   nextBtn.disabled = page >= totalPages || totalPages === 0;
 }
 
-// Navigate to page
 function goToPage(page) {
   const totalPages = Math.ceil(filteredEmployees.length / recordsPerPage);
   if (page >= 1 && page <= totalPages) {
@@ -194,21 +183,19 @@ function goToPage(page) {
   }
 }
 
-// View employee profile - redirect to appropriate profile page
 function viewEmployeeProfile(personnelId, role) {
-  // Determine which profile page to redirect to based on role
   let profileUrl;
   if (role === 'HR') {
     profileUrl = '/hr_employee_profile/' + personnelId;
+  } else if (role === 'Admin') {
+    profileUrl = '/vp_employee_profile/' + personnelId;
   } else {
     profileUrl = '/faculty_employee_profile/' + personnelId;
   }
   
-  // Redirect to the profile page
   window.location.href = profileUrl;
 }
 
-// Setup filters and event listeners
 function setupFilters() {
   const searchInput = document.getElementById('searchInput');
   const collegeFilter = document.getElementById('collegeFilter');
@@ -223,7 +210,6 @@ function setupFilters() {
   collegeFilter.addEventListener('change', applyFilters);
   statusFilter.addEventListener('change', applyFilters);
   
-  // Pagination event listeners
   document.getElementById('prevPage').addEventListener('click', () => {
     goToPage(currentPage - 1);
   });
@@ -233,7 +219,6 @@ function setupFilters() {
   });
 }
 
-// Initialize
 document.addEventListener('DOMContentLoaded', async () => {
   await populateTable();
   setupFilters();

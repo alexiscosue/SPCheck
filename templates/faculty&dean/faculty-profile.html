@@ -179,7 +179,7 @@
 
 <!-- Loading indicator -->
 <div id="loading" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 20px; border-radius: 8px; z-index: 1000;">
-  <i class="fas fa-spinner fa-spin"></i> Loading profile...
+  <i class="fas fa-spinner fa-spin"></i> <span id="loading-text">Loading...</span>
 </div>
 {% endblock %}
 
@@ -189,7 +189,6 @@ let currentProfile = {};
 let allSemesters = [];
 let currentSemesterIndex = 0;
 
-// Load profile data on page load
 document.addEventListener('DOMContentLoaded', function() {
   loadProfileData();
   loadSemesters();
@@ -197,9 +196,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function loadProfileData() {
   try {
-    showLoading(true);
+    showLoading(true, 'Loading profile data...');
     
-    // Load profile and stats in parallel for better performance
     const [profileResponse, statsResponse] = await Promise.all([
       fetch('/api/faculty/profile'),
       fetch('/api/faculty/profile/stats')
@@ -224,7 +222,7 @@ async function loadProfileData() {
   } catch (error) {
     console.error('Error loading profile data:', error);
   } finally {
-    showLoading(false);
+    // Loading indicator will be hidden in displayProfile() after all data is processed
   }
 }
 
@@ -236,11 +234,9 @@ async function loadSemesters() {
     if (data.success && data.semesters.length > 0) {
       allSemesters = data.semesters;
       
-      // Find current semester index
       currentSemesterIndex = allSemesters.findIndex(s => s.is_current);
       if (currentSemesterIndex === -1) currentSemesterIndex = 0;
       
-      // Load schedule for current semester
       loadSchedule(allSemesters[currentSemesterIndex].id);
     } else {
       document.getElementById('teaching-display').innerHTML = 
@@ -255,7 +251,6 @@ async function loadSemesters() {
 
 async function loadSchedule(semesterId) {
   try {
-    showLoading(true);
     const response = await fetch(`/api/faculty/teaching-schedule/${semesterId}`);
     const data = await response.json();
     
@@ -269,8 +264,6 @@ async function loadSchedule(semesterId) {
     console.error('Error loading schedule:', error);
     document.getElementById('teaching-display').innerHTML = 
       '<p style="color:#e53e3e;text-align:center;padding:20px;">Error loading schedule.</p>';
-  } finally {
-    showLoading(false);
   }
 }
 
@@ -278,17 +271,11 @@ function displaySchedule(data) {
   const semesterInfo = data.semester_info;
   const timetable = data.timetable;
   
-  // Update semester title
   document.getElementById('semester-title').textContent = semesterInfo.display;
-  
-  // Update navigation buttons - FIXED: Left arrow goes to older semesters (higher index), Right arrow goes to newer semesters (lower index)
   document.getElementById('prev-semester-btn').disabled = currentSemesterIndex <= 0;
   document.getElementById('next-semester-btn').disabled = currentSemesterIndex >= allSemesters.length - 1;
   
-  // Build timetable HTML
   let html = '<div class="timetable-container"><table class="timetable">';
-  
-  // Header row
   html += '<thead><tr><th>Time</th>';
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   days.forEach(day => {
@@ -296,7 +283,6 @@ function displaySchedule(data) {
   });
   html += '</tr></thead><tbody>';
   
-  // Time slots
   const timeSlots = [
     '7:30 AM - 9:00 AM',
     '9:15 AM - 10:45 AM',
@@ -336,14 +322,11 @@ function displaySchedule(data) {
 }
 
 function changeSemester(direction) {
-  // FIXED NAVIGATION: 
-  // LEFT arrow (prev) goes to OLDER semesters (lower index/more recent)
-  // RIGHT arrow (next) goes to NEWER semesters (higher index/less recent)
   let newIndex;
   if (direction === 'prev') {
-    newIndex = currentSemesterIndex - 1; // Go to older semester
+    newIndex = currentSemesterIndex - 1;
   } else {
-    newIndex = currentSemesterIndex + 1; // Go to newer semester
+    newIndex = currentSemesterIndex + 1;
   }
   
   if (newIndex >= 0 && newIndex < allSemesters.length) {
@@ -353,27 +336,25 @@ function changeSemester(direction) {
 }
 
 function displayProfile() {
-  // Display profile picture
   if (currentProfile.profilepic) {
     document.getElementById('profile-picture').src = 'data:image/jpeg;base64,' + currentProfile.profilepic;
   }
   
-  // Display bio in overview only
   const bio = currentProfile.bio || 'Passionate educator and researcher.';
   document.getElementById('bio-display').textContent = bio;
   
-  // Display phone number
   if (currentProfile.phone && currentProfile.phone !== '+63 ') {
     document.getElementById('contact-phone').innerHTML = 
       `<i class='bx bx-phone'></i><strong> Contact:</strong> ${currentProfile.phone}`;
   }
   
-  // Display documents
   displayDocuments('licenses', currentProfile.licenses || [], currentProfile.licenses_filename || []);
   displayDocuments('degrees', currentProfile.degrees || [], currentProfile.degrees_filename || []);
   displayDocuments('certificates', currentProfile.certificates || [], currentProfile.certificates_filename || []);
   displayDocuments('publications', currentProfile.publications || [], currentProfile.publications_filename || []);
   displayDocuments('awards', currentProfile.awards || [], currentProfile.awards_filename || []);
+  
+  showLoading(false);
 }
 
 function displayProfileStats(stats) {
@@ -398,7 +379,6 @@ function displayDocuments(docType, documents, filenames) {
     const filename = filenames[index] || `${docType}_${index + 1}`;
     const ext = filename.split('.').pop().toLowerCase();
     
-    // Determine icon and type
     let icon = 'fa-file';
     if (['pdf'].includes(ext)) {
       icon = 'fa-file-pdf';
@@ -429,14 +409,11 @@ function viewDocument(docBase64, filename, ext) {
   const container = document.getElementById('document-container');
   
   title.textContent = filename;
-  
-  // Reset both viewers
   iframe.style.display = 'none';
   img.style.display = 'none';
   iframe.src = '';
   img.src = '';
   
-  // Check if it's an image
   if (['jpg', 'jpeg', 'png', 'gif'].includes(ext.toLowerCase())) {
     img.style.display = 'block';
     img.style.margin = '0 auto';
@@ -449,23 +426,18 @@ function viewDocument(docBase64, filename, ext) {
     container.style.textAlign = 'left';
     container.style.padding = '0';
     container.style.overflow = 'hidden';
-    
-    // Use PDF viewer with better compatibility
     iframe.src = 'data:application/pdf;base64,' + docBase64 + '#view=FitH&toolbar=1';
   } else {
-    // For other document types (Word, etc.)
     iframe.style.display = 'block';
     container.style.textAlign = 'left';
     container.style.padding = '0';
     container.style.overflow = 'auto';
-    
-    // Try to create blob URL for better compatibility
+  
     try {
       const blob = base64ToBlob(docBase64, getMimeType(ext));
       const url = URL.createObjectURL(blob);
       iframe.src = url;
       
-      // Handle iframe load errors
       iframe.onerror = function() {
         container.innerHTML = `
           <div style="padding:40px;text-align:center;">
@@ -519,19 +491,14 @@ function closeDocumentModal() {
   const container = document.getElementById('document-container');
   
   modal.style.display = 'none';
-  
-  // Clear and reset everything
   iframe.src = '';
   img.src = '';
   iframe.style.display = 'none';
   img.style.display = 'none';
-  
-  // Reset container to default overflow
   container.style.overflow = 'auto';
   container.style.padding = '0';
 }
 
-// Close modal when clicking outside
 window.onclick = function(event) {
   const modal = document.getElementById('document-modal');
   if (event.target == modal) {
@@ -563,12 +530,17 @@ function getMimeType(ext) {
   return mimeTypes[ext] || 'application/octet-stream';
 }
 
-function showLoading(show) {
+function showLoading(show, text = 'Loading...') {
   const loading = document.getElementById('loading');
-  loading.style.display = show ? 'block' : 'none';
+  const loadingText = document.getElementById('loading-text');
+  if (show) {
+    loadingText.textContent = text;
+    loading.style.display = 'block';
+  } else {
+    loading.style.display = 'none';
+  }
 }
 
-// Tabs functionality
 const tabs = document.querySelectorAll('.tab');
 const contents = document.querySelectorAll('.tab-content');
 tabs.forEach(tab => {

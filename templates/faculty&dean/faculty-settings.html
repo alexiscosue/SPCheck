@@ -45,10 +45,10 @@
             <i class="fas fa-camera"></i>
             <span id="profilepic-label">Choose profile picture...</span>
           </label>
-          <input type="file" id="profilepic" name="profilepic" accept="image/*" onchange="updateFileName(this, 'profilepic-label')">
+          <input type="file" id="profilepic" name="profilepic" accept="image/*" onchange="handleProfilePictureChange(this)">
         </div>
         <div id="current-profilepic" style="margin-top: 10px; display: none;">
-          <img id="profilepic-preview" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 2px solid #ddd;">
+          <img id="profilepic-preview" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 2px solid #ddd; cursor: pointer;" onclick="viewProfilePicture()">
           <p style="margin: 5px 0; font-size: 12px; color: #666;">Current profile picture</p>
         </div>
       </div>
@@ -218,6 +218,25 @@
     </div>
   </div>
 </div>
+
+<!-- Profile Picture Viewer Modal -->
+<div id="profilepic-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="profilepic-modal-title">Profile Picture</h3>
+      <span class="close" onclick="closeProfilePictureModal()">&times;</span>
+    </div>
+    <div class="modal-body">
+      <div id="profilepic-container" style="width:100%;height:75vh;overflow:auto;background:#f5f5f5;border-radius:8px;display:flex;align-items:center;justify-content:center;">
+        <img id="profilepic-viewer" style="max-width:90%;max-height:90%;object-fit:contain;display:none;">
+        <div id="profilepic-no-image" style="text-align:center;padding:40px;display:none;">
+          <i class="fas fa-user-circle" style="font-size:48px;color:#999;margin-bottom:20px;"></i>
+          <p style="color:#666;">No profile picture available</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -323,6 +342,91 @@ document.getElementById('current_password').addEventListener('input', function()
   hidePasswordErrors();
 });
 
+function handleProfilePictureChange(input) {
+  updateFileName(input, 'profilepic-label');
+  
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const preview = document.getElementById('profilepic-preview');
+      preview.src = e.target.result;
+      preview.style.borderColor = '#059669'; 
+      document.getElementById('current-profilepic').style.display = 'block';
+      document.querySelector('#current-profilepic p').textContent = 'New profile picture (preview)';
+      document.querySelector('#current-profilepic p').style.color = '#059669';
+    }
+    reader.readAsDataURL(input.files[0]);
+  } else {
+    if (currentProfile.profilepic) {
+      const preview = document.getElementById('profilepic-preview');
+      preview.src = 'data:image/jpeg;base64,' + currentProfile.profilepic;
+      preview.style.borderColor = '#ddd'; 
+      document.querySelector('#current-profilepic p').textContent = 'Current profile picture';
+      document.querySelector('#current-profilepic p').style.color = '#666';
+    } else {
+      document.getElementById('current-profilepic').style.display = 'none';
+    }
+  }
+}
+
+function viewProfilePicture() {
+  const modal = document.getElementById('profilepic-modal');
+  const title = document.getElementById('profilepic-modal-title');
+  const viewer = document.getElementById('profilepic-viewer');
+  const noImage = document.getElementById('profilepic-no-image');
+  const container = document.getElementById('profilepic-container');
+  
+  title.textContent = 'Profile Picture';
+  viewer.style.display = 'none';
+  noImage.style.display = 'none';
+  viewer.src = '';
+  
+  const profilepicInput = document.getElementById('profilepic');
+  if (profilepicInput.files && profilepicInput.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      viewer.src = e.target.result;
+      viewer.style.display = 'block';
+      container.style.padding = '20px';
+    }
+    reader.readAsDataURL(profilepicInput.files[0]);
+  } else if (currentProfile.profilepic) {
+    viewer.src = 'data:image/jpeg;base64,' + currentProfile.profilepic;
+    viewer.style.display = 'block';
+    container.style.padding = '20px';
+  } else {
+    noImage.style.display = 'block';
+    container.style.padding = '0';
+  }
+  
+  modal.style.display = 'block';
+}
+
+function closeProfilePictureModal() {
+  const modal = document.getElementById('profilepic-modal');
+  const viewer = document.getElementById('profilepic-viewer');
+  const noImage = document.getElementById('profilepic-no-image');
+  const container = document.getElementById('profilepic-container');
+  
+  modal.style.display = 'none';
+  viewer.src = '';
+  viewer.style.display = 'none';
+  noImage.style.display = 'none';
+  container.style.padding = '0';
+}
+
+window.onclick = function(event) {
+  const modal = document.getElementById('profilepic-modal');
+  if (event.target == modal) {
+    closeProfilePictureModal();
+  }
+  
+  const docModal = document.getElementById('document-modal');
+  if (event.target == docModal) {
+    closeDocumentModal();
+  }
+}
+
 document.addEventListener('DOMContentLoaded', loadProfileData);
 
 async function loadProfileData() {
@@ -341,7 +445,8 @@ async function loadProfileData() {
     console.error('Error loading profile:', error);
     showToast('Failed to load profile data', 'error');
   } finally {
-    showLoading(false);
+    // Remove the immediate showLoading(false) call to let the loading indicator
+    // stay visible for the exact duration of the data fetching
   }
 }
 
@@ -353,7 +458,10 @@ function populateForm() {
   if (currentProfile.profilepic) {
     const preview = document.getElementById('profilepic-preview');
     preview.src = 'data:image/jpeg;base64,' + currentProfile.profilepic;
+    preview.style.borderColor = '#ddd';
     document.getElementById('current-profilepic').style.display = 'block';
+    document.querySelector('#current-profilepic p').textContent = 'Current profile picture';
+    document.querySelector('#current-profilepic p').style.color = '#666';
   }
   
   displayDocuments('licenses', currentProfile.licenses || [], currentProfile.licenses_filename || []);
@@ -361,6 +469,7 @@ function populateForm() {
   displayDocuments('certificates', currentProfile.certificates || [], currentProfile.certificates_filename || []);
   displayDocuments('publications', currentProfile.publications || [], currentProfile.publications_filename || []);
   displayDocuments('awards', currentProfile.awards || [], currentProfile.awards_filename || []);
+  showLoading(false);
 }
 
 function displayDocuments(docType, documents, filenames) {
@@ -617,13 +726,6 @@ function closeDocumentModal() {
   container.style.padding = '0';
 }
 
-window.onclick = function(event) {
-  const modal = document.getElementById('document-modal');
-  if (event.target == modal) {
-    closeDocumentModal();
-  }
-}
-
 function base64ToBlob(base64, mimeType) {
   const byteCharacters = atob(base64);
   const byteArrays = [];
@@ -679,16 +781,12 @@ document.getElementById('personalForm').addEventListener('submit', async (e) => 
     const data = await response.json();
     
     if (data.success) {
-      showLoading(true, 'Personal information updated successfully');
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      showLoading(false);
+      showToast('Personal information updated successfully', 'success');
       await loadProfileData();
     } else {
-      showLoading(false);
       showToast('Error: ' + data.error, 'error');
     }
   } catch (error) {
-    showLoading(false);
     console.error('Error updating personal info:', error);
     showToast('Failed to update personal information', 'error');
   }
@@ -699,8 +797,9 @@ document.getElementById('documentsForm').addEventListener('submit', async (e) =>
   
   try {
     showLoading(true, 'Processing documents...');
+    showToast('Processing documents...', 'info');
 
-    const hasNewUploads = ['licenses', 'degrees', 'certificates', 'publications', 'awards'].some(docType => {
+    const hasNewUploads = ['profilepic', 'licenses', 'degrees', 'certificates', 'publications', 'awards'].some(docType => {
       const input = document.getElementById(docType);
       return input.files && input.files.length > 0;
     });
@@ -709,6 +808,7 @@ document.getElementById('documentsForm').addEventListener('submit', async (e) =>
     
     if (!hasNewUploads && !hasDeletions) {
       showToast('No changes to update', 'info');
+      showLoading(false);
       return;
     }
 
@@ -729,13 +829,17 @@ document.getElementById('documentsForm').addEventListener('submit', async (e) =>
       }
     }
     
-    const formData = new FormData(e.target);
+
+    const formData = new FormData();
+    const profilepicInput = document.getElementById('profilepic');
+    if (profilepicInput.files.length > 0) {
+      formData.append('profilepic', profilepicInput.files[0]);
+    }
     
     ['licenses', 'degrees', 'certificates', 'publications', 'awards'].forEach(docType => {
       const files = document.getElementById(docType).files;
-      if (files.length > 0) {
-        const filenames = Array.from(files).map(f => f.name);
-        formData.append(docType + '_filenames', JSON.stringify(filenames));
+      for (let file of files) {
+        formData.append(docType, file);
       }
     });
     
@@ -747,9 +851,7 @@ document.getElementById('documentsForm').addEventListener('submit', async (e) =>
     const data = await response.json();
     
     if (data.success) {
-      showLoading(true, 'Documents updated successfully');
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      showLoading(false);
+      showToast('Documents updated successfully', 'success');
       
       documentsToDelete = {
         licenses: [],
@@ -772,15 +874,16 @@ document.getElementById('documentsForm').addEventListener('submit', async (e) =>
           }
         }
       });
+      
       document.getElementById('profilepic-label').textContent = 'Choose profile picture...';
     } else {
-      showLoading(false);
       showToast('Error: ' + data.error, 'error');
     }
   } catch (error) {
-    showLoading(false);
     console.error('Error updating documents:', error);
     showToast('Failed to update documents: ' + error.message, 'error');
+  } finally {
+    showLoading(false);
   }
 });
 
@@ -827,13 +930,10 @@ document.getElementById('passwordForm').addEventListener('submit', async (e) => 
     const data = await response.json();
     
     if (data.success) {
-      showLoading(true, 'Password changed successfully');
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      showLoading(false);
+      showToast('Password changed successfully', 'success');
       document.getElementById('passwordForm').reset();
       hidePasswordErrors();
     } else {
-      showLoading(false);
       if (data.error.toLowerCase().includes('current password is incorrect')) {
         showPasswordError('current');
       } else if (data.error.toLowerCase().includes('do not match')) {
@@ -845,16 +945,18 @@ document.getElementById('passwordForm').addEventListener('submit', async (e) => 
       }
     }
   } catch (error) {
-    showLoading(false);
     console.error('Error updating password:', error);
     showToast('Failed to update password', 'error');
+  } finally {
+    showLoading(false);
   }
 });
 
 function showToast(message, type = 'success') {
   const toast = document.getElementById('toast');
   toast.textContent = message;
-  toast.style.background = type === 'error' ? '#ef4444' : '#10b981';
+  toast.style.background = type === 'error' ? '#ef4444' : 
+                          type === 'info' ? '#3b82f6' : '#10b981';
   toast.style.display = 'block';
   setTimeout(() => {
     toast.style.display = 'none';

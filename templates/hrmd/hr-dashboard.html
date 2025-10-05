@@ -21,7 +21,7 @@
           <div class="icon fac"><i class='bx bx-user'></i></div>
           <div>
             <div class="title">Total Faculty</div>
-            <div class="value" id="kpi-fac">178</div>
+            <div class="value" id="kpi-fac">Loading...</div>
           </div>
         </div>
 
@@ -61,10 +61,17 @@
           <div class="table">
             <table aria-label="Recent attendance logs">
               <thead>
-                <tr><th>Faculty</th><th>Time</th><th>Room</th><th>Status</th></tr>
+                <tr>
+                  <th style="text-align:center">Name</th>
+                  <th style="text-align:center">Date</th>
+                  <th style="text-align:center">Room</th>
+                  <th style="text-align:center">Time In</th>
+                  <th style="text-align:center">Time Out</th>
+                  <th style="text-align:center">Status</th>
+                </tr>
               </thead>
               <tbody id="recentLogs">
-                <!-- demo rows filled by JS -->
+                <tr><td colspan="6" style="text-align:center;padding:2rem;color:#6b7280">Loading attendance data...</td></tr>
               </tbody>
             </table>
           </div>
@@ -81,77 +88,102 @@
         </div>
 
         <div class="card chart-card">
-  <div style="display:flex;justify-content:space-between;align-items:center">
-    <div style="font-weight:700">Top Departments by Average Score</div>
-    <div style="font-size:13px;color:var(--muted)">This semester</div>
-  </div>
-  <div class="chart-wrapper">
-    <canvas id="topDeptChart"></canvas>
-  </div>
-</div>
-
-</div>
-
-  </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font-weight:700">Top Departments by Average Score</div>
+            <div style="font-size:13px;color:var(--muted)">This semester</div>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="topDeptChart"></canvas>
+          </div>
+        </div>
       </div>
-
-      </div>
-
     </section>
 {% endblock %}
 
 {% block extra_scripts %}
- <script>
-  const topDeptCtx = document.getElementById('topDeptChart').getContext('2d');
-const topDeptChart = new Chart(topDeptCtx, {
-  type: 'bar',
-  data: {
-    labels: ['IT', 'Business', 'Education', 'CS', 'Engineering'],
-    datasets: [{
-      label: 'Average Score',
-      data: [4.3, 4.2, 4.1, 3.9, 3.8],
-      backgroundColor: '#7b1113'
-    }]
-  },
-  options: {
-    indexAxis: 'y', // horizontal
-    responsive: true,
-    maintainAspectRatio: false, // respects wrapper height
-    scales: {
-      x: {
-        min: 0,
-        max: 5,
-        ticks: { stepSize: 1 }
-      },
-      y: { beginAtZero: true }
-    },
-    plugins: { legend: { display: false } }
+<script>
+  async function fetchDashboardData() {
+    try {
+      const facultyResponse = await fetch('/api/hr/faculty-list');
+      const facultyData = await facultyResponse.json();
+      
+      if (facultyData.success) {
+        document.getElementById('kpi-fac').textContent = facultyData.faculty_list.length || 0;
+      } else {
+        document.getElementById('kpi-fac').textContent = 'Error';
+      }
+
+      const attendanceResponse = await fetch('/api/hr/faculty-attendance');
+      const attendanceData = await attendanceResponse.json();
+      
+      if (attendanceData.success) {
+        updateRecentLogs(attendanceData.attendance_logs || []);
+      } else {
+        document.getElementById('recentLogs').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#6b7280">Error loading attendance data</td></tr>';
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      document.getElementById('kpi-fac').textContent = 'Error';
+      document.getElementById('recentLogs').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#6b7280">Error loading data</td></tr>';
+    }
   }
-});
 
+  function updateRecentLogs(logs) {
+    const tbody = document.getElementById('recentLogs');
+    tbody.innerHTML = '';
 
-  // === RECENT ATTENDANCE LOGS (Faculty | Date | Time In | Time Out | Status) ===
-  const facultyLogs = [
-    {name:'Prof. Santos', date:'2025-09-22', in:'08:00', out:'12:00', status:'Present'},
-    {name:'Prof. Cruz', date:'2025-09-22', in:'08:10', out:'12:00', status:'Late'},
-    {name:'Prof. Reyes', date:'2025-09-22', in:'—', out:'—', status:'Absent'},
-    {name:'Prof. Dela Cruz', date:'2025-09-22', in:'08:05', out:'11:00', status:'Present'},
-    {name:'Prof. Garcia', date:'2025-09-22', in:'08:00', out:'12:00', status:'Present'}
-  ];
+    const recentLogs = logs.slice(0, 10);
 
-  const tbody = document.getElementById('recentLogs');
-  tbody.innerHTML = '';
-  facultyLogs.slice(0,5).forEach(f => {
-    const tr = document.createElement('tr');
-    let statusClass = f.status.toLowerCase();
-    tr.innerHTML = `
-      <td style="font-weight:600">${f.name}</td>
-      <td>${f.date}</td>
-      <td>${f.in}</td>
-      <td>${f.out}</td>
-      <td><span class="status ${statusClass}">${f.status}</span></td>
-    `;
-    tbody.appendChild(tr);
+    if (recentLogs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#6b7280">No attendance data available</td></tr>';
+      return;
+    }
+
+    recentLogs.forEach(log => {
+      const tr = document.createElement('tr');
+      let statusClass = log.status.toLowerCase();
+      tr.innerHTML = `
+        <td style="text-align:center">${log.name}</td>
+        <td style="text-align:center">${log.date}</td>
+        <td style="text-align:center">${log.room || 'N/A'}</td>
+        <td style="text-align:center">${log.time_in}</td>
+        <td style="text-align:center">${log.time_out}</td>
+        <td style="text-align:center"><span class="status ${statusClass}">${log.status}</span></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    fetchDashboardData();
+  });
+
+  // === Top Departments Chart ===
+  const topDeptCtx = document.getElementById('topDeptChart').getContext('2d');
+  const topDeptChart = new Chart(topDeptCtx, {
+    type: 'bar',
+    data: {
+      labels: ['IT', 'Business', 'Education', 'CS', 'Engineering'],
+      datasets: [{
+        label: 'Average Score',
+        data: [4.3, 4.2, 4.1, 3.9, 3.8],
+        backgroundColor: '#7b1113'
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          min: 0,
+          max: 5,
+          ticks: { stepSize: 1 }
+        },
+        y: { beginAtZero: true }
+      },
+      plugins: { legend: { display: false } }
+    }
   });
 
   // === Attendance Chart ===
@@ -204,11 +236,9 @@ const topDeptChart = new Chart(topDeptCtx, {
     }
   });
 
-  // === Update KPI values dynamically ===
+  // === Keep static KPI values ===
   document.getElementById('kpi-att').textContent = '92%';
-  document.getElementById('kpi-fac').textContent = '178';
-  document.getElementById('kpi-eval').textContent = '3.5';
+  document.getElementById('kpi-eval').textContent = '4.5';
   document.getElementById('kpi-promo').textContent = '3';
 </script>
 {% endblock %}
-

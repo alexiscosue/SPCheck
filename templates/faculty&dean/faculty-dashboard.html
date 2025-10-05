@@ -140,7 +140,7 @@
     updateClassSchedule();
   }
 
-  // Update class schedule display
+  // Update class schedule display - FIXED: Show ALL classes for the week
   function updateClassSchedule() {
     const scheduleBody = document.getElementById('classScheduleBody');
     const schedule = dashboardData.class_schedule;
@@ -150,9 +150,22 @@
       return;
     }
     
-    // Filter for today's classes and this week's classes (up to Saturday)
-    const todayClasses = schedule.filter(cls => cls.is_today);
-    const thisWeekClasses = schedule.filter(cls => cls.is_this_week && !cls.is_today);
+    // Define day order starting from Sunday (0=Sunday, 1=Monday, ..., 6=Saturday)
+    const dayOrder = { 'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6 };
+    
+    // Get current day of week (0=Sunday, 1=Monday, ..., 6=Saturday)
+    const today = new Date();
+    const currentDayOfWeek = today.getDay(); // 0 (Sunday) to 6 (Saturday)
+    const currentDayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][currentDayOfWeek];
+    
+    // Filter for today's classes
+    const todayClasses = schedule.filter(cls => cls.day === currentDayName);
+    
+    // Filter for this week's classes (from today onward, including today)
+    const thisWeekClasses = schedule.filter(cls => {
+      const classDayIndex = dayOrder[cls.day];
+      return classDayIndex >= currentDayOfWeek;
+    }).sort((a, b) => dayOrder[a.day] - dayOrder[b.day]);
     
     let scheduleHTML = '';
     
@@ -171,32 +184,52 @@
         `;
       });
       
-      if (thisWeekClasses.length > 0) {
-        scheduleHTML += '<div style="font-size: 12px; font-weight: 600; color: #6b7280; margin: 12px 0 8px 0;">THIS WEEK</div>';
+      // Add upcoming classes section if there are classes after today
+      const upcomingClasses = thisWeekClasses.filter(cls => cls.day !== currentDayName);
+      if (upcomingClasses.length > 0) {
+        scheduleHTML += '<div style="font-size: 12px; font-weight: 600; color: #6b7280; margin: 12px 0 8px 0;">UPCOMING THIS WEEK</div>';
+        
+        // Show ALL upcoming classes (no limit)
+        upcomingClasses.forEach(cls => {
+          scheduleHTML += `
+            <div class="schedule-item">
+              <div>
+                <div class="class-name">${cls.subject_code} - ${cls.subject_name}</div>
+                <div class="class-room">${cls.classroom} (${cls.section})</div>
+              </div>
+              <div class="class-time" style="text-align: right;">
+                <div class="class-name">${cls.day}</div>
+                <div class="class-room">${cls.time_display}</div>
+              </div>
+            </div>
+          `;
+        });
       }
     } else {
-      // No classes today, show message
+      // No classes today
       scheduleHTML += '<div style="font-size: 12px; font-weight: 600; color: #6b7280; margin-bottom: 8px;">TODAY</div>';
       scheduleHTML += '<div style="text-align: center; padding: 1rem; color: #9ca3af; font-size: 13px;">No classes today</div>';
       
+      // Show ALL upcoming classes for the rest of the week (no limit)
       if (thisWeekClasses.length > 0) {
-        scheduleHTML += '<div style="font-size: 12px; font-weight: 600; color: #6b7280; margin: 12px 0 8px 0;">THIS WEEK</div>';
+        scheduleHTML += '<div style="font-size: 12px; font-weight: 600; color: #6b7280; margin: 12px 0 8px 0;">UPCOMING THIS WEEK</div>';
+        
+        thisWeekClasses.forEach(cls => {
+          scheduleHTML += `
+            <div class="schedule-item">
+              <div>
+                <div class="class-name">${cls.subject_code} - ${cls.subject_name}</div>
+                <div class="class-room">${cls.classroom} (${cls.section})</div>
+              </div>
+              <div class="class-time" style="text-align: right;">
+                <div class="class-name">${cls.day}</div>
+                <div class="class-room">${cls.time_display}</div>
+              </div>
+            </div>
+          `;
+        });
       }
     }
-    
-    // Show this week's classes (up to Saturday, limit to next few for space)
-    const displayClasses = thisWeekClasses.slice(0, Math.max(0, 5 - todayClasses.length));
-    displayClasses.forEach(cls => {
-      scheduleHTML += `
-        <div class="schedule-item">
-          <div>
-            <div class="class-name">${cls.subject_code} - ${cls.subject_name}</div>
-            <div class="class-room">${cls.classroom} (${cls.section})</div>
-          </div>
-          <div class="class-time" style="text-align: right;">${cls.day}<br>${cls.time_display}</div>
-        </div>
-      `;
-    });
     
     // If no classes at all this week
     if (todayClasses.length === 0 && thisWeekClasses.length === 0) {

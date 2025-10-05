@@ -9,64 +9,254 @@
   <!-- Tabs -->
   <div class="tabs">
     <button class="tablink active" data-tab="personal">Personal Info</button>
+    <button class="tablink" data-tab="documents">Documents</button>
     <button class="tablink" data-tab="password">Password</button>
   </div>
 
+  <!-- Personal Info Tab -->
   <div class="tab-content" id="personal" style="display:block">
-    <form class="grid">
-      <div>
-        <label>First Name</label>
-        <input type="text" value="Diane">
+    <form id="personalForm" class="grid">
+      <div style="grid-column: span 2;">
+        <label><i class="fas fa-phone"></i> Contact Number</label>
+        <input type="text" id="phone" name="phone" placeholder="e.g., +63 9123456789" maxlength="14">
+        <small style="display: block; margin-top: 5px; color: #666;">Format: +63 9XXXXXXXXX (10 digits starting with 9)</small>
       </div>
-      <div>
-        <label>Last Name</label>
-        <input type="text" value="Ayson">
-      </div>
-      <div>
-        <label>Email Address</label>
-        <input type="email" value="dayson@spc.edu.ph">
-      </div>
-      <div>
-        <label>Contact Number</label>
-        <input type="text" value="+63 912 345 6789">
-      </div>
-      <div>
-        <label>Profile Picture</label>
-        <input type="file">
+      <div style="grid-column: span 2;">
+        <label><i class="fas fa-user"></i> Bio</label>
+        <textarea id="bio" name="bio" rows="4" placeholder="Brief description about yourself..."></textarea>
       </div>
       <div style="grid-column:span 2; text-align:right;">
-        <button type="submit" class="btn-primary" onclick="showToast(event)">Save Changes</button>
+        <button type="submit" class="btn-primary">
+          <i class="fas fa-save"></i> Save Changes
+        </button>
       </div>
     </form>
   </div>
 
-  <div class="tab-content" id="password">
-    <form class="grid">
-      <div>
-        <label>Current Password</label>
-        <input type="password">
+  <!-- Documents Tab -->
+  <div class="tab-content" id="documents">
+    <form id="documentsForm" class="grid" enctype="multipart/form-data">
+      
+      <!-- Profile Picture -->
+      <div style="grid-column: span 2;">
+        <label><i class="fas fa-user-circle"></i> Profile Picture</label>
+        <div class="upload-field">
+          <label for="profilepic" style="cursor: pointer;">
+            <i class="fas fa-camera"></i>
+            <span id="profilepic-label">Choose profile picture...</span>
+          </label>
+          <input type="file" id="profilepic" name="profilepic" accept="image/*" onchange="handleProfilePictureChange(this)">
+        </div>
+        <div id="current-profilepic" style="margin-top: 10px; display: none;">
+          <img id="profilepic-preview" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 2px solid #ddd; cursor: pointer;" onclick="viewProfilePicture()">
+          <p style="margin: 5px 0; font-size: 12px; color: #666;">Current profile picture</p>
+        </div>
       </div>
-      <div>
-        <label>New Password</label>
-        <input type="password">
+
+      <!-- Licenses -->
+      <div style="grid-column: span 2;">
+        <div class="document-section">
+          <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-certificate"></i> Licenses</h4>
+          <div class="upload-field">
+            <label for="licenses" style="cursor: pointer;">
+              <i class="fas fa-file-upload"></i>
+              <span>Upload licenses (PDF, images)...</span>
+            </label>
+            <input type="file" id="licenses" name="licenses" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'licenses-list', 'licenses')">
+          </div>
+          <div id="licenses-display" class="documents-grid">
+            <p style="color:var(--muted);">No licenses uploaded yet.</p>
+          </div>
+        </div>
       </div>
-      <div>
-        <label>Confirm New Password</label>
-        <input type="password">
+
+      <!-- Degrees -->
+      <div style="grid-column: span 2;">
+        <div class="document-section" style="margin-top:30px;">
+          <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-graduation-cap"></i> Degrees</h4>
+          <div class="upload-field">
+            <label for="degrees" style="cursor: pointer;">
+              <i class="fas fa-file-upload"></i>
+              <span>Upload degrees (PDF, images)...</span>
+            </label>
+            <input type="file" id="degrees" name="degrees" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'degrees-list', 'degrees')">
+          </div>
+          <div id="degrees-display" class="documents-grid">
+            <p style="color:var(--muted);">No degrees uploaded yet.</p>
+          </div>
+        </div>
       </div>
+
+      <!-- Certificates -->
+      <div style="grid-column: span 2;">
+        <div class="document-section" style="margin-top:30px;">
+          <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-award"></i> Certificates</h4>
+          <div class="upload-field">
+            <label for="certificates" style="cursor: pointer;">
+              <i class="fas fa-file-upload"></i>
+              <span>Upload certificates (PDF, images)...</span>
+            </label>
+            <input type="file" id="certificates" name="certificates" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'certificates-list', 'certificates')">
+          </div>
+          <div id="certificates-display" class="documents-grid">
+            <p style="color:var(--muted);">No certificates uploaded yet.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Publications -->
+      <div style="grid-column: span 2;">
+        <div class="document-section" style="margin-top:30px;">
+          <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-book"></i> Publications</h4>
+          <div class="upload-field">
+            <label for="publications" style="cursor: pointer;">
+              <i class="fas fa-file-upload"></i>
+              <span>Upload publications (PDF, documents)...</span>
+            </label>
+            <input type="file" id="publications" name="publications" multiple accept=".pdf,.doc,.docx" onchange="updateMultiFileNames(this, 'publications-list', 'publications')">
+          </div>
+          <div id="publications-display" class="documents-grid">
+            <p style="color:var(--muted);">No publications uploaded yet.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Awards -->
+      <div style="grid-column: span 2;">
+        <div class="document-section" style="margin-top:30px;">
+          <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-trophy"></i> Awards</h4>
+          <div class="upload-field">
+            <label for="awards" style="cursor: pointer;">
+              <i class="fas fa-file-upload"></i>
+              <span>Upload awards (PDF, images)...</span>
+            </label>
+            <input type="file" id="awards" name="awards" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'awards-list', 'awards')">
+          </div>
+          <div id="awards-display" class="documents-grid">
+            <p style="color:var(--muted);">No awards uploaded yet.</p>
+          </div>
+        </div>
+      </div>
+
       <div style="grid-column:span 2; text-align:right;">
-        <button type="submit" class="btn-primary" onclick="showToast(event)">Update Password</button>
+        <button type="submit" class="btn-primary">
+          <i class="fas fa-upload"></i> Update Documents
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Password Tab -->
+  <div class="tab-content" id="password">
+    <form id="passwordForm" class="grid">
+      <!-- First Row: Current Password (full width) -->
+      <div style="grid-column: span 2;">
+        <label><i class="fas fa-lock"></i> Current Password</label>
+        <div class="password-field-wrapper">
+          <input type="password" id="current_password" name="current_password" required>
+          <i class="fas fa-eye-slash toggle-password" onclick="togglePasswordVisibility('current_password')"></i>
+        </div>
+      </div>
+      
+      <!-- Second Row: New Password Fields (two columns) -->
+      <div>
+        <label><i class="fas fa-key"></i> New Password</label>
+        <div class="password-field-wrapper">
+          <input type="password" id="new_password" name="new_password" required minlength="6">
+          <i class="fas fa-eye-slash toggle-password" onclick="togglePasswordVisibility('new_password')"></i>
+        </div>
+      </div>
+      <div>
+        <label><i class="fas fa-check-circle"></i> Confirm New Password</label>
+        <div class="password-field-wrapper">
+          <input type="password" id="confirm_password" name="confirm_password" required>
+          <i class="fas fa-eye-slash toggle-password" onclick="togglePasswordVisibility('confirm_password')"></i>
+        </div>
+      </div>
+      
+      <!-- Validation Messages -->
+      <div style="grid-column: span 2;">
+        <div id="password-error-current" class="password-error">
+          <i class="fas fa-exclamation-circle"></i> Invalid current password. Please enter your correct current password.
+        </div>
+        <div id="password-error-match" class="password-error">
+          <i class="fas fa-exclamation-circle"></i> New passwords do not match. Please ensure both fields are identical.
+        </div>
+        <div id="password-error-same" class="password-error">
+          <i class="fas fa-exclamation-circle"></i> New password cannot be the same as your current password.
+        </div>
+      </div>
+      
+      <div style="grid-column:span 2; text-align:right;">
+        <button type="submit" class="btn-primary">
+          <i class="fas fa-shield-alt"></i> Update Password
+        </button>
       </div>
     </form>
   </div>
 </div>
 
 <div class="toast" id="toast">Changes saved successfully!</div>
+
+<!-- Loading indicator -->
+<div id="loading" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 20px; border-radius: 8px; z-index: 1000;">
+  <i class="fas fa-spinner fa-spin"></i> <span id="loading-text">Loading...</span>
+</div>
+
+<!-- Document Viewer Modal -->
+<div id="document-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="modal-title">Document Viewer</h3>
+      <span class="close" onclick="closeDocumentModal()">&times;</span>
+    </div>
+    <div class="modal-body">
+      <div id="document-container" style="width:100%;height:75vh;overflow:auto;background:#f5f5f5;border-radius:8px;">
+        <iframe id="document-viewer" style="width:100%;height:100%;border:none;display:none;"></iframe>
+        <img id="image-viewer" style="max-width:100%;height:auto;display:none;margin:0 auto;">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Profile Picture Viewer Modal -->
+<div id="profilepic-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="profilepic-modal-title">Profile Picture</h3>
+      <span class="close" onclick="closeProfilePictureModal()">&times;</span>
+    </div>
+    <div class="modal-body">
+      <div id="profilepic-container" style="width:100%;height:75vh;overflow:auto;background:#f5f5f5;border-radius:8px;display:flex;align-items:center;justify-content:center;">
+        <img id="profilepic-viewer" style="max-width:90%;max-height:90%;object-fit:contain;display:none;">
+        <div id="profilepic-no-image" style="text-align:center;padding:40px;display:none;">
+          <i class="fas fa-user-circle" style="font-size:48px;color:#999;margin-bottom:20px;"></i>
+          <p style="color:#666;">No profile picture available</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
-// Tabs
+let currentProfile = {};
+let documentFileNames = {
+  licenses: [],
+  degrees: [],
+  certificates: [],
+  publications: [],
+  awards: []
+};
+let documentsToDelete = {
+  licenses: [],
+  degrees: [],
+  certificates: [],
+  publications: [],
+  awards: []
+};
+
 document.querySelectorAll('.faculty-settings .tablink').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.faculty-settings .tablink').forEach(b => b.classList.remove('active'));
@@ -76,12 +266,721 @@ document.querySelectorAll('.faculty-settings .tablink').forEach(btn => {
   });
 });
 
-// Toast
-function showToast(e){
-  e.preventDefault();
-  const toast = document.getElementById('toast');
-  toast.style.display='block';
-  setTimeout(()=>{toast.style.display='none';}, 2500);
+
+const phoneInput = document.getElementById('phone');
+phoneInput.addEventListener('input', function(e) {
+  let value = e.target.value;
+  
+  if (!value.startsWith('+63 ')) {
+    value = '+63 ';
+  }
+  let digits = value.slice(4).replace(/\D/g, '');
+  
+  if (digits.length > 10) {
+    digits = digits.slice(0, 10);
+  }
+  e.target.value = '+63 ' + digits;
+});
+
+function togglePasswordVisibility(inputId) {
+  const input = document.getElementById(inputId);
+  const icon = input.parentElement.querySelector('.toggle-password');
+  
+  if (input.type === 'password') {
+    input.type = 'text';
+    icon.classList.remove('fa-eye-slash');
+    icon.classList.add('fa-eye');
+  } else {
+    input.type = 'password';
+    icon.classList.remove('fa-eye');
+    icon.classList.add('fa-eye-slash');
+  }
 }
+
+function hidePasswordErrors() {
+  document.querySelectorAll('.password-error').forEach(el => {
+    el.classList.remove('show');
+  });
+}
+
+function showPasswordError(errorType) {
+  hidePasswordErrors();
+  const errorEl = document.getElementById('password-error-' + errorType);
+  if (errorEl) {
+    errorEl.classList.add('show');
+  }
+}
+
+document.getElementById('new_password').addEventListener('input', function() {
+  hidePasswordErrors();
+  
+  const currentPassword = document.getElementById('current_password').value;
+  const newPassword = this.value;
+  const confirmPassword = document.getElementById('confirm_password').value;
+  
+  if (newPassword && currentPassword && newPassword === currentPassword) {
+    showPasswordError('same');
+  }
+  
+  if (confirmPassword && newPassword !== confirmPassword) {
+    showPasswordError('match');
+  }
+});
+
+document.getElementById('confirm_password').addEventListener('input', function() {
+  hidePasswordErrors();
+  
+  const newPassword = document.getElementById('new_password').value;
+  const confirmPassword = this.value;
+  
+  if (confirmPassword && newPassword !== confirmPassword) {
+    showPasswordError('match');
+  }
+});
+
+document.getElementById('current_password').addEventListener('input', function() {
+  hidePasswordErrors();
+});
+
+function handleProfilePictureChange(input) {
+  updateFileName(input, 'profilepic-label');
+  
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const preview = document.getElementById('profilepic-preview');
+      preview.src = e.target.result;
+      preview.style.borderColor = '#059669'; 
+      document.getElementById('current-profilepic').style.display = 'block';
+      document.querySelector('#current-profilepic p').textContent = 'New profile picture (preview)';
+      document.querySelector('#current-profilepic p').style.color = '#059669';
+    }
+    reader.readAsDataURL(input.files[0]);
+  } else {
+    if (currentProfile.profilepic) {
+      const preview = document.getElementById('profilepic-preview');
+      preview.src = 'data:image/jpeg;base64,' + currentProfile.profilepic;
+      preview.style.borderColor = '#ddd'; 
+      document.querySelector('#current-profilepic p').textContent = 'Current profile picture';
+      document.querySelector('#current-profilepic p').style.color = '#666';
+    } else {
+      document.getElementById('current-profilepic').style.display = 'none';
+    }
+  }
+}
+
+function viewProfilePicture() {
+  const modal = document.getElementById('profilepic-modal');
+  const title = document.getElementById('profilepic-modal-title');
+  const viewer = document.getElementById('profilepic-viewer');
+  const noImage = document.getElementById('profilepic-no-image');
+  const container = document.getElementById('profilepic-container');
+  
+  title.textContent = 'Profile Picture';
+  viewer.style.display = 'none';
+  noImage.style.display = 'none';
+  viewer.src = '';
+  
+  const profilepicInput = document.getElementById('profilepic');
+  if (profilepicInput.files && profilepicInput.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      viewer.src = e.target.result;
+      viewer.style.display = 'block';
+      container.style.padding = '20px';
+    }
+    reader.readAsDataURL(profilepicInput.files[0]);
+  } else if (currentProfile.profilepic) {
+    viewer.src = 'data:image/jpeg;base64,' + currentProfile.profilepic;
+    viewer.style.display = 'block';
+    container.style.padding = '20px';
+  } else {
+    noImage.style.display = 'block';
+    container.style.padding = '0';
+  }
+  
+  modal.style.display = 'block';
+}
+
+function closeProfilePictureModal() {
+  const modal = document.getElementById('profilepic-modal');
+  const viewer = document.getElementById('profilepic-viewer');
+  const noImage = document.getElementById('profilepic-no-image');
+  const container = document.getElementById('profilepic-container');
+  
+  modal.style.display = 'none';
+  viewer.src = '';
+  viewer.style.display = 'none';
+  noImage.style.display = 'none';
+  container.style.padding = '0';
+}
+
+window.onclick = function(event) {
+  const modal = document.getElementById('profilepic-modal');
+  if (event.target == modal) {
+    closeProfilePictureModal();
+  }
+  
+  const docModal = document.getElementById('document-modal');
+  if (event.target == docModal) {
+    closeDocumentModal();
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadProfileData);
+
+async function loadProfileData() {
+  try {
+    showLoading(true, 'Loading profile data...');
+    const response = await fetch('/api/faculty/profile');
+    const data = await response.json();
+    
+    if (data.success) {
+      currentProfile = data.profile;
+      populateForm();
+    } else {
+      showToast('Error loading profile data: ' + data.error, 'error');
+    }
+  } catch (error) {
+    console.error('Error loading profile:', error);
+    showToast('Failed to load profile data', 'error');
+  } finally {
+    // Remove the immediate showLoading(false) call to let the loading indicator
+    // stay visible for the exact duration of the data fetching
+  }
+}
+
+function populateForm() {
+  let phone = currentProfile.phone || '+63 ';
+  document.getElementById('phone').value = phone;
+  document.getElementById('bio').value = currentProfile.bio || '';
+  
+  if (currentProfile.profilepic) {
+    const preview = document.getElementById('profilepic-preview');
+    preview.src = 'data:image/jpeg;base64,' + currentProfile.profilepic;
+    preview.style.borderColor = '#ddd';
+    document.getElementById('current-profilepic').style.display = 'block';
+    document.querySelector('#current-profilepic p').textContent = 'Current profile picture';
+    document.querySelector('#current-profilepic p').style.color = '#666';
+  }
+  
+  displayDocuments('licenses', currentProfile.licenses || [], currentProfile.licenses_filename || []);
+  displayDocuments('degrees', currentProfile.degrees || [], currentProfile.degrees_filename || []);
+  displayDocuments('certificates', currentProfile.certificates || [], currentProfile.certificates_filename || []);
+  displayDocuments('publications', currentProfile.publications || [], currentProfile.publications_filename || []);
+  displayDocuments('awards', currentProfile.awards || [], currentProfile.awards_filename || []);
+  showLoading(false);
+}
+
+function displayDocuments(docType, documents, filenames) {
+  const displayElement = document.getElementById(docType + '-display');
+  if (!displayElement) return;
+  
+  const existingDocuments = documents.filter((doc, index) => !documentsToDelete[docType].includes(index));
+  const newUploadCards = displayElement.querySelectorAll('.document-card[style*="e8f5e8"]');
+  
+  if ((!existingDocuments || existingDocuments.length === 0) && newUploadCards.length === 0) {
+    displayElement.innerHTML = `<p style="color:var(--muted);">No ${docType} uploaded yet.</p>`;
+    return;
+  }
+  
+  displayElement.innerHTML = '';
+  
+  documents.forEach((doc, index) => {
+    if (documentsToDelete[docType].includes(index)) return;
+    
+    const filename = filenames[index] || `${docType}_${index + 1}`;
+    const ext = filename.split('.').pop().toLowerCase();
+    
+    let icon = 'fa-file';
+    if (['pdf'].includes(ext)) {
+      icon = 'fa-file-pdf';
+    } else if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
+      icon = 'fa-file-image';
+    } else if (['doc', 'docx'].includes(ext)) {
+      icon = 'fa-file-word';
+    }
+    
+    const card = document.createElement('div');
+    card.className = 'document-card';
+    card.style.position = 'relative'; 
+    card.onclick = () => viewDocument(doc, filename, ext);
+    
+    card.innerHTML = `
+      <i class="fas ${icon} document-icon"></i>
+      <div class="document-name">${filename}</div>
+      <button type="button" 
+              style="position: absolute; top: 8px; right: 8px; background: none; border: none; color: #666; font-size: 16px; cursor: pointer; padding: 0; width: auto; height: auto;"
+              onclick="markDocumentForDeletion('${docType}', ${index}, event)">
+        ×
+      </button>
+    `;
+    
+    displayElement.appendChild(card);
+  });
+  
+  newUploadCards.forEach(card => {
+    displayElement.appendChild(card);
+  });
+}
+
+function markDocumentForDeletion(docType, index, event) {
+  event.stopPropagation();
+  
+  if (!documentsToDelete[docType].includes(index)) {
+    documentsToDelete[docType].push(index);
+  }
+  
+  const filenames = currentProfile[docType + '_filename'] || [];
+  displayDocuments(docType, currentProfile[docType] || [], filenames);
+}
+
+function updateFileName(input, labelId) {
+  const label = document.getElementById(labelId);
+  if (input.files.length > 0) {
+    label.textContent = input.files[0].name;
+  } else {
+    label.textContent = 'Choose profile picture...';
+  }
+}
+
+function updateMultiFileNames(input, listId, docType) {
+  const displayElement = document.getElementById(docType + '-display');
+  
+  if (input.files.length > 0) {
+    const noDocumentsMsg = displayElement.querySelector('p[style*="color:var(--muted)"]');
+    if (noDocumentsMsg) {
+      noDocumentsMsg.remove();
+    }
+  }
+  
+  const existingNewUploads = displayElement.querySelectorAll('.document-card[style*="e8f5e8"]');
+  existingNewUploads.forEach(card => card.remove());
+  
+  if (input.files.length > 0) {
+    Array.from(input.files).forEach((file, index) => {
+      const ext = file.name.split('.').pop().toLowerCase();
+      
+      let icon = 'fa-file';
+      if (['pdf'].includes(ext)) {
+        icon = 'fa-file-pdf';
+      } else if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
+        icon = 'fa-file-image';
+      } else if (['doc', 'docx'].includes(ext)) {
+        icon = 'fa-file-word';
+      }
+      
+      const card = document.createElement('div');
+      card.className = 'document-card';
+      card.style.background = '#e8f5e8';
+      card.style.borderColor = '#059669';
+      card.style.position = 'relative';
+      card.dataset.fileIndex = index;
+      card.dataset.fileName = file.name;
+      
+      card.innerHTML = `
+        <i class="fas ${icon} document-icon"></i>
+        <div class="document-name">${file.name}</div>
+        <div style="font-size: 11px; color: #666; margin-top: 5px;">${(file.size / 1024).toFixed(1)} KB</div>
+        <button type="button" 
+                style="position: absolute; top: 8px; right: 8px; background: none; border: none; color: #666; font-size: 16px; cursor: pointer; padding: 0; width: auto; height: auto;"
+                onclick="removeNewUpload('${docType}', ${index}, this)">
+          ×
+        </button>
+      `;
+      
+      displayElement.appendChild(card);
+    });
+  } else {
+    const existingDocuments = currentProfile[docType] || [];
+    const existingDocumentsNotDeleted = existingDocuments.filter((doc, index) => !documentsToDelete[docType].includes(index));
+    
+    if (existingDocumentsNotDeleted.length === 0) {
+      displayElement.innerHTML = `<p style="color:var(--muted);">No ${docType} uploaded yet.</p>`;
+    } else {
+      const filenames = currentProfile[docType + '_filename'] || [];
+      displayDocuments(docType, existingDocuments, filenames);
+    }
+  }
+}
+
+function removeNewUpload(docType, fileIndex, buttonElement) {
+  const input = document.getElementById(docType);
+  const displayElement = document.getElementById(docType + '-display');
+  
+  if (!input.files || input.files.length === 0) return;
+  const filesArray = Array.from(input.files);
+  filesArray.splice(fileIndex, 1);
+  
+  const dt = new DataTransfer();
+  filesArray.forEach(file => dt.items.add(file));
+  input.files = dt.files;
+  
+  const card = buttonElement.closest('.document-card');
+  card.remove();
+  
+  const existingDocuments = currentProfile[docType] || [];
+  const existingDocumentsNotDeleted = existingDocuments.filter((doc, index) => !documentsToDelete[docType].includes(index));
+  const remainingNewUploads = displayElement.querySelectorAll('.document-card[style*="e8f5e8"]');
+  
+  if (existingDocumentsNotDeleted.length === 0 && remainingNewUploads.length === 0) {
+    displayElement.innerHTML = `<p style="color:var(--muted);">No ${docType} uploaded yet.</p>`;
+  }
+}
+
+function viewDocument(docBase64, filename, ext) {
+  const modal = document.getElementById('document-modal');
+  const title = document.getElementById('modal-title');
+  const iframe = document.getElementById('document-viewer');
+  const img = document.getElementById('image-viewer');
+  const container = document.getElementById('document-container');
+  
+  title.textContent = filename;
+  iframe.style.display = 'none';
+  img.style.display = 'none';
+  iframe.src = '';
+  img.src = '';
+  
+  if (['jpg', 'jpeg', 'png', 'gif'].includes(ext.toLowerCase())) {
+    img.style.display = 'block';
+    img.style.margin = '0 auto';
+    container.style.textAlign = 'center';
+    container.style.padding = '20px';
+    container.style.overflow = 'auto';
+    img.src = 'data:image/' + ext + ';base64,' + docBase64;
+  } else if (ext.toLowerCase() === 'pdf') {
+    iframe.style.display = 'block';
+    container.style.textAlign = 'left';
+    container.style.padding = '0';
+    container.style.overflow = 'hidden';
+    iframe.src = 'data:application/pdf;base64,' + docBase64 + '#view=FitH&toolbar=1';
+  } else {
+    iframe.style.display = 'block';
+    container.style.textAlign = 'left';
+    container.style.padding = '0';
+    container.style.overflow = 'auto';
+
+    try {
+      const blob = base64ToBlob(docBase64, getMimeType(ext));
+      const url = URL.createObjectURL(blob);
+      iframe.src = url;
+      
+      iframe.onerror = function() {
+        container.innerHTML = `
+          <div style="padding:40px;text-align:center;">
+            <i class="fas fa-exclamation-circle" style="font-size:48px;color:#999;margin-bottom:20px;"></i>
+            <p style="color:#666;margin-bottom:20px;">Cannot preview this file type in browser.</p>
+            <button onclick="downloadDocument('${docBase64}', '${filename}', '${ext}')" 
+                    style="padding:10px 20px;background:var(--spc-maroon);color:white;border:none;border-radius:6px;cursor:pointer;">
+              <i class="fas fa-download"></i> Download File
+            </button>
+          </div>
+        `;
+      };
+    } catch (error) {
+      container.innerHTML = `
+        <div style="padding:40px;text-align:center;">
+          <i class="fas fa-exclamation-circle" style="font-size:48px;color:#999;margin-bottom:20px;"></i>
+          <p style="color:#666;;margin-bottom:20px;">Error loading document.</p>
+          <button onclick="downloadDocument('${docBase64}', '${filename}', '${ext}')" 
+                  style="padding:10px 20px;background:var(--spc-maroon);color:white;border:none;border-radius:6px;cursor:pointer;">
+            <i class="fas fa-download"></i> Download File
+          </button>
+        </div>
+      `;
+    }
+  }
+  
+  modal.style.display = 'block';
+}
+
+function downloadDocument(docBase64, filename, ext) {
+  try {
+    const blob = base64ToBlob(docBase64, getMimeType(ext));
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Error downloading document:', error);
+    alert('Failed to download document');
+  }
+}
+
+function closeDocumentModal() {
+  const modal = document.getElementById('document-modal');
+  const iframe = document.getElementById('document-viewer');
+  const img = document.getElementById('image-viewer');
+  const container = document.getElementById('document-container');
+  
+  modal.style.display = 'none';
+  iframe.src = '';
+  img.src = '';
+  iframe.style.display = 'none';
+  img.style.display = 'none';
+  container.style.overflow = 'auto';
+  container.style.padding = '0';
+}
+
+function base64ToBlob(base64, mimeType) {
+  const byteCharacters = atob(base64);
+  const byteArrays = [];
+  
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteArrays.push(byteCharacters.charCodeAt(i));
+  }
+  
+  return new Blob([new Uint8Array(byteArrays)], { type: mimeType });
+}
+
+function getMimeType(ext) {
+  const mimeTypes = {
+    'pdf': 'application/pdf',
+    'doc': 'application/msword',
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif'
+  };
+  return mimeTypes[ext] || 'application/octet-stream';
+}
+
+document.getElementById('personalForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  let phone = document.getElementById('phone').value.trim();
+  
+  if (phone && phone !== '+63 ') {
+    let digits = phone.slice(4).replace(/\s/g, '');
+    if (!phone.startsWith('+63 ') || digits.length !== 10 || !digits.startsWith('9') || !/^\d+$/.test(digits)) {
+      showToast('Phone number must be +63 followed by 10 digits starting with 9', 'error');
+      return;
+    }
+  }
+  
+  const formData = {
+    phone: phone,
+    bio: document.getElementById('bio').value
+  };
+  
+  try {
+    showLoading(true, 'Updating personal information...');
+    const response = await fetch('/api/faculty/profile/personal', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(formData)
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast('Personal information updated successfully', 'success');
+      await loadProfileData();
+    } else {
+      showToast('Error: ' + data.error, 'error');
+    }
+  } catch (error) {
+    console.error('Error updating personal info:', error);
+    showToast('Failed to update personal information', 'error');
+  }
+});
+
+document.getElementById('documentsForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  try {
+    showLoading(true, 'Processing documents...');
+    showToast('Processing documents...', 'info');
+
+    const hasNewUploads = ['profilepic', 'licenses', 'degrees', 'certificates', 'publications', 'awards'].some(docType => {
+      const input = document.getElementById(docType);
+      return input.files && input.files.length > 0;
+    });
+    
+    const hasDeletions = Object.values(documentsToDelete).some(arr => arr.length > 0);
+    
+    if (!hasNewUploads && !hasDeletions) {
+      showToast('No changes to update', 'info');
+      showLoading(false);
+      return;
+    }
+
+    for (const docType of ['licenses', 'degrees', 'certificates', 'publications', 'awards']) {
+      if (documentsToDelete[docType].length > 0) {
+        const sortedIndices = documentsToDelete[docType].sort((a, b) => b - a);
+        
+        for (const index of sortedIndices) {
+          const response = await fetch(`/api/faculty/profile/document/${docType}/${index}`, {
+            method: 'DELETE'
+          });
+          const data = await response.json();
+          
+          if (!data.success) {
+            throw new Error(`Failed to delete ${docType} document: ${data.error}`);
+          }
+        }
+      }
+    }
+    
+
+    const formData = new FormData();
+    const profilepicInput = document.getElementById('profilepic');
+    if (profilepicInput.files.length > 0) {
+      formData.append('profilepic', profilepicInput.files[0]);
+    }
+    
+    ['licenses', 'degrees', 'certificates', 'publications', 'awards'].forEach(docType => {
+      const files = document.getElementById(docType).files;
+      for (let file of files) {
+        formData.append(docType, file);
+      }
+    });
+    
+    const response = await fetch('/api/faculty/profile/documents', {
+      method: 'POST',
+      body: formData
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast('Documents updated successfully', 'success');
+      
+      documentsToDelete = {
+        licenses: [],
+        degrees: [],
+        certificates: [],
+        publications: [],
+        awards: []
+      };
+      
+      await loadProfileData();
+      
+      ['profilepic', 'licenses', 'degrees', 'certificates', 'publications', 'awards'].forEach(id => {
+        const input = document.getElementById(id);
+        if (input) {
+          input.value = '';
+          const displayElement = document.getElementById(id + '-display');
+          if (displayElement) {
+            const newUploads = displayElement.querySelectorAll('.document-card[style*="e8f5e8"]');
+            newUploads.forEach(item => item.remove());
+          }
+        }
+      });
+      
+      document.getElementById('profilepic-label').textContent = 'Choose profile picture...';
+    } else {
+      showToast('Error: ' + data.error, 'error');
+    }
+  } catch (error) {
+    console.error('Error updating documents:', error);
+    showToast('Failed to update documents: ' + error.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+});
+
+document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  hidePasswordErrors();
+  
+  const currentPassword = document.getElementById('current_password').value;
+  const newPassword = document.getElementById('new_password').value;
+  const confirmPassword = document.getElementById('confirm_password').value;
+  
+  if (newPassword !== confirmPassword) {
+    showPasswordError('match');
+    return;
+  }
+  
+  if (newPassword === currentPassword) {
+    showPasswordError('same');
+    return;
+  }
+  
+  if (newPassword.length < 6) {
+    showToast('Password must be at least 6 characters long', 'error');
+    return;
+  }
+  
+  const formData = {
+    current_password: currentPassword,
+    new_password: newPassword,
+    confirm_password: confirmPassword
+  };
+  
+  try {
+    showLoading(true, 'Updating password...');
+    const response = await fetch('/api/faculty/profile/password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(formData)
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast('Password changed successfully', 'success');
+      document.getElementById('passwordForm').reset();
+      hidePasswordErrors();
+    } else {
+      if (data.error.toLowerCase().includes('current password is incorrect')) {
+        showPasswordError('current');
+      } else if (data.error.toLowerCase().includes('do not match')) {
+        showPasswordError('match');
+      } else if (data.error.toLowerCase().includes('cannot be the same')) {
+        showPasswordError('same');
+      } else {
+        showToast('Error: ' + data.error, 'error');
+      }
+    }
+  } catch (error) {
+    console.error('Error updating password:', error);
+    showToast('Failed to update password', 'error');
+  } finally {
+    showLoading(false);
+  }
+});
+
+function showToast(message, type = 'success') {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.style.background = type === 'error' ? '#ef4444' : 
+                          type === 'info' ? '#3b82f6' : '#10b981';
+  toast.style.display = 'block';
+  setTimeout(() => {
+    toast.style.display = 'none';
+  }, 3000);
+}
+
+function showLoading(show, text = 'Loading...') {
+  const loading = document.getElementById('loading');
+  const loadingText = document.getElementById('loading-text');
+  if (show) {
+    loadingText.textContent = text;
+    loading.style.display = 'block';
+  } else {
+    loading.style.display = 'none';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const allDeleteButtons = document.querySelectorAll('button[onclick*="markDocumentForDeletion"], button[onclick*="removeNewUpload"]');
+  allDeleteButtons.forEach(btn => {
+    if (!btn.closest('.document-card')) {
+      btn.remove();
+    }
+  });
+});
 </script>
 {% endblock %}

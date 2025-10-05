@@ -1,8 +1,12 @@
-{% extends "vp&pres/vp-base.html" %}
+{% if is_hr_viewing %}
+    {% extends "hrmd/hr-base.html" %}
+{% else %}
+    {% extends "vp&pres/vp-base.html" %}
+{% endif %}
 
-{% block title %}Dashboard{% endblock %}
+{% block title %}{% if is_hr_viewing %}{{ firstname }}'s Profile{% else %}My Profile{% endif %}{% endblock %}
 
-{% block page_title %}Faculty Promotions{% endblock %}
+{% block page_title %}{% if is_hr_viewing %}{{ firstname }}'s Profile{% else %}My Profile{% endif %}{% endblock %}
 
 {% block content %}
 <!-- Profile Header -->
@@ -10,129 +14,405 @@
   <div class="profile-banner"></div>
 
   <div class="profile-header">
-    <img src="../img/people.png" alt="Faculty" class="profile-img">
+    <img id="profile-picture" src="../img/people.png" alt="VP Admin" class="profile-img">
 
     <div class="profile-info">
-      <h2 class="profile-name">Prof. Juan Santos</h2>
-      <p class="profile-title">Assistant Professor • IT Department</p>
-      <p class="profile-bio">Passionate about Software Engineering, AI in Education, and Community Engagement.</p>
+      <h2 class="profile-name">{{ vp_name }}</h2>
+      <p class="profile-title">{{ college }}</p>
 
       <div class="profile-contact">
-         <span><i class='bx bx-envelope'></i><strong> Email:</strong> jsantos@spc.edu.ph</span>
-        <span><i class='bx bx-phone'></i><span><strong> Contact:</strong> +63 912 345 6789</span>
+        <span><i class='bx bx-envelope'></i><strong> Email:</strong> {{ email }}</span>
+        <span id="contact-phone"><i class='bx bx-phone'></i><strong> Contact:</strong> +63 912 345 6789</span>
+        <span><i class='bx bx-id-card'></i><strong> Employee No:</strong> {{ employee_no or 'N/A' }}</span>
       </div>
 
-      <div class="profile-status">
-        <strong>Employment Status:</strong> Probationary (Year 2 of 3)
+      <div class="profile-status-row">
+        <div class="status-item">
+          <strong>Position:</strong> <span id="position-display">{{ position }}</span>
+        </div>
+        <div class="status-item">
+          <strong>Employment Status:</strong> <span id="employment-status">{{ employment_status }}</span>
+        </div>
       </div>
     </div>
   </div>
 </section>
 
-    </section>
+<!-- Tabs -->
+<div class="tabs_profile">
+  <div class="tab active" data-tab="overview">Overview</div>
+  <div class="tab" data-tab="credentials-docs">Credentials</div>
+  <div class="tab" data-tab="research-achievements">Research & Achievements</div>
+</div>
 
-    <!-- Tabs -->
-    <div class="tabs_profile">
-      <div class="tab active" data-tab="overview">Overview</div>
-      <div class="tab" data-tab="credentials-docs">Credentials</div>
-      <div class="tab" data-tab="teaching-courses">Teaching</div>
-      <div class="tab" data-tab="research-achievements">Research & Achievements</div>
-      <div class="tab" data-tab="trainings-seminars">Trainings</div>
-    </div>
+<!-- Tab Content -->
 
-    <!-- Tab Content -->
-
-    <!-- Overview -->
-    <div id="overview" class="tab-content active">
+<!-- Overview -->
+<div id="overview" class="tab-content active">
   <div class="career-overview-card">
-  <div class="career-overview-header">
-    <h3>Career Overview</h3>
-    <button class="btn-edit"><i class='bx bx-edit'></i> Edit</button>
-  </div>
+    <div class="career-overview-header">
+      <h3>Career Overview</h3>
+    </div>
 
-  <div class="stats">
+    <!-- In the Overview tab -->
+    <div class="stats">
     <div class="stat-card">
-      <h3>4.6</h3>
-      <p>Avg. Eval Rating</p>
+        <h3 id="years-service">0</h3>
+        <p>Years of Service</p>
     </div>
     <div class="stat-card">
-      <h3>8</h3>
-      <p>Years Teaching</p>
+        <h3 id="professional-certs">0</h3>
+        <p>Professional Certifications</p>
     </div>
     <div class="stat-card">
-      <h3>3</h3>
-      <p>Research Publications</p>
+        <h3 id="research-pubs">0</h3>
+        <p>Research Publications</p>
     </div>
     <div class="stat-card">
-      <h3>66%</h3>
-      <p>Probation Completion</p>
+        <h3 id="awards-count">0</h3>
+        <p>Awards & Recognitions</p>
     </div>
-  </div>
+    </div>
 
-  <p style="margin-top:20px">
-    Prof. Santos is an Assistant Professor with specialization in <strong>Software Engineering</strong>. 
-    He is currently on his <strong>2nd year of probationary status</strong> and is active in both teaching and community extension programs.
-  </p>
+    <p style="margin-top:20px" id="bio-display">
+      Loading profile information...
+    </p>
+  </div>
 </div>
 
+<!-- Credentials & Documents -->
+<div id="credentials-docs" class="tab-content">
+  <div class="card">
+    <h3>Credentials & Documents</h3>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:20px;">Licenses, degrees, and certifications</p>
+    
+    <!-- Licenses Section -->
+    <div class="document-section">
+      <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-certificate"></i> Licenses</h4>
+      <div id="licenses-display" class="documents-grid">
+        <p style="color:var(--muted);">No licenses uploaded yet.</p>
+      </div>
+    </div>
+
+    <!-- Degrees Section -->
+    <div class="document-section" style="margin-top:30px;">
+      <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-graduation-cap"></i> Degrees</h4>
+      <div id="degrees-display" class="documents-grid">
+        <p style="color:var(--muted);">No degrees uploaded yet.</p>
+      </div>
+    </div>
+
+    <!-- Certificates Section -->
+    <div class="document-section" style="margin-top:30px;">
+      <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-award"></i> Certificates</h4>
+      <div id="certificates-display" class="documents-grid">
+        <p style="color:var(--muted);">No certificates uploaded yet.</p>
+      </div>
+    </div>
+  </div>
 </div>
 
-
-    <!-- Credentials & Documents -->
-    <div id="credentials-docs" class="tab-content">
-      <div class="card">
-        <h3>Credentials & Documents</h3>
-        <p style="font-size:13px;color:var(--muted)">Licenses, degrees, certifications, and uploaded files</p>
+<!-- Research & Achievements -->
+<div id="research-achievements" class="tab-content">
+  <div class="card">
+    <h3>Research & Achievements</h3>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:20px;">Publications, papers, awards, and recognitions</p>
+    
+    <!-- Publications Section -->
+    <div class="document-section">
+      <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-book"></i> Publications</h4>
+      <div id="publications-display" class="documents-grid">
+        <p style="color:var(--muted);">No publications uploaded yet.</p>
       </div>
     </div>
 
-    <!-- Teaching & Courses -->
-    <div id="teaching-courses" class="tab-content">
-      <div class="card">
-        <h3>Teaching & Courses</h3>
-        <p style="font-size:13px;color:var(--muted)">Subjects handled and load history</p>
+    <!-- Awards Section -->
+    <div class="document-section" style="margin-top:30px;">
+      <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-trophy"></i> Awards</h4>
+      <div id="awards-display" class="documents-grid">
+        <p style="color:var(--muted);">No awards uploaded yet.</p>
       </div>
     </div>
-
-    <!-- Research & Achievements -->
-    <div id="research-achievements" class="tab-content">
-      <div class="card">
-        <h3>Research & Achievements</h3>
-        <p style="font-size:13px;color:var(--muted)">Publications, papers, awards, recognitions</p>
-      </div>
-    </div>
-
-    <!-- Evaluations -->
-    <div id="evaluations" class="tab-content">
-      <div class="card">
-        <h3>Evaluations</h3>
-        <p style="font-size:13px;color:var(--muted)">Evaluation results and history</p>
-      </div>
-    </div>
-
-    <!-- Trainings & Seminars -->
-    <div id="trainings-seminars" class="tab-content">
-      <div class="card">
-        <h3>Trainings & Seminars</h3>
-        <p style="font-size:13px;color:var(--muted)">Workshops, CPD credits, certificates</p>
-      </div>
-    </div>
-
   </div>
+</div>
+
+<!-- Document Viewer Modal -->
+<div id="document-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="modal-title">Document Viewer</h3>
+      <span class="close" onclick="closeDocumentModal()">&times;</span>
+    </div>
+    <div class="modal-body">
+      <div id="document-container" style="width:100%;height:75vh;overflow:auto;background:#f5f5f5;border-radius:8px;">
+        <iframe id="document-viewer" style="width:100%;height:100%;border:none;display:none;"></iframe>
+        <img id="image-viewer" style="max-width:100%;height:auto;display:none;margin:0 auto;">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Loading indicator -->
+<div id="loading" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 20px; border-radius: 8px; z-index: 1000;">
+  <i class="fas fa-spinner fa-spin"></i> <span id="loading-text">Loading...</span>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
-  <script>
-    // Tabs
-    const tabs = document.querySelectorAll('.tab');
-    const contents = document.querySelectorAll('.tab-content');
-    tabs.forEach(tab => {
-      tab.addEventListener('click', () => {
-        tabs.forEach(t => t.classList.remove('active'));
-        contents.forEach(c => c.classList.remove('active'));
-        tab.classList.add('active');
-        document.getElementById(tab.dataset.tab).classList.add('active');
-      });
-    });
-  </script>
+<script>
+let currentProfile = {};
+
+document.addEventListener('DOMContentLoaded', function() {
+  loadProfileData();
+});
+
+async function loadProfileData() {
+  try {
+    showLoading(true, 'Loading profile data...');
+    
+    const [profileResponse, statsResponse] = await Promise.all([
+      fetch('/api/faculty/profile'),
+      fetch('/api/faculty/profile/stats')
+    ]);
+    
+    const profileData = await profileResponse.json();
+    const statsData = await statsResponse.json();
+    
+    if (profileData.success) {
+      currentProfile = profileData.profile;
+      displayProfile();
+    } else {
+      console.error('Error loading profile:', profileData.error);
+    }
+    
+    if (statsData.success) {
+      displayProfileStats(statsData.stats);
+    } else {
+      console.error('Error loading profile stats:', statsData.error);
+    }
+    
+  } catch (error) {
+    console.error('Error loading profile data:', error);
+  } finally {
+    // Loading indicator will be hidden in displayProfile() after all data is processed
+  }
+}
+
+function displayProfile() {
+  if (currentProfile.profilepic) {
+    document.getElementById('profile-picture').src = 'data:image/jpeg;base64,' + currentProfile.profilepic;
+  }
+  
+  const bio = currentProfile.bio || 'Dedicated administrator committed to institutional excellence and faculty development.';
+  document.getElementById('bio-display').textContent = bio;
+  
+  if (currentProfile.phone && currentProfile.phone !== '+63 ') {
+    document.getElementById('contact-phone').innerHTML = 
+      `<i class='bx bx-phone'></i><strong> Contact:</strong> ${currentProfile.phone}`;
+  }
+  
+  displayDocuments('licenses', currentProfile.licenses || [], currentProfile.licenses_filename || []);
+  displayDocuments('degrees', currentProfile.degrees || [], currentProfile.degrees_filename || []);
+  displayDocuments('certificates', currentProfile.certificates || [], currentProfile.certificates_filename || []);
+  displayDocuments('publications', currentProfile.publications || [], currentProfile.publications_filename || []);
+  displayDocuments('awards', currentProfile.awards || [], currentProfile.awards_filename || []);
+  
+  showLoading(false);
+}
+
+function displayProfileStats(stats) {
+  document.getElementById('years-service').textContent = stats.years_of_service;
+  document.getElementById('research-pubs').textContent = stats.research_publications;
+  document.getElementById('professional-certs').textContent = stats.professional_certifications;
+  document.getElementById('awards-count').textContent = stats.awards_count;
+}
+
+function displayDocuments(docType, documents, filenames) {
+  const displayElement = document.getElementById(docType + '-display');
+  if (!displayElement) return;
+  
+  if (!documents || documents.length === 0) {
+    displayElement.innerHTML = `<p style="color:var(--muted);">No ${docType} uploaded yet.</p>`;
+    return;
+  }
+  
+  displayElement.innerHTML = '';
+  
+  documents.forEach((doc, index) => {
+    const filename = filenames[index] || `${docType}_${index + 1}`;
+    const ext = filename.split('.').pop().toLowerCase();
+    
+    let icon = 'fa-file';
+    if (['pdf'].includes(ext)) {
+      icon = 'fa-file-pdf';
+    } else if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
+      icon = 'fa-file-image';
+    } else if (['doc', 'docx'].includes(ext)) {
+      icon = 'fa-file-word';
+    }
+    
+    const card = document.createElement('div');
+    card.className = 'document-card';
+    card.onclick = () => viewDocument(doc, filename, ext);
+    
+    card.innerHTML = `
+      <i class="fas ${icon} document-icon"></i>
+      <div class="document-name">${filename}</div>
+    `;
+    
+    displayElement.appendChild(card);
+  });
+}
+
+function viewDocument(docBase64, filename, ext) {
+  const modal = document.getElementById('document-modal');
+  const title = document.getElementById('modal-title');
+  const iframe = document.getElementById('document-viewer');
+  const img = document.getElementById('image-viewer');
+  const container = document.getElementById('document-container');
+  
+  title.textContent = filename;
+  iframe.style.display = 'none';
+  img.style.display = 'none';
+  iframe.src = '';
+  img.src = '';
+  
+  if (['jpg', 'jpeg', 'png', 'gif'].includes(ext.toLowerCase())) {
+    img.style.display = 'block';
+    img.style.margin = '0 auto';
+    container.style.textAlign = 'center';
+    container.style.padding = '20px';
+    container.style.overflow = 'auto';
+    img.src = 'data:image/' + ext + ';base64,' + docBase64;
+  } else if (ext.toLowerCase() === 'pdf') {
+    iframe.style.display = 'block';
+    container.style.textAlign = 'left';
+    container.style.padding = '0';
+    container.style.overflow = 'hidden';
+    iframe.src = 'data:application/pdf;base64,' + docBase64 + '#view=FitH&toolbar=1';
+  } else {
+    iframe.style.display = 'block';
+    container.style.textAlign = 'left';
+    container.style.padding = '0';
+    container.style.overflow = 'auto';
+
+    try {
+      const blob = base64ToBlob(docBase64, getMimeType(ext));
+      const url = URL.createObjectURL(blob);
+      iframe.src = url;
+      
+      iframe.onerror = function() {
+        container.innerHTML = `
+          <div style="padding:40px;text-align:center;">
+            <i class="fas fa-exclamation-circle" style="font-size:48px;color:#999;margin-bottom:20px;"></i>
+            <p style="color:#666;margin-bottom:20px;">Cannot preview this file type in browser.</p>
+            <button onclick="downloadDocument('${docBase64}', '${filename}', '${ext}')" 
+                    style="padding:10px 20px;background:var(--spc-maroon);color:white;border:none;border-radius:6px;cursor:pointer;">
+              <i class="fas fa-download"></i> Download File
+            </button>
+          </div>
+        `;
+      };
+    } catch (error) {
+      container.innerHTML = `
+        <div style="padding:40px;text-align:center;">
+          <i class="fas fa-exclamation-circle" style="font-size:48px;color:#999;margin-bottom:20px;"></i>
+          <p style="color:#666;margin-bottom:20px;">Error loading document.</p>
+          <button onclick="downloadDocument('${docBase64}', '${filename}', '${ext}')" 
+                  style="padding:10px 20px;background:var(--spc-maroon);color:white;border:none;border-radius:6px;cursor:pointer;">
+            <i class="fas fa-download"></i> Download File
+            </button>
+        </div>
+      `;
+    }
+  }
+  
+  modal.style.display = 'block';
+}
+
+function downloadDocument(docBase64, filename, ext) {
+  try {
+    const blob = base64ToBlob(docBase64, getMimeType(ext));
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Error downloading document:', error);
+    alert('Failed to download document');
+  }
+}
+
+function closeDocumentModal() {
+  const modal = document.getElementById('document-modal');
+  const iframe = document.getElementById('document-viewer');
+  const img = document.getElementById('image-viewer');
+  const container = document.getElementById('document-container');
+  
+  modal.style.display = 'none';
+  iframe.src = '';
+  img.src = '';
+  iframe.style.display = 'none';
+  img.style.display = 'none';
+  container.style.overflow = 'auto';
+  container.style.padding = '0';
+}
+
+window.onclick = function(event) {
+  const modal = document.getElementById('document-modal');
+  if (event.target == modal) {
+    closeDocumentModal();
+  }
+}
+
+function base64ToBlob(base64, mimeType) {
+  const byteCharacters = atob(base64);
+  const byteArrays = [];
+  
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteArrays.push(byteCharacters.charCodeAt(i));
+  }
+  
+  return new Blob([new Uint8Array(byteArrays)], { type: mimeType });
+}
+
+function getMimeType(ext) {
+  const mimeTypes = {
+    'pdf': 'application/pdf',
+    'doc': 'application/msword',
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif'
+  };
+  return mimeTypes[ext] || 'application/octet-stream';
+}
+
+function showLoading(show, text = 'Loading...') {
+  const loading = document.getElementById('loading');
+  const loadingText = document.getElementById('loading-text');
+  if (show) {
+    loadingText.textContent = text;
+    loading.style.display = 'block';
+  } else {
+    loading.style.display = 'none';
+  }
+}
+
+const tabs = document.querySelectorAll('.tab');
+const contents = document.querySelectorAll('.tab-content');
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    tabs.forEach(t => t.classList.remove('active'));
+    contents.forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.tab).classList.add('active');
+  });
+});
+</script>
 {% endblock %}

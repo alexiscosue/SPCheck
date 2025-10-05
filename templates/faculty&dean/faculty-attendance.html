@@ -68,7 +68,7 @@
       <!-- Combined Attendance Records -->
       <div id="logs" class="tab-content active">
         <div class="search-filter">
-          <input type="text" id="logSearch" placeholder="Search by class, section, room, or date...">
+          <input type="text" id="logSearch" placeholder="Search by Class, Section, Room, or Date...">
           <select id="logFilter">
             <option value="">All Status</option>
             <option>Present</option>
@@ -141,7 +141,6 @@
 {% block extra_scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 <script>
-  // Tabs
   document.querySelectorAll('.tab-btn').forEach(btn=>{
     btn.addEventListener('click',()=>{
       document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
@@ -151,7 +150,6 @@
     });
   });
 
-  // Data variables
   let logs = [];
   let classAttendance = [];
   let statusBreakdown = { present: 0, late: 0, absent: 0 };
@@ -161,7 +159,6 @@
   let availableSemesters = [];
   let currentSemesterId = null;
 
-  // Fetch available semesters
   async function fetchSemesters() {
     try {
       const response = await fetch('/api/faculty/semesters');
@@ -171,7 +168,6 @@
         availableSemesters = data.semesters;
         currentSemesterId = data.current_semester_id;
         
-        // Populate semester dropdown
         const semesterSelect = document.getElementById('semesterSelect');
         semesterSelect.innerHTML = '';
         
@@ -194,16 +190,13 @@
           semesterSelect.appendChild(option);
         });
         
-        // Set current semester as default
         if (currentSemesterId) {
           semesterSelect.value = currentSemesterId;
         } else if (availableSemesters.length > 0) {
-          // If no current semester, select the first one
           semesterSelect.value = availableSemesters[0].id;
           currentSemesterId = availableSemesters[0].id;
         }
         
-        // Load data for selected semester
         await fetchAttendanceData(currentSemesterId);
         
       } else {
@@ -216,7 +209,6 @@
     }
   }
 
-  // Fetch attendance data from server for specific semester
   async function fetchAttendanceData(semesterId) {
     if (!semesterId) return;
     
@@ -229,17 +221,14 @@
         classAttendance = data.class_attendance || [];
         statusBreakdown = data.status_breakdown || { present: 0, late: 0, absent: 0 };
         
-        // Update KPI cards
         updateKPICards(data.kpis || {});
         
-        // Render all components
-        currentPage = 1; // Reset pagination
+        currentPage = 1;
         renderLogs();
         renderCalendar();
         updateStatusChart();
       } else {
         console.error('Failed to fetch attendance data:', data.error);
-        // Clear displays on error
         clearDisplays();
       }
     } catch (error) {
@@ -248,31 +237,22 @@
     }
   }
 
-  // Clear all displays when no data
   function clearDisplays() {
-    // Clear KPIs
     document.getElementById('attendancePercent').textContent = '0%';
     document.getElementById('lateCount').textContent = '0 (0%)';
     document.getElementById('absenceCount').textContent = '0 (0%)';
     document.getElementById('sectionsCount').textContent = '0 (0.0 units)';
     document.getElementById('totalClasses').textContent = '0';
-    
-    // Clear table
     document.getElementById('logsBody').innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #6b7280;">No attendance data available for selected semester</td></tr>';
-    
-    // Clear calendar
     document.getElementById('calendarGrid').innerHTML = '';
     
-    // Clear chart
     if (window.breakdownChart) {
       window.breakdownChart.destroy();
     }
     
-    // Update pagination
     updatePaginationControls(1, 1, 0);
   }
 
-  // Update KPI cards with real data
   function updateKPICards(kpis) {
     const totalClasses = kpis.total_classes || 0;
     const lateCount = kpis.late_count || 0;
@@ -280,32 +260,25 @@
     const sectionsCount = kpis.sections_count || 0;
     const totalUnits = kpis.total_units || 0;
     
-    // Attendance percentage
     document.getElementById('attendancePercent').textContent = kpis.attendance_percent || '0%';
-    
-    // Late count with percentage
+
     const latePercent = totalClasses > 0 ? Math.round((lateCount / totalClasses) * 100) : 0;
     document.getElementById('lateCount').textContent = `${lateCount} (${latePercent}%)`;
-    
-    // Absence count with percentage
+
     const absencePercent = totalClasses > 0 ? Math.round((absenceCount / totalClasses) * 100) : 0;
     document.getElementById('absenceCount').textContent = `${absenceCount} (${absencePercent}%)`;
     
-    // Sections and units
     document.getElementById('sectionsCount').textContent = `${sectionsCount} (${totalUnits.toFixed(1)} units)`;
     
-    // Total classes
     document.getElementById('totalClasses').textContent = totalClasses;
   }
 
-  // Render Combined Logs (enhanced with class/section/room search)
   function renderLogs(){
     const tbody = document.getElementById('logsBody');
     tbody.innerHTML='';
     let search = document.getElementById('logSearch').value.toLowerCase();
     let filter = document.getElementById('logFilter').value;
     
-    // Filter records based on search (class, section, room, or date) and status filter
     filteredLogs = logs.filter(l => {
       const searchMatch = !search || 
         l.date.includes(search) ||
@@ -318,23 +291,18 @@
       return searchMatch && filterMatch;
     });
     
-    // Calculate pagination
     const totalRecords = filteredLogs.length;
     const totalPages = Math.ceil(totalRecords / recordsPerPage);
     const startIndex = (currentPage - 1) * recordsPerPage;
     const endIndex = startIndex + recordsPerPage;
-    
-    // Get records for current page
     const currentPageRecords = filteredLogs.slice(startIndex, endIndex);
     
-    // Show message if no records
     if (currentPageRecords.length === 0) {
       const message = filteredLogs.length === 0 && (search || filter) ? 
         'No records match your search criteria' : 
         'No attendance data available for selected semester';
       tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #6b7280;">${message}</td></tr>`;
     } else {
-      // Render current page records
       currentPageRecords.forEach(l=>{
         const tr=document.createElement('tr');
         tr.innerHTML=`<td>${l.date}</td><td>${l.class_name || 'N/A'}</td><td>${l.classroom || 'N/A'}</td><td>${l.class_section || 'N/A'}</td><td>${l.time_in || '—'}</td><td>${l.time_out || '—'}</td><td><span class="status ${l.status.toLowerCase()}">${l.status}</span></td>`;
@@ -342,17 +310,14 @@
       });
     }
     
-    // Update pagination info and controls
     updatePaginationControls(currentPage, totalPages, totalRecords);
   }
 
-  // Update pagination controls
   function updatePaginationControls(page, totalPages, totalRecords) {
     const pageInfo = document.getElementById('pageInfo');
     const prevBtn = document.getElementById('prevPage');
     const nextBtn = document.getElementById('nextPage');
     
-    // Update page info text
     if (totalRecords === 0) {
       pageInfo.textContent = '0 records';
     } else {
@@ -361,12 +326,10 @@
       pageInfo.textContent = `${startRecord} - ${endRecord} of ${totalRecords} records`;
     }
     
-    // Update button states
     prevBtn.disabled = page <= 1;
     nextBtn.disabled = page >= totalPages || totalPages === 0;
   }
 
-  // Pagination navigation
   function goToPage(page) {
     const totalPages = Math.ceil(filteredLogs.length / recordsPerPage);
     if (page >= 1 && page <= totalPages) {
@@ -375,7 +338,6 @@
     }
   }
 
-  // Calendar with Month/Year and dots
   let currentDate = new Date();
 
   function renderCalendar(){
@@ -390,7 +352,6 @@
 
     monthLabel.textContent = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
 
-    // Weekday headers
     const weekdays = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     weekdays.forEach(day=>{
       let div = document.createElement('div');
@@ -399,16 +360,13 @@
       cal.appendChild(div);
     });
 
-    // Empty slots before first day
     for(let i=0;i<firstDay;i++){
       let empty = document.createElement('div');
       empty.className = 'empty';
       cal.appendChild(empty);
     }
 
-    // Days of month with dots for multiple attendance records
     for(let i=1;i<=daysInMonth;i++){
-      // Find all records for this day
       let dayRecords = logs.filter(record => {
         let d = new Date(record.date);
         return d.getDate()===i && d.getMonth()===month && d.getFullYear()===year;
@@ -416,28 +374,22 @@
 
       let div = document.createElement('div');
       div.classList.add('day');
-      
-      // Day number
+    
       let dayNumber = document.createElement('div');
       dayNumber.className = 'day-number';
       dayNumber.textContent = i;
       div.appendChild(dayNumber);
-
-      // Dots container
       let dotsContainer = document.createElement('div');
       dotsContainer.className = 'dots-container';
 
-      // Create dots for each attendance record
       dayRecords.forEach(record => {
         let dot = document.createElement('span');
         dot.className = `status-dot ${record.status.toLowerCase()}`;
         
-        // Create tooltip
         let tooltip = document.createElement('div');
         tooltip.className = 'dot-tooltip';
         tooltip.innerHTML = `<strong>${record.status}</strong><br>${record.class_name || 'N/A'}<br>${record.classroom || 'N/A'}<br>${record.class_section || 'N/A'}`;
         
-        // Add hover events
         dot.addEventListener('mouseenter', () => {
           tooltip.classList.add('show');
         });
@@ -455,19 +407,15 @@
     }
   }
 
-  // Update Status Chart
   function updateStatusChart() {
     const statusCtx = document.getElementById('statusBreakdown').getContext('2d');
     
-    // Destroy existing chart if it exists
     if (window.breakdownChart) {
       window.breakdownChart.destroy();
     }
     
-    // Don't create chart if no data
     const totalRecords = statusBreakdown.present + statusBreakdown.late + statusBreakdown.absent;
     if (totalRecords === 0) {
-      // Show "No data" message in canvas
       statusCtx.clearRect(0, 0, statusCtx.canvas.width, statusCtx.canvas.height);
       statusCtx.font = '16px Arial';
       statusCtx.fillStyle = '#6b7280';
@@ -490,7 +438,7 @@
           if(els.length){
             const label = window.breakdownChart.data.labels[els[0].index];
             document.getElementById('logFilter').value = label;
-            currentPage = 1; // Reset to first page when filtering
+            currentPage = 1;
             renderLogs();
           }
         },
@@ -501,7 +449,6 @@
     });
   }
 
-  // Navigation
   document.getElementById('prevMonth').addEventListener('click',()=>{
     currentDate.setMonth(currentDate.getMonth()-1);
     renderCalendar();
@@ -511,17 +458,15 @@
     renderCalendar();
   });
 
-  // Search and Filter Events
   document.getElementById('logSearch').addEventListener('input', () => {
-    currentPage = 1; // Reset to first page when searching
+    currentPage = 1; 
     renderLogs();
   });
   document.getElementById('logFilter').addEventListener('change', () => {
-    currentPage = 1; // Reset to first page when filtering
+    currentPage = 1; 
     renderLogs();
   });
 
-  // Pagination event listeners
   document.getElementById('prevPage').addEventListener('click', () => {
     goToPage(currentPage - 1);
   });
@@ -529,7 +474,6 @@
     goToPage(currentPage + 1);
   });
 
-  // Semester selection event listener
   document.getElementById('semesterSelect').addEventListener('change', (e) => {
     const selectedSemesterId = e.target.value;
     if (selectedSemesterId && selectedSemesterId !== currentSemesterId) {
@@ -538,9 +482,7 @@
     }
   });
 
-  // RFID Simulation - only works with current semester
   document.getElementById('rfidBtn').addEventListener('click', async () => {
-    // Check if current semester is selected
     const selectedSemester = availableSemesters.find(s => s.id == currentSemesterId);
     if (!selectedSemester || !selectedSemester.is_current) {
       alert('RFID simulation only works with the current semester.');
@@ -557,7 +499,6 @@
       
       const result = await response.json();
       if (result.success) {
-        // Refresh data after simulation
         await fetchAttendanceData(currentSemesterId);
       } else {
         console.error('RFID simulation failed:', result.error);
@@ -569,7 +510,6 @@
     }
   });
 
-  // Initial data load - fetch semesters first, then load attendance data
   document.addEventListener('DOMContentLoaded', fetchSemesters);
 </script>
 {% endblock %}

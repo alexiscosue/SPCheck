@@ -1230,7 +1230,7 @@ def get_teaching_load(cursor, personnel_id, acadcalendar_id):
 
 # Modified API endpoints to support viewing other profiles
 @app.route('/api/faculty/profile')
-@require_auth([20001, 20002, 20003])
+@require_auth([20001, 20002, 20003, 20004])
 def api_get_faculty_profile():
     """API endpoint to get faculty profile data - AUTO CREATES PROFILE IF NOT EXISTS"""
     try:
@@ -1439,7 +1439,7 @@ def api_get_profile_stats():
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/faculty/profile/personal', methods=['POST'])
-@require_auth([20001, 20002, 20003])
+@require_auth([20001, 20002, 20003, 20004])
 def api_update_personal_info():
     """API endpoint to update personal information - AUTO CREATES PROFILE IF NOT EXISTS"""
     try:
@@ -1536,7 +1536,7 @@ def api_update_personal_info():
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/faculty/profile/documents', methods=['POST'])
-@require_auth([20001, 20002, 20003])
+@require_auth([20001, 20002, 20003, 20004])
 def api_update_documents():
     """API endpoint to update document uploads - AUTO CREATES PROFILE IF NOT EXISTS"""
     try:
@@ -1659,7 +1659,7 @@ def api_update_documents():
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/faculty/profile/password', methods=['POST'])
-@require_auth([20001, 20002, 20003])
+@require_auth([20001, 20002, 20003, 20004])
 def api_update_password():
     """API endpoint to update password"""
     try:
@@ -1717,7 +1717,7 @@ def api_update_password():
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/faculty/profile/document/<doc_type>/<int:index>', methods=['DELETE'])
-@require_auth([20001, 20002, 20003])
+@require_auth([20001, 20002, 20003, 20004])
 def api_delete_document(doc_type, index):
     """API endpoint to delete a specific document from an array"""
     try:
@@ -2263,7 +2263,7 @@ def api_hr_employees_list():
             elif role_display == 'dean':
                 role_display = 'Dean'
             elif role_display == 'vppres':
-                role_display = 'Admin'
+                role_display = 'Admin'  
             
             employees_list.append({
                 'personnel_id': personnel_id,
@@ -2415,6 +2415,69 @@ def faculty_employee_profile(personnel_id):
             
     except Exception as e:
         print(f"Error loading employee profile: {e}")
+        return "Error loading profile", 500
+    
+@app.route('/vp_employee_profile/<int:personnel_id>')
+@require_auth([20003])
+def vp_employee_profile(personnel_id):
+    """HR view of VP/President profile"""
+    try:
+        # Get the target employee's information
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                p.firstname,
+                p.lastname,
+                p.honorifics,
+                c.collegename,
+                p.employee_no,
+                r.rolename,
+                u.email,
+                pr.position,
+                pr.employmentstatus
+            FROM personnel p
+            LEFT JOIN college c ON p.college_id = c.college_id
+            LEFT JOIN roles r ON p.role_id = r.role_id
+            LEFT JOIN users u ON p.user_id = u.user_id
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            WHERE p.personnel_id = %s
+        """, (personnel_id,))
+        
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        if result:
+            firstname, lastname, honorifics, collegename, employee_no, rolename, email, position, employmentstatus = result
+            
+            # Format the full name with honorifics at the end
+            if honorifics:
+                full_name = f"{firstname} {lastname}, {honorifics}"
+            else:
+                full_name = f"{firstname} {lastname}"
+            
+            employee_info = {
+                'vp_name': full_name,
+                'college': collegename or 'College of Computer Studies',
+                'employee_no': employee_no,
+                'email': email or 'email@spc.edu.ph',
+                'position': position or 'Full-Time Employee',
+                'employment_status': employmentstatus or 'Regular',
+                'firstname': firstname,
+                'is_hr_viewing': True  # Flag to indicate HR is viewing
+            }
+            
+            # Store the target personnel_id in session for API calls
+            session['viewing_personnel_id'] = personnel_id
+            
+            return render_template('vp&pres/vp-profile.html', **employee_info)
+        else:
+            return "Employee not found", 404
+            
+    except Exception as e:
+        print(f"Error loading VP employee profile: {e}")
         return "Error loading profile", 500
 
 # Modified API endpoints to support viewing other profiles
