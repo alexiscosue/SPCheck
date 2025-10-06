@@ -31,14 +31,14 @@
   <table class="employee-table" style="table-layout: fixed; width: 100%;">
     <thead>
       <tr>
-        <th style="width: 150px; ">Name</th>
-        <th style="width: 160px; ">College</th>
-        <th style="width: 60px; ">Role</th>
-        <th style="width: 120px; ">Position</th>
-        <th style="width: 150px; ">Status</th>
-        <th style="width: 180px; ">Email</th>
-        <th style="width: 110px; ">Phone</th>
-        <th style="width: 60px; ">Action</th>
+        <th style="width: 150px; cursor: pointer;" data-sort="name">Name <span class="sort-icon">↕</span></th>
+        <th style="width: 160px; cursor: pointer;" data-sort="college">College <span class="sort-icon">↕</span></th>
+        <th style="width: 60px; cursor: pointer;" data-sort="role">Role <span class="sort-icon">↕</span></th>
+        <th style="width: 120px; cursor: pointer;" data-sort="position">Position <span class="sort-icon">↕</span></th>
+        <th style="width: 150px; cursor: pointer;" data-sort="status">Status <span class="sort-icon">↕</span></th>
+        <th style="width: 180px; cursor: pointer;" data-sort="email">Email <span class="sort-icon">↕</span></th>
+        <th style="width: 110px; cursor: pointer;" data-sort="phone">Phone <span class="sort-icon">↕</span></th>
+        <th style="width: 60px;">Action</th>
       </tr>
     </thead>
     <tbody id="employeeTableBody" style="text-align: center;"></tbody>
@@ -52,6 +52,7 @@ let currentPage = 1;
 const recordsPerPage = 10;
 let filteredEmployees = [];
 let allEmployees = [];
+let currentSort = { column: null, direction: 'asc' }; 
 
 async function fetchEmployeesData() {
   try {
@@ -104,6 +105,42 @@ async function populateTable() {
   renderEmployees();
 }
 
+function sortEmployees(employees, column, direction) {
+  return [...employees].sort((a, b) => {
+    let aValue = a[column];
+    let bValue = b[column];
+    
+    if (aValue === null || aValue === undefined) aValue = '';
+    if (bValue === null || bValue === undefined) bValue = '';
+    
+    aValue = String(aValue).toLowerCase();
+    bValue = String(bValue).toLowerCase();
+    
+    if (direction === 'asc') {
+      return aValue.localeCompare(bValue);
+    } else {
+      return bValue.localeCompare(aValue);
+    }
+  });
+}
+
+function updateSortIcons() {
+  document.querySelectorAll('th[data-sort]').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    const icon = th.querySelector('.sort-icon');
+    icon.textContent = '↕';
+  });
+  
+  if (currentSort.column) {
+    const currentTh = document.querySelector(`th[data-sort="${currentSort.column}"]`);
+    if (currentTh) {
+      currentTh.classList.add(`sort-${currentSort.direction}`);
+      const icon = currentTh.querySelector('.sort-icon');
+      icon.textContent = currentSort.direction === 'asc' ? '↑' : '↓';
+    }
+  }
+}
+
 function renderEmployees() {
   const tbody = document.getElementById('employeeTableBody');
   tbody.innerHTML = '';
@@ -126,6 +163,10 @@ function renderEmployees() {
     
     return matchesSearch && matchesCollege && matchesStatus;
   });
+  
+  if (currentSort.column) {
+    filteredEmployees = sortEmployees(filteredEmployees, currentSort.column, currentSort.direction);
+  }
   
   const totalRecords = filteredEmployees.length;
   const totalPages = Math.ceil(totalRecords / recordsPerPage);
@@ -156,6 +197,7 @@ function renderEmployees() {
   }
   
   updatePaginationControls(currentPage, totalPages, totalRecords);
+  updateSortIcons();
 }
 
 function updatePaginationControls(page, totalPages, totalRecords) {
@@ -216,6 +258,21 @@ function setupFilters() {
   
   document.getElementById('nextPage').addEventListener('click', () => {
     goToPage(currentPage + 1);
+  });
+  
+  document.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const column = th.getAttribute('data-sort');
+      
+      if (currentSort.column === column) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentSort.column = column;
+        currentSort.direction = 'asc';
+      }
+      
+      renderEmployees();
+    });
   });
 }
 

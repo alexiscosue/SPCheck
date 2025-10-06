@@ -150,6 +150,25 @@
     });
   });
 
+  // Function to convert military time to 12-hour format
+  function convertTo12Hour(militaryTime) {
+    if (!militaryTime || militaryTime === '—') return '—';
+    
+    // Handle time strings like "14:30:00" or "14:30"
+    const timeParts = militaryTime.split(':');
+    if (timeParts.length < 2) return militaryTime;
+    
+    let hours = parseInt(timeParts[0]);
+    const minutes = timeParts[1];
+    
+    if (isNaN(hours)) return militaryTime;
+    
+    const period = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    
+    return `${hours}:${minutes} ${period}`;
+  }
+
   let logs = [];
   let classAttendance = [];
   let statusBreakdown = { present: 0, late: 0, absent: 0 };
@@ -305,7 +324,11 @@
     } else {
       currentPageRecords.forEach(l=>{
         const tr=document.createElement('tr');
-        tr.innerHTML=`<td>${l.date}</td><td>${l.class_name || 'N/A'}</td><td>${l.classroom || 'N/A'}</td><td>${l.class_section || 'N/A'}</td><td>${l.time_in || '—'}</td><td>${l.time_out || '—'}</td><td><span class="status ${l.status.toLowerCase()}">${l.status}</span></td>`;
+        // Convert military time to 12-hour format for display
+        const timeIn12Hour = convertTo12Hour(l.time_in);
+        const timeOut12Hour = convertTo12Hour(l.time_out);
+        
+        tr.innerHTML=`<td>${l.date}</td><td>${l.class_name || 'N/A'}</td><td>${l.classroom || 'N/A'}</td><td>${l.class_section || 'N/A'}</td><td>${timeIn12Hour}</td><td>${timeOut12Hour}</td><td><span class="status ${l.status.toLowerCase()}">${l.status}</span></td>`;
         tbody.appendChild(tr);
       });
     }
@@ -388,7 +411,10 @@
         
         let tooltip = document.createElement('div');
         tooltip.className = 'dot-tooltip';
-        tooltip.innerHTML = `<strong>${record.status}</strong><br>${record.class_name || 'N/A'}<br>${record.classroom || 'N/A'}<br>${record.class_section || 'N/A'}`;
+        // Convert times in tooltip to 12-hour format
+        const timeIn12Hour = convertTo12Hour(record.time_in);
+        const timeOut12Hour = convertTo12Hour(record.time_out);
+        tooltip.innerHTML = `<strong>${record.status}</strong><br>${record.class_name || 'N/A'}<br>${record.classroom || 'N/A'}<br>${record.class_section || 'N/A'}<br>In: ${timeIn12Hour}<br>Out: ${timeOut12Hour}`;
         
         dot.addEventListener('mouseenter', () => {
           tooltip.classList.add('show');

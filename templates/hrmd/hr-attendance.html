@@ -411,9 +411,14 @@
     const timetable = data.timetable;
     const semesterInfo = data.semester_info;
     
+    let semesterDisplay = semesterInfo.display;
+    if (semesterInfo.name && !semesterInfo.name.includes('Semester')) {
+      semesterDisplay = `${semesterInfo.name} Semester, ${semesterInfo.year}`;
+    }
+    
     let html = `
       <div class="hr-schedule-header">
-        <h4>${semesterInfo.display}</h4>
+        <h4>${semesterDisplay}</h4>
       </div>
       <div class="hr-timetable-container">
         <table class="hr-timetable">
