@@ -5,7 +5,6 @@ from flask import Flask, render_template, request, redirect, url_for, session
 from dotenv import load_dotenv
 import pg8000
 
-# Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
@@ -29,14 +28,13 @@ ROLE_REDIRECTS = {
     20004: ('vppres', 'vp_promotions')
 }
 
-# Helper function to get personnel info (works for all roles)
 def get_personnel_info(user_id):
     """Get personnel information from personnel, college, profile, and users tables"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Join personnel, college, profile, and users tables to get complete personnel info
+
         cursor.execute("""
             SELECT 
                 p.firstname,
@@ -63,7 +61,6 @@ def get_personnel_info(user_id):
         if result:
             firstname, lastname, honorifics, collegename, employee_no, rolename, email, position, employmentstatus = result
             
-            # Format the full name with honorifics at the end
             if honorifics:
                 full_name = f"{firstname} {lastname}, {honorifics}"
             else:
@@ -71,9 +68,9 @@ def get_personnel_info(user_id):
             
             return {
                 'personnel_name': full_name,
-                'faculty_name': full_name,  # For backward compatibility with faculty templates
-                'hr_name': full_name,       # For HR templates
-                'vp_name': full_name,       # For VP templates
+                'faculty_name': full_name,  
+                'hr_name': full_name,       
+                'vp_name': full_name,      
                 'college': collegename or 'College of Computer Studies',
                 'employee_no': employee_no,
                 'firstname': firstname,
@@ -87,7 +84,6 @@ def get_personnel_info(user_id):
     except Exception as e:
         print(f"Error getting personnel info: {e}")
     
-    # Default values if query fails or no data found
     return {
         'personnel_name': 'Staff Member',
         'faculty_name': 'Prof. Santos',
@@ -104,12 +100,10 @@ def get_personnel_info(user_id):
         'employment_status': 'Regular'
     }
 
-# Backward compatibility - keep the old function name
 def get_faculty_info(user_id):
     """Get faculty information - wrapper for get_personnel_info"""
     return get_personnel_info(user_id)
 
-# Authentication decorator
 def require_auth(allowed_roles):
     def decorator(func):
         def wrapper(*args, **kwargs):
@@ -134,7 +128,6 @@ def api_faculty_attendance():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get personnel_id for the current user
         cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
         personnel_result = cursor.fetchone()
         
@@ -143,7 +136,6 @@ def api_faculty_attendance():
         
         personnel_id = personnel_result[0]
         
-        # Get current academic calendar
         cursor.execute("""
             SELECT acadcalendar_id, semesterstart, semesterend 
             FROM acadcalendar 
@@ -158,7 +150,6 @@ def api_faculty_attendance():
         
         acadcalendar_id, semester_start, semester_end = academic_calendar
         
-        # Get all scheduled classes for this faculty including class section and classroom
         cursor.execute("""
             SELECT 
                 sch.class_id,
@@ -179,7 +170,6 @@ def api_faculty_attendance():
         
         scheduled_classes = cursor.fetchall()
         
-        # Get existing attendance records including class section and classroom
         cursor.execute("""
             SELECT 
                 a.class_id,
@@ -199,7 +189,6 @@ def api_faculty_attendance():
         
         attendance_records = cursor.fetchall()
         
-        # Create a map of existing attendance by class_id and date
         attendance_map = {}
         for record in attendance_records:
             class_id, status, timein, timeout, subject_code, subject_name, class_section, classroom = record
@@ -219,14 +208,12 @@ def api_faculty_attendance():
                 'classroom': classroom
             }
         
-        # Generate all expected class dates and cross-reference with attendance
         attendance_logs = []
         class_attendance = []
         status_counts = {'present': 0, 'late': 0, 'absent': 0}
         
         from datetime import datetime, timedelta
         
-        # Get Philippines timezone
         philippines_tz = pytz.timezone('Asia/Manila')
         current_date = datetime.now(philippines_tz).date()
         
@@ -235,7 +222,6 @@ def api_faculty_attendance():
             
             class_name = f"{subject_code} - {subject_name}"
             
-            # Process both class days (day1 and day2)
             for day, start_time, end_time in [(day1, start1, end1), (day2, start2, end2)]:
                 if not day:
                     continue
@@ -308,7 +294,6 @@ def api_faculty_attendance():
                     }
                     class_attendance.append(class_entry)
                     
-                    # Count statuses
                     if status.lower() == 'present':
                         status_counts['present'] += 1
                     elif status.lower() == 'late':
@@ -318,11 +303,9 @@ def api_faculty_attendance():
                     
                     check_date += timedelta(days=7)
         
-        # Sort logs by date (most recent first)
         attendance_logs.sort(key=lambda x: x['date'], reverse=True)
         class_attendance.sort(key=lambda x: x['date'], reverse=True)
         
-        # Calculate KPIs
         total_classes = len(attendance_logs)
         attendance_percent = round((status_counts['present'] + status_counts['late']) / total_classes * 100, 1) if total_classes > 0 else 0
         
@@ -357,7 +340,6 @@ def api_simulate_rfid():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get personnel_id for the current user
         cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
         personnel_result = cursor.fetchone()
         
@@ -366,7 +348,6 @@ def api_simulate_rfid():
         
         personnel_id = personnel_result[0]
         
-        # Get a random class for the faculty member
         cursor.execute("""
             SELECT class_id FROM schedule 
             WHERE personnel_id = %s 
@@ -381,25 +362,20 @@ def api_simulate_rfid():
         
         class_id = class_result[0]
         
-        # Simulate random status (Present, Late, or Absent)
         import random
         statuses = ['Present', 'Late', 'Absent']
         status = random.choice(statuses)
         
-        # Get current time in Philippines timezone
         philippines_tz = pytz.timezone('Asia/Manila')
         current_time = datetime.now(philippines_tz).replace(microsecond=0)
         
-        # For absent, don't set timein/timeout
         if status == 'Absent':
             timein = None
             timeout = None
         else:
-            # For present/late, set realistic times
             timein = current_time.replace(hour=8, minute=random.randint(0, 30 if status == 'Late' else 5))
             timeout = timein.replace(hour=12, minute=0)
         
-        # Insert simulated attendance record
         cursor.execute("""
             INSERT INTO attendance (personnel_id, class_id, attendancestatus, timein, timeout)
             VALUES (%s, %s, %s, %s, %s)
@@ -423,7 +399,6 @@ def api_faculty_semesters():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get all available semesters, ordered by academic year and semester
         cursor.execute("""
             SELECT 
                 acadcalendar_id,
@@ -442,17 +417,14 @@ def api_faculty_semesters():
         
         semesters = cursor.fetchall()
         
-        # Format the semesters for dropdown
         semester_options = []
         current_semester_id = None
         
         for sem in semesters:
             acadcalendar_id, semester, acadyear, start_date, end_date = sem
             
-            # Create display text
             display_text = f"{semester}, AY {acadyear}"
             
-            # Check if this is the current semester
             from datetime import date
             today = date.today()
             is_current = start_date <= today <= end_date
@@ -489,8 +461,7 @@ def api_faculty_attendance_by_semester(semester_id):
         user_id = session['user_id']
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        # Get personnel_id for the current user
+
         cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
         personnel_result = cursor.fetchone()
         
@@ -499,7 +470,6 @@ def api_faculty_attendance_by_semester(semester_id):
         
         personnel_id = personnel_result[0]
         
-        # Get specific academic calendar
         cursor.execute("""
             SELECT acadcalendar_id, semester, acadyear, semesterstart, semesterend 
             FROM acadcalendar 
@@ -512,7 +482,6 @@ def api_faculty_attendance_by_semester(semester_id):
         
         acadcalendar_id, semester_name, acad_year, semester_start, semester_end = academic_calendar
         
-        # Get all scheduled classes for this faculty in this semester including classroom
         cursor.execute("""
             SELECT 
                 sch.class_id,
@@ -534,7 +503,6 @@ def api_faculty_attendance_by_semester(semester_id):
         
         scheduled_classes = cursor.fetchall()
         
-        # Get existing attendance records for this semester including classroom
         cursor.execute("""
             SELECT 
                 a.class_id,
@@ -554,7 +522,6 @@ def api_faculty_attendance_by_semester(semester_id):
         
         attendance_records = cursor.fetchall()
         
-        # Create a map of existing attendance by class_id and date
         attendance_map = {}
         for record in attendance_records:
             class_id, status, timein, timeout, subject_code, subject_name, class_section, classroom = record
@@ -574,7 +541,6 @@ def api_faculty_attendance_by_semester(semester_id):
                 'classroom': classroom
             }
         
-        # Generate all expected class dates and cross-reference with attendance
         attendance_logs = []
         class_attendance = []
         status_counts = {'present': 0, 'late': 0, 'absent': 0}
@@ -584,7 +550,6 @@ def api_faculty_attendance_by_semester(semester_id):
         from datetime import datetime, timedelta
         import pytz
         
-        # Get Philippines timezone
         philippines_tz = pytz.timezone('Asia/Manila')
         current_date = datetime.now(philippines_tz).date()
         
@@ -593,13 +558,11 @@ def api_faculty_attendance_by_semester(semester_id):
             
             class_name = f"{subject_code} - {subject_name}"
             
-            # Count unique sections and units
             section_key = f"{subject_code}_{class_section}"
             if section_key not in unique_sections:
                 unique_sections.add(section_key)
                 total_units += units or 3
             
-            # Process both class days (day1 and day2)
             for day, start_time, end_time in [(day1, start1, end1), (day2, start2, end2)]:
                 if not day:
                     continue
@@ -621,8 +584,7 @@ def api_faculty_attendance_by_semester(semester_id):
                 
                 if check_date < semester_start:
                     check_date += timedelta(days=7)
-                
-                # Generate all class dates within semester bounds and up to current date
+
                 end_date = min(current_date, semester_end)
                 while check_date <= end_date:
                     date_key = f"{class_id}_{check_date}"
@@ -674,7 +636,6 @@ def api_faculty_attendance_by_semester(semester_id):
                     }
                     class_attendance.append(class_entry)
                     
-                    # Count statuses
                     if status.lower() == 'present':
                         status_counts['present'] += 1
                     elif status.lower() == 'late':
@@ -684,11 +645,9 @@ def api_faculty_attendance_by_semester(semester_id):
                     
                     check_date += timedelta(days=7)
         
-        # Sort logs by date (most recent first)
         attendance_logs.sort(key=lambda x: x['date'], reverse=True)
         class_attendance.sort(key=lambda x: x['date'], reverse=True)
         
-        # Calculate KPIs
         total_classes = len(attendance_logs)
         attendance_percent = round((status_counts['present'] + status_counts['late']) / total_classes * 100, 1) if total_classes > 0 else 0
         
@@ -701,7 +660,6 @@ def api_faculty_attendance_by_semester(semester_id):
             'total_units': total_units
         }
         
-        # Add semester info
         semester_info = {
             'id': acadcalendar_id,
             'name': semester_name,
@@ -730,12 +688,10 @@ def api_faculty_attendance_by_semester(semester_id):
 def api_faculty_teaching_schedule(semester_id):
     """API endpoint to get faculty teaching schedule as a timetable"""
     try:
-        # Check if we're viewing another employee's profile (HR use case)
         viewing_personnel_id = session.get('viewing_personnel_id')
         if viewing_personnel_id:
             personnel_id = viewing_personnel_id
         else:
-            # Normal case - get logged in user's data
             user_id = session['user_id']
             conn = get_db_connection()
             cursor = conn.cursor()
@@ -750,8 +706,7 @@ def api_faculty_teaching_schedule(semester_id):
         
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        # Get specific academic calendar
+
         cursor.execute("""
             SELECT acadcalendar_id, semester, acadyear
             FROM acadcalendar 
@@ -764,7 +719,6 @@ def api_faculty_teaching_schedule(semester_id):
         
         acadcalendar_id, semester_name, acad_year = academic_calendar
         
-        # Get all scheduled classes for this faculty in this semester
         cursor.execute("""
             SELECT 
                 sch.classday_1,
@@ -783,22 +737,17 @@ def api_faculty_teaching_schedule(semester_id):
         
         scheduled_classes = cursor.fetchall()
         
-        # Helper function to format time to 12-hour AM/PM - FIXED TIMEZONE HANDLING
         def format_time_12hr(time_val):
             if not time_val:
                 return None
             
-            # Handle timezone-aware datetime objects
             if hasattr(time_val, 'tzinfo') and time_val.tzinfo is not None:
-                # Convert to Philippines timezone
                 ph_tz = pytz.timezone('Asia/Manila')
                 time_val = time_val.astimezone(ph_tz)
                 time_str = time_val.strftime('%H:%M')
             elif hasattr(time_val, 'strftime'):
-                # Already local time or naive datetime
                 time_str = time_val.strftime('%H:%M')
             else:
-                # String time
                 time_str = str(time_val)[:5]
             
             try:
@@ -810,7 +759,6 @@ def api_faculty_teaching_schedule(semester_id):
             except:
                 return time_str
         
-        # Helper function to map time to time slot - IMPROVED MAPPING
         def get_time_slot(start_time, end_time):
             if not start_time or not end_time:
                 return None
@@ -823,7 +771,6 @@ def api_faculty_teaching_schedule(semester_id):
             
             time_slot = f"{start_str} - {end_str}"
             
-            # Map to standard time slots with more flexible matching
             time_slot_mapping = {
                 '7:30 AM - 9:00 AM': '7:30 AM - 9:00 AM',
                 '9:15 AM - 10:45 AM': '9:15 AM - 10:45 AM', 
@@ -834,24 +781,19 @@ def api_faculty_teaching_schedule(semester_id):
                 '6:00 PM - 7:30 PM': '6:00 PM - 7:30 PM'
             }
             
-            # Try exact match first
             if time_slot in time_slot_mapping:
                 return time_slot_mapping[time_slot]
             
-            # Try to match based on start time (for flexibility)
             start_time_only = start_str
             for slot in time_slot_mapping.keys():
                 if slot.startswith(start_time_only):
                     return slot
             
-            # Return the original time slot if no match found
             return time_slot
         
-        # Build timetable structure
         timetable = {}
         days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
         
-        # Initialize timetable with empty time slots for all days
         for day in days:
             timetable[day] = {
                 '7:30 AM - 9:00 AM': None,
@@ -863,14 +805,12 @@ def api_faculty_teaching_schedule(semester_id):
                 '6:00 PM - 7:30 PM': None
             }
         
-        # Populate timetable with classes - FIXED: Process both class days properly
         for scheduled_class in scheduled_classes:
             (day1, start1, end1, day2, start2, end2, 
              subject_code, classroom, section) = scheduled_class
             
             print(f"DEBUG: Processing class - Day1: {day1}, Start1: {start1}, End1: {end1}, Day2: {day2}, Start2: {start2}, End2: {end2}")
             
-            # Process first class day
             if day1 and start1 and end1:
                 time_slot = get_time_slot(start1, end1)
                 if time_slot and day1 in timetable:
@@ -881,7 +821,6 @@ def api_faculty_teaching_schedule(semester_id):
                     }
                     print(f"DEBUG: Added to timetable - {day1} at {time_slot}: {subject_code}")
             
-            # Process second class day  
             if day2 and start2 and end2:
                 time_slot = get_time_slot(start2, end2)
                 if time_slot and day2 in timetable:
@@ -892,7 +831,6 @@ def api_faculty_teaching_schedule(semester_id):
                     }
                     print(f"DEBUG: Added to timetable - {day2} at {time_slot}: {subject_code}")
         
-        # Semester info
         semester_info = {
             'id': acadcalendar_id,
             'name': semester_name,
@@ -924,7 +862,6 @@ def api_faculty_dashboard():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get personnel_id for the current user
         cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
         personnel_result = cursor.fetchone()
         
@@ -933,7 +870,6 @@ def api_faculty_dashboard():
         
         personnel_id = personnel_result[0]
         
-        # Get current academic calendar
         cursor.execute("""
             SELECT acadcalendar_id, semester, acadyear, semesterstart, semesterend 
             FROM acadcalendar 
@@ -947,14 +883,9 @@ def api_faculty_dashboard():
             return {'success': False, 'error': 'No active academic calendar found'}
         
         acadcalendar_id, semester_name, acad_year, semester_start, semester_end = academic_calendar
-        
-        # Calculate attendance rate for current semester
+
         attendance_rate = calculate_attendance_rate(cursor, personnel_id, acadcalendar_id, semester_start, semester_end)
-        
-        # Get class schedule for current week
         class_schedule = get_weekly_class_schedule(cursor, personnel_id, acadcalendar_id)
-        
-        # Get teaching load (total units)
         teaching_load = get_teaching_load(cursor, personnel_id, acadcalendar_id)
         
         cursor.close()
@@ -982,11 +913,9 @@ def calculate_attendance_rate(cursor, personnel_id, acadcalendar_id, semester_st
         from datetime import datetime, timedelta
         import pytz
         
-        # Get Philippines timezone
         philippines_tz = pytz.timezone('Asia/Manila')
         current_date = datetime.now(philippines_tz).date()
-        
-        # Get all scheduled classes for this faculty in current semester
+
         cursor.execute("""
             SELECT 
                 sch.class_id,
@@ -997,8 +926,7 @@ def calculate_attendance_rate(cursor, personnel_id, acadcalendar_id, semester_st
         """, (personnel_id, acadcalendar_id))
         
         scheduled_classes = cursor.fetchall()
-        
-        # Get existing attendance records for current semester
+
         cursor.execute("""
             SELECT 
                 a.class_id,
@@ -1011,7 +939,6 @@ def calculate_attendance_rate(cursor, personnel_id, acadcalendar_id, semester_st
         
         attendance_records = cursor.fetchall()
         
-        # Create attendance map
         attendance_map = {}
         for record in attendance_records:
             class_id, status, timein = record
@@ -1019,7 +946,6 @@ def calculate_attendance_rate(cursor, personnel_id, acadcalendar_id, semester_st
                 date_key = f"{class_id}_{timein.date()}"
                 attendance_map[date_key] = status
         
-        # Count total expected classes and attendance
         total_classes = 0
         present_late_count = 0
         
@@ -1031,7 +957,6 @@ def calculate_attendance_rate(cursor, personnel_id, acadcalendar_id, semester_st
         for scheduled_class in scheduled_classes:
             class_id, day1, day2 = scheduled_class
             
-            # Process both class days
             for day in [day1, day2]:
                 if not day:
                     continue
@@ -1040,7 +965,6 @@ def calculate_attendance_rate(cursor, personnel_id, acadcalendar_id, semester_st
                 if target_weekday is None:
                     continue
                 
-                # Find first occurrence of this weekday after semester start
                 check_date = semester_start
                 days_ahead = target_weekday - check_date.weekday()
                 if days_ahead <= 0:
@@ -1050,22 +974,18 @@ def calculate_attendance_rate(cursor, personnel_id, acadcalendar_id, semester_st
                 if check_date < semester_start:
                     check_date += timedelta(days=7)
                 
-                # Count classes until current date
                 end_date = min(current_date, semester_end)
                 while check_date <= end_date:
                     total_classes += 1
                     
-                    # Check attendance for this date
                     date_key = f"{class_id}_{check_date}"
                     if date_key in attendance_map:
                         status = attendance_map[date_key].lower()
                         if status in ['present', 'late']:
                             present_late_count += 1
-                    # If no record exists, assume absent (don't count towards present/late)
                     
                     check_date += timedelta(days=7)
         
-        # Calculate attendance rate
         if total_classes > 0:
             attendance_rate = round((present_late_count / total_classes) * 100)
         else:
@@ -1087,26 +1007,20 @@ def get_weekly_class_schedule(cursor, personnel_id, acadcalendar_id):
         from datetime import datetime, timedelta
         import pytz
         
-        # Get Philippines timezone
         philippines_tz = pytz.timezone('Asia/Manila')
         current_datetime = datetime.now(philippines_tz)
         current_date = current_datetime.date()
-        
-        # Get current day name
         current_day = current_date.strftime('%A')
         
-        # Helper function to convert 24-hour time to 12-hour AM/PM format
         def format_time_ampm(time_val):
             if not time_val:
                 return 'N/A'
             
-            # Handle both string and time object
             if hasattr(time_val, 'strftime'):
                 time_str = time_val.strftime('%H:%M')
             else:
                 time_str = str(time_val)[:5]
             
-            # Parse hours and minutes
             try:
                 hours, minutes = map(int, time_str.split(':'))
                 period = 'AM' if hours < 12 else 'PM'
@@ -1116,7 +1030,6 @@ def get_weekly_class_schedule(cursor, personnel_id, acadcalendar_id):
             except:
                 return time_str
         
-        # Get all scheduled classes for this faculty
         cursor.execute("""
             SELECT 
                 sch.class_id,
@@ -1138,12 +1051,10 @@ def get_weekly_class_schedule(cursor, personnel_id, acadcalendar_id):
         
         scheduled_classes = cursor.fetchall()
         
-        # Calculate days until Saturday
-        current_weekday = current_date.weekday()  # Monday=0, Sunday=6
-        days_until_saturday = (5 - current_weekday) % 7  # Saturday=5
+        current_weekday = current_date.weekday() 
+        days_until_saturday = (5 - current_weekday) % 7 
         saturday_date = current_date + timedelta(days=days_until_saturday)
         
-        # Map day names to check if they're within current week (up to Saturday)
         day_order = {'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3, 'Friday': 4, 'Saturday': 5, 'Sunday': 6}
         
         weekly_schedule = []
@@ -1154,14 +1065,12 @@ def get_weekly_class_schedule(cursor, personnel_id, acadcalendar_id):
             
             class_name = f"{subject_code} - {subject_name}"
             
-            # Process first class day
             if day1 and start1 and end1:
                 start1_str = format_time_ampm(start1)
                 end1_str = format_time_ampm(end1)
                 
-                # Check if this day is within current week (today to Saturday)
                 day1_num = day_order.get(day1, -1)
-                is_this_week = current_weekday <= day1_num <= 5  # Up to Saturday
+                is_this_week = current_weekday <= day1_num <= 5 
                 
                 weekly_schedule.append({
                     'class_name': class_name,
@@ -1177,14 +1086,12 @@ def get_weekly_class_schedule(cursor, personnel_id, acadcalendar_id):
                     'is_this_week': is_this_week
                 })
             
-            # Process second class day
             if day2 and start2 and end2:
                 start2_str = format_time_ampm(start2)
                 end2_str = format_time_ampm(end2)
                 
-                # Check if this day is within current week (today to Saturday)
                 day2_num = day_order.get(day2, -1)
-                is_this_week = current_weekday <= day2_num <= 5  # Up to Saturday
+                is_this_week = current_weekday <= day2_num <= 5 
                 
                 weekly_schedule.append({
                     'class_name': class_name,
@@ -1200,7 +1107,6 @@ def get_weekly_class_schedule(cursor, personnel_id, acadcalendar_id):
                     'is_this_week': is_this_week
                 })
         
-        # Sort by day and time
         weekly_schedule.sort(key=lambda x: (day_order.get(x['day'], 8), x['start_time']))
         
         return weekly_schedule
@@ -1228,20 +1134,16 @@ def get_teaching_load(cursor, personnel_id, acadcalendar_id):
         print(f"Error getting teaching load: {e}")
         return 0
 
-# Modified API endpoints to support viewing other profiles
 @app.route('/api/faculty/profile')
 @require_auth([20001, 20002, 20003, 20004])
 def api_get_faculty_profile():
     """API endpoint to get faculty profile data - AUTO CREATES PROFILE IF NOT EXISTS"""
     try:
-        # Check if we're viewing another employee's profile (HR use case)
         viewing_personnel_id = session.get('viewing_personnel_id')
+        
         if viewing_personnel_id:
-            user_id = viewing_personnel_id
-            # Use the viewing_personnel_id directly as personnel_id for query
             personnel_id = viewing_personnel_id
         else:
-            # Normal case - get logged in user's data
             user_id = session['user_id']
             conn = get_db_connection()
             cursor = conn.cursor()
@@ -1257,12 +1159,10 @@ def api_get_faculty_profile():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get phone from personnel table
         cursor.execute("SELECT phone FROM personnel WHERE personnel_id = %s", (personnel_id,))
         phone_result = cursor.fetchone()
         phone = phone_result[0] if phone_result else None
         
-        # Get profile data including filenames
         cursor.execute("""
             SELECT bio, profilepic, 
                    licenses, degrees, certificates, publications, awards,
@@ -1274,16 +1174,13 @@ def api_get_faculty_profile():
         
         profile_result = cursor.fetchone()
         
-        # AUTO CREATE PROFILE IF NOT EXISTS (only for logged-in user, not for viewed profiles)
         if not profile_result and not viewing_personnel_id:
             print(f"Profile not found for personnel_id: {personnel_id}. Creating new profile...")
             
-            # Get the maximum profile_id to generate the next one
             cursor.execute("SELECT COALESCE(MAX(profile_id), 90000) FROM profile")
             max_profile_id = cursor.fetchone()[0]
             new_profile_id = max_profile_id + 1
             
-            # Create new profile with empty/default values
             cursor.execute("""
                 INSERT INTO profile (
                     profile_id, personnel_id, bio, profilepic, 
@@ -1306,11 +1203,9 @@ def api_get_faculty_profile():
             profile_result = cursor.fetchone()
             print(f"New profile created with ID: {new_profile_id} for personnel_id: {personnel_id}")
         
-        # Now profile_result should exist
         (bio, profilepic, licenses, degrees, certificates, publications, awards,
          licenses_fn, degrees_fn, certificates_fn, publications_fn, awards_fn) = profile_result
         
-        # Convert bytea to base64 for frontend
         import base64
         profile_data = {
             'phone': str(phone) if phone else '',
@@ -1328,11 +1223,9 @@ def api_get_faculty_profile():
             'awards_filename': awards_fn or []
         }
         
-        # Convert profile picture to base64
         if profilepic:
             profile_data['profilepic'] = base64.b64encode(bytes(profilepic)).decode('utf-8')
         
-        # Convert document arrays to base64
         for doc_type in ['licenses', 'degrees', 'certificates', 'publications', 'awards']:
             doc_array = locals()[doc_type]
             if doc_array and len(doc_array) > 0:
@@ -1354,12 +1247,10 @@ def api_get_faculty_profile():
 def api_get_profile_stats():
     """API endpoint to get profile statistics - works for faculty, dean, HR, and VP"""
     try:
-        # Check if we're viewing another employee's profile (HR use case)
         viewing_personnel_id = session.get('viewing_personnel_id')
         if viewing_personnel_id:
             personnel_id = viewing_personnel_id
         else:
-            # Normal case - get logged in user's data
             user_id = session['user_id']
             conn = get_db_connection()
             cursor = conn.cursor()
@@ -1375,7 +1266,6 @@ def api_get_profile_stats():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get personnel hire date if not already retrieved
         if not viewing_personnel_id:
             cursor.execute("SELECT hiredate FROM personnel WHERE personnel_id = %s", (personnel_id,))
             hire_date_result = cursor.fetchone()
@@ -1385,17 +1275,14 @@ def api_get_profile_stats():
             hire_date_result = cursor.fetchone()
             hire_date = hire_date_result[0] if hire_date_result else None
         
-        # Calculate years of service from hire date
         years_of_service = 0
         if hire_date:
             from datetime import datetime
             today = datetime.now().date()
             years_of_service = today.year - hire_date.year
-            # Adjust if birthday hasn't occurred this year
             if today.month < hire_date.month or (today.month == hire_date.month and today.day < hire_date.day):
                 years_of_service -= 1
         
-        # Get profile data to count documents
         cursor.execute("""
             SELECT 
                 certificates, publications, awards
@@ -1405,7 +1292,6 @@ def api_get_profile_stats():
         
         profile_result = cursor.fetchone()
         
-        # Count documents
         certificates_count = 0
         publications_count = 0
         awards_count = 0
@@ -1449,20 +1335,14 @@ def api_update_personal_info():
         phone_str = data.get('phone', '').strip()
         bio = data.get('bio', '').strip()
         
-        # Store phone as string in format: +63 9XXXXXXXXX (no spaces between digits)
         phone = None
         if phone_str and phone_str != '+63 ' and phone_str != '+63':
-            # Remove all spaces from input
             phone_clean = phone_str.replace(' ', '')
             
-            # Check if it starts with +63
             if phone_clean.startswith('+63'):
-                # Extract digits after +63
                 phone_digits = phone_clean[3:]
                 
-                # Validate: must be 10 digits starting with 9
                 if len(phone_digits) == 10 and phone_digits[0] == '9' and phone_digits.isdigit():
-                    # Store as: +63 9XXXXXXXXX (space after +63, no spaces between digits)
                     phone = '+63 ' + phone_digits
                 else:
                     return {'success': False, 'error': 'Phone number must be +63 followed by 10 digits starting with 9'}
@@ -1472,7 +1352,6 @@ def api_update_personal_info():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get personnel_id
         cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
         personnel_result = cursor.fetchone()
         
@@ -1483,30 +1362,24 @@ def api_update_personal_info():
         
         personnel_id = personnel_result[0]
         
-        # Update phone in personnel table (as string)
         cursor.execute("""
             UPDATE personnel SET phone = %s WHERE personnel_id = %s
         """, (phone, personnel_id))
         
-        # Check if profile exists
         cursor.execute("SELECT profile_id FROM profile WHERE personnel_id = %s", (personnel_id,))
         profile_exists = cursor.fetchone()
         
         if profile_exists:
-            # Update existing profile
             cursor.execute("""
                 UPDATE profile SET bio = %s WHERE personnel_id = %s
             """, (bio, personnel_id))
         else:
-            # AUTO CREATE PROFILE IF NOT EXISTS
             print(f"Profile not found for personnel_id: {personnel_id}. Creating new profile...")
             
-            # Get the maximum profile_id to generate the next one
             cursor.execute("SELECT COALESCE(MAX(profile_id), 90000) FROM profile")
             max_profile_id = cursor.fetchone()[0]
             new_profile_id = max_profile_id + 1
             
-            # Insert new profile
             cursor.execute("""
                 INSERT INTO profile (
                     profile_id, personnel_id, bio, profilepic, 
@@ -1544,7 +1417,6 @@ def api_update_documents():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get personnel_id
         cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
         personnel_result = cursor.fetchone()
         
@@ -1555,15 +1427,12 @@ def api_update_documents():
         
         personnel_id = personnel_result[0]
         
-        # Check if profile exists
         cursor.execute("SELECT profile_id FROM profile WHERE personnel_id = %s", (personnel_id,))
         profile_exists = cursor.fetchone()
         
         if not profile_exists:
-            # AUTO CREATE PROFILE IF NOT EXISTS
             print(f"Profile not found for personnel_id: {personnel_id}. Creating new profile...")
             
-            # Get the maximum profile_id to generate the next one
             cursor.execute("SELECT COALESCE(MAX(profile_id), 90000) FROM profile")
             max_profile_id = cursor.fetchone()[0]
             new_profile_id = max_profile_id + 1
@@ -1584,7 +1453,6 @@ def api_update_documents():
             conn.commit()
             print(f"New profile created with ID: {new_profile_id} for personnel_id: {personnel_id}")
         
-        # Handle profile picture upload (this replaces the old one)
         if 'profilepic' in request.files:
             file = request.files['profilepic']
             if file and file.filename:
@@ -1595,7 +1463,6 @@ def api_update_documents():
                 conn.commit()
                 print(f"Profile picture updated: {len(profilepic_data)} bytes, filename: {file.filename}")
         
-        # Mapping for database column names
         column_mapping = {
             'licenses': 'licensesname',
             'degrees': 'degreesname',
@@ -1604,12 +1471,10 @@ def api_update_documents():
             'awards': 'awardsname'
         }
         
-        # Handle document arrays - APPEND new files to existing ones
         for doc_type in ['licenses', 'degrees', 'certificates', 'publications', 'awards']:
             files = request.files.getlist(doc_type)
             
             if files and any(f.filename for f in files):
-                # Get existing documents and filenames first
                 filename_col = column_mapping[doc_type]
                 cursor.execute(f"""
                     SELECT {doc_type}, {filename_col}
@@ -1618,11 +1483,9 @@ def api_update_documents():
                 """, (personnel_id,))
                 existing_result = cursor.fetchone()
                 
-                # Start with existing documents
                 existing_docs = list(existing_result[0]) if existing_result and existing_result[0] else []
                 existing_filenames = list(existing_result[1]) if existing_result and existing_result[1] else []
                 
-                # Read new files and append to existing
                 new_docs = []
                 new_filenames = []
                 
@@ -1632,11 +1495,9 @@ def api_update_documents():
                         new_filenames.append(f.filename)
                 
                 if new_docs:
-                    # Combine existing and new
                     combined_docs = existing_docs + new_docs
                     combined_filenames = existing_filenames + new_filenames
                     
-                    # Update database with combined arrays
                     cursor.execute(f"""
                         UPDATE profile 
                         SET {doc_type} = %s, {filename_col} = %s 
@@ -1670,7 +1531,6 @@ def api_update_password():
         new_password = data.get('new_password', '')
         confirm_password = data.get('confirm_password', '')
         
-        # Validate passwords
         if not current_password or not new_password or not confirm_password:
             return {'success': False, 'error': 'All password fields are required'}
         
@@ -1683,7 +1543,6 @@ def api_update_password():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Verify current password
         cursor.execute("SELECT password FROM users WHERE user_id = %s", (user_id,))
         current_pass_result = cursor.fetchone()
         
@@ -1692,13 +1551,11 @@ def api_update_password():
             conn.close()
             return {'success': False, 'error': 'Current password is incorrect'}
         
-        # Check if new password is same as current password
         if current_password == new_password:
             cursor.close()
             conn.close()
             return {'success': False, 'error': 'New password cannot be the same as current password'}
         
-        # Update password
         cursor.execute("""
             UPDATE users SET password = %s WHERE user_id = %s
         """, (new_password, user_id))
@@ -1729,7 +1586,6 @@ def api_delete_document(doc_type, index):
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get personnel_id
         cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
         personnel_result = cursor.fetchone()
         
@@ -1740,7 +1596,6 @@ def api_delete_document(doc_type, index):
         
         personnel_id = personnel_result[0]
         
-        # Mapping for database column names
         column_mapping = {
             'licenses': 'licensesname',
             'degrees': 'degreesname',
@@ -1751,7 +1606,6 @@ def api_delete_document(doc_type, index):
         
         filename_col = column_mapping[doc_type]
         
-        # Get current document array AND filenames
         cursor.execute(f"""
             SELECT {doc_type}, {filename_col} 
             FROM profile 
@@ -1772,13 +1626,11 @@ def api_delete_document(doc_type, index):
             conn.close()
             return {'success': False, 'error': 'Invalid document index'}
         
-        # Remove document and filename at index
         deleted_filename = filenames[index] if index < len(filenames) else f"Document_{index+1}"
         doc_array.pop(index)
         if index < len(filenames):
             filenames.pop(index)
         
-        # Update database
         cursor.execute(f"""
             UPDATE profile 
             SET {doc_type} = %s, {filename_col} = %s 
@@ -1806,7 +1658,6 @@ def api_hr_faculty_attendance():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get current academic calendar
         cursor.execute("""
             SELECT acadcalendar_id, semesterstart, semesterend 
             FROM acadcalendar 
@@ -1823,7 +1674,6 @@ def api_hr_faculty_attendance():
         
         acadcalendar_id, semester_start, semester_end = academic_calendar
         
-        # Get all faculty and dean (role_id 20001 and 20002) with count
         cursor.execute("""
             SELECT COUNT(*)
             FROM personnel p
@@ -1831,7 +1681,6 @@ def api_hr_faculty_attendance():
         """)
         total_faculty = cursor.fetchone()[0]
         
-        # Get all attendance records for faculty and dean with personnel names
         cursor.execute("""
             SELECT 
                 p.firstname,
@@ -1851,42 +1700,33 @@ def api_hr_faculty_attendance():
         
         attendance_records = cursor.fetchall()
         
-        # Build attendance logs with faculty names
         attendance_logs = []
         status_counts = {'present': 0, 'late': 0, 'absent': 0}
         
-        # Philippines timezone
         philippines_tz = pytz.timezone('Asia/Manila')
         today = datetime.now(philippines_tz).date()
         
-        # Today's stats
         present_today = 0
         late_today = 0
         absent_today = 0
         
-        # Process attendance records
         for record in attendance_records:
             firstname, lastname, honorifics, status, timein, timeout, classroom = record
             
-            # Format faculty name
             if honorifics:
                 faculty_name = f"{firstname} {lastname}, {honorifics}"
             else:
                 faculty_name = f"{firstname} {lastname}"
-            
-            # Format date and times
+
             if timein:
-                # Handle timezone-aware datetime
                 if hasattr(timein, 'tzinfo') and timein.tzinfo is not None:
                     timein_local = timein.astimezone(philippines_tz)
                 else:
                     timein_local = philippines_tz.localize(timein) if timein.tzinfo is None else timein
                 
                 date_str = timein_local.strftime('%Y-%m-%d')
-                # Format time in 12-hour with AM/PM
                 time_in_str = timein_local.strftime('%I:%M %p')
                 
-                # Check if this is today's record
                 if timein_local.date() == today:
                     status_lower = status.lower()
                     if status_lower == 'present':
@@ -1896,18 +1736,16 @@ def api_hr_faculty_attendance():
                     elif status_lower == 'absent':
                         absent_today += 1
             else:
-                # For absent records without timein
                 date_str = today.strftime('%Y-%m-%d')
                 time_in_str = '—'
                 absent_today += 1
             
-            # Format timeout
             if timeout:
                 if hasattr(timeout, 'tzinfo') and timeout.tzinfo is not None:
                     timeout_local = timeout.astimezone(philippines_tz)
                 else:
                     timeout_local = philippines_tz.localize(timeout) if timeout.tzinfo is None else timeout
-                # Format time in 12-hour with AM/PM
+
                 time_out_str = timeout_local.strftime('%I:%M %p')
             else:
                 time_out_str = '—'
@@ -1922,7 +1760,6 @@ def api_hr_faculty_attendance():
             }
             attendance_logs.append(log_entry)
             
-            # Count statuses (all records)
             status_lower = status.lower()
             if status_lower == 'present':
                 status_counts['present'] += 1
@@ -1962,7 +1799,6 @@ def api_hr_faculty_list():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get current academic calendar
         cursor.execute("""
             SELECT acadcalendar_id, semesterstart, semesterend 
             FROM acadcalendar 
@@ -1979,7 +1815,6 @@ def api_hr_faculty_list():
         
         acadcalendar_id, semester_start, semester_end = academic_calendar
         
-        # Get ONLY faculty (20001) and dean (20002) - STRICTLY EXCLUDE HR (20003) and all others
         cursor.execute("""
             SELECT 
                 p.personnel_id,
@@ -2004,7 +1839,6 @@ def api_hr_faculty_list():
         for record in faculty_records:
             personnel_id, firstname, lastname, honorifics, role_id, collegename, total_units = record
             
-            # Format faculty name
             if honorifics:
                 faculty_name = f"{firstname} {lastname}, {honorifics}"
             else:
@@ -2040,7 +1874,6 @@ def api_hr_faculty_schedule(personnel_id):
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get current academic calendar
         cursor.execute("""
             SELECT acadcalendar_id, semester, acadyear
             FROM acadcalendar 
@@ -2057,7 +1890,6 @@ def api_hr_faculty_schedule(personnel_id):
         
         acadcalendar_id, semester_name, acad_year = academic_calendar
         
-        # Get all scheduled classes for this faculty in current semester
         cursor.execute("""
             SELECT 
                 sch.classday_1,
@@ -2076,22 +1908,17 @@ def api_hr_faculty_schedule(personnel_id):
         
         scheduled_classes = cursor.fetchall()
         
-        # Helper function to format time to 12-hour AM/PM
         def format_time_12hr(time_val):
             if not time_val:
                 return None
             
-            # Handle timezone-aware datetime objects
             if hasattr(time_val, 'tzinfo') and time_val.tzinfo is not None:
-                # Convert to Philippines timezone
                 ph_tz = pytz.timezone('Asia/Manila')
                 time_val = time_val.astimezone(ph_tz)
                 time_str = time_val.strftime('%H:%M')
             elif hasattr(time_val, 'strftime'):
-                # Already local time or naive datetime
                 time_str = time_val.strftime('%H:%M')
             else:
-                # String time
                 time_str = str(time_val)[:5]
             
             try:
@@ -2103,7 +1930,6 @@ def api_hr_faculty_schedule(personnel_id):
             except:
                 return time_str
         
-        # Helper function to map time to time slot
         def get_time_slot(start_time, end_time):
             if not start_time or not end_time:
                 return None
@@ -2116,7 +1942,6 @@ def api_hr_faculty_schedule(personnel_id):
             
             time_slot = f"{start_str} - {end_str}"
             
-            # Map to standard time slots
             time_slot_mapping = {
                 '7:30 AM - 9:00 AM': '7:30 AM - 9:00 AM',
                 '9:15 AM - 10:45 AM': '9:15 AM - 10:45 AM', 
@@ -2127,24 +1952,19 @@ def api_hr_faculty_schedule(personnel_id):
                 '6:00 PM - 7:30 PM': '6:00 PM - 7:30 PM'
             }
             
-            # Try exact match first
             if time_slot in time_slot_mapping:
                 return time_slot_mapping[time_slot]
-            
-            # Try to match based on start time
+
             start_time_only = start_str
             for slot in time_slot_mapping.keys():
                 if slot.startswith(start_time_only):
                     return slot
             
-            # Return the original time slot if no match found
             return time_slot
         
-        # Build timetable structure
         timetable = {}
         days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
         
-        # Initialize timetable with empty time slots for all days
         for day in days:
             timetable[day] = {
                 '7:30 AM - 9:00 AM': None,
@@ -2156,12 +1976,10 @@ def api_hr_faculty_schedule(personnel_id):
                 '6:00 PM - 7:30 PM': None
             }
         
-        # Populate timetable with classes
         for scheduled_class in scheduled_classes:
             (day1, start1, end1, day2, start2, end2, 
              subject_code, classroom, section) = scheduled_class
             
-            # Process first class day
             if day1 and start1 and end1:
                 time_slot = get_time_slot(start1, end1)
                 if time_slot and day1 in timetable:
@@ -2171,7 +1989,6 @@ def api_hr_faculty_schedule(personnel_id):
                         'section': section or 'N/A'
                     }
             
-            # Process second class day  
             if day2 and start2 and end2:
                 time_slot = get_time_slot(start2, end2)
                 if time_slot and day2 in timetable:
@@ -2181,7 +1998,6 @@ def api_hr_faculty_schedule(personnel_id):
                         'section': section or 'N/A'
                     }
         
-        # Semester info
         semester_info = {
             'id': acadcalendar_id,
             'name': semester_name,
@@ -2212,7 +2028,6 @@ def api_hr_employees_list():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get all personnel with their college, role, and profile information
         cursor.execute("""
             SELECT 
                 p.personnel_id,
@@ -2241,20 +2056,17 @@ def api_hr_employees_list():
             (personnel_id, firstname, lastname, honorifics, employee_no, 
              phone, collegename, rolename, position, employmentstatus, email) = emp
             
-            # Format the full name with honorifics
             if honorifics:
                 full_name = f"{firstname} {lastname}, {honorifics}"
             else:
                 full_name = f"{firstname} {lastname}"
             
-            # Format phone number if exists
             phone_formatted = str(phone) if phone else "N/A"
             if phone_formatted.startswith('+63 ') and len(phone_formatted) > 4:
                 digits = phone_formatted[4:]
                 if len(digits) == 10:
                     phone_formatted = f"+63 {digits[:3]} {digits[3:6]} {digits[6:]}"
             
-            # Convert role display names
             role_display = rolename or 'N/A'
             if role_display == 'hrmd':
                 role_display = 'HR'
@@ -2296,7 +2108,6 @@ def api_hr_employees_list():
 def hr_employee_profile(personnel_id):
     """HR view of employee profile"""
     try:
-        # Get the target employee's information
         conn = get_db_connection()
         cursor = conn.cursor()
         
@@ -2326,7 +2137,6 @@ def hr_employee_profile(personnel_id):
         if result:
             firstname, lastname, honorifics, collegename, employee_no, rolename, email, position, employmentstatus = result
             
-            # Format the full name with honorifics at the end
             if honorifics:
                 full_name = f"{firstname} {lastname}, {honorifics}"
             else:
@@ -2340,10 +2150,9 @@ def hr_employee_profile(personnel_id):
                 'position': position or 'Full-Time Employee',
                 'employment_status': employmentstatus or 'Regular',
                 'firstname': firstname,
-                'is_hr_viewing': True  # Flag to indicate HR is viewing
+                'is_hr_viewing': True  
             }
             
-            # Store the target personnel_id in session for API calls
             session['viewing_personnel_id'] = personnel_id
             
             return render_template('hrmd/hr-profile.html', **employee_info)
@@ -2359,7 +2168,6 @@ def hr_employee_profile(personnel_id):
 def faculty_employee_profile(personnel_id):
     """HR view of faculty/dean profile"""
     try:
-        # Get the target employee's information
         conn = get_db_connection()
         cursor = conn.cursor()
         
@@ -2389,7 +2197,6 @@ def faculty_employee_profile(personnel_id):
         if result:
             firstname, lastname, honorifics, collegename, employee_no, rolename, email, position, employmentstatus = result
             
-            # Format the full name with honorifics at the end
             if honorifics:
                 full_name = f"{firstname} {lastname}, {honorifics}"
             else:
@@ -2403,10 +2210,9 @@ def faculty_employee_profile(personnel_id):
                 'position': position or 'Full-Time Employee',
                 'employment_status': employmentstatus or 'Regular',
                 'firstname': firstname,
-                'is_hr_viewing': True  # Flag to indicate HR is viewing
+                'is_hr_viewing': True 
             }
             
-            # Store the target personnel_id in session for API calls
             session['viewing_personnel_id'] = personnel_id
             
             return render_template('faculty&dean/faculty-profile.html', **employee_info)
@@ -2422,7 +2228,6 @@ def faculty_employee_profile(personnel_id):
 def vp_employee_profile(personnel_id):
     """HR view of VP/President profile"""
     try:
-        # Get the target employee's information
         conn = get_db_connection()
         cursor = conn.cursor()
         
@@ -2452,7 +2257,6 @@ def vp_employee_profile(personnel_id):
         if result:
             firstname, lastname, honorifics, collegename, employee_no, rolename, email, position, employmentstatus = result
             
-            # Format the full name with honorifics at the end
             if honorifics:
                 full_name = f"{firstname} {lastname}, {honorifics}"
             else:
@@ -2466,10 +2270,9 @@ def vp_employee_profile(personnel_id):
                 'position': position or 'Full-Time Employee',
                 'employment_status': employmentstatus or 'Regular',
                 'firstname': firstname,
-                'is_hr_viewing': True  # Flag to indicate HR is viewing
+                'is_hr_viewing': True  
             }
             
-            # Store the target personnel_id in session for API calls
             session['viewing_personnel_id'] = personnel_id
             
             return render_template('vp&pres/vp-profile.html', **employee_info)
@@ -2489,7 +2292,6 @@ def api_hr_employee_profile(personnel_id):
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get profile data including filenames for the target employee
         cursor.execute("""
             SELECT bio, profilepic, 
                    licenses, degrees, certificates, publications, awards,
@@ -2501,7 +2303,6 @@ def api_hr_employee_profile(personnel_id):
         
         profile_result = cursor.fetchone()
         
-        # Convert bytea to base64 for frontend
         import base64
         profile_data = {
             'bio': '',
@@ -2524,17 +2325,14 @@ def api_hr_employee_profile(personnel_id):
             
             profile_data['bio'] = bio or ''
             
-            # Convert profile picture to base64
             if profilepic:
                 profile_data['profilepic'] = base64.b64encode(bytes(profilepic)).decode('utf-8')
             
-            # Convert document arrays to base64
             for doc_type in ['licenses', 'degrees', 'certificates', 'publications', 'awards']:
                 doc_array = locals()[doc_type]
                 if doc_array and len(doc_array) > 0:
                     profile_data[doc_type] = [base64.b64encode(bytes(doc)).decode('utf-8') for doc in doc_array]
             
-            # Add filenames
             profile_data['licenses_filename'] = licenses_fn or []
             profile_data['degrees_filename'] = degrees_fn or []
             profile_data['certificates_filename'] = certificates_fn or []
@@ -2560,7 +2358,6 @@ def api_hr_employee_profile_stats(personnel_id):
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get personnel hire date
         cursor.execute("SELECT hiredate FROM personnel WHERE personnel_id = %s", (personnel_id,))
         personnel_result = cursor.fetchone()
         
@@ -2571,17 +2368,14 @@ def api_hr_employee_profile_stats(personnel_id):
         
         hire_date = personnel_result[0]
         
-        # Calculate years of service from hire date
         years_of_service = 0
         if hire_date:
             from datetime import datetime
             today = datetime.now().date()
             years_of_service = today.year - hire_date.year
-            # Adjust if birthday hasn't occurred this year
             if today.month < hire_date.month or (today.month == hire_date.month and today.day < hire_date.day):
                 years_of_service -= 1
         
-        # Get profile data to count documents
         cursor.execute("""
             SELECT 
                 certificates, publications, awards
@@ -2591,7 +2385,6 @@ def api_hr_employee_profile_stats(personnel_id):
         
         profile_result = cursor.fetchone()
         
-        # Count documents
         certificates_count = 0
         publications_count = 0
         awards_count = 0
@@ -2632,7 +2425,6 @@ def api_hr_colleges_list():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get all colleges
         cursor.execute("""
             SELECT college_id, collegename 
             FROM college 
@@ -2663,6 +2455,13 @@ def api_hr_colleges_list():
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
 
+@app.route('/clear-viewing-session')
+@require_auth([20003])
+def clear_viewing_session():
+    """Clear the viewing personnel session variable"""
+    session.pop('viewing_personnel_id', None)
+    return {'success': True}
+
 # Login route
 @app.route('/', methods=['GET', 'POST'])
 def login():
@@ -2674,7 +2473,6 @@ def login():
             conn = get_db_connection()
             cursor = conn.cursor()
             
-            # Query to get user with role
             cursor.execute("""
                 SELECT u.user_id, u.email, u.role_id 
                 FROM users u 
@@ -2685,8 +2483,7 @@ def login():
             
             if user and user[2] in ROLE_REDIRECTS:
                 user_id, user_email, role_id = user
-                
-                # Update last login with correct timezone (Philippines) - no microseconds
+    
                 philippines_tz = pytz.timezone('Asia/Manila')
                 current_time = datetime.now(philippines_tz).replace(microsecond=0)
                 print(f"DEBUG: Current time being saved: {current_time}")
@@ -2698,13 +2495,11 @@ def login():
                 cursor.close()
                 conn.close()
                 
-                # Set session variables
                 session['user_id'] = user_id
                 session['email'] = user_email
                 session['user_role'] = role_id
                 session['user_type'] = ROLE_REDIRECTS[role_id][0]
                 
-                # Redirect based on role
                 return redirect(url_for(ROLE_REDIRECTS[role_id][1]))
             else:
                 cursor.close()
@@ -2799,12 +2594,16 @@ def hr_promotions():
 @app.route('/hr_profile')
 @require_auth([20003])
 def hr_profile():
+    """HR's own profile - clear viewing session"""
+    session.pop('viewing_personnel_id', None)  
     personnel_info = get_personnel_info(session['user_id'])
     return render_template('hrmd/hr-profile.html', **personnel_info)
 
 @app.route('/hr_settings')
 @require_auth([20003])
 def hr_settings():
+    """HR's own settings - clear viewing session"""
+    session.pop('viewing_personnel_id', None) 
     personnel_info = get_personnel_info(session['user_id'])
     return render_template('hrmd/hr-settings.html', **personnel_info)
 

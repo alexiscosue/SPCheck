@@ -98,10 +98,8 @@
 
 {% block extra_scripts %}
 <script>
-  // Global variables for dashboard data
   let dashboardData = null;
 
-  // Fetch dashboard data from API
   async function fetchDashboardData() {
     try {
       const response = await fetch('/api/faculty/dashboard');
@@ -120,27 +118,22 @@
     }
   }
 
-  // Update dashboard display with fetched data
   function updateDashboardDisplay() {
     if (!dashboardData) return;
     
-    // Update attendance rate
     const attendanceRateElement = document.getElementById('attendanceRate');
     const attendanceRate = dashboardData.attendance_rate.percentage;
     const trend = attendanceRate >= 95 ? 'up-arrow-alt' : attendanceRate >= 85 ? 'right-arrow-alt' : 'down-arrow-alt';
     const trendColor = attendanceRate >= 95 ? '#16a34a' : attendanceRate >= 85 ? '#f59e0b' : '#ef4444';
     
     attendanceRateElement.innerHTML = `${attendanceRate}% <i class='bx bx-${trend}' style="color:${trendColor}"></i>`;
-    
-    // Update teaching load
+
     const teachingLoadElement = document.getElementById('teachingLoad');
     teachingLoadElement.textContent = `${dashboardData.teaching_load}.0 Units`;
     
-    // Update class schedule
     updateClassSchedule();
   }
 
-  // Update class schedule display - FIXED: Show ALL classes for the week
   function updateClassSchedule() {
     const scheduleBody = document.getElementById('classScheduleBody');
     const schedule = dashboardData.class_schedule;
@@ -150,18 +143,11 @@
       return;
     }
     
-    // Define day order starting from Sunday (0=Sunday, 1=Monday, ..., 6=Saturday)
     const dayOrder = { 'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6 };
-    
-    // Get current day of week (0=Sunday, 1=Monday, ..., 6=Saturday)
     const today = new Date();
-    const currentDayOfWeek = today.getDay(); // 0 (Sunday) to 6 (Saturday)
+    const currentDayOfWeek = today.getDay(); 
     const currentDayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][currentDayOfWeek];
-    
-    // Filter for today's classes
     const todayClasses = schedule.filter(cls => cls.day === currentDayName);
-    
-    // Filter for this week's classes (from today onward, including today)
     const thisWeekClasses = schedule.filter(cls => {
       const classDayIndex = dayOrder[cls.day];
       return classDayIndex >= currentDayOfWeek;
@@ -169,7 +155,6 @@
     
     let scheduleHTML = '';
     
-    // Show today's classes first
     if (todayClasses.length > 0) {
       scheduleHTML += '<div style="font-size: 12px; font-weight: 600; color: #16a34a; margin-bottom: 8px;">TODAY</div>';
       todayClasses.forEach(cls => {
@@ -184,12 +169,10 @@
         `;
       });
       
-      // Add upcoming classes section if there are classes after today
       const upcomingClasses = thisWeekClasses.filter(cls => cls.day !== currentDayName);
       if (upcomingClasses.length > 0) {
         scheduleHTML += '<div style="font-size: 12px; font-weight: 600; color: #6b7280; margin: 12px 0 8px 0;">UPCOMING THIS WEEK</div>';
         
-        // Show ALL upcoming classes (no limit)
         upcomingClasses.forEach(cls => {
           scheduleHTML += `
             <div class="schedule-item">
@@ -206,11 +189,9 @@
         });
       }
     } else {
-      // No classes today
       scheduleHTML += '<div style="font-size: 12px; font-weight: 600; color: #6b7280; margin-bottom: 8px;">TODAY</div>';
       scheduleHTML += '<div style="text-align: center; padding: 1rem; color: #9ca3af; font-size: 13px;">No classes today</div>';
-      
-      // Show ALL upcoming classes for the rest of the week (no limit)
+ 
       if (thisWeekClasses.length > 0) {
         scheduleHTML += '<div style="font-size: 12px; font-weight: 600; color: #6b7280; margin: 12px 0 8px 0;">UPCOMING THIS WEEK</div>';
         
@@ -231,7 +212,6 @@
       }
     }
     
-    // If no classes at all this week
     if (todayClasses.length === 0 && thisWeekClasses.length === 0) {
       scheduleHTML = '<div style="text-align: center; padding: 1rem; color: #6b7280;">No classes scheduled this week</div>';
     }
@@ -239,14 +219,12 @@
     scheduleBody.innerHTML = scheduleHTML;
   }
 
-  // Show error state
   function showErrorState() {
     document.getElementById('attendanceRate').innerHTML = 'Error <i class="bx bx-error-circle" style="color:#ef4444"></i>';
     document.getElementById('teachingLoad').textContent = 'Error loading';
     document.getElementById('classScheduleBody').innerHTML = '<div style="text-align: center; padding: 1rem; color: #ef4444;">Error loading schedule</div>';
   }
 
-  // Static Charts (keeping original dummy data as requested)
   const myAttendanceCtx = document.getElementById('myAttendanceChart').getContext('2d');
   new Chart(myAttendanceCtx, {
     type: 'line',
@@ -267,11 +245,9 @@
     options:{ responsive:true, plugins:{ legend:{ display:false } }, scales:{ y:{ min:0, max:5, ticks:{ stepSize:1 } } } }
   });
 
-  // Initialize dashboard data on page load
   document.addEventListener('DOMContentLoaded', function() {
     fetchDashboardData();
     
-    // Refresh data every 5 minutes
     setInterval(fetchDashboardData, 5 * 60 * 1000);
   });
 </script>

@@ -84,6 +84,25 @@
     const sidebar = document.getElementById('sidebar');
     const btnToggle = document.getElementById('btnToggle');
     btnToggle.addEventListener('click', () => sidebar.classList.toggle('collapsed'));
+
+    document.addEventListener('DOMContentLoaded', function() {
+
+    const currentPath = window.location.pathname;
+    const isHROwnPage = currentPath === '/hr_profile' || 
+                        currentPath === '/hr_settings' || 
+                        currentPath === '/hr_dashboard' ||
+                        currentPath === '/hr_attendance' ||
+                        currentPath === '/hr_promotions' ||
+                        currentPath === '/hr_evaluations';
+    
+    if (isHROwnPage) {
+        // Clear viewing session
+        fetch('/clear-viewing-session', {
+            method: 'GET',
+            credentials: 'include'
+        });
+    }
+});
   </script>
 
   {% block extra_scripts %}{% endblock %}
