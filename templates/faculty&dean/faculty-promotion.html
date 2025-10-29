@@ -53,19 +53,26 @@
         </div>
 
         <!-- Promotion Application -->
-<form id="promotion-doc-upload-form" enctype="multipart/form-data" method="POST" action="/faculty/promotion/upload">
-  <div class="upload-field">
-    <label for="resume_cv"><i class='bx bx-file'></i> Resume / CV</label>
-    <input id="resume_cv" type="file" name="resume_cv" required style="display:inline-block;" />
-    <span class="status nu">Not Uploaded</span>
-  </div>
-  <div class="upload-field" style="margin-top:10px">
-    <label for="cover_letter"><i class='bx bx-file'></i> Cover Letter</label>
-    <input id="cover_letter" type="file" name="cover_letter" required style="display:inline-block;" />
-    <span class="status nu">Not Uploaded</span>
-  </div>
-  <button class="btn-primary" style="margin-top:15px" type="submit"><i class='bx bx-upload'></i> Submit Application</button>
-</form>
+        <form id="promotion-doc-upload-form" enctype="multipart/form-data" method="POST" action="/faculty/promotion/upload">
+          <div class="upload-field" style="position: relative;">
+            <input id="resume_cv" type="file" name="resume_cv" style="display:none;" required/>
+              <label for="resume_cv" class="custom-upload-label">
+                <i class='bx bx-file'></i>
+                <span class="label-text">Resume / CV</span>
+                <span class="status nu" id="resume_cv_status">Not Uploaded</span>
+              </label>
+          </div>
+          <div class="upload-field" style="margin-top:10px; position: relative;">
+            <input id="cover_letter" type="file" name="cover_letter" style="display:none;" required/>
+            <label for="cover_letter" class="custom-upload-label">
+            <i class='bx bx-file'></i>
+            <span class="label-text">Cover Letter</span>
+            <span class="status nu" id="cover_letter_status">Not Uploaded</span>
+          </label>
+          </div>
+          <button class="btn-primary" style="margin-top:15px" type="submit"><i class='bx bx-upload'></i> Submit Application</button>
+        </form>
+
 
         </div>
 
@@ -133,22 +140,41 @@
 </div>
       </div>
     </section>
-{% endblock %}
+
+    {% endblock %}
 
 {% block extra_scripts %}
   <script>
-    const sidebar = document.getElementById('sidebar');
-    document.getElementById('btnToggle').addEventListener('click', () => {
-      sidebar.classList.toggle('collapsed');
-    });
+document.getElementById('resume_cv').addEventListener('change', function(event) {
+  var statusSpan = document.getElementById('resume_cv_status');
+  var fileName = event.target.files.length ? event.target.files[0].name : 'Not Uploaded';
+  statusSpan.textContent = fileName;
+  if (event.target.files.length) {
+    statusSpan.classList.add('ok');
+    statusSpan.classList.remove('nu');
+  } else {
+    statusSpan.classList.remove('ok');
+    statusSpan.classList.add('nu');
+  }
+});
 
-    // collapsibles
-    document.querySelectorAll(".collapsible").forEach(btn => {
-      btn.addEventListener("click", () => {
-        btn.classList.toggle("active");
-        let content = btn.nextElementSibling;
-        content.classList.toggle("show");
-      });
-    });
+document.getElementById('cover_letter').addEventListener('change', function(event) {
+  var statusSpan = document.getElementById('cover_letter_status');
+  var fileName = event.target.files.length ? event.target.files[0].name : 'Not Uploaded';
+  statusSpan.textContent = fileName;
+  if (event.target.files.length) {
+    statusSpan.classList.add('ok');
+    statusSpan.classList.remove('nu');
+  } else {
+    statusSpan.classList.remove('ok');
+    statusSpan.classList.add('nu');
+  }
+});
+
   </script>
 {% endblock %}
+
+
+
+
+
