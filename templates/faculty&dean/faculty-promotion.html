@@ -53,20 +53,20 @@
         </div>
 
         <!-- Promotion Application -->
-        <div class="card-promotion" style="padding:20px">
-          <div class="card-header"><i class='bx bx-pie-chart-alt'></i><span>Promotion Application</span></div>
-          <p style="font-size:14px">Please upload the required documents:</p>
-          <div class="upload-field">
-            <label><i class='bx bx-file'></i> Resume / CV</label>
-            <input type="file" />
-            <span class="status nu">Not Uploaded</span>
-          </div>
-          <div class="upload-field" style="margin-top:10px">
-            <label><i class='bx bx-file'></i> Cover Letter</label>
-            <input type="file" />
-            <span class="status nu">Not Uploaded</span>
-          </div>
-          <button class="btn-primary" style="margin-top:15px"><i class='bx bx-upload'></i> Submit Application</button>
+<form id="promotion-doc-upload-form" enctype="multipart/form-data" method="POST" action="/faculty/promotion/upload">
+  <div class="upload-field">
+    <label for="resume_cv"><i class='bx bx-file'></i> Resume / CV</label>
+    <input id="resume_cv" type="file" name="resume_cv" required style="display:inline-block;" />
+    <span class="status nu">Not Uploaded</span>
+  </div>
+  <div class="upload-field" style="margin-top:10px">
+    <label for="cover_letter"><i class='bx bx-file'></i> Cover Letter</label>
+    <input id="cover_letter" type="file" name="cover_letter" required style="display:inline-block;" />
+    <span class="status nu">Not Uploaded</span>
+  </div>
+  <button class="btn-primary" style="margin-top:15px" type="submit"><i class='bx bx-upload'></i> Submit Application</button>
+</form>
+
         </div>
 
       </div>
