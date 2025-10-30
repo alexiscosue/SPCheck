@@ -2622,6 +2622,40 @@ th[data-sort]:hover {
   background-color: #f9fafb;
 }
 
+
+/* FOR UPLOADS*/
+
+.custom-upload-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  font-family: inherit;
+  color: var(--text, #333);
+}
+
+.custom-upload-label:hover {
+  border-color: #8e24aa;
+  background: #f5f5fc;
+}
+
+.custom-upload-label {
+  display: inline-block;
+  width: 110px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+
+
+
+
+
 .rfid-controls {
   display: flex;
   align-items: center;

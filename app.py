@@ -2862,5 +2862,65 @@ def test_db():
     except Exception as e:
         return f"Database connection failed: {e}"
 
+ # CARDO CODES MWHEHEHEHE   
+@app.route('/faculty/promotion/upload', methods=['POST'])
+@require_auth([20001, 20002])  # Adjust roles as necessary
+def promotion_document_upload():
+    userid = session.get("user_id")
+    if not userid:
+        return "Unauthorized", 401
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Get personnel_id, firstname, lastname from personnel via user_id
+    cursor.execute("""
+        SELECT personnel_id, firstname, lastname
+        FROM personnel
+        WHERE user_id = %s
+    """, (userid,))
+    personnel = cursor.fetchone()
+
+    if not personnel:
+        cursor.close()
+        conn.close()
+        return "Personnel record not found for the current user.", 400
+
+    personnel_id, firstname, lastname = personnel
+
+    # Upload Resume/CV file
+    if 'resume_cv' in request.files:
+        resume_file = request.files['resume_cv']
+        if resume_file and resume_file.filename:
+            ext = os.path.splitext(resume_file.filename)[1]
+            new_filename = f"{lastname}_{firstname}-Resume_CV{ext}"
+            file_data = resume_file.read()
+
+            cursor.execute("""
+                INSERT INTO promotions (personnel_id, document_type, filename, filedata)
+                VALUES (%s, %s, %s, %s)
+            """, (personnel_id, ['resume_cv'], new_filename, file_data))
+            conn.commit()
+
+    # Upload Cover Letter file
+    if 'cover_letter' in request.files:
+        cover_letter_file = request.files['cover_letter']
+        if cover_letter_file and cover_letter_file.filename:
+            ext = os.path.splitext(cover_letter_file.filename)[1]
+            new_filename = f"{lastname}_{firstname}-Cover_Letter{ext}"
+            file_data = cover_letter_file.read()
+
+            cursor.execute("""
+                INSERT INTO promotions (personnel_id, document_type, filename, filedata)
+                VALUES (%s, %s, %s, %s)
+            """, (personnel_id, ['cover_letter'], new_filename, file_data))
+            conn.commit()
+
+    cursor.close()
+    conn.close()
+
+    return redirect(url_for('faculty_promotion'))  # Redirect to your desired page after upload
+
+
 if __name__ == "__main__":
     app.run(debug=True)

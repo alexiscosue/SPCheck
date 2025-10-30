@@ -2,5 +2,9 @@ Flask==2.3.3
 python-dotenv==1.0.0
 pg8000==1.30.3
 pytz==2023.3
+# --- Google Sheets API Packages ---
+google-auth
+google-api-python-client
+gspread
 pyserial==3.5
 schedule
