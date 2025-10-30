@@ -142,12 +142,25 @@
     recentLogs.forEach(log => {
       const tr = document.createElement('tr');
       let statusClass = log.status.toLowerCase();
+      
+      // Fix: Check if time_in is "00:00" and convert to dash
+      let timeInDisplay = log.time_in;
+      if (timeInDisplay === '00:00' || timeInDisplay === '0:00') {
+        timeInDisplay = '—';
+      }
+      
+      // Fix: Check if time_out is "00:00" and convert to dash
+      let timeOutDisplay = log.time_out;
+      if (timeOutDisplay === '00:00' || timeOutDisplay === '0:00') {
+        timeOutDisplay = '—';
+      }
+      
       tr.innerHTML = `
         <td style="text-align:center">${log.name}</td>
         <td style="text-align:center">${log.date}</td>
         <td style="text-align:center">${log.room || 'N/A'}</td>
-        <td style="text-align:center">${log.time_in}</td>
-        <td style="text-align:center">${log.time_out}</td>
+        <td style="text-align:center">${timeInDisplay}</td>
+        <td style="text-align:center">${timeOutDisplay}</td>
         <td style="text-align:center"><span class="status ${statusClass}">${log.status}</span></td>
       `;
       tbody.appendChild(tr);

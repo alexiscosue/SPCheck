@@ -122,9 +122,6 @@
           </div>
         </div>
       </div>
-
-      <!-- RFID Simulation -->
-      <button class="rfid-btn" id="rfidBtn">Simulate RFID Tap</button>
     </div>
 
     <!-- Right: Status Breakdown (Smaller) -->
@@ -136,6 +133,9 @@
     </div>
   </div>
 </section>
+
+<!-- RFID Tap Notification Container -->
+<div id="notificationContainer"></div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -150,11 +150,9 @@
     });
   });
 
-  // Function to convert military time to 12-hour format
   function convertTo12Hour(militaryTime) {
     if (!militaryTime || militaryTime === '—') return '—';
     
-    // Handle time strings like "14:30:00" or "14:30"
     const timeParts = militaryTime.split(':');
     if (timeParts.length < 2) return militaryTime;
     
@@ -169,6 +167,95 @@
     return `${hours}:${minutes} ${period}`;
   }
 
+  function showRFIDNotification(data) {
+    if (!data || !data.personnel_id || !data.tap_time) {
+        console.error('Invalid notification data:', data);
+        return;
+    }
+    
+    const container = document.getElementById('notificationContainer');
+    const notification = document.createElement('div');
+    notification.className = 'rfid-notification';
+    
+    let icon = 'bx-info-circle';
+    let colorClass = 'info';
+    let title = 'RFID Tapped';
+    
+    if (data.action === 'timein') {
+        icon = 'bx-log-in-circle';
+        colorClass = data.status === 'Present' ? 'success' : 'warning';
+        title = 'Time-In Recorded';
+    } else if (data.action === 'timeout') {
+        icon = 'bx-log-out-circle';
+        colorClass = 'success';
+        title = 'Time-Out Recorded';
+    } else if (data.action === 'duplicate') {
+        icon = 'bx-error-circle';
+        colorClass = 'info';
+        title = 'Already Recorded';
+    } else if (data.status === 'outside_buffer') {
+        icon = 'bx-time';
+        colorClass = 'warning';
+        title = 'RFID Tapped';
+    } else if (data.status === 'no_schedule') {
+        icon = 'bx-calendar-x';
+        colorClass = 'error';
+        title = 'No Schedule Found';
+    }
+    
+    notification.classList.add(colorClass);
+    
+    let content = `
+        <div class="notification-header">
+            <i class='bx ${icon}'></i>
+            <strong>${title}</strong>
+            <button class="notification-close" onclick="this.parentElement.parentElement.remove()">
+                <i class='bx bx-x'></i>
+            </button>
+        </div>
+        <div class="notification-body">
+            <div class="notification-time">${data.tap_time}</div>
+    `;
+    
+    if (data.subject_code && data.subject_name) {
+        content += `
+            <div class="notification-class">
+                <strong>${data.subject_code}</strong> - ${data.subject_name}
+            </div>
+        `;
+    }
+
+    if (data.class_section || data.classroom) {
+        let locationInfo = [];
+        if (data.class_section) locationInfo.push(`Section: ${data.class_section}`);
+        if (data.classroom) locationInfo.push(`Room: ${data.classroom}`);
+        
+        if (locationInfo.length > 0) {
+            content += `
+                <div class="notification-location">
+                    ${locationInfo.join(' • ')}
+                </div>
+            `;
+        }
+    }
+    
+    if ((data.action === 'timein' || data.action === 'timeout') && data.status && data.status !== 'outside_buffer' && data.status !== 'no_schedule') {
+        content += `<div class="notification-status">Status: <span class="status-badge ${data.status.toLowerCase()}">${data.status}</span></div>`;
+    }
+    
+    content += `
+            <div class="notification-message">${data.message}</div>
+        </div>
+    `;
+    
+    notification.innerHTML = content;
+    container.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.classList.add('show');
+    }, 10);
+}
+
   let logs = [];
   let classAttendance = [];
   let statusBreakdown = { present: 0, late: 0, absent: 0 };
@@ -177,6 +264,8 @@
   let filteredLogs = [];
   let availableSemesters = [];
   let currentSemesterId = null;
+  let currentPersonnelId = null;
+  let notificationEventSource = null;
 
   async function fetchSemesters() {
     try {
@@ -226,6 +315,64 @@
       console.error('Error fetching semesters:', error);
       document.getElementById('semesterSelect').innerHTML = '<option value="">Error loading semesters</option>';
     }
+  }
+
+  async function fetchPersonnelId() {
+    try {
+      const response = await fetch('/api/faculty/current-personnel');
+      const data = await response.json();
+      if (data.success) {
+        currentPersonnelId = data.personnel_id;
+        console.log('Current personnel ID:', currentPersonnelId);
+        startNotificationListener();
+      }
+    } catch (error) {
+      console.error('Error fetching personnel ID:', error);
+    }
+  }
+
+  function startNotificationListener() {
+    if (!currentPersonnelId) return;
+    
+    if (notificationEventSource) {
+      notificationEventSource.close();
+    }
+    
+    notificationEventSource = new EventSource(`/api/rfid/notifications/${currentPersonnelId}`);
+    
+    notificationEventSource.onmessage = function(event) {
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.connected || !data.personnel_id) {
+          console.log('SSE connection established');
+          return;
+        }
+        
+        console.log('Received RFID notification:', data);
+        
+        if (data.personnel_id && data.tap_time) {
+          showRFIDNotification(data);
+          
+          setTimeout(() => {
+            if (currentSemesterId) {
+              fetchAttendanceData(currentSemesterId);
+            }
+          }, 500);
+        }
+      } catch (error) {
+        console.error('Error parsing notification:', error);
+      }
+    };
+    
+    notificationEventSource.onerror = function(error) {
+      console.error('Notification stream error:', error);
+      setTimeout(() => {
+        if (currentPersonnelId) {
+          startNotificationListener();
+        }
+      }, 5000);
+    };
   }
 
   async function fetchAttendanceData(semesterId) {
@@ -324,7 +471,6 @@
     } else {
       currentPageRecords.forEach(l=>{
         const tr=document.createElement('tr');
-        // Convert military time to 12-hour format for display
         const timeIn12Hour = convertTo12Hour(l.time_in);
         const timeOut12Hour = convertTo12Hour(l.time_out);
         
@@ -411,7 +557,6 @@
         
         let tooltip = document.createElement('div');
         tooltip.className = 'dot-tooltip';
-        // Convert times in tooltip to 12-hour format
         const timeIn12Hour = convertTo12Hour(record.time_in);
         const timeOut12Hour = convertTo12Hour(record.time_out);
         tooltip.innerHTML = `<strong>${record.status}</strong><br>${record.class_name || 'N/A'}<br>${record.classroom || 'N/A'}<br>${record.class_section || 'N/A'}<br>In: ${timeIn12Hour}<br>Out: ${timeOut12Hour}`;
@@ -508,34 +653,15 @@
     }
   });
 
-  document.getElementById('rfidBtn').addEventListener('click', async () => {
-    const selectedSemester = availableSemesters.find(s => s.id == currentSemesterId);
-    if (!selectedSemester || !selectedSemester.is_current) {
-      alert('RFID simulation only works with the current semester.');
-      return;
-    }
-    
-    try {
-      const response = await fetch('/api/faculty/simulate-rfid', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      const result = await response.json();
-      if (result.success) {
-        await fetchAttendanceData(currentSemesterId);
-      } else {
-        console.error('RFID simulation failed:', result.error);
-        alert('RFID simulation failed: ' + result.error);
-      }
-    } catch (error) {
-      console.error('Error simulating RFID:', error);
-      alert('Error simulating RFID. Please try again.');
-    }
+  document.addEventListener('DOMContentLoaded', () => {
+    fetchSemesters();
+    fetchPersonnelId();
   });
 
-  document.addEventListener('DOMContentLoaded', fetchSemesters);
+  window.addEventListener('beforeunload', () => {
+    if (notificationEventSource) {
+      notificationEventSource.close();
+    }
+  });
 </script>
 {% endblock %}

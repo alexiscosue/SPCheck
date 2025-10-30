@@ -2621,3 +2621,254 @@ th[data-sort] {
 th[data-sort]:hover {
   background-color: #f9fafb;
 }
+
+.rfid-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.rfid-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.rfid-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.rfid-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.rfid-btn.active {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.rfid-btn i {
+  font-size: 1.25rem;
+}
+
+.rfid-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #f3f4f6;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #9ca3af;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.status-indicator.active {
+  background: #10b981;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+#notificationContainer {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 400px;
+}
+
+.rfid-notification {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  padding: 16px;
+  transform: translateX(450px);
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-left: 4px solid #3b82f6;
+  min-width: 350px;
+}
+
+.rfid-notification.show {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.rfid-notification.success {
+  border-left-color: #10b981;
+}
+
+.rfid-notification.warning {
+  border-left-color: #f59e0b;
+}
+
+.rfid-notification.error {
+  border-left-color: #ef4444;
+}
+
+.rfid-notification.info {
+  border-left-color: #3b82f6;
+}
+
+.notification-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 16px;
+}
+
+.notification-header i {
+  font-size: 24px;
+}
+
+.rfid-notification.success .notification-header i {
+  color: #10b981;
+}
+
+.rfid-notification.warning .notification-header i {
+  color: #f59e0b;
+}
+
+.rfid-notification.error .notification-header i {
+  color: #ef4444;
+}
+
+.rfid-notification.info .notification-header i {
+  color: #3b82f6;
+}
+
+.notification-header strong {
+  flex: 1;
+  color: #1f2937;
+}
+
+.notification-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: #9ca3af;
+  font-size: 20px;
+  line-height: 1;
+  transition: color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notification-close:hover {
+  color: #6b7280;
+  background: #f3f4f6;
+  border-radius: 4px;
+}
+
+.notification-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.notification-time {
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.notification-class {
+  color: #1f2937;
+  padding: 8px;
+  background: #f3f4f6;
+  border-radius: 6px;
+}
+
+.notification-class strong {
+  color: #3b82f6;
+  font-weight: 600;
+}
+
+.notification-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #4b5563;
+}
+
+.notification-location {
+    font-size: 13px;
+    color: #6b7280;
+    padding: 4px 8px;
+    background: #f9fafb;
+    border-radius: 4px;
+    margin: 4px 0;
+}
+
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status-badge.present {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-badge.late {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-badge.absent {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.notification-message {
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+  #notificationContainer {
+    right: 10px;
+    left: 10px;
+    max-width: none;
+  }
+  
+  .rfid-notification {
+    min-width: auto;
+  }
+}

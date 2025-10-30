@@ -5,6 +5,14 @@ from flask import Flask, render_template, request, redirect, url_for, session
 from dotenv import load_dotenv
 import pg8000
 from pg8000 import dbapi
+from rfid_reader import RFIDReader
+from datetime import timedelta
+from flask import Response
+import json
+import queue
+import threading
+import atexit
+import time
 
 load_dotenv()
 
@@ -23,13 +31,12 @@ class ConnectionPool:
         self.current_connections = 0
         self.lock = threading.Lock()
         
-        # Initialize minimum connections
         for _ in range(min_connections):
             self.pool.put(self._create_connection())
             self.current_connections += 1
     
     def _create_connection(self):
-        return pg8000.dbapi.connect(
+        conn = pg8000.dbapi.connect(
             host=os.getenv('DB_HOST', 'dpg-d3ue6mbe5dus739khe70-a.oregon-postgres.render.com'),
             port=int(os.getenv('DB_PORT', 5432)),
             database=os.getenv('DB_NAME', 'spcheck'),
@@ -37,18 +44,21 @@ class ConnectionPool:
             password=os.getenv('DB_PASSWORD', 'Z2Z7rEXFpHmge1rgxM2qBXBERkDAuC7c'),
             ssl_context=True
         )
+
+        cursor = conn.cursor()
+        cursor.execute("SET TIME ZONE 'Asia/Manila'")
+        cursor.close()
+        return conn
     
     def get_connection(self):
         try:
             conn = self.pool.get(block=False)
-            # Test if connection is still alive
             try:
                 cursor = conn.cursor()
                 cursor.execute("SELECT 1")
                 cursor.close()
                 return conn
             except:
-                # Connection dead, create new one
                 conn.close()
                 return self._create_connection()
         except Empty:
@@ -56,20 +66,211 @@ class ConnectionPool:
                 if self.current_connections < self.max_connections:
                     self.current_connections += 1
                     return self._create_connection()
-            # Wait for available connection
+
             return self.pool.get(block=True, timeout=5)
     
     def return_connection(self, conn):
         try:
             self.pool.put(conn, block=False)
         except:
-            # Pool is full, close connection
             conn.close()
             with self.lock:
                 self.current_connections -= 1
 
-# Initialize connection pool
 db_pool = ConnectionPool(min_connections=3, max_connections=15)
+rfid_reader = RFIDReader(db_pool)
+
+absence_checker_thread = None
+absence_checker_running = False
+
+rfid_reader_state = {
+    'is_running': False,
+    'port': None,
+    'started_by': None, 
+    'started_at': None
+}
+rfid_state_lock = threading.Lock()
+
+def get_rfid_state():
+    """Get current RFID reader state"""
+    with rfid_state_lock:
+        return rfid_reader_state.copy()
+
+def update_rfid_state(is_running, port=None, started_by=None):
+    """Update RFID reader state"""
+    with rfid_state_lock:
+        rfid_reader_state['is_running'] = is_running
+        rfid_reader_state['port'] = port
+        if started_by:
+            rfid_reader_state['started_by'] = started_by
+            rfid_reader_state['started_at'] = datetime.now(pytz.timezone('Asia/Manila')).isoformat()
+        elif not is_running:
+            rfid_reader_state['started_by'] = None
+            rfid_reader_state['started_at'] = None
+
+def check_and_record_absences():
+    """Independent absence checker - calculates dates from schedule and records absences"""
+    global absence_checker_running
+    
+    while absence_checker_running:
+        try:
+            philippines_tz = pytz.timezone('Asia/Manila')
+            current_time = datetime.now(philippines_tz)
+            current_date = current_time.date()
+            current_time_only = current_time.time()
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                WITH current_calendar AS (
+                    SELECT acadcalendar_id, semesterstart, semesterend
+                    FROM acadcalendar 
+                    WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                    ORDER BY semesterstart DESC LIMIT 1
+                )
+                SELECT 
+                    sch.class_id, sch.personnel_id, 
+                    sch.classday_1, sch.starttime_1, sch.endtime_1,
+                    sch.classday_2, sch.starttime_2, sch.endtime_2,
+                    sub.subjectcode, sub.subjectname, sch.classsection, sch.classroom,
+                    p.firstname, p.lastname,
+                    cc.semesterstart, cc.semesterend
+                FROM schedule sch
+                JOIN subjects sub ON sch.subject_id = sub.subject_id
+                JOIN personnel p ON sch.personnel_id = p.personnel_id
+                CROSS JOIN current_calendar cc
+                WHERE sch.acadcalendar_id = cc.acadcalendar_id
+                AND p.role_id IN (20001, 20002)
+            """)
+            
+            all_schedules = cursor.fetchall()
+            absences_recorded = 0
+            
+            weekday_map = {
+                'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3,
+                'Friday': 4, 'Saturday': 5, 'Sunday': 6
+            }
+            
+            for schedule in all_schedules:
+                (class_id, personnel_id, day1, start1, end1, day2, start2, end2, 
+                 subject_code, subject_name, class_section, classroom, firstname, lastname,
+                 semester_start, semester_end) = schedule
+                
+                for day, start_time, end_time in [(day1, start1, end1), (day2, start2, end2)]:
+                    if not day or not start_time or not end_time:
+                        continue
+                    
+                    if isinstance(start_time, str):
+                        start_t = datetime.strptime(start_time[:8], '%H:%M:%S').time()
+                    else:
+                        start_t = start_time
+                    
+                    if isinstance(end_time, str):
+                        end_t = datetime.strptime(end_time[:8], '%H:%M:%S').time()
+                    else:
+                        end_t = end_time
+                    
+                    end_dt = datetime.combine(datetime.today(), end_t)
+                    buffer_end_dt = end_dt + timedelta(minutes=15)
+                    buffer_end = buffer_end_dt.time()
+                    
+                    target_weekday = weekday_map.get(day)
+                    if target_weekday is None:
+                        continue
+                    
+                    check_date = semester_start
+                    days_ahead = target_weekday - check_date.weekday()
+                    if days_ahead < 0:  
+                        days_ahead += 7
+                    check_date = check_date + timedelta(days=days_ahead)
+                    
+                    while check_date <= current_date and check_date <= semester_end:
+                        should_check = False
+                        if check_date < current_date:
+                            should_check = True
+                        elif check_date == current_date and current_time_only > buffer_end:
+                            should_check = True
+                        
+                        if should_check:
+                            cursor.execute("""
+                                SELECT attendance_id, attendancestatus, timein, timeout
+                                FROM attendance 
+                                WHERE personnel_id = %s 
+                                AND class_id = %s 
+                                AND DATE(timein AT TIME ZONE 'Asia/Manila') = %s
+                            """, (personnel_id, class_id, check_date))
+                            
+                            existing = cursor.fetchone()
+                            
+                            if not existing:
+                                cursor.execute("SELECT COALESCE(MAX(attendance_id), 70000) FROM attendance")
+                                new_id = cursor.fetchone()[0] + 1
+                                
+                                naive_midnight = datetime.combine(check_date, datetime.min.time())
+                                absence_timestamp = philippines_tz.localize(naive_midnight)
+                                
+                                cursor.execute("""
+                                    INSERT INTO attendance (
+                                        attendance_id, personnel_id, class_id, 
+                                        attendancestatus, timein, timeout
+                                    )
+                                    VALUES (%s, %s, %s, %s, %s, NULL)
+                                """, (new_id, personnel_id, class_id, 'Absent', absence_timestamp))
+                                
+                                absences_recorded += 1
+                                
+                                print(f"❌ ABSENCE AUTO-RECORDED: {firstname} {lastname} (ID: {personnel_id})")
+                                print(f"   Date: {check_date.strftime('%A, %Y-%m-%d')}")
+                                print(f"   Class: {subject_code} - {subject_name}, Section: {class_section or 'N/A'}, Room: {classroom or 'N/A'}")
+                                print(f"   Scheduled: {start_t.strftime('%H:%M')} - {end_t.strftime('%H:%M')}")
+                                print(f"   Timestamp stored: {absence_timestamp.isoformat()}")
+                        
+                        check_date = check_date + timedelta(days=7)
+            
+            if absences_recorded > 0:
+                conn.commit()
+                print(f"✅ Total absences recorded: {absences_recorded} at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            cursor.close()
+            return_db_connection(conn)
+            
+        except Exception as e:
+            print(f"❌ Error in absence checker: {e}")
+            import traceback
+            traceback.print_exc()
+            if conn:
+                try:
+                    conn.rollback()
+                    cursor.close()
+                    return_db_connection(conn)
+                except:
+                    pass
+        
+        time.sleep(60)
+
+
+def start_absence_checker():
+    """Start the independent absence checker thread"""
+    global absence_checker_thread, absence_checker_running
+    
+    if absence_checker_running:
+        print("⚠️ Absence checker already running")
+        return
+    
+    absence_checker_running = True
+    absence_checker_thread = threading.Thread(target=check_and_record_absences, daemon=True)
+    absence_checker_thread.start()
+    print("🚀 Independent absence checker started - runs every 1 minute")
+
+def stop_absence_checker():
+    """Stop the absence checker thread"""
+    global absence_checker_running
+    absence_checker_running = False
+    print("🛑 Absence checker stopped")
+
+start_absence_checker()
+atexit.register(stop_absence_checker)
 
 def get_db_connection():
     return db_pool.get_connection()
@@ -95,7 +296,6 @@ def set_cached(key, data):
     with _cache_lock:
         _cache[key] = (data, datetime.now().timestamp())
 
-# Role mapping for redirections
 ROLE_REDIRECTS = {
     20001: ('faculty', 'faculty_dashboard'),
     20002: ('dean', 'faculty_dashboard'),
@@ -209,7 +409,6 @@ def api_faculty_attendance():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # OPTIMIZED: Single query to get everything needed
         cursor.execute("""
             WITH current_calendar AS (
                 SELECT acadcalendar_id, semesterstart, semesterend
@@ -273,13 +472,12 @@ def api_faculty_attendance():
         scheduled_classes = scheduled_classes_json or []
         attendance_records = attendance_records_json or []
         
-        # Build attendance map
         attendance_map = {}
         for record in attendance_records:
             class_id = record['class_id']
             timein = record['timein']
             if timein:
-                date_key = f"{class_id}_{timein[:10]}"  # Extract date part
+                date_key = f"{class_id}_{timein[:10]}" 
             else:
                 date_key = f"{class_id}_absent_{len(attendance_map)}"
             attendance_map[date_key] = record
@@ -328,7 +526,6 @@ def api_faculty_attendance():
                     
                     found_record = attendance_map.get(date_key)
                     if not found_record:
-                        # Check for absent record
                         for key, record in attendance_map.items():
                             if record['class_id'] == class_id and not record['timein']:
                                 found_record = record
@@ -404,68 +601,272 @@ def api_faculty_attendance():
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
 
-@app.route('/api/faculty/simulate-rfid', methods=['POST'])
-@require_auth([20001, 20002])
-def api_simulate_rfid():
-    """API endpoint to simulate RFID tap for testing"""
+@app.route('/api/rfid/start', methods=['POST'])
+@require_auth([20001, 20002, 20003]) 
+def api_rfid_start():
+    """Start the RFID reader - accessible by Faculty, Dean, and HR"""
     try:
-        user_id = session['user_id']
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        state = get_rfid_state()
+        if state['is_running']:
+            return {
+                'success': True, 
+                'message': f"RFID reader already running on {state['port']}",
+                'port': state['port'],
+                'already_running': True
+            }
         
-        cursor.execute("""
-            SELECT p.personnel_id, sch.class_id
-            FROM personnel p
-            JOIN schedule sch ON p.personnel_id = sch.personnel_id
-            WHERE p.user_id = %s
-            ORDER BY RANDOM()
-            LIMIT 1
-        """, (user_id,))
+        data = request.get_json(silent=True) or {}
+        port = data.get('port') 
         
-        result = cursor.fetchone()
+        result = rfid_reader.start_reading(port)
         
-        if not result:
-            cursor.close()
-            return_db_connection(conn)
-            return {'success': False, 'error': 'No classes found for this faculty member'}
+        if result.get('success'):
+            user_id = session.get('user_id')
+            personnel_info = get_personnel_info(user_id)
+            started_by = personnel_info.get('personnel_name', 'Unknown')
+            
+            update_rfid_state(
+                is_running=True, 
+                port=result.get('port'),
+                started_by=started_by
+            )
+            
+            print(f"✅ RFID Reader started by: {started_by}")
         
-        personnel_id, class_id = result
-        
-        import random
-        statuses = ['Present', 'Late', 'Absent']
-        status = random.choice(statuses)
-        
-        philippines_tz = pytz.timezone('Asia/Manila')
-        current_time = datetime.now(philippines_tz).replace(microsecond=0)
-        
-        if status == 'Absent':
-            timein = None
-            timeout = None
-        else:
-            timein = current_time.replace(hour=8, minute=random.randint(0, 30 if status == 'Late' else 5))
-            timeout = timein.replace(hour=12, minute=0)
-        
-        cursor.execute("""
-            INSERT INTO attendance (personnel_id, class_id, attendancestatus, timein, timeout)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (personnel_id, class_id, status, timein, timeout))
-        
-        conn.commit()
-        cursor.close()
-        return_db_connection(conn)
-        
-        return {'success': True, 'message': f'Simulated {status} attendance record created'}
+        return result
         
     except Exception as e:
-        print(f"Error simulating RFID: {e}")
+        print(f"Error starting RFID reader: {e}")
+        import traceback
+        traceback.print_exc()
         return {'success': False, 'error': str(e)}
+
+@app.route('/api/rfid/stop', methods=['POST'])
+@require_auth([20001, 20002, 20003]) 
+def api_rfid_stop():
+    """Stop the RFID reader - accessible by Faculty, Dean, and HR"""
+    try:
+        result = rfid_reader.stop_reading()
+        
+        if result.get('success'):
+            update_rfid_state(is_running=False, port=None)
+            
+            user_id = session.get('user_id')
+            personnel_info = get_personnel_info(user_id)
+            stopped_by = personnel_info.get('personnel_name', 'Unknown')
+            print(f"🛑 RFID Reader stopped by: {stopped_by}")
+        
+        return result
+        
+    except Exception as e:
+        print(f"Error stopping RFID reader: {e}")
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/rfid/status')
+@require_auth([20001, 20002, 20003]) 
+def api_rfid_status():
+    """Get RFID reader status - accessible by Faculty, Dean, and HR"""
+    try:
+        state = get_rfid_state()
+        return {
+            'success': True,
+            'is_running': state['is_running'],
+            'port': state['port'],
+            'started_by': state.get('started_by'),
+            'started_at': state.get('started_at')
+        }
+        
+    except Exception as e:
+        print(f"Error getting RFID status: {e}")
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/rfid/ports')
+@require_auth([20001, 20002, 20003])  
+def api_rfid_ports():
+    """Get available serial ports - accessible by Faculty, Dean, and HR"""
+    try:
+        import serial.tools.list_ports
+        ports = serial.tools.list_ports.comports()
+        
+        port_list = []
+        for port in ports:
+            port_list.append({
+                'device': port.device,
+                'description': port.description,
+                'hwid': port.hwid
+            })
+        
+        return {
+            'success': True,
+            'ports': port_list
+        }
+        
+    except Exception as e:
+        print(f"Error listing ports: {e}")
+        return {'success': False, 'error': str(e)}
+
+notification_queues = {}  
+notification_lock = threading.Lock()
+
+def broadcast_notification(personnel_id, notification_data):
+    """Broadcast notification to specific personnel AND to HR"""
+    with notification_lock:
+        if personnel_id in notification_queues:
+            for q in notification_queues[personnel_id]:
+                try:
+                    q.put(notification_data)
+                except Exception as e:
+                    print(f"Error putting notification in queue: {e}")
+        
+        hr_key = 'hr_all_notifications'
+        if hr_key in notification_queues:
+            for q in notification_queues[hr_key]:
+                try:
+                    q.put(notification_data)
+                except Exception as e:
+                    print(f"Error putting notification in HR queue: {e}")
+
+def handle_rfid_notification(notification_data):
+    """Handle RFID notifications from the reader"""
+    personnel_id = notification_data.get('personnel_id')
+    if personnel_id:
+        print(f"Broadcasting notification to personnel {personnel_id}")
+        broadcast_notification(personnel_id, notification_data)
+
+rfid_reader.add_notification_callback(handle_rfid_notification)
+
+@app.route('/api/faculty/current-personnel')
+@require_auth([20001, 20002])
+def api_current_personnel():
+    """Get current user's personnel ID"""
+    try:
+        user_id = session['user_id']
+        personnel_info = get_personnel_info(user_id)
+        personnel_id = personnel_info.get('personnel_id')
+        
+        if not personnel_id:
+            return {'success': False, 'error': 'Personnel record not found'}
+        
+        return {
+            'success': True,
+            'personnel_id': personnel_id
+        }
+    except Exception as e:
+        print(f"Error getting current personnel: {e}")
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/rfid/notifications/<int:personnel_id>')
+@require_auth([20001, 20002])
+def api_rfid_notifications_stream(personnel_id):
+    """Server-Sent Events endpoint for RFID notifications"""
+    
+    user_id = session['user_id']
+    personnel_info = get_personnel_info(user_id)
+    if personnel_info.get('personnel_id') != personnel_id:
+        return {'success': False, 'error': 'Unauthorized'}, 403
+    
+    def event_stream():
+        q = queue.Queue()
+        
+        with notification_lock:
+            if personnel_id not in notification_queues:
+                notification_queues[personnel_id] = []
+            notification_queues[personnel_id].append(q)
+        
+        print(f"SSE connection established for personnel {personnel_id}")
+        
+        try:
+            yield f"data: {json.dumps({'connected': True})}\n\n"
+            
+            while True:
+                try:
+                    notification = q.get(timeout=30)
+                    
+                    if notification and notification.get('personnel_id') and notification.get('tap_time'):
+                        print(f"Sending notification to personnel {personnel_id}: {notification}")
+                        yield f"data: {json.dumps(notification)}\n\n"
+                except queue.Empty:
+                    yield ": keepalive\n\n"
+        except GeneratorExit:
+            print(f"SSE connection closed for personnel {personnel_id}")
+        finally:
+            with notification_lock:
+                if personnel_id in notification_queues:
+                    try:
+                        notification_queues[personnel_id].remove(q)
+                        if not notification_queues[personnel_id]:
+                            del notification_queues[personnel_id]
+                        print(f"Cleaned up SSE queue for personnel {personnel_id}")
+                    except Exception as e:
+                        print(f"Error cleaning up SSE queue: {e}")
+    
+    return Response(
+        event_stream(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive'
+        }
+    )
+
+@app.route('/api/hr/rfid-notifications')
+@require_auth([20003])
+def api_hr_rfid_notifications_stream():
+    """Server-Sent Events endpoint for HR to receive ALL RFID notifications"""
+    
+    def event_stream():
+        q = queue.Queue()
+        
+        with notification_lock:
+            hr_key = 'hr_all_notifications'
+            if hr_key not in notification_queues:
+                notification_queues[hr_key] = []
+            notification_queues[hr_key].append(q)
+        
+        print(f"HR SSE connection established - will receive all RFID notifications")
+        
+        try:
+            yield f"data: {json.dumps({'connected': True})}\n\n"
+            
+            while True:
+                try:
+                    notification = q.get(timeout=30)
+                    
+                    if notification and notification.get('personnel_id') and notification.get('tap_time'):
+                        print(f"HR Sending notification: {notification}")
+                        yield f"data: {json.dumps(notification)}\n\n"
+                except queue.Empty:
+                    yield ": keepalive\n\n"
+        except GeneratorExit:
+            print(f"HR SSE connection closed")
+        finally:
+            with notification_lock:
+                if hr_key in notification_queues:
+                    try:
+                        notification_queues[hr_key].remove(q)
+                        if not notification_queues[hr_key]:
+                            del notification_queues[hr_key]
+                        print(f"Cleaned up HR SSE queue")
+                    except Exception as e:
+                        print(f"Error cleaning up HR SSE queue: {e}")
+    
+    return Response(
+        event_stream(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive'
+        }
+    )
 
 @app.route('/api/faculty/semesters')
 @require_auth([20001, 20002, 20003])
 def api_faculty_semesters():
     """API endpoint to get available semesters - CACHED"""
     cache_key = "all_semesters"
-    cached = get_cached(cache_key, ttl=1800)  # Cache for 30 minutes
+    cached = get_cached(cache_key, ttl=1800) 
     if cached:
         return cached
     
@@ -529,13 +930,12 @@ def api_faculty_semesters():
 @app.route('/api/faculty/attendance/<int:semester_id>')
 @require_auth([20001, 20002, 20003])
 def api_faculty_attendance_by_semester(semester_id):
-    """OPTIMIZED: Get faculty attendance data for specific semester"""
+    """Get faculty attendance data with proper date handling for absent records"""
     try:
         user_id = session['user_id']
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # OPTIMIZED: Single complex query
         cursor.execute("""
             WITH semester_info AS (
                 SELECT acadcalendar_id, semester, acadyear, semesterstart, semesterend 
@@ -545,12 +945,6 @@ def api_faculty_attendance_by_semester(semester_id):
             faculty_schedule AS (
                 SELECT 
                     sch.class_id,
-                    sch.classday_1,
-                    sch.starttime_1,
-                    sch.endtime_1,
-                    sch.classday_2,
-                    sch.starttime_2,
-                    sch.endtime_2,
                     sub.subjectcode,
                     sub.subjectname,
                     sub.units,
@@ -563,6 +957,7 @@ def api_faculty_attendance_by_semester(semester_id):
             ),
             faculty_attendance AS (
                 SELECT 
+                    a.attendance_id,
                     a.class_id,
                     a.attendancestatus,
                     a.timein,
@@ -576,6 +971,7 @@ def api_faculty_attendance_by_semester(semester_id):
                 JOIN subjects sub ON sch.subject_id = sub.subject_id
                 JOIN personnel p ON a.personnel_id = p.personnel_id
                 WHERE p.user_id = %s AND sch.acadcalendar_id = %s
+                ORDER BY a.timein DESC
             )
             SELECT 
                 (SELECT row_to_json(semester_info) FROM semester_info),
@@ -592,36 +988,12 @@ def api_faculty_attendance_by_semester(semester_id):
         
         semester_info_json, scheduled_classes_json, attendance_records_json = result
         
-        semester_start = date.fromisoformat(semester_info_json['semesterstart'])
-        semester_end = date.fromisoformat(semester_info_json['semesterend'])
-        
         scheduled_classes = scheduled_classes_json or []
         attendance_records = attendance_records_json or []
         
-        # Build attendance map
-        attendance_map = {}
-        for record in attendance_records:
-            class_id = record['class_id']
-            timein = record['timein']
-            if timein:
-                date_key = f"{class_id}_{timein[:10]}"
-            else:
-                date_key = f"{class_id}_absent_{len(attendance_map)}"
-            attendance_map[date_key] = record
-        
-        attendance_logs = []
-        class_attendance = []
-        status_counts = {'present': 0, 'late': 0, 'absent': 0}
+        subject_info = {}
         unique_sections = set()
         total_units = 0
-        
-        philippines_tz = pytz.timezone('Asia/Manila')
-        current_date = datetime.now(philippines_tz).date()
-        
-        weekday_map = {
-            'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3,
-            'Friday': 4, 'Saturday': 5, 'Sunday': 6
-        }
         
         for scheduled_class in scheduled_classes:
             class_id = scheduled_class['class_id']
@@ -631,91 +1003,88 @@ def api_faculty_attendance_by_semester(semester_id):
             class_section = scheduled_class['classsection']
             classroom = scheduled_class['classroom']
             
-            class_name = f"{subject_code} - {subject_name}"
+            subject_info[class_id] = {
+                'class_name': f"{subject_code} - {subject_name}",
+                'subject_code': subject_code,
+                'class_section': class_section,
+                'classroom': classroom
+            }
             
             section_key = f"{subject_code}_{class_section}"
             if section_key not in unique_sections:
                 unique_sections.add(section_key)
                 total_units += units or 3
-            
-            for day_key in ['1', '2']:
-                day = scheduled_class.get(f'classday_{day_key}')
-                if not day:
-                    continue
-                
-                target_weekday = weekday_map.get(day)
-                if target_weekday is None:
-                    continue
-                
-                check_date = semester_start
-                days_ahead = target_weekday - check_date.weekday()
-                if days_ahead <= 0:
-                    days_ahead += 7
-                check_date += timedelta(days=days_ahead)
-                
-                if check_date < semester_start:
-                    check_date += timedelta(days=7)
+        
+        attendance_logs = []
+        class_attendance = []
+        status_counts = {'present': 0, 'late': 0, 'absent': 0}
+        
+        for record in attendance_records:
+            class_id = record['class_id']
+            status = record['attendancestatus']
+            timein = record['timein']
+            timeout = record['timeout']
 
-                end_date = min(current_date, semester_end)
-                while check_date <= end_date:
-                    date_key = f"{class_id}_{check_date}"
-                    
-                    found_record = attendance_map.get(date_key)
-                    
-                    if found_record:
-                        status = found_record['attendancestatus']
-                        timein = found_record['timein']
-                        timeout = found_record['timeout']
-                        
-                        time_in_str = timein[11:16] if timein else '—'
-                        time_out_str = timeout[11:16] if timeout else '—'
-                    else:
-                        status = 'Absent'
-                        time_in_str = '—'
-                        time_out_str = '—'
-                    
-                    log_entry = {
-                        'date': check_date.strftime('%Y-%m-%d'),
-                        'time_in': time_in_str,
-                        'time_out': time_out_str,
-                        'status': status.capitalize(),
-                        'class_name': class_name,
-                        'class_section': class_section or 'N/A',
-                        'classroom': classroom or 'N/A'
-                    }
-                    attendance_logs.append(log_entry)
-                    
-                    class_entry = {
-                        'class_name': class_name,
-                        'class_section': class_section or 'N/A',
-                        'classroom': classroom or 'N/A',
-                        'date': check_date.strftime('%Y-%m-%d'),
-                        'time_in': time_in_str,
-                        'status': status.capitalize()
-                    }
-                    class_attendance.append(class_entry)
-                    
-                    status_lower = status.lower()
-                    if status_lower == 'present':
-                        status_counts['present'] += 1
-                    elif status_lower == 'late':
-                        status_counts['late'] += 1
-                    elif status_lower == 'absent':
-                        status_counts['absent'] += 1
-                    
-                    check_date += timedelta(days=7)
+            info = subject_info.get(class_id, {})
+            class_name = info.get('class_name', f"Class {class_id}")
+            class_section = info.get('class_section') or 'N/A'
+            classroom = info.get('classroom') or 'N/A'
+            
+            if timein:
+                date_str = timein[:10] 
+                time_part = timein[11:19]
+                is_absent_record = (status.lower() == 'absent' and time_part == '00:00:00')
+                
+                if is_absent_record:
+                    time_in_str = '—'
+                else:
+                    time_in_str = timein[11:16]
+            else:
+                date_str = 'N/A'
+                time_in_str = '—'
+            
+            if status.lower() == 'absent' or not timeout:
+                time_out_str = '—'
+            else:
+                time_out_str = timeout[11:16]
+            
+            log_entry = {
+                'date': date_str,
+                'time_in': time_in_str,
+                'time_out': time_out_str,
+                'status': status.capitalize(),
+                'class_name': class_name,
+                'class_section': class_section,
+                'classroom': classroom
+            }
+            attendance_logs.append(log_entry)
+            
+            class_entry = {
+                'class_name': class_name,
+                'class_section': class_section,
+                'classroom': classroom,
+                'date': date_str,
+                'time_in': time_in_str,
+                'status': status.capitalize()
+            }
+            class_attendance.append(class_entry)
+            
+            status_lower = status.lower()
+            if status_lower == 'present':
+                status_counts['present'] += 1
+            elif status_lower == 'late':
+                status_counts['late'] += 1
+            elif status_lower == 'absent':
+                status_counts['absent'] += 1
         
-        attendance_logs.sort(key=lambda x: x['date'], reverse=True)
-        class_attendance.sort(key=lambda x: x['date'], reverse=True)
-        
-        total_classes = len(attendance_logs)
-        attendance_percent = round((status_counts['present'] + status_counts['late']) / total_classes * 100, 1) if total_classes > 0 else 0
+        total_recorded = len(attendance_logs)
+        attendance_percent = round((status_counts['present'] + status_counts['late']) / total_recorded * 100, 1) if total_recorded > 0 else 0
         
         kpis = {
             'attendance_percent': f'{attendance_percent}%',
             'late_count': status_counts['late'],
             'absence_count': status_counts['absent'],
-            'total_classes': total_classes,
+            'total_classes': total_recorded,
             'sections_count': len(unique_sections),
             'total_units': total_units
         }
@@ -761,7 +1130,6 @@ def api_faculty_teaching_schedule(semester_id):
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # OPTIMIZED: Single query
         cursor.execute("""
             SELECT 
                 ac.acadcalendar_id,
@@ -923,7 +1291,6 @@ def api_faculty_dashboard():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # OPTIMIZED: One mega query for all dashboard data
         cursor.execute("""
             WITH current_semester AS (
                 SELECT acadcalendar_id, semester, acadyear, semesterstart, semesterend 
@@ -990,7 +1357,6 @@ def api_faculty_dashboard():
         scheduled_classes = schedule_json or []
         attendance_records = attendance_json or []
         
-        # Calculate attendance rate
         attendance_map = {}
         for record in attendance_records:
             class_id = record['class_id']
@@ -1049,7 +1415,6 @@ def api_faculty_dashboard():
             'present_late': present_late_count
         }
         
-        # Build weekly schedule
         current_day = current_date.strftime('%A')
         current_weekday = current_date.weekday()
         
@@ -1354,24 +1719,20 @@ def api_update_personal_info():
             return_db_connection(conn)
             return {'success': False, 'error': 'Personnel record not found'}
         
-        # Update phone in personnel table
         cursor.execute("""
             UPDATE personnel SET phone = %s WHERE personnel_id = %s
         """, (phone, personnel_id))
         
-        # Check if profile exists
         cursor.execute("""
             SELECT profile_id FROM profile WHERE personnel_id = %s
         """, (personnel_id,))
         profile_exists = cursor.fetchone()
         
         if profile_exists:
-            # Update existing profile
             cursor.execute("""
                 UPDATE profile SET bio = %s WHERE personnel_id = %s
             """, (bio, personnel_id))
         else:
-            # Create new profile
             cursor.execute("SELECT COALESCE(MAX(profile_id), 90000) FROM profile")
             max_profile_id = cursor.fetchone()[0]
             new_profile_id = max_profile_id + 1
@@ -1393,7 +1754,6 @@ def api_update_personal_info():
         cursor.close()
         return_db_connection(conn)
         
-        # Clear cache
         cache_key = f"personnel_info_{user_id}"
         with _cache_lock:
             _cache.pop(cache_key, None)
@@ -1424,7 +1784,6 @@ def api_update_documents():
             return_db_connection(conn)
             return {'success': False, 'error': 'Personnel record not found'}
         
-        # Ensure profile exists
         cursor.execute("""
             INSERT INTO profile (profile_id, personnel_id, bio, profilepic, 
                 licenses, degrees, certificates, publications, awards,
@@ -1641,7 +2000,6 @@ def api_hr_faculty_attendance():
         philippines_tz = pytz.timezone('Asia/Manila')
         today = datetime.now(philippines_tz).date()
         
-        # OPTIMIZED: Single query with aggregation
         cursor.execute("""
             WITH current_calendar AS (
                 SELECT acadcalendar_id, semesterstart, semesterend 
@@ -1713,13 +2071,22 @@ def api_hr_faculty_attendance():
             faculty_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
             
             if timein:
-                date_str = timein[:10]
-                time_in_str = timein[11:16]
+                date_str = timein[:10] 
+                time_part = timein[11:19]
+                is_absent_record = (status.lower() == 'absent' and time_part == '00:00:00')
+                
+                if is_absent_record:
+                    time_in_str = '—'
+                else:
+                    time_in_str = timein[11:16] 
             else:
                 date_str = today.strftime('%Y-%m-%d')
                 time_in_str = '—'
             
-            time_out_str = timeout[11:16] if timeout else '—'
+            if status.lower() == 'absent' or not timeout:
+                time_out_str = '—'
+            else:
+                time_out_str = timeout[11:16]
             
             log_entry = {
                 'name': faculty_name,
@@ -1770,7 +2137,6 @@ def api_hr_faculty_list():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # OPTIMIZED: Single query with aggregation
         cursor.execute("""
             WITH current_calendar AS (
                 SELECT acadcalendar_id 
@@ -1837,7 +2203,6 @@ def api_hr_faculty_schedule(personnel_id):
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # OPTIMIZED: Single query
         cursor.execute("""
             WITH current_calendar AS (
                 SELECT acadcalendar_id, semester, acadyear
@@ -2009,7 +2374,6 @@ def api_hr_employees_list():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # OPTIMIZED: Single query
         cursor.execute("""
             SELECT 
                 p.personnel_id,
@@ -2368,12 +2732,10 @@ def login():
     
     return render_template('login.html')
 
-# Reset password page
 @app.route('/reset_password')
 def reset_password():
     return render_template('reset.html')
 
-# Faculty/Dean routes with faculty info
 @app.route('/faculty-dashboard')
 @require_auth([20001, 20002])
 def faculty_dashboard():
@@ -2463,7 +2825,6 @@ def hr_settings():
     personnel_info = get_personnel_info(session['user_id'])
     return render_template('hrmd/hr-settings.html', **personnel_info)
 
-# VP/President routes
 @app.route('/vp_promotions')
 @require_auth([20004])
 def vp_promotions():
