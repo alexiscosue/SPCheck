@@ -9,30 +9,55 @@
 
       <!-- Stepper -->
       <div class="card" style="grid-column:1 / -1; padding:20px">
-        <h3>Promotion Application Progress</h3>
-        <div class="stepper">
-          <div class="step done">
-            <div class="circle">1</div>
-            Submitted
-            <small>2025-09-05</small>
-          </div>
-          <div class="step done">
-            <div class="circle">2</div>
-            HRMD Review
-            <small>Approved 2025-09-08</small>
-          </div>
-          <div class="step active">
-            <div class="circle">3</div>
-            VP Admin Review
-            <small>Pending</small>
-          </div>
-          <div class="step">
-            <div class="circle">4</div>
-            President Approval
-            <small>Not yet</small>
-          </div>
-        </div>
-      </div>
+  <h3>Promotion Application Progress</h3>
+  <div class="stepper">
+    <div class="step done">
+      <div class="circle">1</div>
+      Submitted
+      <small>{{ date_submitted.strftime("%Y-%m-%d") if date_submitted else '' }}</small>
+    </div>
+    <div class="step {% if current_status == 'hrmd' %}active{% elif hrmd_approval_date %}done{% endif %}">
+      <div class="circle">2</div>
+      HRMD Review
+      <small>
+        {% if current_status == 'hrmd' %}
+          In Progress
+        {% elif hrmd_approval_date %}
+          Approved {{ hrmd_approval_date }}
+        {% else %}
+          Not yet
+        {% endif %}
+      </small>
+    </div>
+    <div class="step {% if current_status == 'vpa' %}active{% elif vpa_approval_date %}done{% endif %}">
+      <div class="circle">3</div>
+      VP Admin Review
+      <small>
+        {% if current_status == 'vpa' %}
+          In Progress
+        {% elif vpa_approval_date %}
+          Approved {{ vpa_approval_date }}
+        {% else %}
+          Not yet
+        {% endif %}
+      </small>
+    </div>
+    <div class="step {% if current_status == 'pres' %}active{% elif pres_approval_date %}done{% endif %}">
+      <div class="circle">4</div>
+      President Approval
+      <small>
+        {% if current_status == 'pres' %}
+          In Progress
+        {% elif pres_approval_date %}
+          Approved {{ pres_approval_date }}
+        {% else %}
+          Not yet
+        {% endif %}
+      </small>
+    </div>
+  </div>
+</div>
+
 
       <!-- Two-column layout -->
       <div class="grid-2" style="grid-column:1 / -1">
@@ -55,7 +80,7 @@
         <!-- Promotion Application -->
         <form id="promotion-doc-upload-form" enctype="multipart/form-data" method="POST" action="/faculty/promotion/upload">
           <div class="upload-field" style="position: relative;">
-            <input id="resume_cv" type="file" name="resume_cv" style="display:none;" required/>
+            <input id="resume_cv" type="file" name="resume_cv" style="display:none;" required {% if upload_locked %}disabled{% endif %}/>
               <label for="resume_cv" class="custom-upload-label">
                 <i class='bx bx-file'></i>
                 <span class="label-text">Resume / CV</span>
@@ -63,7 +88,7 @@
               </label>
           </div>
           <div class="upload-field" style="margin-top:10px; position: relative;">
-            <input id="cover_letter" type="file" name="cover_letter" style="display:none;" required/>
+            <input id="cover_letter" type="file" name="cover_letter" style="display:none;" required {% if upload_locked %}disabled{% endif %}/>
             <label for="cover_letter" class="custom-upload-label">
             <i class='bx bx-file'></i>
             <span class="label-text">Cover Letter</span>
@@ -145,6 +170,7 @@
 
 {% block extra_scripts %}
   <script>
+    // FILE UPLOADING 
 document.getElementById('resume_cv').addEventListener('change', function(event) {
   var statusSpan = document.getElementById('resume_cv_status');
   var fileName = event.target.files.length ? event.target.files[0].name : 'Not Uploaded';
@@ -171,6 +197,45 @@ document.getElementById('cover_letter').addEventListener('change', function(even
   }
 });
 
+  // Update file upload statuses as well
+  document.getElementById('resume_cv').addEventListener('change', function(event) {
+    var statusSpan = document.getElementById('resume_cv_status');
+    var fileName = event.target.files.length ? event.target.files[0].name : 'Not Uploaded';
+    statusSpan.textContent = fileName;
+    if (event.target.files.length) {
+      statusSpan.classList.add('ok');
+      statusSpan.classList.remove('nu');
+    } else {
+      statusSpan.classList.remove('ok');
+      statusSpan.classList.add('nu');
+    }
+    updateStep1Status();
+  });
+
+  document.getElementById('cover_letter').addEventListener('change', function(event) {
+    var statusSpan = document.getElementById('cover_letter_status');
+    var fileName = event.target.files.length ? event.target.files[0].name : 'Not Uploaded';
+    statusSpan.textContent = fileName;
+    if (event.target.files.length) {
+      statusSpan.classList.add('ok');
+      statusSpan.classList.remove('nu');
+    } else {
+      statusSpan.classList.remove('ok');
+      statusSpan.classList.add('nu');
+    }
+    updateStep1Status();
+  });
+
+  document.getElementById('promotion-doc-upload-form').addEventListener('submit', function(event) {
+    const step1 = document.querySelector('.stepper .step:nth-child(1)');
+    step1.classList.remove('active');
+    step1.classList.add('done');
+    const today = new Date().toISOString().slice(0, 10);
+    step1.querySelector('small').textContent = 'Submitted ' + today;
+  });
+
+  // Initial check on page load
+  updateStep1Status();
   </script>
 {% endblock %}
 

@@ -2392,11 +2392,66 @@ def faculty_evaluations():
     faculty_info = get_faculty_info(session['user_id'])
     return render_template('faculty&dean/faculty-evaluations.html', **faculty_info)
 
+# EDITED BY CARDS
 @app.route('/faculty_promotion')
 @require_auth([20001, 20002])
 def faculty_promotion():
-    faculty_info = get_faculty_info(session['user_id'])
-    return render_template('faculty&dean/faculty-promotion.html', **faculty_info)
+    userid = session.get("user_id")
+    if not userid:
+        return "Unauthorized", 401
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Get faculty_id for this user
+    cursor.execute("""
+        SELECT personnel_id FROM personnel WHERE user_id = %s
+    """, (userid,))
+    result = cursor.fetchone()
+    if not result:
+        cursor.close()
+        conn.close()
+        return "Faculty record not found for the current user.", 400
+
+    faculty_id = result[0]
+
+    # Get the latest application for this faculty
+    cursor.execute("""
+        SELECT current_status, date_submitted, hrmd_approval_date, vpa_approval_date, pres_approval_date, final_decision
+        FROM promotion_application
+        WHERE faculty_id = %s
+        ORDER BY date_submitted DESC
+        LIMIT 1
+    """, (faculty_id,))
+    row = cursor.fetchone()
+
+    cursor.close()
+    conn.close()
+
+    if row:
+        statuses_in_progress = {"hrmd", "vpa", "pres"}
+        upload_locked = row and row[0] in statuses_in_progress
+        return render_template(
+            'faculty&dean/faculty-promotion.html',
+            current_status=row[0],
+            date_submitted=row[1],
+            hrmd_approval_date=row[2],
+            vpa_approval_date=row[3],
+            pres_approval_date=row[4],
+            final_decision=row[5],
+            upload_locked=upload_locked      # <--- add this to the context
+        )
+    else:
+        return render_template(
+            'faculty&dean/faculty-promotion.html',
+            current_status=None,
+            date_submitted=None,
+            hrmd_approval_date=None,
+            vpa_approval_date=None,
+            pres_approval_date=None,
+            final_decision=None,
+            upload_locked=False              # <--- add this to the context
+        )
 
 @app.route('/faculty_profile')
 @require_auth([20001, 20002])
@@ -2503,7 +2558,7 @@ def test_db():
 
  # CARDO CODES MWHEHEHEHE   
 @app.route('/faculty/promotion/upload', methods=['POST'])
-@require_auth([20001, 20002])  # Adjust roles as necessary
+@require_auth([20001, 20002])
 def promotion_document_upload():
     userid = session.get("user_id")
     if not userid:
@@ -2512,53 +2567,48 @@ def promotion_document_upload():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Get personnel_id, firstname, lastname from personnel via user_id
+    # Get faculty_id from personnel via user_id
     cursor.execute("""
-        SELECT personnel_id, firstname, lastname
-        FROM personnel
-        WHERE user_id = %s
+        SELECT personnel_id FROM personnel WHERE user_id = %s
     """, (userid,))
-    personnel = cursor.fetchone()
-
-    if not personnel:
+    result = cursor.fetchone()
+    if not result:
         cursor.close()
         conn.close()
-        return "Personnel record not found for the current user.", 400
+        return "Faculty record not found for the current user.", 400
 
-    personnel_id, firstname, lastname = personnel
+    faculty_id = result[0]
 
-    # Upload Resume/CV file
+    resume_cv_data = None
+    cover_letter_data = None
+
     if 'resume_cv' in request.files:
         resume_file = request.files['resume_cv']
         if resume_file and resume_file.filename:
-            ext = os.path.splitext(resume_file.filename)[1]
-            new_filename = f"{lastname}_{firstname}-Resume_CV{ext}"
-            file_data = resume_file.read()
+            resume_cv_data = resume_file.read()
 
-            cursor.execute("""
-                INSERT INTO promotions (personnel_id, document_type, filename, filedata)
-                VALUES (%s, %s, %s, %s)
-            """, (personnel_id, ['resume_cv'], new_filename, file_data))
-            conn.commit()
-
-    # Upload Cover Letter file
     if 'cover_letter' in request.files:
         cover_letter_file = request.files['cover_letter']
         if cover_letter_file and cover_letter_file.filename:
-            ext = os.path.splitext(cover_letter_file.filename)[1]
-            new_filename = f"{lastname}_{firstname}-Cover_Letter{ext}"
-            file_data = cover_letter_file.read()
+            cover_letter_data = cover_letter_file.read()
 
-            cursor.execute("""
-                INSERT INTO promotions (personnel_id, document_type, filename, filedata)
-                VALUES (%s, %s, %s, %s)
-            """, (personnel_id, ['cover_letter'], new_filename, file_data))
-            conn.commit()
+    if resume_cv_data is None or cover_letter_data is None:
+        cursor.close()
+        conn.close()
+        return "Both resume and cover letter must be uploaded.", 400
 
+    # Insert new application row
+    cursor.execute("""
+        INSERT INTO promotion_application (
+            faculty_id, cover_letter, resume, date_submitted, current_status
+        ) VALUES (%s, %s, %s, NOW(), %s)
+        RETURNING application_id
+    """, (faculty_id, cover_letter_data, resume_cv_data, 'hrmd'))
+    conn.commit()
     cursor.close()
     conn.close()
 
-    return redirect(url_for('faculty_promotion'))  # Redirect to your desired page after upload
+    return redirect(url_for('faculty_promotion'))
 
 
 if __name__ == "__main__":
