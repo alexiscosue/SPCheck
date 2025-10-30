@@ -108,6 +108,18 @@
           </table>
         </div>
       </div>
+
+      <!-- RFID Controls -->
+      <div class="rfid-controls">
+        <button class="rfid-btn" id="rfidBtn">
+          <i class='bx bx-power-off'></i>
+          <span id="rfidBtnText">Start RFID Reader</span>
+        </button>
+        <div class="rfid-status" id="rfidStatus">
+          <span class="status-indicator" id="statusIndicator"></span>
+          <span id="statusText">Reader Offline</span>
+        </div>
+      </div>
     </div>
 
     <!-- Right: Status Breakdown (Smaller) -->
@@ -119,6 +131,9 @@
     </div>
   </div>
 </section>
+
+<!-- RFID Tap Notification Container -->
+<div id="notificationContainer"></div>
 
 <!-- Per-Class Attendance Modal -->
 <div class="modal" id="classModal">
@@ -149,6 +164,124 @@
     });
   });
 
+  function convertTo12Hour(militaryTime) {
+    if (!militaryTime || militaryTime === '—') return '—';
+    
+    const timeParts = militaryTime.split(':');
+    if (timeParts.length < 2) return militaryTime;
+    
+    let hours = parseInt(timeParts[0]);
+    const minutes = timeParts[1];
+    
+    if (isNaN(hours)) return militaryTime;
+    
+    const period = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    
+    return `${hours}:${minutes} ${period}`;
+  }
+
+  function showRFIDNotification(data) {
+    if (!data || !data.personnel_id || !data.tap_time) {
+        console.error('Invalid notification data:', data);
+        return;
+    }
+    
+    const container = document.getElementById('notificationContainer');
+    
+    const notification = document.createElement('div');
+    notification.className = 'rfid-notification';
+    
+    let icon = 'bx-info-circle';
+    let colorClass = 'info';
+    let title = 'RFID Tapped';
+    
+    if (data.action === 'timein') {
+        icon = 'bx-log-in-circle';
+        colorClass = data.status === 'Present' ? 'success' : 'warning';
+        title = 'Time-In Recorded';
+    } else if (data.action === 'timeout') {
+        icon = 'bx-log-out-circle';
+        colorClass = 'success';
+        title = 'Time-Out Recorded';
+    } else if (data.action === 'duplicate') {
+        icon = 'bx-error-circle';
+        colorClass = 'info';
+        title = 'Already Recorded';
+    } else if (data.status === 'outside_buffer') {
+        icon = 'bx-time';
+        colorClass = 'warning';
+        title = 'RFID Tapped';
+    } else if (data.status === 'no_schedule') {
+        icon = 'bx-calendar-x';
+        colorClass = 'error';
+        title = 'No Schedule Found';
+    }
+    
+    notification.classList.add(colorClass);
+    
+    let content = `
+        <div class="notification-header">
+            <i class='bx ${icon}'></i>
+            <strong>${title}</strong>
+            <button class="notification-close" onclick="this.parentElement.parentElement.remove()">
+                <i class='bx bx-x'></i>
+            </button>
+        </div>
+        <div class="notification-body">
+            <div class="notification-time">${data.tap_time}</div>
+    `;
+    
+    if (data.subject_code && data.subject_name) {
+        content += `
+            <div class="notification-class">
+                <strong>${data.subject_code}</strong> - ${data.subject_name}
+            </div>
+        `;
+    }
+    
+    if (data.class_section || data.classroom) {
+        let locationInfo = [];
+        if (data.class_section) locationInfo.push(`Section: ${data.class_section}`);
+        if (data.classroom) locationInfo.push(`Room: ${data.classroom}`);
+        
+        if (locationInfo.length > 0) {
+            content += `
+                <div class="notification-location">
+                    ${locationInfo.join(' • ')}
+                </div>
+            `;
+        }
+    }
+  
+    if ((data.action === 'timein' || data.action === 'timeout') && data.status && data.status !== 'outside_buffer' && data.status !== 'no_schedule') {
+        content += `<div class="notification-status">Status: <span class="status-badge ${data.status.toLowerCase()}">${data.status}</span></div>`;
+    }
+    
+    content += `
+            <div class="notification-message">${data.message}</div>
+        </div>
+    `;
+    
+    notification.innerHTML = content;
+    container.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.classList.add('show');
+    }, 10);
+    
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.classList.remove('show');
+            setTimeout(() => {
+                if (notification.parentElement) {
+                    notification.remove();
+                }
+            }, 300);
+        }
+    }, 10000);
+  }
+
   let facultyLogs = [];
   let facultyList = [];
   let currentPage = 1;
@@ -157,6 +290,45 @@
   let statusBreakdown = { present: 0, late: 0, absent: 0 };
   let currentPageClasses = 1;
   let filteredFaculty = [];
+  let notificationEventSource = null;
+
+  function startNotificationListener() {
+    if (notificationEventSource) {
+      notificationEventSource.close();
+    }
+    
+    notificationEventSource = new EventSource('/api/hr/rfid-notifications');
+    
+    notificationEventSource.onmessage = function(event) {
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.connected || !data.personnel_id) {
+          console.log('SSE connection established for HR notifications');
+          return;
+        }
+        
+        console.log('HR Received RFID notification:', data);
+        
+        if (data.personnel_id && data.tap_time) {
+          showRFIDNotification(data);
+          
+          setTimeout(() => {
+            fetchFacultyAttendance();
+          }, 500);
+        }
+      } catch (error) {
+        console.error('Error parsing HR notification:', error);
+      }
+    };
+    
+    notificationEventSource.onerror = function(error) {
+      console.error('HR Notification stream error:', error);
+      setTimeout(() => {
+        startNotificationListener();
+      }, 5000);
+    };
+  }
 
   async function fetchFacultyAttendance() {
     try {
@@ -255,7 +427,10 @@
     } else {
       currentPageRecords.forEach(f=>{
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${f.name}</td><td>${f.date}</td><td>${f.room || 'N/A'}</td><td>${f.time_in}</td><td>${f.time_out}</td><td><span class="status ${f.status.toLowerCase()}">${f.status}</span></td>`;
+        const timeIn12Hour = convertTo12Hour(f.time_in);
+        const timeOut12Hour = convertTo12Hour(f.time_out);
+        
+        tr.innerHTML = `<td>${f.name}</td><td>${f.date}</td><td>${f.room || 'N/A'}</td><td>${timeIn12Hour}</td><td>${timeOut12Hour}</td><td><span class="status ${f.status.toLowerCase()}">${f.status}</span></td>`;
         tbody.appendChild(tr);
       });
     }
@@ -519,11 +694,6 @@
     goToPageClasses(currentPageClasses + 1);
   });
 
-  document.addEventListener('DOMContentLoaded', () => {
-    fetchFacultyAttendance();
-    fetchFacultyList();
-  });
-
   let breakdownChart = null;
 
   function updateStatusChart() {
@@ -567,5 +737,133 @@
       }
     });
   }
+
+  let rfidReaderActive = false;
+
+  async function checkRFIDStatus() {
+    try {
+      const response = await fetch('/api/rfid/status');
+      const data = await response.json();
+      
+      if (data.success) {
+        updateRFIDUI(data.is_running, data.port, data.started_by);
+      }
+    } catch (error) {
+      console.error('Error checking RFID status:', error);
+    }
+  }
+
+  function updateRFIDUI(isRunning, port, startedBy) {
+    rfidReaderActive = isRunning;
+    const btn = document.getElementById('rfidBtn');
+    const btnText = document.getElementById('rfidBtnText');
+    const statusIndicator = document.getElementById('statusIndicator');
+    const statusText = document.getElementById('statusText');
+    
+    if (isRunning) {
+      btn.classList.add('active');
+      btnText.textContent = 'Stop RFID Reader';
+      statusIndicator.classList.add('active');
+      
+      let statusMessage = port ? `Reader Active (${port})` : 'Reader Active';
+      if (startedBy) {
+        statusMessage += ` - Started by ${startedBy}`;
+      }
+      statusText.textContent = statusMessage;
+    } else {
+      btn.classList.remove('active');
+      btnText.textContent = 'Start RFID Reader';
+      statusIndicator.classList.remove('active');
+      statusText.textContent = 'Reader Offline';
+    }
+  }
+
+  document.getElementById('rfidBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('rfidBtn');
+    btn.disabled = true;
+    
+    try {
+      if (rfidReaderActive) {
+        const response = await fetch('/api/rfid/stop', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'}
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+          updateRFIDUI(false);
+          alert('RFID reader stopped successfully.');
+          await fetchFacultyAttendance(); 
+        } else {
+          alert('Failed to stop RFID reader: ' + result.error);
+        }
+      } else {
+
+        const response = await fetch('/api/rfid/start', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'}
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+          updateRFIDUI(true, result.port);
+          
+          if (result.already_running) {
+            alert('RFID reader was already running on ' + result.port);
+          } else {
+            alert('RFID reader started successfully. Faculty can now tap their RFID cards.');
+          }
+          
+          startAutoRefresh();
+        } else {
+          alert('Failed to start RFID reader: ' + result.error);
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling RFID reader:', error);
+      alert('Error: ' + error.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  let autoRefreshInterval = null;
+
+  function startAutoRefresh() {
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval);
+    }
+    
+    autoRefreshInterval = setInterval(async () => {
+      if (rfidReaderActive) {
+        await fetchFacultyAttendance();
+      } else {
+        stopAutoRefresh();
+      }
+    }, 5000);
+  }
+
+  function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval);
+      autoRefreshInterval = null;
+    }
+  }
+
+  setInterval(checkRFIDStatus, 10000);
+
+  document.addEventListener('DOMContentLoaded', () => {
+    checkRFIDStatus();
+    fetchFacultyAttendance();
+    fetchFacultyList();
+    startNotificationListener(); 
+  });
+
+  window.addEventListener('beforeunload', () => {
+    stopAutoRefresh();
+    if (notificationEventSource) {
+      notificationEventSource.close();
+    }
+  });
 </script>
 {% endblock %}
