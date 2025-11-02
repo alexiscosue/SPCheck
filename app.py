@@ -711,7 +711,7 @@ notification_lock = threading.Lock()
 def broadcast_notification(personnel_id, notification_data):
     """Broadcast notification to specific personnel AND to HR"""
     with notification_lock:
-        if personnel_id in notification_queues:
+        if personnel_id and personnel_id > 0 and personnel_id in notification_queues:
             for q in notification_queues[personnel_id]:
                 try:
                     q.put(notification_data)
@@ -723,14 +723,14 @@ def broadcast_notification(personnel_id, notification_data):
             for q in notification_queues[hr_key]:
                 try:
                     q.put(notification_data)
+                    print(f"✓ Sent notification to HR: {notification_data.get('action', 'unknown')}")
                 except Exception as e:
                     print(f"Error putting notification in HR queue: {e}")
 
 def handle_rfid_notification(notification_data):
     """Handle RFID notifications from the reader"""
     personnel_id = notification_data.get('personnel_id')
-    if personnel_id:
-        print(f"Broadcasting notification to personnel {personnel_id}")
+    if personnel_id is not None:
         broadcast_notification(personnel_id, notification_data)
 
 rfid_reader.add_notification_callback(handle_rfid_notification)
@@ -833,7 +833,7 @@ def api_hr_rfid_notifications_stream():
                 try:
                     notification = q.get(timeout=30)
                     
-                    if notification and notification.get('personnel_id') and notification.get('tap_time'):
+                    if notification:
                         print(f"HR Sending notification: {notification}")
                         yield f"data: {json.dumps(notification)}\n\n"
                 except queue.Empty:
@@ -1560,7 +1560,6 @@ def api_get_faculty_profile():
                 """, (new_profile_id, personnel_id))
                 conn.commit()
                 
-                # Fetch again
                 cursor.execute("""
                     SELECT 
                         pe.phone,
@@ -2120,6 +2119,66 @@ def api_hr_faculty_attendance():
         
     except Exception as e:
         print(f"Error fetching HR faculty attendance data: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/hr/rfid-logs')
+@require_auth([20003])
+def api_hr_rfid_logs():
+    """Get all RFID logs for HR view"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                rl.taptime,
+                rl.personnel_id,
+                rl.remarks,
+                p.firstname,
+                p.lastname,
+                p.honorifics
+            FROM rfidlogs rl
+            LEFT JOIN personnel p ON rl.personnel_id = p.personnel_id
+            ORDER BY rl.taptime DESC
+        """)
+        
+        logs = cursor.fetchall()
+        cursor.close()
+        return_db_connection(conn)
+        
+        rfid_logs = []
+        for log in logs:
+            (taptime, personnel_id, remarks, firstname, lastname, honorifics) = log
+            
+            if personnel_id and firstname and lastname:
+                personnel_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+            else:
+                personnel_name = "Unknown RFID"
+            
+            if taptime:
+                tap_datetime = taptime.astimezone(pytz.timezone('Asia/Manila'))
+                date_str = tap_datetime.strftime('%Y-%m-%d')
+                time_str = tap_datetime.strftime('%H:%M:%S') 
+            else:
+                date_str = "N/A"
+                time_str = "N/A"
+            
+            rfid_logs.append({
+                'personnel_name': personnel_name,
+                'date': date_str,
+                'tap_time': time_str,
+                'remarks': remarks or ""
+            })
+        
+        return {
+            'success': True,
+            'rfid_logs': rfid_logs
+        }
+        
+    except Exception as e:
+        print(f"Error fetching RFID logs: {e}")
         import traceback
         traceback.print_exc()
         return {'success': False, 'error': str(e)}

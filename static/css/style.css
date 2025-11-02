@@ -2734,6 +2734,7 @@ th[data-sort]:hover {
 }
 
 .rfid-notification {
+  display: block; 
   background: white;
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
@@ -2837,11 +2838,25 @@ th[data-sort]:hover {
   padding: 8px;
   background: #f3f4f6;
   border-radius: 6px;
+  font-size: 14px;
 }
 
 .notification-class strong {
   color: #3b82f6;
   font-weight: 600;
+  font-size: 15px;
+}
+
+.notification-body > .notification-class:first-child {
+  background: transparent;
+  padding: 0;
+  margin-bottom: 4px;
+}
+
+.notification-body > .notification-class:first-child strong {
+  color: #3b82f6;
+  font-weight: 600;
+  font-size: 15px;
 }
 
 .notification-status {
@@ -2852,12 +2867,12 @@ th[data-sort]:hover {
 }
 
 .notification-location {
-    font-size: 13px;
-    color: #6b7280;
-    padding: 4px 8px;
-    background: #f9fafb;
-    border-radius: 4px;
-    margin: 4px 0;
+  font-size: 13px;
+  color: #6b7280;
+  padding: 4px 8px;
+  background: #f9fafb;
+  border-radius: 4px;
+  margin: 4px 0;
 }
 
 .status-badge {
@@ -2887,6 +2902,7 @@ th[data-sort]:hover {
   color: #4b5563;
   font-size: 13px;
   line-height: 1.5;
+  margin-top: 4px;
 }
 
 @media (max-width: 768px) {

@@ -47,6 +47,7 @@
       <div class="tabs">
         <button class="tab-btn active" data-tab="logs">All Faculty Logs</button>
         <button class="tab-btn" data-tab="classes">View Classes</button>
+        <button class="tab-btn" data-tab="rfidlogs">RFID Logs</button>
       </div>
 
       <!-- All Faculty Logs -->
@@ -106,6 +107,33 @@
             </thead>
             <tbody id="facultyBody"></tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- View RFID Logs Tab -->
+      <div id="rfidlogs" class="tab-content">
+        <div class="search-filter">
+            <input type="text" id="rfidLogSearch" placeholder="Search by name, remarks, or date...">
+        </div>
+        <div class="hr-pagination-controls">
+            <button id="prevPageRfidLogs" class="hr-pagination-btn">‹</button>
+            <span id="pageInfoRfidLogs">0 records</span>
+            <button id="nextPageRfidLogs" class="hr-pagination-btn">›</button>
+        </div>
+        <div class="table">
+            <table class="hr-attendance-table">
+                <thead>
+                    <tr>
+                        <th>Personnel</th>
+                        <th>Date</th>
+                        <th>Tap Time</th>
+                        <th>Remarks</th>
+                    </tr>
+                </thead>
+                <tbody id="rfidLogsBody">
+                    <tr><td colspan="5" style="text-align: center; padding: 2rem; color: #6b7280;">Loading...</td></tr>
+                </tbody>
+            </table>
         </div>
       </div>
 
@@ -182,13 +210,12 @@
   }
 
   function showRFIDNotification(data) {
-    if (!data || !data.personnel_id || !data.tap_time) {
+    if (!data || !data.tap_time) {
         console.error('Invalid notification data:', data);
         return;
     }
     
     const container = document.getElementById('notificationContainer');
-    
     const notification = document.createElement('div');
     notification.className = 'rfid-notification';
     
@@ -196,26 +223,35 @@
     let colorClass = 'info';
     let title = 'RFID Tapped';
     
-    if (data.action === 'timein') {
+    if (data.action === 'unknown_rfid') {
+        icon = 'bx-error-circle';
+        colorClass = 'error';
+        title = 'Unknown RFID Card';
+    }
+    else if (data.action === 'no_schedule') {
+        icon = 'bx-calendar-x';
+        colorClass = 'warning';
+        title = 'No Teaching Load';
+    }
+    else if (data.status === 'outside_buffer') {
+        icon = 'bx-time';
+        colorClass = 'warning';
+        title = 'Outside Class Schedule';
+    }
+    else if (data.action === 'timein') {
         icon = 'bx-log-in-circle';
         colorClass = data.status === 'Present' ? 'success' : 'warning';
         title = 'Time-In Recorded';
-    } else if (data.action === 'timeout') {
+    }
+    else if (data.action === 'timeout') {
         icon = 'bx-log-out-circle';
         colorClass = 'success';
         title = 'Time-Out Recorded';
-    } else if (data.action === 'duplicate') {
+    }
+    else if (data.action === 'duplicate') {
         icon = 'bx-error-circle';
         colorClass = 'info';
         title = 'Already Recorded';
-    } else if (data.status === 'outside_buffer') {
-        icon = 'bx-time';
-        colorClass = 'warning';
-        title = 'RFID Tapped';
-    } else if (data.status === 'no_schedule') {
-        icon = 'bx-calendar-x';
-        colorClass = 'error';
-        title = 'No Schedule Found';
     }
     
     notification.classList.add(colorClass);
@@ -232,9 +268,21 @@
             <div class="notification-time">${data.tap_time}</div>
     `;
     
+    if (data.person_name) {
+        content += `<div class="notification-class"><strong>${data.person_name}</strong></div>`;
+    }
+    
+    if (data.rfid_uid && data.action === 'unknown_rfid') {
+        content += `
+            <div class="notification-class" style="margin-top: 8px;">
+                <strong>RFID UID:</strong> ${data.rfid_uid}
+            </div>
+        `;
+    }
+    
     if (data.subject_code && data.subject_name) {
         content += `
-            <div class="notification-class">
+            <div class="notification-class" style="margin-top: 8px;">
                 <strong>${data.subject_code}</strong> - ${data.subject_name}
             </div>
         `;
@@ -254,14 +302,13 @@
         }
     }
   
-    if ((data.action === 'timein' || data.action === 'timeout') && data.status && data.status !== 'outside_buffer' && data.status !== 'no_schedule') {
+    if ((data.action === 'timein' || data.action === 'timeout') && data.status && 
+        data.status !== 'outside_buffer' && data.status !== 'no_schedule' && 
+        data.status !== 'error' && data.status !== 'warning') {
         content += `<div class="notification-status">Status: <span class="status-badge ${data.status.toLowerCase()}">${data.status}</span></div>`;
     }
     
-    content += `
-            <div class="notification-message">${data.message}</div>
-        </div>
-    `;
+    content += `<div class="notification-message">${data.message}</div></div>`;
     
     notification.innerHTML = content;
     container.appendChild(notification);
@@ -302,15 +349,15 @@
     notificationEventSource.onmessage = function(event) {
       try {
         const data = JSON.parse(event.data);
-        
-        if (data.connected || !data.personnel_id) {
+
+        if (data.connected === true) {
           console.log('SSE connection established for HR notifications');
           return;
         }
         
         console.log('HR Received RFID notification:', data);
         
-        if (data.personnel_id && data.tap_time) {
+        if (data.tap_time) {
           showRFIDNotification(data);
           
           setTimeout(() => {
@@ -697,45 +744,54 @@
   let breakdownChart = null;
 
   function updateStatusChart() {
-    const statusCtx = document.getElementById('statusBreakdown').getContext('2d');
-    
-    if (breakdownChart) {
-      breakdownChart.destroy();
-    }
-    
-    const totalRecords = statusBreakdown.present + statusBreakdown.late + statusBreakdown.absent;
-    if (totalRecords === 0) {
-      statusCtx.clearRect(0, 0, statusCtx.canvas.width, statusCtx.canvas.height);
-      statusCtx.font = '16px Arial';
-      statusCtx.fillStyle = '#6b7280';
-      statusCtx.textAlign = 'center';
-      statusCtx.fillText('No data available', statusCtx.canvas.width / 2, statusCtx.canvas.height / 2);
-      return;
-    }
-    
-    breakdownChart = new Chart(statusCtx, {
-      type: 'doughnut',
-      data: {
-        labels: ['Present', 'Late', 'Absent'],
-        datasets: [{
-          data: [statusBreakdown.present, statusBreakdown.late, statusBreakdown.absent],
-          backgroundColor: ['#16a34a', '#f59e0b', '#ef4444']
-        }]
-      },
-      options: {
-        onClick: (e, els) => {
-          if(els.length){
-            const label = breakdownChart.data.labels[els[0].index];
-            document.getElementById('logFilter').value = label;
-            currentPage = 1;
-            renderLogs();
-          }
-        },
-        plugins: {
-          legend: { position: 'bottom' }
+      const statusCtx = document.getElementById('statusBreakdown').getContext('2d');
+      
+      const totalRecords = statusBreakdown.present + statusBreakdown.late + statusBreakdown.absent;
+      if (totalRecords === 0) {
+        if (breakdownChart) {
+          breakdownChart.destroy();
+          breakdownChart = null;
         }
+        statusCtx.clearRect(0, 0, statusCtx.canvas.width, statusCtx.canvas.height);
+        statusCtx.font = '16px Arial';
+        statusCtx.fillStyle = '#6b7280';
+        statusCtx.textAlign = 'center';
+        statusCtx.fillText('No data available', statusCtx.canvas.width / 2, statusCtx.canvas.height / 2);
+        return;
       }
-    });
+      
+      if (breakdownChart) {
+        breakdownChart.data.datasets[0].data = [statusBreakdown.present, statusBreakdown.late, statusBreakdown.absent];
+        breakdownChart.update('none'); 
+        return;
+      }
+      
+      breakdownChart = new Chart(statusCtx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Present', 'Late', 'Absent'],
+          datasets: [{
+            data: [statusBreakdown.present, statusBreakdown.late, statusBreakdown.absent],
+            backgroundColor: ['#16a34a', '#f59e0b', '#ef4444']
+          }]
+        },
+        options: {
+          animation: {
+            duration: 800, 
+          },
+          onClick: (e, els) => {
+            if(els.length){
+              const label = breakdownChart.data.labels[els[0].index];
+              document.getElementById('logFilter').value = label;
+              currentPage = 1;
+              renderLogs();
+            }
+          },
+          plugins: {
+            legend: { position: 'bottom' }
+          }
+        }
+      });
   }
 
   let rfidReaderActive = false;
@@ -825,6 +881,123 @@
     } finally {
       btn.disabled = false;
     }
+  });
+
+  let rfidLogs = [];
+  let currentPageRfidLogs = 1;
+  let filteredRfidLogs = [];
+
+  async function fetchRFIDLogs() {
+      try {
+          const response = await fetch('/api/hr/rfid-logs');
+          const data = await response.json();
+          
+          if (data.success) {
+              rfidLogs = data.rfid_logs || [];
+              currentPageRfidLogs = 1;
+              renderRFIDLogs();
+          } else {
+              console.error('Failed to fetch RFID logs:', data.error);
+              renderRFIDLogs();
+          }
+      } catch (error) {
+          console.error('Error fetching RFID logs:', error);
+          renderRFIDLogs();
+      }
+  }
+
+  function renderRFIDLogs() {
+    const tbody = document.getElementById('rfidLogsBody');
+    tbody.innerHTML = '';
+    
+    let search = document.getElementById('rfidLogSearch').value.toLowerCase();
+    
+    filteredRfidLogs = rfidLogs.filter(log => {
+        const searchMatch = !search || 
+            log.personnel_name.toLowerCase().includes(search) ||
+            log.remarks.toLowerCase().includes(search) ||
+            log.date.includes(search) ||
+            log.tap_time.includes(search);
+        
+        return searchMatch;
+    });
+    
+    const totalRecords = filteredRfidLogs.length;
+    const totalPages = Math.ceil(totalRecords / recordsPerPage);
+    const startIndex = (currentPageRfidLogs - 1) * recordsPerPage;
+    const endIndex = startIndex + recordsPerPage;
+    const currentPageRecords = filteredRfidLogs.slice(startIndex, endIndex);
+    
+    if (currentPageRecords.length === 0) {
+        const message = filteredRfidLogs.length === 0 && search ? 
+            'No records match your search criteria' : 
+            'No RFID log data available';
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 2rem; color: #6b7280;">${message}</td></tr>`;
+    } else {
+        currentPageRecords.forEach(log => {
+            const tr = document.createElement('tr');
+            const tapTime12Hour = convertTo12Hour(log.tap_time);
+            
+            tr.innerHTML = `
+                <td>${log.personnel_name}</td>
+                <td>${log.date}</td>
+                <td>${tapTime12Hour}</td>
+                <!-- Comment out Class column
+                <td>${log.class_display}</td>
+                -->
+                <td style="text-align: left;">${log.remarks}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+    
+    updateRFIDLogsPaginationControls(currentPageRfidLogs, totalPages, totalRecords);
+  }
+
+  function updateRFIDLogsPaginationControls(page, totalPages, totalRecords) {
+      const pageInfo = document.getElementById('pageInfoRfidLogs');
+      const prevBtn = document.getElementById('prevPageRfidLogs');
+      const nextBtn = document.getElementById('nextPageRfidLogs');
+      
+      if (totalRecords === 0) {
+          pageInfo.textContent = '0 records';
+      } else {
+          const startRecord = ((page - 1) * recordsPerPage) + 1;
+          const endRecord = Math.min(page * recordsPerPage, totalRecords);
+          pageInfo.textContent = `${startRecord} - ${endRecord} of ${totalRecords} records`;
+      }
+      
+      prevBtn.disabled = page <= 1;
+      nextBtn.disabled = page >= totalPages || totalPages === 0;
+  }
+
+  function goToPageRfidLogs(page) {
+      const totalPages = Math.ceil(filteredRfidLogs.length / recordsPerPage);
+      if (page >= 1 && page <= totalPages) {
+          currentPageRfidLogs = page;
+          renderRFIDLogs();
+      }
+  }
+
+  document.getElementById('rfidLogSearch').addEventListener('input', () => {
+      currentPageRfidLogs = 1;
+      renderRFIDLogs();
+  });
+
+  document.getElementById('prevPageRfidLogs').addEventListener('click', () => {
+      goToPageRfidLogs(currentPageRfidLogs - 1);
+  });
+
+  document.getElementById('nextPageRfidLogs').addEventListener('click', () => {
+      goToPageRfidLogs(currentPageRfidLogs + 1);
+  });
+
+  document.addEventListener('DOMContentLoaded', () => {
+      checkRFIDStatus();
+      fetchFacultyAttendance();
+      fetchFacultyList();
+      fetchRFIDLogs();
+      startNotificationListener();
   });
 
   let autoRefreshInterval = null;

@@ -139,7 +139,7 @@ class RFIDReader:
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """, (new_log_id, rfid_uid, personnel_id, taptime, matched_class_id, status, remarks))
             
-            print(f"📝 Logged tap: {status} - {remarks}")
+            print(f"📋 Logged tap: {status} - {remarks}")
         except Exception as e:
             print(f"⚠️ Failed to log RFID tap: {e}")
     
@@ -156,8 +156,24 @@ class RFIDReader:
             cursor.execute("SELECT personnel_id FROM rfid WHERE rfid_uid = %s", (rfid_uid,))
             result = cursor.fetchone()
             
+            # CASE 1: RFID UID not found in database
             if not result:
                 print(f"⚠️ RFID UID {rfid_uid} not found in database")
+                
+                notification_data = {
+                    'personnel_id': 0, 
+                    'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S'),
+                    'action': 'unknown_rfid',
+                    'status': 'error',
+                    'rfid_uid': rfid_uid,
+                    'subject_code': None,
+                    'subject_name': None,
+                    'class_section': None,
+                    'classroom': None,
+                    'message': f'Unknown RFID card (UID: {rfid_uid}) - Not registered in system'
+                }
+                self._trigger_notification(notification_data)
+                
                 self._log_rfid_tap(cursor, rfid_uid, None, current_time, None, 'unknown_rfid', 
                                   f"RFID UID not registered in system")
                 conn.commit()
@@ -167,6 +183,19 @@ class RFIDReader:
             
             personnel_id = result[0]
             print(f"✓ Personnel ID: {personnel_id}")
+            
+            cursor.execute("""
+                SELECT firstname, lastname, honorifics
+                FROM personnel
+                WHERE personnel_id = %s
+            """, (personnel_id,))
+            person_result = cursor.fetchone()
+            
+            if person_result:
+                firstname, lastname, honorifics = person_result
+                person_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+            else:
+                person_name = f"Personnel ID {personnel_id}"
             
             cursor.execute("UPDATE rfid SET lastused = %s WHERE rfid_uid = %s", (current_time, rfid_uid))
             
@@ -189,23 +218,25 @@ class RFIDReader:
             
             schedules = cursor.fetchall()
             
+            # CASE 2: Personnel has RFID but no teaching load/class schedule
             if not schedules:
                 notification_data = {
                     'personnel_id': personnel_id,
+                    'person_name': person_name,
                     'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S'),
-                    'action': 'tap',
-                    'status': 'no_schedule',
+                    'action': 'no_schedule',
+                    'status': 'warning',
                     'subject_code': None,
                     'subject_name': None,
                     'class_section': None,
                     'classroom': None,
-                    'message': 'No classes scheduled for current semester'
+                    'message': f'{person_name} has no teaching load or class schedule for the current semester'
                 }
                 self._trigger_notification(notification_data)
                 
-                print(f"⚠️ No schedule for personnel {personnel_id}")
+                print(f"⚠️ No schedule for personnel {personnel_id} ({person_name})")
                 self._log_rfid_tap(cursor, rfid_uid, personnel_id, current_time, None, 'no_schedule',
-                                  f"No classes scheduled for current semester")
+                                  f"Personnel has RFID but no classes scheduled for current semester")
                 
                 conn.commit()
                 cursor.close()
@@ -260,9 +291,11 @@ class RFIDReader:
                         print(f"✓ Matched: {subject_code} - {subject_name}, Section: {class_section or 'N/A'}, Room: {classroom or 'N/A'} ({start_time} - {end_time})")
                         break
             
+            # CASE 3: No class within 15-minute buffer
             if not matching_class:
                 notification_data = {
                     'personnel_id': personnel_id,
+                    'person_name': person_name,
                     'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S'),
                     'action': 'tap',
                     'status': 'outside_buffer',
@@ -270,7 +303,7 @@ class RFIDReader:
                     'subject_name': None,
                     'class_section': None,
                     'classroom': None,
-                    'message': 'No class scheduled within 15 minutes'
+                    'message': f'{person_name} tapped outside class schedule - No class within 15 minutes'
                 }
                 self._trigger_notification(notification_data)
                 
@@ -300,6 +333,7 @@ class RFIDReader:
                 if timeout is None:
                     notification_data = {
                         'personnel_id': personnel_id,
+                        'person_name': person_name,
                         'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S'),
                         'action': 'timeout',
                         'status': status,
@@ -320,6 +354,7 @@ class RFIDReader:
                 else:
                     notification_data = {
                         'personnel_id': personnel_id,
+                        'person_name': person_name,
                         'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S'),
                         'action': 'duplicate',
                         'status': status,
@@ -346,6 +381,7 @@ class RFIDReader:
                 
                 notification_data = {
                     'personnel_id': personnel_id,
+                    'person_name': person_name,
                     'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S'),
                     'action': 'timein',
                     'status': status,
