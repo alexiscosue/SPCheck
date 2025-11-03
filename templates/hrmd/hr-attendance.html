@@ -131,7 +131,7 @@
                     </tr>
                 </thead>
                 <tbody id="rfidLogsBody">
-                    <tr><td colspan="5" style="text-align: center; padding: 2rem; color: #6b7280;">Loading...</td></tr>
+                    <tr><td colspan="4" style="text-align: center; padding: 2rem; color: #6b7280;">Loading...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -147,6 +147,10 @@
           <span class="status-indicator" id="statusIndicator"></span>
           <span id="statusText">Reader Offline</span>
         </div>
+        <button class="edit-remarks-btn" id="editRemarksBtn">
+          <i class='bx bx-edit-alt'></i>
+          <span id="editRemarksBtnText">Edit Remarks</span>
+        </button>
       </div>
     </div>
 
@@ -209,6 +213,29 @@
     return `${hours}:${minutes} ${period}`;
   }
 
+  function convertTo12HourWithSeconds(timeString) {
+    if (!timeString) return '—';
+    
+    const timeParts = timeString.split(':');
+    if (timeParts.length < 2) return timeString;
+    
+    let hours = parseInt(timeParts[0]);
+    const minutes = timeParts[1];
+    
+    let seconds = '00';
+    if (timeParts.length >= 3) {
+      const secParts = timeParts[2].split('.');
+      seconds = secParts[0];
+    }
+    
+    if (isNaN(hours)) return timeString;
+    
+    const period = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    
+    return `${hours}:${minutes}:${seconds} ${period}`;
+  }
+
   function showRFIDNotification(data) {
     if (!data || !data.tap_time) {
         console.error('Invalid notification data:', data);
@@ -256,6 +283,8 @@
     
     notification.classList.add(colorClass);
     
+    const formattedTime = convertTo12HourWithSeconds(data.tap_time);
+    
     let content = `
         <div class="notification-header">
             <i class='bx ${icon}'></i>
@@ -265,7 +294,7 @@
             </button>
         </div>
         <div class="notification-body">
-            <div class="notification-time">${data.tap_time}</div>
+            <div class="notification-time">${formattedTime}</div>
     `;
     
     if (data.person_name) {
@@ -362,6 +391,7 @@
           
           setTimeout(() => {
             fetchFacultyAttendance();
+            fetchRFIDLogs();
           }, 500);
         }
       } catch (error) {
@@ -886,6 +916,8 @@
   let rfidLogs = [];
   let currentPageRfidLogs = 1;
   let filteredRfidLogs = [];
+  let isEditingRemarks = false;
+  let remarksEditData = new Map();
 
   async function fetchRFIDLogs() {
       try {
@@ -934,21 +966,46 @@
             'No RFID log data available';
         tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 2rem; color: #6b7280;">${message}</td></tr>`;
     } else {
-        currentPageRecords.forEach(log => {
+        currentPageRecords.forEach((log, index) => {
             const tr = document.createElement('tr');
-            const tapTime12Hour = convertTo12Hour(log.tap_time);
+            const tapTime12Hour = convertTo12HourWithSeconds(log.tap_time);
+            const logId = log.log_id;
             
-            tr.innerHTML = `
-                <td>${log.personnel_name}</td>
-                <td>${log.date}</td>
-                <td>${tapTime12Hour}</td>
-                <!-- Comment out Class column
-                <td>${log.class_display}</td>
-                -->
-                <td style="text-align: left;">${log.remarks}</td>
-            `;
+            if (isEditingRemarks) {
+                const currentRemarks = remarksEditData.has(logId) ? remarksEditData.get(logId) : log.remarks;
+                
+                tr.innerHTML = `
+                    <td>${log.personnel_name}</td>
+                    <td>${log.date}</td>
+                    <td>${tapTime12Hour}</td>
+                    <td>
+                        <input type="text" 
+                               class="remarks-editable" 
+                               value="${currentRemarks}" 
+                               data-log-id="${logId}"
+                               placeholder="Enter remarks...">
+                    </td>
+                `;
+            } else {
+                tr.innerHTML = `
+                    <td>${log.personnel_name}</td>
+                    <td>${log.date}</td>
+                    <td>${tapTime12Hour}</td>
+                    <td>${log.remarks}</td>
+                `;
+            }
             tbody.appendChild(tr);
         });
+        
+        if (isEditingRemarks) {
+            const inputs = tbody.querySelectorAll('.remarks-editable');
+            inputs.forEach(input => {
+                input.addEventListener('input', (e) => {
+                    const logId = parseInt(e.target.dataset.logId);
+                    remarksEditData.set(logId, e.target.value);
+                });
+            });
+        }
     }
     
     updateRFIDLogsPaginationControls(currentPageRfidLogs, totalPages, totalRecords);
@@ -992,6 +1049,59 @@
       goToPageRfidLogs(currentPageRfidLogs + 1);
   });
 
+  document.getElementById('editRemarksBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('editRemarksBtn');
+      const btnText = document.getElementById('editRemarksBtnText');
+      const btnIcon = btn.querySelector('i');
+      
+      if (!isEditingRemarks) {
+          isEditingRemarks = true;
+          remarksEditData.clear();
+          btn.classList.add('active');
+          btnText.textContent = 'Save Remarks';
+          btnIcon.className = 'bx bx-save';
+          renderRFIDLogs();
+      } else {
+          if (remarksEditData.size > 0) {
+              btn.disabled = true;
+              
+              try {
+                  const updates = Array.from(remarksEditData.entries()).map(([log_id, remarks]) => ({
+                      log_id,
+                      remarks
+                  }));
+                  
+                  const response = await fetch('/api/hr/update-rfid-remarks', {
+                      method: 'POST',
+                      headers: {'Content-Type': 'application/json'},
+                      body: JSON.stringify({ updates })
+                  });
+                  
+                  const result = await response.json();
+                  
+                  if (result.success) {
+                      alert(`Successfully updated ${result.updated_count} remark(s)`);
+                      await fetchRFIDLogs();
+                  } else {
+                      alert('Failed to update remarks: ' + result.error);
+                  }
+              } catch (error) {
+                  console.error('Error updating remarks:', error);
+                  alert('Error updating remarks: ' + error.message);
+              } finally {
+                  btn.disabled = false;
+              }
+          }
+          
+          isEditingRemarks = false;
+          remarksEditData.clear();
+          btn.classList.remove('active');
+          btnText.textContent = 'Edit Remarks';
+          btnIcon.className = 'bx bx-edit-alt';
+          renderRFIDLogs();
+      }
+  });
+
   document.addEventListener('DOMContentLoaded', () => {
       checkRFIDStatus();
       fetchFacultyAttendance();
@@ -1024,13 +1134,6 @@
   }
 
   setInterval(checkRFIDStatus, 10000);
-
-  document.addEventListener('DOMContentLoaded', () => {
-    checkRFIDStatus();
-    fetchFacultyAttendance();
-    fetchFacultyList();
-    startNotificationListener(); 
-  });
 
   window.addEventListener('beforeunload', () => {
     stopAutoRefresh();

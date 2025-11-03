@@ -2123,16 +2123,60 @@ def api_hr_faculty_attendance():
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
 
+@app.route('/api/hr/update-rfid-remarks', methods=['POST'])
+@require_auth([20003])
+def api_update_rfid_remarks():
+    """Update remarks for multiple RFID logs"""
+    try:
+        data = request.get_json()
+        updates = data.get('updates', [])
+        
+        if not updates:
+            return {'success': False, 'error': 'No updates provided'}
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        updated_count = 0
+        for update in updates:
+            log_id = update.get('log_id')
+            remarks = update.get('remarks', '')
+            
+            if log_id:
+                cursor.execute("""
+                    UPDATE rfidlogs 
+                    SET remarks = %s 
+                    WHERE log_id = %s
+                """, (remarks, log_id))
+                updated_count += 1
+        
+        conn.commit()
+        cursor.close()
+        return_db_connection(conn)
+        
+        return {
+            'success': True,
+            'message': f'Successfully updated {updated_count} remark(s)',
+            'updated_count': updated_count
+        }
+        
+    except Exception as e:
+        print(f"Error updating RFID remarks: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
 @app.route('/api/hr/rfid-logs')
 @require_auth([20003])
 def api_hr_rfid_logs():
-    """Get all RFID logs for HR view"""
+    """Get all RFID logs for HR view with milliseconds"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
             SELECT 
+                rl.log_id,
                 rl.taptime,
                 rl.personnel_id,
                 rl.remarks,
@@ -2150,7 +2194,7 @@ def api_hr_rfid_logs():
         
         rfid_logs = []
         for log in logs:
-            (taptime, personnel_id, remarks, firstname, lastname, honorifics) = log
+            (log_id, taptime, personnel_id, remarks, firstname, lastname, honorifics) = log
             
             if personnel_id and firstname and lastname:
                 personnel_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
@@ -2160,12 +2204,13 @@ def api_hr_rfid_logs():
             if taptime:
                 tap_datetime = taptime.astimezone(pytz.timezone('Asia/Manila'))
                 date_str = tap_datetime.strftime('%Y-%m-%d')
-                time_str = tap_datetime.strftime('%H:%M:%S') 
+                time_str = tap_datetime.strftime('%H:%M:%S.%f')[:12] 
             else:
                 date_str = "N/A"
                 time_str = "N/A"
             
             rfid_logs.append({
+                'log_id': log_id,
                 'personnel_name': personnel_name,
                 'date': date_str,
                 'tap_time': time_str,

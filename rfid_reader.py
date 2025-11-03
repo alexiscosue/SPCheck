@@ -162,7 +162,7 @@ class RFIDReader:
                 
                 notification_data = {
                     'personnel_id': 0, 
-                    'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S'),
+                    'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
                     'action': 'unknown_rfid',
                     'status': 'error',
                     'rfid_uid': rfid_uid,
@@ -223,7 +223,7 @@ class RFIDReader:
                 notification_data = {
                     'personnel_id': personnel_id,
                     'person_name': person_name,
-                    'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S'),
+                    'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
                     'action': 'no_schedule',
                     'status': 'warning',
                     'subject_code': None,
@@ -296,7 +296,7 @@ class RFIDReader:
                 notification_data = {
                     'personnel_id': personnel_id,
                     'person_name': person_name,
-                    'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S'),
+                    'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
                     'action': 'tap',
                     'status': 'outside_buffer',
                     'subject_code': None,
@@ -334,7 +334,7 @@ class RFIDReader:
                     notification_data = {
                         'personnel_id': personnel_id,
                         'person_name': person_name,
-                        'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S'),
+                        'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
                         'action': 'timeout',
                         'status': status,
                         'subject_code': subject_code,
@@ -355,7 +355,7 @@ class RFIDReader:
                     notification_data = {
                         'personnel_id': personnel_id,
                         'person_name': person_name,
-                        'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S'),
+                        'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
                         'action': 'duplicate',
                         'status': status,
                         'subject_code': subject_code,
@@ -382,7 +382,7 @@ class RFIDReader:
                 notification_data = {
                     'personnel_id': personnel_id,
                     'person_name': person_name,
-                    'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S'),
+                    'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
                     'action': 'timein',
                     'status': status,
                     'subject_code': subject_code,
