@@ -6,6 +6,8 @@
 
 {% block content %}
 <section class="grid" aria-live="polite">
+  <!-- KPI Cards Commented Out - Data fetching still works in background -->
+  <!--
   <div class="kpis card" style="padding:16px">
     <div class="kpi card" style="gap:14px">
       <div class="icon fac"><i class='bx bx-check-shield' style="font-size:20px"></i></div>
@@ -39,6 +41,7 @@
       </div>
     </div>
   </div>
+  -->
 
   <!-- Main Content Area with Sidebar Layout -->
   <div class="hr-attendance-layout" style="grid-column: 1 / -1;">
@@ -53,7 +56,7 @@
       <!-- All Faculty Logs -->
       <div id="logs" class="tab-content active">
         <div class="search-filter">
-          <input type="text" id="logSearch" placeholder="Search by name, date, or room...">
+          <input type="text" id="logSearch" placeholder="Search by name, date, class, or room...">
           <select id="logFilter">
             <option value="">All Status</option>
             <option>Present</option>
@@ -72,6 +75,7 @@
               <tr>
                 <th>Name</th>
                 <th>Date</th>
+                <th>Class</th>
                 <th>Room</th>
                 <th>Time In</th>
                 <th>Time Out</th>
@@ -79,7 +83,7 @@
               </tr>
             </thead>
             <tbody id="logsBody">
-              <tr><td colspan="6" style="text-align: center; padding: 2rem; color: #6b7280;">Loading...</td></tr>
+              <tr><td colspan="7" style="text-align: center; padding: 2rem; color: #6b7280;">Loading...</td></tr>
             </tbody>
           </table>
         </div>
@@ -124,7 +128,7 @@
             <table class="hr-attendance-table">
                 <thead>
                     <tr>
-                        <th>Personnel</th>
+                        <th>Name</th>
                         <th>Date</th>
                         <th>Tap Time</th>
                         <th>Remarks</th>
@@ -416,6 +420,7 @@
         facultyLogs = data.attendance_logs || [];
         statusBreakdown = data.status_breakdown || { present: 0, late: 0, absent: 0 };
         
+        // KPI update function is still called but won't update anything since KPI elements are commented out
         updateKPICards(data.kpis || {});
         
         currentPage = 1;
@@ -452,12 +457,15 @@
   }
 
   function clearDisplays() {
+    // KPI elements are commented out, but function remains for compatibility
+    /*
     document.getElementById('kpi-att').textContent = '0';
     document.getElementById('kpi-fac').textContent = '0';
     document.getElementById('kpi-eval').textContent = '0';
     document.getElementById('kpi-promo').textContent = '0';
+    */
     
-    document.getElementById('logsBody').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: #6b7280;">No attendance data available</td></tr>';
+    document.getElementById('logsBody').innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #6b7280;">No attendance data available</td></tr>';
     
     if (window.breakdownChart) {
       window.breakdownChart.destroy();
@@ -467,10 +475,14 @@
   }
 
   function updateKPICards(kpis) {
+    // KPI elements are commented out, but function remains for compatibility
+    // This function will still be called but won't update anything
+    /*
     document.getElementById('kpi-att').textContent = kpis.total_faculty || 0;
     document.getElementById('kpi-fac').textContent = kpis.present_today || 0;
     document.getElementById('kpi-eval').textContent = kpis.late_today || 0;
     document.getElementById('kpi-promo').textContent = kpis.absent_today || 0;
+    */
   }
 
   function renderLogs(){
@@ -483,6 +495,7 @@
       const searchMatch = !search || 
         f.name.toLowerCase().includes(search) ||
         f.date.includes(search) ||
+        (f.class_name && f.class_name.toLowerCase().includes(search)) ||
         (f.room && f.room.toLowerCase().includes(search));
       
       const filterMatch = !filter || f.status === filter;
@@ -500,14 +513,15 @@
       const message = filteredLogs.length === 0 && (search || filter) ? 
         'No records match your search criteria' : 
         'No attendance data available';
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 2rem; color: #6b7280;">${message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #6b7280;">${message}</td></tr>`;
     } else {
       currentPageRecords.forEach(f=>{
         const tr = document.createElement('tr');
         const timeIn12Hour = convertTo12Hour(f.time_in);
         const timeOut12Hour = convertTo12Hour(f.time_out);
+        const className = f.class_name || 'N/A';
         
-        tr.innerHTML = `<td>${f.name}</td><td>${f.date}</td><td>${f.room || 'N/A'}</td><td>${timeIn12Hour}</td><td>${timeOut12Hour}</td><td><span class="status ${f.status.toLowerCase()}">${f.status}</span></td>`;
+        tr.innerHTML = `<td>${f.name}</td><td>${f.date}</td><td>${className}</td><td>${f.room || 'N/A'}</td><td>${timeIn12Hour}</td><td>${timeOut12Hour}</td><td><span class="status ${f.status.toLowerCase()}">${f.status}</span></td>`;
         tbody.appendChild(tr);
       });
     }
@@ -695,7 +709,9 @@
       '12:45 PM - 2:15 PM',
       '2:30 PM - 4:00 PM',
       '4:15 PM - 5:45 PM',
-      '6:00 PM - 7:30 PM'
+      '6:00 PM - 7:30 PM',
+      '7:45 PM - 9:00 PM',
+      '9:15 PM - 10:45 PM'
     ];
     
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];

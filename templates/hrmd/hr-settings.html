@@ -220,20 +220,40 @@
     </table>
   </div>
 
-  <!-- Security Tab (KEEP ORIGINAL CONTENT) -->
+  <!-- Security Tab -->
   <div id="security" class="tab-content">
     <h4>User Roles</h4>
     <button class="btn-primary">Manage Access</button>
+    
     <h4 style="margin-top:20px">Audit Logs</h4>
-    <table class="table">
-      <thead><tr><th>User</th><th>Action</th><th>Date</th></tr></thead>
-      <tbody>
-        <tr><td>bhadid</td><td>Changed password</td><td>2025-09-22</td></tr>
-      </tbody>
-    </table>
-    <h4 style="margin-top:20px">Session Management</h4>
-    <label>Force logout all devices</label>
-    <label class="switch"><input type="checkbox"><span class="slider"></span></label>
+    <div id="audit-logs-container">
+      <div class="search-filter">
+        <input type="text" id="auditLogSearch" placeholder="Search by user, action, or details...">
+      </div>
+      <div class="hr-pagination-controls">
+        <button id="prevPageAuditLogs" class="hr-pagination-btn">‹</button>
+        <span id="pageInfoAuditLogs">0 records</span>
+        <button id="nextPageAuditLogs" class="hr-pagination-btn">›</button>
+      </div>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Action</th>
+            <th>Details</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody id="audit-logs-body">
+          <!-- Audit logs will be loaded here dynamically -->
+          <tr>
+            <td colspan="4" style="text-align: center; color: #666;">
+              <i class="fas fa-spinner fa-spin"></i> Loading audit logs...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -1031,6 +1051,165 @@ document.addEventListener('DOMContentLoaded', function() {
       btn.remove();
     }
   });
+});
+
+let auditLogs = [];
+let currentPageAuditLogs = 1;
+let filteredAuditLogs = [];
+let recordsPerPageAuditLogs = 10;
+
+async function loadAuditLogs() {
+  try {
+    const response = await fetch('/api/auditlogs');
+    const data = await response.json();
+    
+    if (data.success && data.audit_logs && data.audit_logs.length > 0) {
+      auditLogs = data.audit_logs;
+      currentPageAuditLogs = 1;
+      renderAuditLogs();
+    } else {
+      auditLogs = [];
+      renderAuditLogs();
+    }
+  } catch (error) {
+    console.error('Error loading audit logs:', error);
+    auditLogs = [];
+    renderAuditLogs();
+  }
+}
+
+function renderAuditLogs() {
+  const tbody = document.getElementById('audit-logs-body');
+  tbody.innerHTML = '';
+  
+  let search = document.getElementById('auditLogSearch').value.toLowerCase();
+  
+  filteredAuditLogs = auditLogs.filter(log => {
+    const searchMatch = !search || 
+      log.personnel_name.toLowerCase().includes(search) ||
+      log.action.toLowerCase().includes(search) ||
+      (log.details && log.details.toLowerCase().includes(search)) ||
+      log.date.toLowerCase().includes(search);
+    
+    return searchMatch;
+  });
+  
+  const totalRecords = filteredAuditLogs.length;
+  const totalPages = Math.ceil(totalRecords / recordsPerPageAuditLogs);
+  const startIndex = (currentPageAuditLogs - 1) * recordsPerPageAuditLogs;
+  const endIndex = startIndex + recordsPerPageAuditLogs;
+  const currentPageRecords = filteredAuditLogs.slice(startIndex, endIndex);
+  
+  if (currentPageRecords.length === 0) {
+    const message = filteredAuditLogs.length === 0 && search ? 
+      'No records match your search criteria' : 
+      'No audit logs found';
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="4" style="text-align: center; color: #666;">
+          ${message}
+        </td>
+      </tr>
+    `;
+  } else {
+    currentPageRecords.forEach(log => {
+      const row = document.createElement('tr');
+      const formattedDetails = formatAuditDetails(log.details);
+      
+      row.innerHTML = `
+        <td>${escapeHtml(log.personnel_name)}</td>
+        <td>${escapeHtml(log.action)}</td>
+        <td class="audit-details-cell">
+          <div class="audit-details-content">
+            ${formattedDetails}
+          </div>
+        </td>
+        <td style="white-space: nowrap;">${escapeHtml(log.date)}</td>
+      `;
+      tbody.appendChild(row);
+    });
+  }
+  
+  updateAuditLogsPaginationControls(currentPageAuditLogs, totalPages, totalRecords);
+}
+
+function updateAuditLogsPaginationControls(page, totalPages, totalRecords) {
+  const pageInfo = document.getElementById('pageInfoAuditLogs');
+  const prevBtn = document.getElementById('prevPageAuditLogs');
+  const nextBtn = document.getElementById('nextPageAuditLogs');
+  
+  if (totalRecords === 0) {
+    pageInfo.textContent = '0 records';
+  } else {
+    const startRecord = ((page - 1) * recordsPerPageAuditLogs) + 1;
+    const endRecord = Math.min(page * recordsPerPageAuditLogs, totalRecords);
+    pageInfo.textContent = `${startRecord} - ${endRecord} of ${totalRecords} records`;
+  }
+  
+  prevBtn.disabled = page <= 1;
+  nextBtn.disabled = page >= totalPages || totalPages === 0;
+}
+
+function goToPageAuditLogs(page) {
+  const totalPages = Math.ceil(filteredAuditLogs.length / recordsPerPageAuditLogs);
+  if (page >= 1 && page <= totalPages) {
+    currentPageAuditLogs = page;
+    renderAuditLogs();
+  }
+}
+
+document.getElementById('auditLogSearch').addEventListener('input', () => {
+  currentPageAuditLogs = 1;
+  renderAuditLogs();
+});
+
+document.getElementById('prevPageAuditLogs').addEventListener('click', () => {
+  goToPageAuditLogs(currentPageAuditLogs - 1);
+});
+
+document.getElementById('nextPageAuditLogs').addEventListener('click', () => {
+  goToPageAuditLogs(currentPageAuditLogs + 1);
+});
+
+function formatAuditDetails(details) {
+  if (!details) return '';
+  
+  const lines = details.split('\n');
+  let formattedHtml = '';
+  
+  lines.forEach(line => {
+    if (line.trim() === '') return;
+    
+    let styledLine = escapeHtml(line);
+    
+    if (line.startsWith('Before:')) {
+      styledLine = `<span style="color: #dc3545; font-weight: 500;">${escapeHtml(line)}</span>`;
+    } else if (line.startsWith('After:')) {
+      styledLine = `<span style="color: #198754; font-weight: 500;">${escapeHtml(line)}</span>`;
+    } 
+    
+    formattedHtml += `${styledLine}<br>`;
+  });
+  
+  return formattedHtml;
+}
+
+function escapeHtml(unsafe) {
+  if (unsafe === null || unsafe === undefined) return '';
+  return unsafe
+    .toString()
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const securityTab = document.querySelector('.tablink[data-tab="security"]');
+  if (securityTab) {
+    securityTab.addEventListener('click', loadAuditLogs);
+  }
 });
 </script>
 {% endblock %}

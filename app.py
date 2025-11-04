@@ -1496,6 +1496,99 @@ def api_faculty_dashboard():
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
 
+@app.route('/api/auditlogs')
+@require_auth([20003])  
+def api_audit_logs():
+    """Get audit logs for HR view"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                al.audit_id,
+                al.personnel_id,
+                al.action,
+                al.details,
+                al.created_at,
+                p.firstname,
+                p.lastname,
+                p.honorifics
+            FROM auditlogs al
+            LEFT JOIN personnel p ON al.personnel_id = p.personnel_id
+            ORDER BY al.created_at DESC
+            LIMIT 100
+        """)
+        
+        logs = cursor.fetchall()
+        cursor.close()
+        return_db_connection(conn)
+        
+        audit_logs = []
+        for log in logs:
+            (audit_id, personnel_id, action, details, created_at, 
+             firstname, lastname, honorifics) = log
+            
+            if personnel_id and firstname and lastname:
+                personnel_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+            else:
+                personnel_name = "System"
+            
+            if created_at:
+                created_dt = created_at.astimezone(pytz.timezone('Asia/Manila'))
+                date_str = created_dt.strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                date_str = "N/A"
+            
+            audit_logs.append({
+                'audit_id': audit_id,
+                'personnel_name': personnel_name,
+                'action': action,
+                'details': details or "",
+                'date': date_str
+            })
+        
+        return {
+            'success': True,
+            'audit_logs': audit_logs
+        }
+        
+    except Exception as e:
+        print(f"Error fetching audit logs: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+def log_audit_action(personnel_id, action, details=None, before_value=None, after_value=None, evidence=None):
+    """Log audit actions to the auditlogs table"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+    
+        comprehensive_details = details or ""
+        
+        if before_value is not None:
+            comprehensive_details += f"\nBefore: {before_value}"
+        
+        if after_value is not None:
+            comprehensive_details += f"\nAfter: {after_value}"
+        
+        cursor.execute("""
+            INSERT INTO auditlogs (personnel_id, action, details, created_at)
+            VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+        """, (personnel_id, action, comprehensive_details))
+        
+        conn.commit()
+        cursor.close()
+        return_db_connection(conn)
+        
+        print(f"📝 Audit logged: {action} by personnel_id {personnel_id}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error logging audit action: {e}")
+        return False
+    
 @app.route('/api/faculty/profile')
 @require_auth([20001, 20002, 20003, 20004])
 def api_get_faculty_profile():
@@ -1718,6 +1811,14 @@ def api_update_personal_info():
             return_db_connection(conn)
             return {'success': False, 'error': 'Personnel record not found'}
         
+        cursor.execute("SELECT phone FROM personnel WHERE personnel_id = %s", (personnel_id,))
+        current_phone_result = cursor.fetchone()
+        current_phone = current_phone_result[0] if current_phone_result else None
+        
+        cursor.execute("SELECT bio FROM profile WHERE personnel_id = %s", (personnel_id,))
+        current_bio_result = cursor.fetchone()
+        current_bio = current_bio_result[0] if current_bio_result else None
+        
         cursor.execute("""
             UPDATE personnel SET phone = %s WHERE personnel_id = %s
         """, (phone, personnel_id))
@@ -1757,7 +1858,32 @@ def api_update_personal_info():
         with _cache_lock:
             _cache.pop(cache_key, None)
         
-        print(f"Personal info updated for personnel_id: {personnel_id}, phone: {phone}")
+        changes_logged = []
+        
+        if str(current_phone) != str(phone):
+            changes_logged.append("phone")
+            log_audit_action(
+                personnel_id,
+                "Phone number updated", 
+                "User updated their phone number",
+                before_value=f"Phone: {current_phone}" if current_phone else "Phone: Not set",
+                after_value=f"Phone: {phone}" if phone else "Phone: Removed"
+            )
+        
+        if current_bio != bio:
+            changes_logged.append("bio")
+            
+            log_audit_action(
+                personnel_id,
+                "Bio updated", 
+                "User updated their bio information",
+                before_value=f"Bio: {current_bio}" if current_bio else "Bio: Not set",
+                after_value=f"Bio: {bio}" if bio else "Bio: Removed"
+            )
+        
+        if changes_logged:
+            print(f"Personal info updated for personnel_id: {personnel_id}, changes: {', '.join(changes_logged)}")
+        
         return {'success': True, 'message': 'Personal information updated successfully'}
         
     except Exception as e:
@@ -1799,14 +1925,31 @@ def api_update_documents():
         """, (personnel_id,))
         conn.commit()
         
+        uploaded_docs = []
+        
         if 'profilepic' in request.files:
             file = request.files['profilepic']
             if file and file.filename:
                 profilepic_data = file.read()
+                
+                cursor.execute("SELECT profilepic FROM profile WHERE personnel_id = %s", (personnel_id,))
+                existing_profilepic = cursor.fetchone()
+                
                 cursor.execute("""
                     UPDATE profile SET profilepic = %s WHERE personnel_id = %s
                 """, (profilepic_data, personnel_id))
                 conn.commit()
+                
+                action = "Profile picture updated" if existing_profilepic and existing_profilepic[0] else "Profile picture uploaded"
+                uploaded_docs.append("profile picture")
+
+                log_audit_action(
+                    personnel_id,
+                    action,
+                    f"User {'updated' if existing_profilepic and existing_profilepic[0] else 'uploaded'} their profile picture",
+                    before_value="Exists: Yes" if existing_profilepic and existing_profilepic[0] else "Exists: No",
+                    after_value="Exists: Yes"
+                )
         
         column_mapping = {
             'licenses': 'licensesname',
@@ -1836,8 +1979,18 @@ def api_update_documents():
                 
                 for f in files:
                     if f.filename:
-                        new_docs.append(f.read())
+                        file_data = f.read()
+                        new_docs.append(file_data)
                         new_filenames.append(f.filename)
+                        uploaded_docs.append(f"{doc_type}: {f.filename}")
+                        
+                        log_audit_action(
+                            personnel_id,
+                            f"{doc_type.capitalize()} uploaded",
+                            f"User uploaded {doc_type} document",
+                            before_value=f"Total {doc_type}: {len(existing_filenames)}",
+                            after_value=f"Total {doc_type}: {len(existing_filenames) + 1}"
+                        )
                 
                 if new_docs:
                     combined_docs = existing_docs + new_docs
@@ -1898,6 +2051,9 @@ def api_update_password():
             return_db_connection(conn)
             return {'success': False, 'error': 'New password cannot be the same as current password'}
         
+        personnel_info = get_personnel_info(user_id)
+        personnel_id = personnel_info.get('personnel_id')
+        
         cursor.execute("""
             UPDATE users SET password = %s WHERE user_id = %s
         """, (new_password, user_id))
@@ -1905,6 +2061,15 @@ def api_update_password():
         conn.commit()
         cursor.close()
         return_db_connection(conn)
+        
+        if personnel_id:
+            log_audit_action(
+                personnel_id,
+                "Password changed", 
+                "User changed their password",
+                before_value="[HIDDEN]",
+                after_value="[HIDDEN]"
+            )
         
         return {'success': True, 'message': 'Password updated successfully'}
         
@@ -1980,6 +2145,14 @@ def api_delete_document(doc_type, index):
         cursor.close()
         return_db_connection(conn)
         
+        log_audit_action(
+            personnel_id,
+            f"{doc_type.capitalize()} deleted",
+            f"User deleted {doc_type} document",
+            before_value=f"Total {doc_type}: {len(doc_array) + 1}",
+            after_value=f"Total {doc_type}: {len(doc_array)}"
+        )
+        
         return {'success': True, 'message': 'Document deleted successfully'}
         
     except Exception as e:
@@ -2021,12 +2194,16 @@ def api_hr_faculty_attendance():
                     a.timein,
                     a.timeout,
                     sch.classroom,
+                    sub.subjectcode,
+                    sub.subjectname,
+                    sch.classsection,
                     CASE 
                         WHEN DATE(a.timein AT TIME ZONE 'Asia/Manila') = %s THEN 1 
                         ELSE 0 
                     END as is_today
                 FROM attendance a
                 JOIN schedule sch ON a.class_id = sch.class_id
+                JOIN subjects sub ON sch.subject_id = sub.subject_id
                 JOIN personnel p ON a.personnel_id = p.personnel_id
                 CROSS JOIN current_calendar cc
                 WHERE p.role_id IN (20001, 20002)
@@ -2066,8 +2243,13 @@ def api_hr_faculty_attendance():
             timein = record['timein']
             timeout = record['timeout']
             classroom = record['classroom']
+            subject_code = record['subjectcode']
+            subject_name = record['subjectname']
+            class_section = record['classsection']
             
             faculty_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+            
+            class_name = f"{subject_code} - {subject_name}"
             
             if timein:
                 date_str = timein[:10] 
@@ -2090,6 +2272,8 @@ def api_hr_faculty_attendance():
             log_entry = {
                 'name': faculty_name,
                 'date': date_str,
+                'class_name': class_name,
+                'class_section': class_section or 'N/A',
                 'room': classroom or 'N/A',
                 'time_in': time_in_str,
                 'time_out': time_out_str,
@@ -2137,18 +2321,35 @@ def api_update_rfid_remarks():
         conn = get_db_connection()
         cursor = conn.cursor()
         
+        user_id = session['user_id']
+        personnel_info = get_personnel_info(user_id)
+        personnel_id = personnel_info.get('personnel_id')
+        
         updated_count = 0
+        
         for update in updates:
             log_id = update.get('log_id')
             remarks = update.get('remarks', '')
             
             if log_id:
+                cursor.execute("SELECT remarks FROM rfidlogs WHERE log_id = %s", (log_id,))
+                current_remarks_result = cursor.fetchone()
+                current_remarks = current_remarks_result[0] if current_remarks_result else ""
+                
                 cursor.execute("""
                     UPDATE rfidlogs 
                     SET remarks = %s 
                     WHERE log_id = %s
                 """, (remarks, log_id))
                 updated_count += 1
+                
+                log_audit_action(
+                    personnel_id,
+                    "RFID remarks updated",
+                    f"HR updated remarks for RFID log",
+                    before_value=f"Remarks: {current_remarks}" if current_remarks else "Remarks: Not set",
+                    after_value=f"Remarks: {remarks}" if remarks else "Remarks: Cleared"
+                )
         
         conn.commit()
         cursor.close()
@@ -2799,7 +3000,7 @@ def login():
             cursor = conn.cursor()
             
             cursor.execute("""
-                SELECT u.user_id, u.email, u.role_id 
+                SELECT u.user_id, u.email, u.role_id, u.lastlogin, u.lastlogout
                 FROM users u 
                 WHERE u.email = %s AND u.password = %s
             """, (email, password))
@@ -2807,13 +3008,17 @@ def login():
             user = cursor.fetchone()
             
             if user and user[2] in ROLE_REDIRECTS:
-                user_id, user_email, role_id = user
+                user_id, user_email, role_id, last_login, last_logout = user
     
                 philippines_tz = pytz.timezone('Asia/Manila')
                 current_time = datetime.now(philippines_tz).replace(microsecond=0)
+                
                 cursor.execute("""
                     UPDATE users SET lastlogin = %s WHERE user_id = %s
                 """, (current_time, user_id))
+                
+                cursor.execute("SELECT personnel_id, firstname, lastname FROM personnel WHERE user_id = %s", (user_id,))
+                personnel_result = cursor.fetchone()
                 
                 conn.commit()
                 cursor.close()
@@ -2824,8 +3029,33 @@ def login():
                 session['user_role'] = role_id
                 session['user_type'] = ROLE_REDIRECTS[role_id][0]
                 
+                if personnel_result:
+                    personnel_id, firstname, lastname = personnel_result
+                    last_login_str = last_login.strftime('%Y-%m-%d %H:%M:%S') if last_login else "Never"
+                    last_logout_str = last_logout.strftime('%Y-%m-%d %H:%M:%S') if last_logout else "Never"
+                    current_time_str = current_time.strftime('%Y-%m-%d %H:%M:%S')
+                    
+                    log_audit_action(
+                        personnel_id, 
+                        "User logged in", 
+                        f"User logged in of the system",
+                        before_value=f"Last logout: {last_logout_str}",
+                        after_value=f"Current login: {current_time_str}"
+                    )
+                
                 return redirect(url_for(ROLE_REDIRECTS[role_id][1]))
             else:
+                cursor.execute("SELECT personnel_id FROM personnel WHERE user_id IN (SELECT user_id FROM users WHERE email = %s)", (email,))
+                personnel_result = cursor.fetchone()
+                
+                if personnel_result:
+                    log_audit_action(
+                        personnel_result[0],
+                        "Failed login attempt",
+                        f"Failed login attempt for email: {email}",
+                        evidence="Invalid credentials provided"
+                    )
+                
                 cursor.close()
                 return_db_connection(conn)
                 return render_template('login.html', error="Invalid credentials. Please try again.")
@@ -3004,6 +3234,45 @@ def vp_settings():
 
 @app.route('/logout')
 def logout():
+    """Logout with audit logging"""
+    user_id = session.get('user_id')
+    
+    if user_id:
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute("SELECT lastlogin FROM users WHERE user_id = %s", (user_id,))
+            last_login_result = cursor.fetchone()
+            last_login = last_login_result[0] if last_login_result else None
+            
+            cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
+            personnel_result = cursor.fetchone()
+            
+            philippines_tz = pytz.timezone('Asia/Manila')
+            current_time = datetime.now(philippines_tz).replace(microsecond=0)
+            
+            if personnel_result:
+                personnel_id = personnel_result[0]
+                cursor.execute("UPDATE users SET lastlogout = %s WHERE user_id = %s", (current_time, user_id))
+                
+                last_login_str = last_login.strftime('%Y-%m-%d %H:%M:%S') if last_login else "Never"
+                current_time_str = current_time.strftime('%Y-%m-%d %H:%M:%S')
+                
+                log_audit_action(
+                    personnel_id,
+                    "User logged out",
+                    "User logged out of the system",
+                    before_value=f"Last login: {last_login_str}",
+                    after_value=f"Current logout: {current_time_str}"
+                )
+            
+            conn.commit()
+            cursor.close()
+            return_db_connection(conn)
+        except Exception as e:
+            print(f"Error logging logout action: {e}")
+    
     session.clear()
     return redirect(url_for('login'))
 

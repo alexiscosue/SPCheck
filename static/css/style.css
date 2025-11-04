@@ -3020,3 +3020,59 @@ table:has(#rfidLogsBody) thead th:nth-child(4) {
     min-width: auto;
   }
 }
+/* Audit Logs Table Specific Styling */
+#audit-logs-container table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+#audit-logs-container th {
+  text-align: center;
+  vertical-align: middle;
+  border: none;
+}
+
+#audit-logs-container td {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  border: none;
+  vertical-align: middle;
+  padding: 12px 8px;
+}
+
+#audit-logs-container td:nth-child(1),
+#audit-logs-container td:nth-child(2),
+#audit-logs-container td:nth-child(4) {
+  text-align: center;
+}
+
+#audit-logs-container td:nth-child(3) {
+  text-align: left;
+}
+
+#audit-logs-container th:nth-child(1) { width: 10%; }
+#audit-logs-container th:nth-child(2) { width: 15%; }
+#audit-logs-container th:nth-child(3) { width: 60%; }
+#audit-logs-container th:nth-child(4) { width: 15%; }
+
+#audit-logs-container tbody tr {
+  height: 60px;
+}
+
+.audit-details-cell {
+  white-space: normal;
+  line-height: 1.4;
+  max-width: 400px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.audit-details-content {
+  max-height: none;
+  overflow-y: visible;
+  padding-right: 0;
+  text-align: left;
+}
