@@ -6,6 +6,8 @@
 
 {% block content %}
 <section class="grid" aria-live="polite">
+  <!-- KPI Cards Commented Out - Data fetching still works in background -->
+  <!--
   <div class="kpis card" style="padding:16px">
     <div class="kpi card" style="gap:14px">
       <div class="icon fac"><i class='bx bx-check-shield' style="font-size:20px"></i></div>
@@ -39,6 +41,7 @@
       </div>
     </div>
   </div>
+  -->
 
   <!-- Main Content Area with Sidebar Layout -->
   <div class="hr-attendance-layout" style="grid-column: 1 / -1;">
@@ -53,7 +56,7 @@
       <!-- All Faculty Logs -->
       <div id="logs" class="tab-content active">
         <div class="search-filter">
-          <input type="text" id="logSearch" placeholder="Search by name, date, or room...">
+          <input type="text" id="logSearch" placeholder="Search by name, date, class, or room...">
           <select id="logFilter">
             <option value="">All Status</option>
             <option>Present</option>
@@ -72,6 +75,7 @@
               <tr>
                 <th>Name</th>
                 <th>Date</th>
+                <th>Class</th>
                 <th>Room</th>
                 <th>Time In</th>
                 <th>Time Out</th>
@@ -79,7 +83,7 @@
               </tr>
             </thead>
             <tbody id="logsBody">
-              <tr><td colspan="6" style="text-align: center; padding: 2rem; color: #6b7280;">Loading...</td></tr>
+              <tr><td colspan="7" style="text-align: center; padding: 2rem; color: #6b7280;">Loading...</td></tr>
             </tbody>
           </table>
         </div>
@@ -124,14 +128,14 @@
             <table class="hr-attendance-table">
                 <thead>
                     <tr>
-                        <th>Personnel</th>
+                        <th>Name</th>
                         <th>Date</th>
                         <th>Tap Time</th>
                         <th>Remarks</th>
                     </tr>
                 </thead>
                 <tbody id="rfidLogsBody">
-                    <tr><td colspan="5" style="text-align: center; padding: 2rem; color: #6b7280;">Loading...</td></tr>
+                    <tr><td colspan="4" style="text-align: center; padding: 2rem; color: #6b7280;">Loading...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -147,6 +151,10 @@
           <span class="status-indicator" id="statusIndicator"></span>
           <span id="statusText">Reader Offline</span>
         </div>
+        <button class="edit-remarks-btn" id="editRemarksBtn">
+          <i class='bx bx-edit-alt'></i>
+          <span id="editRemarksBtnText">Edit Remarks</span>
+        </button>
       </div>
     </div>
 
@@ -209,6 +217,29 @@
     return `${hours}:${minutes} ${period}`;
   }
 
+  function convertTo12HourWithSeconds(timeString) {
+    if (!timeString) return '—';
+    
+    const timeParts = timeString.split(':');
+    if (timeParts.length < 2) return timeString;
+    
+    let hours = parseInt(timeParts[0]);
+    const minutes = timeParts[1];
+    
+    let seconds = '00';
+    if (timeParts.length >= 3) {
+      const secParts = timeParts[2].split('.');
+      seconds = secParts[0];
+    }
+    
+    if (isNaN(hours)) return timeString;
+    
+    const period = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    
+    return `${hours}:${minutes}:${seconds} ${period}`;
+  }
+
   function showRFIDNotification(data) {
     if (!data || !data.tap_time) {
         console.error('Invalid notification data:', data);
@@ -256,6 +287,8 @@
     
     notification.classList.add(colorClass);
     
+    const formattedTime = convertTo12HourWithSeconds(data.tap_time);
+    
     let content = `
         <div class="notification-header">
             <i class='bx ${icon}'></i>
@@ -265,7 +298,7 @@
             </button>
         </div>
         <div class="notification-body">
-            <div class="notification-time">${data.tap_time}</div>
+            <div class="notification-time">${formattedTime}</div>
     `;
     
     if (data.person_name) {
@@ -362,6 +395,7 @@
           
           setTimeout(() => {
             fetchFacultyAttendance();
+            fetchRFIDLogs();
           }, 500);
         }
       } catch (error) {
@@ -386,6 +420,7 @@
         facultyLogs = data.attendance_logs || [];
         statusBreakdown = data.status_breakdown || { present: 0, late: 0, absent: 0 };
         
+        // KPI update function is still called but won't update anything since KPI elements are commented out
         updateKPICards(data.kpis || {});
         
         currentPage = 1;
@@ -422,12 +457,15 @@
   }
 
   function clearDisplays() {
+    // KPI elements are commented out, but function remains for compatibility
+    /*
     document.getElementById('kpi-att').textContent = '0';
     document.getElementById('kpi-fac').textContent = '0';
     document.getElementById('kpi-eval').textContent = '0';
     document.getElementById('kpi-promo').textContent = '0';
+    */
     
-    document.getElementById('logsBody').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: #6b7280;">No attendance data available</td></tr>';
+    document.getElementById('logsBody').innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #6b7280;">No attendance data available</td></tr>';
     
     if (window.breakdownChart) {
       window.breakdownChart.destroy();
@@ -437,10 +475,14 @@
   }
 
   function updateKPICards(kpis) {
+    // KPI elements are commented out, but function remains for compatibility
+    // This function will still be called but won't update anything
+    /*
     document.getElementById('kpi-att').textContent = kpis.total_faculty || 0;
     document.getElementById('kpi-fac').textContent = kpis.present_today || 0;
     document.getElementById('kpi-eval').textContent = kpis.late_today || 0;
     document.getElementById('kpi-promo').textContent = kpis.absent_today || 0;
+    */
   }
 
   function renderLogs(){
@@ -453,6 +495,7 @@
       const searchMatch = !search || 
         f.name.toLowerCase().includes(search) ||
         f.date.includes(search) ||
+        (f.class_name && f.class_name.toLowerCase().includes(search)) ||
         (f.room && f.room.toLowerCase().includes(search));
       
       const filterMatch = !filter || f.status === filter;
@@ -470,14 +513,15 @@
       const message = filteredLogs.length === 0 && (search || filter) ? 
         'No records match your search criteria' : 
         'No attendance data available';
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 2rem; color: #6b7280;">${message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #6b7280;">${message}</td></tr>`;
     } else {
       currentPageRecords.forEach(f=>{
         const tr = document.createElement('tr');
         const timeIn12Hour = convertTo12Hour(f.time_in);
         const timeOut12Hour = convertTo12Hour(f.time_out);
+        const className = f.class_name || 'N/A';
         
-        tr.innerHTML = `<td>${f.name}</td><td>${f.date}</td><td>${f.room || 'N/A'}</td><td>${timeIn12Hour}</td><td>${timeOut12Hour}</td><td><span class="status ${f.status.toLowerCase()}">${f.status}</span></td>`;
+        tr.innerHTML = `<td>${f.name}</td><td>${f.date}</td><td>${className}</td><td>${f.room || 'N/A'}</td><td>${timeIn12Hour}</td><td>${timeOut12Hour}</td><td><span class="status ${f.status.toLowerCase()}">${f.status}</span></td>`;
         tbody.appendChild(tr);
       });
     }
@@ -665,7 +709,9 @@
       '12:45 PM - 2:15 PM',
       '2:30 PM - 4:00 PM',
       '4:15 PM - 5:45 PM',
-      '6:00 PM - 7:30 PM'
+      '6:00 PM - 7:30 PM',
+      '7:45 PM - 9:00 PM',
+      '9:15 PM - 10:45 PM'
     ];
     
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -886,6 +932,8 @@
   let rfidLogs = [];
   let currentPageRfidLogs = 1;
   let filteredRfidLogs = [];
+  let isEditingRemarks = false;
+  let remarksEditData = new Map();
 
   async function fetchRFIDLogs() {
       try {
@@ -934,21 +982,46 @@
             'No RFID log data available';
         tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 2rem; color: #6b7280;">${message}</td></tr>`;
     } else {
-        currentPageRecords.forEach(log => {
+        currentPageRecords.forEach((log, index) => {
             const tr = document.createElement('tr');
-            const tapTime12Hour = convertTo12Hour(log.tap_time);
+            const tapTime12Hour = convertTo12HourWithSeconds(log.tap_time);
+            const logId = log.log_id;
             
-            tr.innerHTML = `
-                <td>${log.personnel_name}</td>
-                <td>${log.date}</td>
-                <td>${tapTime12Hour}</td>
-                <!-- Comment out Class column
-                <td>${log.class_display}</td>
-                -->
-                <td style="text-align: left;">${log.remarks}</td>
-            `;
+            if (isEditingRemarks) {
+                const currentRemarks = remarksEditData.has(logId) ? remarksEditData.get(logId) : log.remarks;
+                
+                tr.innerHTML = `
+                    <td>${log.personnel_name}</td>
+                    <td>${log.date}</td>
+                    <td>${tapTime12Hour}</td>
+                    <td>
+                        <input type="text" 
+                               class="remarks-editable" 
+                               value="${currentRemarks}" 
+                               data-log-id="${logId}"
+                               placeholder="Enter remarks...">
+                    </td>
+                `;
+            } else {
+                tr.innerHTML = `
+                    <td>${log.personnel_name}</td>
+                    <td>${log.date}</td>
+                    <td>${tapTime12Hour}</td>
+                    <td>${log.remarks}</td>
+                `;
+            }
             tbody.appendChild(tr);
         });
+        
+        if (isEditingRemarks) {
+            const inputs = tbody.querySelectorAll('.remarks-editable');
+            inputs.forEach(input => {
+                input.addEventListener('input', (e) => {
+                    const logId = parseInt(e.target.dataset.logId);
+                    remarksEditData.set(logId, e.target.value);
+                });
+            });
+        }
     }
     
     updateRFIDLogsPaginationControls(currentPageRfidLogs, totalPages, totalRecords);
@@ -992,6 +1065,59 @@
       goToPageRfidLogs(currentPageRfidLogs + 1);
   });
 
+  document.getElementById('editRemarksBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('editRemarksBtn');
+      const btnText = document.getElementById('editRemarksBtnText');
+      const btnIcon = btn.querySelector('i');
+      
+      if (!isEditingRemarks) {
+          isEditingRemarks = true;
+          remarksEditData.clear();
+          btn.classList.add('active');
+          btnText.textContent = 'Save Remarks';
+          btnIcon.className = 'bx bx-save';
+          renderRFIDLogs();
+      } else {
+          if (remarksEditData.size > 0) {
+              btn.disabled = true;
+              
+              try {
+                  const updates = Array.from(remarksEditData.entries()).map(([log_id, remarks]) => ({
+                      log_id,
+                      remarks
+                  }));
+                  
+                  const response = await fetch('/api/hr/update-rfid-remarks', {
+                      method: 'POST',
+                      headers: {'Content-Type': 'application/json'},
+                      body: JSON.stringify({ updates })
+                  });
+                  
+                  const result = await response.json();
+                  
+                  if (result.success) {
+                      alert(`Successfully updated ${result.updated_count} remark(s)`);
+                      await fetchRFIDLogs();
+                  } else {
+                      alert('Failed to update remarks: ' + result.error);
+                  }
+              } catch (error) {
+                  console.error('Error updating remarks:', error);
+                  alert('Error updating remarks: ' + error.message);
+              } finally {
+                  btn.disabled = false;
+              }
+          }
+          
+          isEditingRemarks = false;
+          remarksEditData.clear();
+          btn.classList.remove('active');
+          btnText.textContent = 'Edit Remarks';
+          btnIcon.className = 'bx bx-edit-alt';
+          renderRFIDLogs();
+      }
+  });
+
   document.addEventListener('DOMContentLoaded', () => {
       checkRFIDStatus();
       fetchFacultyAttendance();
@@ -1024,13 +1150,6 @@
   }
 
   setInterval(checkRFIDStatus, 10000);
-
-  document.addEventListener('DOMContentLoaded', () => {
-    checkRFIDStatus();
-    fetchFacultyAttendance();
-    fetchFacultyList();
-    startNotificationListener(); 
-  });
 
   window.addEventListener('beforeunload', () => {
     stopAutoRefresh();
