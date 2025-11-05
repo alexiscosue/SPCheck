@@ -1,18 +1,21 @@
 import os
 from datetime import datetime, timedelta, date
 import pytz
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from dotenv import load_dotenv
 import pg8000
 from pg8000 import dbapi
 from rfid_reader import RFIDReader
-from datetime import timedelta
+from datetime import timedelta, datetime
 from flask import Response
 import json
 import queue
 import threading
 import atexit
 import time
+from flask import make_response
+from io import BytesIO
+import base64
 
 load_dotenv()
 
@@ -2817,28 +2820,26 @@ def faculty_evaluations():
 @app.route('/faculty_promotion')
 @require_auth([20001, 20002])
 def faculty_promotion():
-    userid = session.get("user_id")
+    userid = session.get('user_id')
     if not userid:
         return "Unauthorized", 401
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Get faculty_id for this user
-    cursor.execute("""
-        SELECT personnel_id FROM personnel WHERE user_id = %s
-    """, (userid,))
+    cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (userid,))
     result = cursor.fetchone()
     if not result:
         cursor.close()
         conn.close()
-        return "Faculty record not found for the current user.", 400
+        return "Faculty record not found", 400
 
     faculty_id = result[0]
 
-    # Get the latest application for this faculty
     cursor.execute("""
-        SELECT current_status, date_submitted, hrmd_approval_date, vpa_approval_date, pres_approval_date, final_decision
+        SELECT application_id, current_status, date_submitted, hrmd_approval_date, 
+               vpa_approval_date, pres_approval_date, final_decision, resume, cover_letter, 
+               resume_filename, cover_letter_filename
         FROM promotion_application
         WHERE faculty_id = %s
         ORDER BY date_submitted DESC
@@ -2850,29 +2851,40 @@ def faculty_promotion():
     conn.close()
 
     if row:
-        statuses_in_progress = {"hrmd", "vpa", "pres"}
-        upload_locked = row and row[0] in statuses_in_progress
+        application_id = row[0]
         return render_template(
             'faculty&dean/faculty-promotion.html',
-            current_status=row[0],
-            date_submitted=row[1],
-            hrmd_approval_date=row[2],
-            vpa_approval_date=row[3],
-            pres_approval_date=row[4],
-            final_decision=row[5],
-            upload_locked=upload_locked      # <--- add this to the context
+            application_id=application_id,
+            current_status=row[1],
+            date_submitted=row[2],
+            hrmd_approval_date=row[3],
+            vpa_approval_date=row[4],
+            pres_approval_date=row[5],
+            final_decision=row[6],
+            resume_cv=row[7],
+            cover_letter=row[8],
+            resume_filename=row[9],
+            cover_letter_filename=row[10],
+            upload_locked=row[1] in {"hrmd", "vpa", "pres"}
         )
     else:
+        # No active application found
         return render_template(
             'faculty&dean/faculty-promotion.html',
+            application_id=None,
             current_status=None,
             date_submitted=None,
             hrmd_approval_date=None,
             vpa_approval_date=None,
             pres_approval_date=None,
             final_decision=None,
-            upload_locked=False              # <--- add this to the context
+            resume_cv=None,
+            cover_letter=None,
+            resume_filename=None,
+            cover_letter_filename=None,
+            upload_locked=False
         )
+
 
 @app.route('/faculty_profile')
 @require_auth([20001, 20002])
@@ -2920,8 +2932,78 @@ def hr_attendance():
 @app.route('/hr_promotions')
 @require_auth([20003])
 def hr_promotions():
-    personnel_info = get_personnel_info(session['user_id'])
-    return render_template('hrmd/hr-promotions.html', **personnel_info)
+    """HR Promotions Dashboard with database query"""
+    try:
+        personnel_info = get_personnel_info(session['user_id'])
+        
+        # Fetch all promotion applications
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                pa.application_id,
+                pa.faculty_id,
+                p.firstname,
+                p.lastname,
+                p.honorifics,
+                c.collegename,
+                pr.position as current_rank,
+                pa.current_status,
+                pa.date_submitted,
+                pa.hrmd_approval_date,
+                pa.vpa_approval_date,
+                pa.pres_approval_date
+            FROM promotion_application pa
+            JOIN personnel p ON pa.faculty_id = p.personnel_id
+            LEFT JOIN college c ON p.college_id = c.college_id
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            ORDER BY pa.date_submitted DESC
+        """)
+        
+        promotions = cursor.fetchall()
+        cursor.close()
+        return_db_connection(conn)
+        
+        # Format promotion data
+        promotions_list = []
+        for promo in promotions:
+            (application_id, faculty_id, firstname, lastname, honorifics, collegename,
+             current_rank, current_status, date_submitted, hrmd_approval, vpa_approval, pres_approval) = promo
+            
+            # Format faculty name
+            if honorifics:
+                fullname = f"{honorifics} {firstname} {lastname}"
+            else:
+                fullname = f"{firstname} {lastname}"
+            
+            # Map status enum to display text
+            status_display = str(current_status).replace('_', ' ').title() if current_status else 'Pending HR Review'
+            
+            promotions_list.append({
+                'applicationid': application_id,
+                'facultyid': faculty_id,
+                'name': fullname,
+                'department': collegename or 'N/A',
+                'currentrank': current_rank or 'Instructor',
+                'requestedrank': 'Associate Professor',  # Default value
+                'status': status_display,
+                'submitteddate': date_submitted.strftime('%Y-%m-%d') if date_submitted else 'N/A'
+            })
+        
+        print(f"Promotions List: {promotions_list}") 
+        return render_template('hrmd/hr-promotions.html', 
+                             personnelinfo=personnel_info,
+                             promotions=promotions_list)
+        
+    except Exception as e:
+        print(f"Error in hr_promotions route: {e}")
+        import traceback
+        traceback.print_exc()
+        return render_template('hrmd/hr-promotions.html', 
+                             personnelinfo=get_personnel_info(session['user_id']),
+                             promotions=[])
+
 
 @app.route('/hr_profile')
 @require_auth([20003])
@@ -3006,11 +3088,13 @@ def promotion_document_upload():
         resume_file = request.files['resume_cv']
         if resume_file and resume_file.filename:
             resume_cv_data = resume_file.read()
+            resume_cv_filename = resume_file.filename
 
     if 'cover_letter' in request.files:
         cover_letter_file = request.files['cover_letter']
         if cover_letter_file and cover_letter_file.filename:
             cover_letter_data = cover_letter_file.read()
+            cover_letter_filename = cover_letter_file.filename
 
     if resume_cv_data is None or cover_letter_data is None:
         cursor.close()
@@ -3020,15 +3104,321 @@ def promotion_document_upload():
     # Insert new application row
     cursor.execute("""
         INSERT INTO promotion_application (
-            faculty_id, cover_letter, resume, date_submitted, current_status
-        ) VALUES (%s, %s, %s, NOW(), %s)
+            faculty_id, cover_letter, resume, resume_filename, cover_letter_filename, date_submitted, current_status
+        ) VALUES (%s, %s, %s, %s, %s, NOW(), %s)
         RETURNING application_id
-    """, (faculty_id, cover_letter_data, resume_cv_data, 'hrmd'))
+    """, (faculty_id, cover_letter_data, resume_cv_data, resume_cv_filename, cover_letter_filename, 'hrmd'))
     conn.commit()
     cursor.close()
     conn.close()
 
     return redirect(url_for('faculty_promotion'))
+
+@app.route('/faculty/promotion/view_resume')
+@require_auth([20001, 20002])
+def view_resume():
+    userid = session.get("user_id")
+    if not userid:
+        return "Unauthorized", 401
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # get faculty_id
+    cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (userid,))
+    res = cursor.fetchone()
+    if not res:
+        cursor.close()
+        conn.close()
+        return "Faculty record not found", 400
+
+    faculty_id = res[0]
+
+    # get latest application resume for user
+    cursor.execute("""
+        SELECT resume FROM promotion_application
+        WHERE faculty_id = %s
+        ORDER BY date_submitted DESC LIMIT 1
+    """, (faculty_id,))
+    result = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    if result and result[0]:
+        return Response(result[0], mimetype='application/pdf', headers={"Content-Disposition": "inline; filename=resume.pdf"})
+    else:
+        return "Resume not found", 404
+
+    
+@app.route('/faculty/promotion/view_cover_letter')
+@require_auth([20001, 20002])
+def view_cover_letter():
+    userid = session.get("user_id")
+    if not userid:
+        return "Unauthorized", 401
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Get faculty_id from user_id
+    cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (userid,))
+    result = cursor.fetchone()
+    if not result:
+        cursor.close()
+        conn.close()
+        return "Faculty record not found", 400
+
+    faculty_id = result[0]
+
+    # Get latest cover letter
+    cursor.execute("""
+        SELECT cover_letter FROM promotion_application
+        WHERE faculty_id = %s
+        ORDER BY date_submitted DESC LIMIT 1
+    """, (faculty_id,))
+
+    cover_letter = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    if cover_letter and cover_letter[0]:
+        return Response(
+            cover_letter[0],
+            mimetype='application/pdf',
+            headers={"Content-Disposition": "inline; filename=cover_letter.pdf"}
+        )
+    else:
+        return "Cover Letter not found", 404
+
+    
+@app.route('/faculty/promotion/delete')
+@require_auth([20001, 20002])
+def delete_submission():
+    userid = session.get("user_id")
+    if not userid:
+        return "Unauthorized", 401
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Get faculty_id
+    cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (userid,))
+    result = cursor.fetchone()
+    if not result:
+        cursor.close()
+        conn.close()
+        return "Faculty record not found", 400
+
+    faculty_id = result[0]
+
+    # Get latest application id
+    cursor.execute("""
+        SELECT application_id FROM promotion_application
+        WHERE faculty_id = %s
+        ORDER BY date_submitted DESC LIMIT 1
+    """, (faculty_id,))
+    app_row = cursor.fetchone()
+
+    if not app_row:
+        cursor.close()
+        conn.close()
+        return "No application found to delete.", 400
+
+    application_id = app_row[0]
+
+    # Delete application
+    cursor.execute("DELETE FROM promotion_application WHERE application_id = %s", (application_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return redirect(url_for('faculty_promotion'))  # Redirect to main page
+
+
+@app.route('/api/promotion/details/<int:application_id>')
+@require_auth([20003])
+def get_promotion_details(application_id):
+    """Get detailed promotion information for modal"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                pa.application_id,
+                pa.faculty_id,
+                p.firstname,
+                p.lastname,
+                p.honorifics,
+                p.phone,
+                c.collegename,
+                pr.position as current_rank,
+                pa.current_status,
+                pa.date_submitted,
+                u.email,
+                pa.cover_letter_filename,
+                pa.resume_filename,
+                pr.profilepic
+            FROM promotion_application pa
+            JOIN personnel p ON pa.faculty_id = p.personnel_id
+            LEFT JOIN college c ON p.college_id = c.college_id
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            LEFT JOIN users u ON p.user_id = u.user_id
+            WHERE pa.application_id = %s
+        """, (application_id,))
+        
+        result = cursor.fetchone()
+        cursor.close()
+        return_db_connection(conn)
+        
+        if result:
+            (app_id, faculty_id, firstname, lastname, honorifics, phone, 
+             collegename, current_rank, current_status, date_submitted, 
+             email, cover_letter_filename, resume_filename, profilepic) = result
+            
+            if honorifics:
+                fullname = f"{honorifics} {firstname} {lastname}"
+            else:
+                fullname = f"{firstname} {lastname}"
+            
+            # Convert profile picture to base64
+            profile_image_base64 = None
+            if profilepic:
+                binary_image = bytes(profilepic)
+                profile_image_base64 = f'data:image/jpeg;base64,{base64.b64encode(binary_image).decode("utf-8")}'
+            
+            return {
+                'success': True,
+                'data': {
+                    'applicationid': app_id,
+                    'facultyid': faculty_id,
+                    'name': fullname,
+                    'email': email or 'N/A',
+                    'phone': phone or 'N/A',
+                    'department': collegename or 'N/A',
+                    'currentrank': current_rank or 'Instructor',
+                    'status': str(current_status) if current_status else 'Pending',
+                    'submitteddate': date_submitted.strftime('%Y-%m-%d') if date_submitted else 'N/A',
+                    'has_cover_letter': bool(cover_letter_filename),
+                    'has_resume': bool(resume_filename),
+                    'cover_letter_filename': cover_letter_filename,
+                    'resume_filename': resume_filename,
+                    'profileimage': profile_image_base64
+                }
+            }
+        else:
+            return {'success': False, 'error': 'Application not found'}, 404
+            
+    except Exception as e:
+        print(f"Error fetching promotion details: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}, 500
+
+# Route to serve profile image as base64 for embedding
+@app.route('/api/profile/image-base64/<int:personnel_id>')
+@require_auth([20003])  # HR only
+def get_profile_image_base64(personnel_id):
+    """Get profile picture as base64 for embedding in HTML"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT profilepic 
+            FROM profile 
+            WHERE personnel_id = %s
+        """, (personnel_id,))
+        
+        result = cursor.fetchone()
+        cursor.close()
+        return_db_connection(conn)
+        
+        if result and result[0]:
+            binary_image = bytes(result[0])
+            base64_image = base64.b64encode(binary_image).decode('utf-8')
+            return {'success': True, 'image': f'data:image/jpeg;base64,{base64_image}'}
+        else:
+            return {'success': False, 'image': None}
+            
+    except Exception as e:
+        print(f"Error fetching profile image: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}, 500
+
+@app.route('/api/promotion/document/<int:application_id>/<doc_type>')
+@require_auth([20003])  # HR only
+def get_promotion_document(application_id, doc_type):
+    """Serve PDF documents from promotion_application table"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Validate doc_type
+        valid_types = ['cover_letter', 'resume']
+        if doc_type not in valid_types:
+            return {'error': 'Invalid document type'}, 400
+        
+        # Fetch the document
+        cursor.execute(f"""
+            SELECT {doc_type}
+            FROM promotion_application 
+            WHERE application_id = %s
+        """, (application_id,))
+        
+        result = cursor.fetchone()
+        cursor.close()
+        return_db_connection(conn)
+        
+        if result and result[0]:
+            binary_pdf = bytes(result[0])
+            
+            response = make_response(binary_pdf)
+            response.headers['Content-Type'] = 'application/pdf'
+            response.headers['Content-Disposition'] = 'inline; filename=document.pdf'
+            return response
+        else:
+            return {'error': 'Document not found'}, 404
+            
+    except Exception as e:
+        print(f"Error fetching document: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'error': str(e)}, 500
+
+@app.route('/api/promotion/forward-to-vpaa', methods=['POST'])
+def forward_to_vpaa():
+    try:
+        data = request.get_json()
+        application_id = data.get('application_id')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check your actual column names in the database
+        update_query = """
+            UPDATE promotion_application 
+            SET current_status = %s::status_enum,
+                hrmd_approval_date = %s
+            WHERE application_id = %s
+        """
+        
+        cursor.execute(update_query, (
+            'vpa',
+            datetime.now(),
+            application_id
+        ))
+        
+        conn.commit()
+        cursor.close()
+        
+        return jsonify({'success': True, 'message': 'Application forwarded to VPAA'})
+        
+    except Exception as e:
+        print(f"Error forwarding to VPAA: {str(e)}")
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 if __name__ == "__main__":
