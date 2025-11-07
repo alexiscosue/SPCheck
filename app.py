@@ -19,6 +19,40 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = 'spc-faculty-system-2025-secret-key'
 
+def convert_to_24hour(time_str):
+    """Convert time string to 24-hour format. Default to AM if no period specified."""
+    if not time_str:
+        return '00:00:00'
+    
+    if ':' in time_str and 'AM' not in time_str.upper() and 'PM' not in time_str.upper():
+        if time_str.count(':') == 1:
+            return time_str + ':00'
+        return time_str
+    
+    time_str = time_str.upper().strip()
+    time_part = time_str.replace('AM', '').replace('PM', '').strip()
+    period = 'AM'
+    if 'PM' in time_str:
+        period = 'PM'
+    elif 'AM' not in time_str:
+        period = 'AM'
+    
+    if ':' in time_part:
+        parts = time_part.split(':')
+        hours = int(parts[0])
+        minutes = int(parts[1]) if len(parts) > 1 else 0
+    else:
+        hours = int(time_part)
+        minutes = 0
+    
+    if period == 'PM' and hours != 12:
+        hours += 12
+    elif period == 'AM' and hours == 12:
+        hours = 0
+    
+    return f"{hours:02d}:{minutes:02d}:00"
+
+
 # ========== CONNECTION POOLING ==========
 from queue import Queue, Empty
 import threading
@@ -172,29 +206,29 @@ def check_and_record_absences():
                         end_t = end_time
                     
                     end_dt = datetime.combine(datetime.today(), end_t)
-                    buffer_end_dt = end_dt + timedelta(minutes=15)
-                    buffer_end = buffer_end_dt.time()
+                    absence_cutoff_dt = end_dt + timedelta(minutes=15)
+                    absence_cutoff = absence_cutoff_dt.time()
                     
                     target_weekday = weekday_map.get(day)
                     if target_weekday is None:
                         continue
                     
                     check_date = semester_start
-                    days_ahead = target_weekday - check_date.weekday()
-                    if days_ahead < 0:  
-                        days_ahead += 7
-                    check_date = check_date + timedelta(days=days_ahead)
+                    while check_date.weekday() != target_weekday:
+                        check_date += timedelta(days=1)
                     
                     while check_date <= current_date and check_date <= semester_end:
-                        should_check = False
-                        if check_date < current_date:
-                            should_check = True
-                        elif check_date == current_date and current_time_only > buffer_end:
-                            should_check = True
+                        should_record_absence = False
                         
-                        if should_check:
+                        if check_date < current_date:
+                            should_record_absence = True
+                        elif check_date == current_date:
+                            if current_time_only > absence_cutoff:
+                                should_record_absence = True
+                        
+                        if should_record_absence:
                             cursor.execute("""
-                                SELECT attendance_id, attendancestatus, timein, timeout
+                                SELECT attendance_id 
                                 FROM attendance 
                                 WHERE personnel_id = %s 
                                 AND class_id = %s 
@@ -220,25 +254,19 @@ def check_and_record_absences():
                                 
                                 absences_recorded += 1
                                 
-                                print(f"❌ ABSENCE AUTO-RECORDED: {firstname} {lastname} (ID: {personnel_id})")
-                                print(f"   Date: {check_date.strftime('%A, %Y-%m-%d')}")
-                                print(f"   Class: {subject_code} - {subject_name}, Section: {class_section or 'N/A'}, Room: {classroom or 'N/A'}")
-                                print(f"   Scheduled: {start_t.strftime('%H:%M')} - {end_t.strftime('%H:%M')}")
-                                print(f"   Timestamp stored: {absence_timestamp.isoformat()}")
+                                print(f"ABSENCE RECORDED: {firstname} {lastname} - {subject_code} on {check_date}")
                         
-                        check_date = check_date + timedelta(days=7)
+                        check_date += timedelta(days=7)
             
             if absences_recorded > 0:
                 conn.commit()
-                print(f"✅ Total absences recorded: {absences_recorded} at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"Total absences recorded: {absences_recorded}")
             
             cursor.close()
             return_db_connection(conn)
             
         except Exception as e:
-            print(f"❌ Error in absence checker: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Error in absence checker: {e}")
             if conn:
                 try:
                     conn.rollback()
@@ -1114,7 +1142,7 @@ def api_faculty_attendance_by_semester(semester_id):
 @app.route('/api/faculty/teaching-schedule/<int:semester_id>')
 @require_auth([20001, 20002, 20003])
 def api_faculty_teaching_schedule(semester_id):
-    """OPTIMIZED: Get faculty teaching schedule as a timetable"""
+    """Get faculty teaching schedule with 15-minute grid precision"""
     try:
         viewing_personnel_id = session.get('viewing_personnel_id')
         if viewing_personnel_id:
@@ -1135,37 +1163,52 @@ def api_faculty_teaching_schedule(semester_id):
                 ac.acadcalendar_id,
                 ac.semester,
                 ac.acadyear,
-                json_agg(
-                    json_build_object(
-                        'classday_1', sch.classday_1,
-                        'starttime_1', sch.starttime_1,
-                        'endtime_1', sch.endtime_1,
-                        'classday_2', sch.classday_2,
-                        'starttime_2', sch.starttime_2,
-                        'endtime_2', sch.endtime_2,
-                        'subjectcode', sub.subjectcode,
-                        'classroom', sch.classroom,
-                        'classsection', sch.classsection
-                    )
-                ) as schedule_data
+                sch.classday_1,
+                sch.starttime_1,
+                sch.endtime_1,
+                sch.classday_2,
+                sch.starttime_2,
+                sch.endtime_2,
+                sub.subjectcode,
+                sch.classroom,
+                sch.classsection
             FROM acadcalendar ac
             LEFT JOIN schedule sch ON sch.acadcalendar_id = ac.acadcalendar_id AND sch.personnel_id = %s
             LEFT JOIN subjects sub ON sch.subject_id = sub.subject_id
             WHERE ac.acadcalendar_id = %s
-            GROUP BY ac.acadcalendar_id, ac.semester, ac.acadyear
         """, (personnel_id, semester_id))
         
-        result = cursor.fetchone()
+        results = cursor.fetchall()
         cursor.close()
         return_db_connection(conn)
         
-        if not result:
+        if not results:
             return {'success': False, 'error': 'Academic calendar not found'}
+
+        acadcalendar_id = results[0][0]
+        semester_name = results[0][1]
+        acad_year = results[0][2]
         
-        acadcalendar_id, semester_name, acad_year, schedule_data = result
-        scheduled_classes = schedule_data or []
+        def time_to_minutes(time_val):
+            """Convert time to minutes since 7:00 AM"""
+            if not time_val:
+                return None
+            
+            if isinstance(time_val, str):
+                time_str = time_val[:8]  
+            elif hasattr(time_val, 'strftime'):
+                time_str = time_val.strftime('%H:%M:%S')
+            else:
+                time_str = str(time_val)[:8]
+            
+            try:
+                hours, minutes, _ = map(int, time_str.split(':'))
+                return (hours - 7) * 60 + minutes
+            except:
+                return None
         
         def format_time_12hr(time_val):
+            """Format time in 12-hour format"""
             if not time_val:
                 return None
             
@@ -1185,83 +1228,49 @@ def api_faculty_teaching_schedule(semester_id):
             except:
                 return time_str
         
-        def get_time_slot(start_time, end_time):
-            if not start_time or not end_time:
-                return None
-            
-            start_str = format_time_12hr(start_time)
-            end_str = format_time_12hr(end_time)
-            
-            if not start_str or not end_str:
-                return None
-            
-            time_slot = f"{start_str} - {end_str}"
-            
-            time_slot_mapping = {
-                '7:30 AM - 9:00 AM': '7:30 AM - 9:00 AM',
-                '9:15 AM - 10:45 AM': '9:15 AM - 10:45 AM', 
-                '11:00 AM - 12:30 PM': '11:00 AM - 12:30 PM',
-                '12:45 PM - 2:15 PM': '12:45 PM - 2:15 PM',
-                '2:30 PM - 4:00 PM': '2:30 PM - 4:00 PM',
-                '4:15 PM - 5:45 PM': '4:15 PM - 5:45 PM',
-                '6:00 PM - 7:30 PM': '6:00 PM - 7:30 PM'
-            }
-            
-            if time_slot in time_slot_mapping:
-                return time_slot_mapping[time_slot]
-            
-            start_time_only = start_str
-            for slot in time_slot_mapping.keys():
-                if slot.startswith(start_time_only):
-                    return slot
-            
-            return time_slot
+        schedule_classes = []
         
-        timetable = {}
-        days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-        
-        for day in days:
-            timetable[day] = {
-                '7:30 AM - 9:00 AM': None,
-                '9:15 AM - 10:45 AM': None,
-                '11:00 AM - 12:30 PM': None,
-                '12:45 PM - 2:15 PM': None,
-                '2:30 PM - 4:00 PM': None,
-                '4:15 PM - 5:45 PM': None,
-                '6:00 PM - 7:30 PM': None
-            }
-        
-        for scheduled_class in scheduled_classes:
-            if not scheduled_class.get('subjectcode'):
+        for row in results:
+            if not row[9]: 
                 continue
+            
+            (_, _, _, classday_1, starttime_1, endtime_1, 
+             classday_2, starttime_2, endtime_2,
+             subject_code, classroom, class_section) = row
+            
+            if classday_1 and starttime_1 and endtime_1:
+                start_minutes = time_to_minutes(starttime_1)
+                end_minutes = time_to_minutes(endtime_1)
                 
-            day1 = scheduled_class.get('classday_1')
-            start1 = scheduled_class.get('starttime_1')
-            end1 = scheduled_class.get('endtime_1')
-            day2 = scheduled_class.get('classday_2')
-            start2 = scheduled_class.get('starttime_2')
-            end2 = scheduled_class.get('endtime_2')
-            subject_code = scheduled_class['subjectcode']
-            classroom = scheduled_class.get('classroom')
-            section = scheduled_class.get('classsection')
-            
-            if day1 and start1 and end1:
-                time_slot = get_time_slot(start1, end1)
-                if time_slot and day1 in timetable:
-                    timetable[day1][time_slot] = {
+                if start_minutes is not None and end_minutes is not None:
+                    schedule_classes.append({
+                        'day': classday_1,
                         'subject_code': subject_code,
                         'classroom': classroom or 'TBA',
-                        'section': section or 'N/A'
-                    }
+                        'section': class_section or 'N/A',
+                        'start_minutes': start_minutes,
+                        'end_minutes': end_minutes,
+                        'start_time': format_time_12hr(starttime_1),
+                        'end_time': format_time_12hr(endtime_1),
+                        'duration_minutes': end_minutes - start_minutes
+                    })
             
-            if day2 and start2 and end2:
-                time_slot = get_time_slot(start2, end2)
-                if time_slot and day2 in timetable:
-                    timetable[day2][time_slot] = {
+            if classday_2 and starttime_2 and endtime_2:
+                start_minutes = time_to_minutes(starttime_2)
+                end_minutes = time_to_minutes(endtime_2)
+                
+                if start_minutes is not None and end_minutes is not None:
+                    schedule_classes.append({
+                        'day': classday_2,
                         'subject_code': subject_code,
                         'classroom': classroom or 'TBA',
-                        'section': section or 'N/A'
-                    }
+                        'section': class_section or 'N/A',
+                        'start_minutes': start_minutes,
+                        'end_minutes': end_minutes,
+                        'start_time': format_time_12hr(starttime_2),
+                        'end_time': format_time_12hr(endtime_2),
+                        'duration_minutes': end_minutes - start_minutes
+                    })
         
         semester_info = {
             'id': acadcalendar_id,
@@ -1272,7 +1281,7 @@ def api_faculty_teaching_schedule(semester_id):
         
         return {
             'success': True,
-            'timetable': timetable,
+            'schedule_classes': schedule_classes,
             'semester_info': semester_info
         }
         
@@ -1560,23 +1569,28 @@ def api_audit_logs():
         return {'success': False, 'error': str(e)}
 
 def log_audit_action(personnel_id, action, details=None, before_value=None, after_value=None, evidence=None):
-    """Log audit actions to the auditlogs table"""
+    """Log audit actions to the auditlogs table with improved formatting"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-    
-        comprehensive_details = details or ""
+        
+        def clean_value(value):
+            if value is None or value == '' or value == '00:00:00':
+                return 'None'
+            return str(value)
+        
+        formatted_details = details or ""
         
         if before_value is not None:
-            comprehensive_details += f"\nBefore: {before_value}"
+            formatted_details += f"\nBefore: {clean_value(before_value)}"
         
         if after_value is not None:
-            comprehensive_details += f"\nAfter: {after_value}"
+            formatted_details += f"\nAfter: {clean_value(after_value)}"
         
         cursor.execute("""
             INSERT INTO auditlogs (personnel_id, action, details, created_at)
             VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
-        """, (personnel_id, action, comprehensive_details))
+        """, (personnel_id, action, formatted_details))
         
         conn.commit()
         cursor.close()
@@ -1895,7 +1909,7 @@ def api_update_personal_info():
 @app.route('/api/faculty/profile/documents', methods=['POST'])
 @require_auth([20001, 20002, 20003, 20004])
 def api_update_documents():
-    """API endpoint to update document uploads"""
+    """API endpoint to update document uploads - FIXED VERSION"""
     try:
         user_id = session['user_id']
         conn = get_db_connection()
@@ -1909,21 +1923,28 @@ def api_update_documents():
             return_db_connection(conn)
             return {'success': False, 'error': 'Personnel record not found'}
         
-        cursor.execute("""
-            INSERT INTO profile (profile_id, personnel_id, bio, profilepic, 
-                licenses, degrees, certificates, publications, awards,
-                licensesname, degreesname, certificatesname, publicationsname, awardsname,
-                employmentstatus, position)
-            VALUES (
-                (SELECT COALESCE(MAX(profile_id), 90000) + 1 FROM profile),
-                %s, '', NULL,
-                ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[],
-                ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[],
-                'Regular', 'Full-Time Employee'
-            )
-            ON CONFLICT (personnel_id) DO NOTHING
-        """, (personnel_id,))
-        conn.commit()
+        cursor.execute("SELECT profile_id FROM profile WHERE personnel_id = %s", (personnel_id,))
+        profile_exists = cursor.fetchone()
+        
+        if not profile_exists:
+            cursor.execute("SELECT COALESCE(MAX(profile_id), 90000) FROM profile")
+            max_profile_id = cursor.fetchone()[0]
+            new_profile_id = max_profile_id + 1
+            
+            cursor.execute("""
+                INSERT INTO profile (
+                    profile_id, personnel_id, bio, profilepic, 
+                    licenses, degrees, certificates, publications, awards,
+                    licensesname, degreesname, certificatesname, publicationsname, awardsname,
+                    employmentstatus, position
+                )
+                VALUES (%s, %s, '', NULL,
+                        ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[],
+                        ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[],
+                        'Regular', 'Full-Time Employee')
+            """, (new_profile_id, personnel_id))
+            conn.commit()
+            print(f"Created new profile with ID: {new_profile_id} for personnel_id: {personnel_id}")
         
         uploaded_docs = []
         
@@ -1931,9 +1952,13 @@ def api_update_documents():
             file = request.files['profilepic']
             if file and file.filename:
                 profilepic_data = file.read()
+                new_profilepic_filename = file.filename
                 
                 cursor.execute("SELECT profilepic FROM profile WHERE personnel_id = %s", (personnel_id,))
                 existing_profilepic = cursor.fetchone()
+                
+                before_filename = "profile_picture.jpg" if existing_profilepic and existing_profilepic[0] else "None"
+                after_filename = new_profilepic_filename
                 
                 cursor.execute("""
                     UPDATE profile SET profilepic = %s WHERE personnel_id = %s
@@ -1946,9 +1971,9 @@ def api_update_documents():
                 log_audit_action(
                     personnel_id,
                     action,
-                    f"User {'updated' if existing_profilepic and existing_profilepic[0] else 'uploaded'} their profile picture",
-                    before_value="Exists: Yes" if existing_profilepic and existing_profilepic[0] else "Exists: No",
-                    after_value="Exists: Yes"
+                    f"User {'updated' if existing_profilepic and existing_profilepic[0] else 'uploaded'} profile picture",
+                    before_value=before_filename,
+                    after_value=after_filename
                 )
         
         column_mapping = {
@@ -1983,18 +2008,14 @@ def api_update_documents():
                         new_docs.append(file_data)
                         new_filenames.append(f.filename)
                         uploaded_docs.append(f"{doc_type}: {f.filename}")
-                        
-                        log_audit_action(
-                            personnel_id,
-                            f"{doc_type.capitalize()} uploaded",
-                            f"User uploaded {doc_type} document",
-                            before_value=f"Total {doc_type}: {len(existing_filenames)}",
-                            after_value=f"Total {doc_type}: {len(existing_filenames) + 1}"
-                        )
                 
                 if new_docs:
+                    before_filenames = existing_filenames if existing_filenames else ["None"]
+                    
                     combined_docs = existing_docs + new_docs
                     combined_filenames = existing_filenames + new_filenames
+                    
+                    after_filenames = combined_filenames if combined_filenames else ["None"]
                     
                     cursor.execute(f"""
                         UPDATE profile 
@@ -2002,6 +2023,17 @@ def api_update_documents():
                         WHERE personnel_id = %s
                     """, (combined_docs, combined_filenames, personnel_id))
                     conn.commit()
+                    
+                    before_text = ", ".join(before_filenames) if before_filenames != ["None"] else "None"
+                    after_text = ", ".join(after_filenames) if after_filenames != ["None"] else "None"
+                    
+                    log_audit_action(
+                        personnel_id,
+                        f"{doc_type.capitalize()} uploaded",
+                        f"User uploaded {doc_type} document(s)",
+                        before_value=before_text,
+                        after_value=after_text
+                    )
         
         cursor.close()
         return_db_connection(conn)
@@ -2082,7 +2114,7 @@ def api_update_password():
 @app.route('/api/faculty/profile/document/<doc_type>/<int:index>', methods=['DELETE'])
 @require_auth([20001, 20002, 20003, 20004])
 def api_delete_document(doc_type, index):
-    """API endpoint to delete a specific document from an array"""
+    """API endpoint to delete a specific document from an array - FIXED VERSION"""
     try:
         user_id = session['user_id']
         
@@ -2131,9 +2163,13 @@ def api_delete_document(doc_type, index):
             return {'success': False, 'error': 'Invalid document index'}
         
         deleted_filename = filenames[index] if index < len(filenames) else f"Document_{index+1}"
+        before_filenames = filenames.copy() if filenames else ["None"]
+        
         doc_array.pop(index)
         if index < len(filenames):
             filenames.pop(index)
+        
+        after_filenames = filenames if filenames else ["None"]
         
         cursor.execute(f"""
             UPDATE profile 
@@ -2145,12 +2181,15 @@ def api_delete_document(doc_type, index):
         cursor.close()
         return_db_connection(conn)
         
+        before_text = ", ".join(before_filenames) if before_filenames != ["None"] else "None"
+        after_text = ", ".join(after_filenames) if after_filenames != ["None"] else "None"
+        
         log_audit_action(
             personnel_id,
             f"{doc_type.capitalize()} deleted",
-            f"User deleted {doc_type} document",
-            before_value=f"Total {doc_type}: {len(doc_array) + 1}",
-            after_value=f"Total {doc_type}: {len(doc_array)}"
+            f"User deleted {doc_type} document: {deleted_filename}",
+            before_value=before_text,
+            after_value=after_text
         )
         
         return {'success': True, 'message': 'Document deleted successfully'}
@@ -2164,7 +2203,7 @@ def api_delete_document(doc_type, index):
 @app.route('/api/hr/faculty-attendance')
 @require_auth([20003])
 def api_hr_faculty_attendance():
-    """OPTIMIZED: Get all faculty and dean attendance data for HR"""
+    """SIMPLE: Get all faculty attendance data - SHOW ONLY WHAT'S IN DATABASE"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -2173,125 +2212,106 @@ def api_hr_faculty_attendance():
         today = datetime.now(philippines_tz).date()
         
         cursor.execute("""
-            WITH current_calendar AS (
-                SELECT acadcalendar_id, semesterstart, semesterend 
-                FROM acadcalendar 
-                WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
-                ORDER BY semesterstart DESC
-                LIMIT 1
-            ),
-            faculty_count AS (
-                SELECT COUNT(*) as total
-                FROM personnel p
-                WHERE p.role_id IN (20001, 20002)
-            ),
-            today_attendance AS (
-                SELECT 
-                    p.firstname,
-                    p.lastname,
-                    p.honorifics,
-                    a.attendancestatus,
-                    a.timein,
-                    a.timeout,
-                    sch.classroom,
-                    sub.subjectcode,
-                    sub.subjectname,
-                    sch.classsection,
-                    CASE 
-                        WHEN DATE(a.timein AT TIME ZONE 'Asia/Manila') = %s THEN 1 
-                        ELSE 0 
-                    END as is_today
-                FROM attendance a
-                JOIN schedule sch ON a.class_id = sch.class_id
-                JOIN subjects sub ON sch.subject_id = sub.subject_id
-                JOIN personnel p ON a.personnel_id = p.personnel_id
-                CROSS JOIN current_calendar cc
-                WHERE p.role_id IN (20001, 20002)
-                AND sch.acadcalendar_id = cc.acadcalendar_id
-                ORDER BY a.timein DESC
-            )
             SELECT 
-                (SELECT total FROM faculty_count),
-                json_agg(row_to_json(today_attendance)) as attendance_data,
-                (SELECT COUNT(*) FROM today_attendance WHERE is_today = 1 AND LOWER(attendancestatus) = 'present') as present_today,
-                (SELECT COUNT(*) FROM today_attendance WHERE is_today = 1 AND LOWER(attendancestatus) = 'late') as late_today,
-                (SELECT COUNT(*) FROM today_attendance WHERE is_today = 1 AND LOWER(attendancestatus) = 'absent') as absent_today,
-                (SELECT COUNT(*) FROM today_attendance WHERE LOWER(attendancestatus) = 'present') as total_present,
-                (SELECT COUNT(*) FROM today_attendance WHERE LOWER(attendancestatus) = 'late') as total_late,
-                (SELECT COUNT(*) FROM today_attendance WHERE LOWER(attendancestatus) = 'absent') as total_absent
-            FROM today_attendance
-        """, (today,))
+                p.firstname,
+                p.lastname,
+                p.honorifics,
+                a.attendancestatus,
+                a.timein,
+                a.timeout,
+                sch.classroom,
+                sub.subjectcode,
+                sub.subjectname,
+                sch.classsection
+            FROM attendance a
+            JOIN personnel p ON a.personnel_id = p.personnel_id
+            JOIN schedule sch ON a.class_id = sch.class_id
+            JOIN subjects sub ON sch.subject_id = sub.subject_id
+            WHERE p.role_id IN (20001, 20002)
+            ORDER BY a.timein DESC, p.lastname, p.firstname
+        """)
         
-        result = cursor.fetchone()
+        attendance_records = cursor.fetchall()
+        
+        cursor.execute("SELECT COUNT(*) FROM personnel WHERE role_id IN (20001, 20002)")
+        total_faculty = cursor.fetchone()[0]
+        
         cursor.close()
         return_db_connection(conn)
         
-        if not result:
-            return {'success': False, 'error': 'No data found'}
-        
-        total_faculty, attendance_data, present_today, late_today, absent_today, total_present, total_late, total_absent = result
-        
-        attendance_records = attendance_data or []
-        
         attendance_logs = []
+        status_counts = {'present': 0, 'late': 0, 'absent': 0}
+        today_counts = {'present': 0, 'late': 0, 'absent': 0}
+        
+        seen_records = set()
         
         for record in attendance_records:
-            firstname = record['firstname']
-            lastname = record['lastname']
-            honorifics = record['honorifics']
-            status = record['attendancestatus']
-            timein = record['timein']
-            timeout = record['timeout']
-            classroom = record['classroom']
-            subject_code = record['subjectcode']
-            subject_name = record['subjectname']
-            class_section = record['classsection']
+            (firstname, lastname, honorifics, status, timein, timeout, 
+             classroom, subject_code, subject_name, class_section) = record
             
             faculty_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
-            
             class_name = f"{subject_code} - {subject_name}"
             
+            date_str = "N/A"
+            time_in_str = '—'
+            time_out_str = '—'
+            
             if timein:
-                date_str = timein[:10] 
-                time_part = timein[11:19]
-                is_absent_record = (status.lower() == 'absent' and time_part == '00:00:00')
-                
-                if is_absent_record:
-                    time_in_str = '—'
+                if timein.tzinfo:
+                    timein_ph = timein.astimezone(philippines_tz)
                 else:
-                    time_in_str = timein[11:16] 
-            else:
-                date_str = today.strftime('%Y-%m-%d')
-                time_in_str = '—'
+                    timein_ph = philippines_tz.localize(timein)
+                
+                date_str = timein_ph.strftime('%Y-%m-%d')
+                is_absent_record = (status.lower() == 'absent' and 
+                                  timein_ph.hour == 0 and 
+                                  timein_ph.minute == 0 and 
+                                  timein_ph.second == 0)
+                
+                if not is_absent_record:
+                    time_in_str = timein_ph.strftime('%H:%M')
             
-            if status.lower() == 'absent' or not timeout:
-                time_out_str = '—'
-            else:
-                time_out_str = timeout[11:16]
+            if timeout and status.lower() != 'absent':
+                if timeout.tzinfo:
+                    timeout_ph = timeout.astimezone(philippines_tz)
+                else:
+                    timeout_ph = philippines_tz.localize(timeout)
+                time_out_str = timeout_ph.strftime('%H:%M')
             
-            log_entry = {
-                'name': faculty_name,
-                'date': date_str,
-                'class_name': class_name,
-                'class_section': class_section or 'N/A',
-                'room': classroom or 'N/A',
-                'time_in': time_in_str,
-                'time_out': time_out_str,
-                'status': status.capitalize()
-            }
-            attendance_logs.append(log_entry)
+            record_key = f"{faculty_name}_{date_str}_{class_name}_{class_section}_{time_in_str}_{time_out_str}"
+            
+            if record_key not in seen_records:
+                seen_records.add(record_key)
+                
+                log_entry = {
+                    'name': faculty_name,
+                    'date': date_str,
+                    'class_name': class_name,
+                    'class_section': class_section or 'N/A',
+                    'room': classroom or 'N/A',
+                    'time_in': time_in_str,
+                    'time_out': time_out_str,
+                    'status': status.capitalize()
+                }
+                attendance_logs.append(log_entry)
+                status_lower = status.lower()
+                if status_lower in status_counts:
+                    status_counts[status_lower] += 1
+                
+                if date_str == today.strftime('%Y-%m-%d') and status_lower in today_counts:
+                    today_counts[status_lower] += 1
+                
+                print(f"✅ Database record: {faculty_name} - {date_str} - {class_name}")
+            else:
+                print(f"🚨 DUPLICATE SKIPPED: {record_key}")
+        
+        print(f"📊 Database records: {len(attendance_records)}, Displayed: {len(attendance_logs)}")
         
         kpis = {
             'total_faculty': total_faculty or 0,
-            'present_today': present_today or 0,
-            'late_today': late_today or 0,
-            'absent_today': absent_today or 0
-        }
-        
-        status_counts = {
-            'present': total_present or 0,
-            'late': total_late or 0,
-            'absent': total_absent or 0
+            'present_today': today_counts['present'] or 0,
+            'late_today': today_counts['late'] or 0,
+            'absent_today': today_counts['absent'] or 0
         }
         
         return {
@@ -2305,6 +2325,323 @@ def api_hr_faculty_attendance():
         print(f"Error fetching HR faculty attendance data: {e}")
         import traceback
         traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/hr/update-attendance-time', methods=['POST'])
+@require_auth([20003])
+def api_update_attendance_time():
+    """Update time in/out for attendance records with improved audit logging"""
+    try:
+        data = request.get_json()
+        updates = data.get('updates', [])
+        
+        print(f"📥 Received update request with {len(updates)} updates")
+        
+        if not updates:
+            return {'success': False, 'error': 'No updates provided'}
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        user_id = session['user_id']
+        personnel_info = get_personnel_info(user_id)
+        hr_personnel_id = personnel_info.get('personnel_id')
+        
+        updated_count = 0
+        
+        for update in updates:
+            name = update.get('name')
+            date = update.get('date')
+            class_name = update.get('class_name')
+            time_in = update.get('time_in', '')  
+            time_out = update.get('time_out', '')  
+            
+            print(f"🔧 Processing update for {name} on {date}, class: {class_name}")
+            print(f"   Time-in: '{time_in}', Time-out: '{time_out}'")
+            
+            if name and date and class_name:
+                name_parts = name.split(' ')
+                if len(name_parts) >= 2:
+                    firstname = name_parts[0]
+                    lastname = name_parts[1].replace(',', '')
+                    
+                    print(f"   Looking for: {firstname} {lastname}, date: {date}, class: {class_name}")
+                    
+                    date_obj = datetime.strptime(date, '%Y-%m-%d')
+                    day_of_week = date_obj.strftime('%A')  
+                    print(f"   Day of week: {day_of_week}")
+                    subject_code = class_name.split(' - ')[0] if ' - ' in class_name else class_name
+                    
+                    cursor.execute("""
+                        SELECT 
+                            a.attendance_id, 
+                            a.timein, 
+                            a.timeout, 
+                            a.attendancestatus,
+                            p.personnel_id,
+                            sch.class_id,
+                            sch.classday_1,
+                            sch.starttime_1,
+                            sch.endtime_1,
+                            sch.classday_2, 
+                            sch.starttime_2,
+                            sch.endtime_2,
+                            sub.subjectcode,
+                            sub.subjectname,
+                            sch.classsection,
+                            sch.classroom
+                        FROM attendance a
+                        JOIN personnel p ON a.personnel_id = p.personnel_id
+                        JOIN schedule sch ON a.class_id = sch.class_id
+                        JOIN subjects sub ON sch.subject_id = sub.subject_id
+                        WHERE p.firstname = %s 
+                        AND p.lastname = %s 
+                        AND DATE(a.timein AT TIME ZONE 'Asia/Manila') = %s
+                        AND sub.subjectcode = %s
+                        ORDER BY 
+                            CASE 
+                                WHEN (sch.classday_1 = %s) THEN 1
+                                WHEN (sch.classday_2 = %s) THEN 2
+                                ELSE 3
+                            END,
+                            a.timein DESC
+                    """, (firstname, lastname, date, subject_code, day_of_week, day_of_week))
+                    
+                    attendance_results = cursor.fetchall()
+                    
+                    print(f"   Found {len(attendance_results)} matching records")
+                    
+                    if attendance_results:
+                        target_record = None
+                        exact_match_found = False
+                        
+                        for attendance_result in attendance_results:
+                            (attendance_id, current_timein, current_timeout, current_status, 
+                             personnel_id, class_id, classday_1, starttime_1, endtime_1, classday_2, starttime_2, endtime_2,
+                             subject_code, subject_name, class_section, classroom) = attendance_result
+                            
+                            day1_matches = (classday_1 == day_of_week)
+                            day2_matches = (classday_2 == day_of_week)
+                            
+                            print(f"   Checking record {attendance_id}:")
+                            print(f"     timein={current_timein}, timeout={current_timeout}")
+                            print(f"     schedule: {classday_1} {starttime_1}-{endtime_1} / {classday_2} {starttime_2}-{endtime_2}")
+                            print(f"     matches {day_of_week}: Day1={day1_matches}, Day2={day2_matches}")
+                            
+                            # RULE 1: Exact day match 
+                            if day1_matches or day2_matches:
+                                if day1_matches:
+                                    scheduled_day = classday_1
+                                    scheduled_start = starttime_1
+                                    scheduled_end = endtime_1
+                                    day_type = "Day1"
+                                else:
+                                    scheduled_day = classday_2  
+                                    scheduled_start = starttime_2
+                                    scheduled_end = endtime_2
+                                    day_type = "Day2"
+                                
+                                print(f"   ✅ Exact day match found: {day_type} - {scheduled_day} {scheduled_start}-{scheduled_end}")
+                                
+                                target_record = attendance_result
+                                exact_match_found = True
+                                print(f"   ✅ Found PERFECT match on {day_type}: {attendance_id}")
+                                break
+                        
+                        # RULE 2: If no exact day match found, use the first record
+                        if not exact_match_found and attendance_results:
+                            target_record = attendance_results[0]
+                            print(f"   ⚠️ Using first record as fallback: {target_record[0]}")
+                        
+                        if target_record:
+                            (attendance_id, current_timein, current_timeout, current_status, 
+                             personnel_id, class_id, classday_1, starttime_1, endtime_1, classday_2, starttime_2, endtime_2,
+                             subject_code, subject_name, class_section, classroom) = target_record
+                            
+                            print(f"   🎯 Updating record: ID={attendance_id}")
+                            print(f"   Schedule: {classday_1} {starttime_1}-{endtime_1} / {classday_2} {starttime_2}-{endtime_2}")
+                            print(f"   Current - Timein: {current_timein}, Timeout: {current_timeout}, Status: {current_status}")
+                            
+                            changes_made = []
+                            updates_applied = False
+                            
+                            original_timein = current_timein
+                            original_timeout = current_timeout
+                            original_status = current_status
+                            
+                            if 'time_in' in update:
+                                updates_applied = True
+                                if time_in == '':  
+                                    # DELETE TIME-IN: Set timein to midnight of the same date (retain date)
+                                    midnight_time = f"{date} 00:00:00"
+                                    cursor.execute("""
+                                        UPDATE attendance 
+                                        SET timein = %s::timestamp AT TIME ZONE 'Asia/Manila'
+                                        WHERE attendance_id = %s
+                                    """, (midnight_time, attendance_id))
+                                    changes_made.append("deleted time-in")
+                                    print(f"   ✅ Deleted time-in (set to midnight)")
+                                else:  
+                                    # SET/UPDATE TIME-IN: Convert to 24-hour format with AM/PM handling
+                                    time_in_24hr = convert_to_24hour(time_in)
+                                    new_timein = f"{date} {time_in_24hr}"
+                                    cursor.execute("""
+                                        UPDATE attendance 
+                                        SET timein = %s::timestamp AT TIME ZONE 'Asia/Manila'
+                                        WHERE attendance_id = %s
+                                    """, (new_timein, attendance_id))
+                                    changes_made.append(f"set time-in to {time_in}")
+                                    print(f"   ✅ Set time-in to {time_in_24hr}")
+                            
+                            if 'time_out' in update:
+                                # RULE: Timeout can only be added if there's a valid timein
+                                current_timein_check = current_timein
+                                if 'time_in' in update and time_in != '':
+                                    time_in_24hr = convert_to_24hour(time_in)
+                                    current_timein_check = datetime.strptime(f"{date} {time_in_24hr}", "%Y-%m-%d %H:%M:%S")
+                                
+                                if time_out == '':  
+                                    # DELETE TIME-OUT: Set to NULL (completely remove)
+                                    cursor.execute("""
+                                        UPDATE attendance 
+                                        SET timeout = NULL
+                                        WHERE attendance_id = %s
+                                    """, (attendance_id,))
+                                    changes_made.append("deleted time-out")
+                                    print(f"   ✅ Deleted time-out")
+                                    updates_applied = True
+                                else:  
+                                    # RULE: Can only add timeout if there's a valid timein
+                                    if current_timein_check and current_timein_check.strftime('%H:%M:%S') != '00:00:00':
+                                        # SET/UPDATE TIME-OUT: Convert to 24-hour format with AM/PM handling
+                                        time_out_24hr = convert_to_24hour(time_out)
+                                        new_timeout = f"{date} {time_out_24hr}"
+                                        cursor.execute("""
+                                            UPDATE attendance 
+                                            SET timeout = %s::timestamp AT TIME ZONE 'Asia/Manila'
+                                            WHERE attendance_id = %s
+                                        """, (new_timeout, attendance_id))
+                                        changes_made.append(f"set time-out to {time_out}")
+                                        print(f"   ✅ Set time-out to {time_out_24hr}")
+                                        updates_applied = True
+                                    else:
+                                        print(f"   ⚠️ Cannot add timeout - no valid timein exists")
+                                        updates_applied = False
+                            
+                            new_status = current_status
+                            if updates_applied:
+                                cursor.execute("""
+                                    SELECT timein, timeout FROM attendance WHERE attendance_id = %s
+                                """, (attendance_id,))
+                                updated_times = cursor.fetchone()
+                                
+                                if updated_times:
+                                    updated_timein, updated_timeout = updated_times
+                                    
+                                    if updated_timein is None:
+                                        new_status = 'Absent'
+                                    elif updated_timein is not None:
+                                        if updated_timein and updated_timein.strftime('%H:%M:%S') == '00:00:00':
+                                            new_status = 'Absent'
+                                        elif updated_timeout is None:
+                                            new_status = 'Present'
+                                        else:
+                                            new_status = 'Present'
+                                    
+                                    if new_status != current_status:
+                                        cursor.execute("""
+                                            UPDATE attendance 
+                                            SET attendancestatus = %s
+                                            WHERE attendance_id = %s
+                                        """, (new_status, attendance_id))
+                                        print(f"   ✅ Updated status: {current_status} → {new_status}")
+                                
+                                updated_count += 1
+                                
+                                schedule_info = ""
+                                if day1_matches and classday_1 and starttime_1 and endtime_1:
+                                    start1_str = str(starttime_1)[:8] if starttime_1 else 'N/A'
+                                    end1_str = str(endtime_1)[:8] if endtime_1 else 'N/A'
+                                    schedule_info = f"{classday_1} {start1_str} - {end1_str}"
+                                elif day2_matches and classday_2 and starttime_2 and endtime_2:
+                                    start2_str = str(starttime_2)[:8] if starttime_2 else 'N/A'
+                                    end2_str = str(endtime_2)[:8] if endtime_2 else 'N/A'
+                                    schedule_info = f"{classday_2} {start2_str} - {end2_str}"
+                                else:
+                                    schedule_parts = []
+                                    if classday_1 and starttime_1 and endtime_1:
+                                        start1_str = str(starttime_1)[:8] if starttime_1 else 'N/A'
+                                        end1_str = str(endtime_1)[:8] if endtime_1 else 'N/A'
+                                        schedule_parts.append(f"{classday_1} {start1_str}-{end1_str}")
+                                    if classday_2 and starttime_2 and endtime_2:
+                                        start2_str = str(starttime_2)[:8] if starttime_2 else 'N/A'
+                                        end2_str = str(endtime_2)[:8] if endtime_2 else 'N/A'
+                                        schedule_parts.append(f"{classday_2} {start2_str}-{end2_str}")
+                                    schedule_info = " / ".join(schedule_parts) if schedule_parts else "N/A"
+
+                                before_timein_str = "None"
+                                if original_timein and original_timein.strftime('%H:%M:%S') != '00:00:00':
+                                    before_timein_str = original_timein.strftime('%H:%M:%S')
+
+                                before_timeout_str = "None"
+                                if original_timeout and original_timeout.strftime('%H:%M:%S') != '00:00:00':
+                                    before_timeout_str = original_timeout.strftime('%H:%M:%S')
+
+                                after_timein_str = "None"
+                                if 'time_in' in update:
+                                    if time_in == '':
+                                        after_timein_str = "None"
+                                    else:
+                                        time_in_24hr = convert_to_24hour(time_in)
+                                        after_timein_str = time_in_24hr if time_in_24hr else "None"
+                                else:
+                                    after_timein_str = before_timein_str
+
+                                after_timeout_str = "None"
+                                if 'time_out' in update:
+                                    if time_out == '':
+                                        after_timeout_str = "None"
+                                    else:
+                                        time_out_24hr = convert_to_24hour(time_out)
+                                        after_timeout_str = time_out_24hr if time_out_24hr else "None"
+                                else:
+                                    after_timeout_str = before_timeout_str
+
+                                class_name_clean = class_name.replace('\n', ' ').replace('\r', ' ').strip()
+                                audit_details = f"HR updated attendance for {name}\nClass: {class_name_clean}\nDate: {date}\nSchedule: {schedule_info}\nSection: {class_section}\nClassroom: {classroom}"
+
+                                log_audit_action(
+                                    hr_personnel_id,
+                                    "Attendance time updated",
+                                    audit_details,
+                                    before_value=f"Time-in: {before_timein_str}, Time-out: {before_timeout_str}, Status: {original_status}",
+                                    after_value=f"Time-in: {after_timein_str}, Time-out: {after_timeout_str}, Status: {new_status}"
+                                )
+                                
+                                print(f"   ✅ Successfully updated attendance_id: {attendance_id}")
+                    else:
+                        print(f"   ❌ No matching attendance record found!")
+        
+        conn.commit()
+        cursor.close()
+        return_db_connection(conn)
+        
+        print(f"✅ Successfully processed {updated_count} attendance record updates")
+        
+        return {
+            'success': True,
+            'message': f'Successfully updated {updated_count} attendance record(s)',
+            'updated_count': updated_count
+        }
+        
+    except Exception as e:
+        print(f"❌ Error updating attendance time: {e}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+            cursor.close()
+            return_db_connection(conn)
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/hr/update-rfid-remarks', methods=['POST'])
@@ -2503,7 +2840,7 @@ def api_hr_faculty_list():
 @app.route('/api/hr/faculty-schedule/<int:personnel_id>')
 @require_auth([20003])
 def api_hr_faculty_schedule(personnel_id):
-    """OPTIMIZED: Get faculty teaching schedule for HR view"""
+    """HR view: Get faculty teaching schedule with 15-minute grid precision"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -2520,36 +2857,51 @@ def api_hr_faculty_schedule(personnel_id):
                 cc.acadcalendar_id,
                 cc.semester,
                 cc.acadyear,
-                json_agg(
-                    json_build_object(
-                        'classday_1', sch.classday_1,
-                        'starttime_1', sch.starttime_1,
-                        'endtime_1', sch.endtime_1,
-                        'classday_2', sch.classday_2,
-                        'starttime_2', sch.starttime_2,
-                        'endtime_2', sch.endtime_2,
-                        'subjectcode', sub.subjectcode,
-                        'classroom', sch.classroom,
-                        'classsection', sch.classsection
-                    )
-                ) as schedule_data
+                sch.classday_1,
+                sch.starttime_1,
+                sch.endtime_1,
+                sch.classday_2,
+                sch.starttime_2,
+                sch.endtime_2,
+                sub.subjectcode,
+                sch.classroom,
+                sch.classsection
             FROM current_calendar cc
             LEFT JOIN schedule sch ON sch.acadcalendar_id = cc.acadcalendar_id AND sch.personnel_id = %s
             LEFT JOIN subjects sub ON sch.subject_id = sub.subject_id
-            GROUP BY cc.acadcalendar_id, cc.semester, cc.acadyear
         """, (personnel_id,))
         
-        result = cursor.fetchone()
+        results = cursor.fetchall()
         cursor.close()
         return_db_connection(conn)
         
-        if not result:
+        if not results:
             return {'success': False, 'error': 'Academic calendar not found'}
         
-        acadcalendar_id, semester_name, acad_year, schedule_data = result
-        scheduled_classes = schedule_data or []
+        acadcalendar_id = results[0][0]
+        semester_name = results[0][1]
+        acad_year = results[0][2]
+        
+        def time_to_minutes(time_val):
+            """Convert time to minutes since 7:00 AM"""
+            if not time_val:
+                return None
+            
+            if isinstance(time_val, str):
+                time_str = time_val[:8]
+            elif hasattr(time_val, 'strftime'):
+                time_str = time_val.strftime('%H:%M:%S')
+            else:
+                time_str = str(time_val)[:8]
+            
+            try:
+                hours, minutes, _ = map(int, time_str.split(':'))
+                return (hours - 7) * 60 + minutes
+            except:
+                return None
         
         def format_time_12hr(time_val):
+            """Format time in 12-hour format"""
             if not time_val:
                 return None
             
@@ -2569,83 +2921,49 @@ def api_hr_faculty_schedule(personnel_id):
             except:
                 return time_str
         
-        def get_time_slot(start_time, end_time):
-            if not start_time or not end_time:
-                return None
-            
-            start_str = format_time_12hr(start_time)
-            end_str = format_time_12hr(end_time)
-            
-            if not start_str or not end_str:
-                return None
-            
-            time_slot = f"{start_str} - {end_str}"
-            
-            time_slot_mapping = {
-                '7:30 AM - 9:00 AM': '7:30 AM - 9:00 AM',
-                '9:15 AM - 10:45 AM': '9:15 AM - 10:45 AM', 
-                '11:00 AM - 12:30 PM': '11:00 AM - 12:30 PM',
-                '12:45 PM - 2:15 PM': '12:45 PM - 2:15 PM',
-                '2:30 PM - 4:00 PM': '2:30 PM - 4:00 PM',
-                '4:15 PM - 5:45 PM': '4:15 PM - 5:45 PM',
-                '6:00 PM - 7:30 PM': '6:00 PM - 7:30 PM'
-            }
-            
-            if time_slot in time_slot_mapping:
-                return time_slot_mapping[time_slot]
-            
-            start_time_only = start_str
-            for slot in time_slot_mapping.keys():
-                if slot.startswith(start_time_only):
-                    return slot
-            
-            return time_slot
+        schedule_classes = []
         
-        timetable = {}
-        days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-        
-        for day in days:
-            timetable[day] = {
-                '7:30 AM - 9:00 AM': None,
-                '9:15 AM - 10:45 AM': None,
-                '11:00 AM - 12:30 PM': None,
-                '12:45 PM - 2:15 PM': None,
-                '2:30 PM - 4:00 AM': None,
-                '4:15 PM - 5:45 PM': None,
-                '6:00 PM - 7:30 PM': None
-            }
-        
-        for scheduled_class in scheduled_classes:
-            if not scheduled_class or not scheduled_class.get('subjectcode'):
+        for row in results:
+            if not row[9]:
                 continue
             
-            day1 = scheduled_class.get('classday_1')
-            start1 = scheduled_class.get('starttime_1')
-            end1 = scheduled_class.get('endtime_1')
-            day2 = scheduled_class.get('classday_2')
-            start2 = scheduled_class.get('starttime_2')
-            end2 = scheduled_class.get('endtime_2')
-            subject_code = scheduled_class['subjectcode']
-            classroom = scheduled_class.get('classroom')
-            section = scheduled_class.get('classsection')
+            (_, _, _, classday_1, starttime_1, endtime_1, 
+             classday_2, starttime_2, endtime_2,
+             subject_code, classroom, class_section) = row
             
-            if day1 and start1 and end1:
-                time_slot = get_time_slot(start1, end1)
-                if time_slot and day1 in timetable:
-                    timetable[day1][time_slot] = {
+            if classday_1 and starttime_1 and endtime_1:
+                start_minutes = time_to_minutes(starttime_1)
+                end_minutes = time_to_minutes(endtime_1)
+                
+                if start_minutes is not None and end_minutes is not None:
+                    schedule_classes.append({
+                        'day': classday_1,
                         'subject_code': subject_code,
                         'classroom': classroom or 'TBA',
-                        'section': section or 'N/A'
-                    }
+                        'section': class_section or 'N/A',
+                        'start_minutes': start_minutes,
+                        'end_minutes': end_minutes,
+                        'start_time': format_time_12hr(starttime_1),
+                        'end_time': format_time_12hr(endtime_1),
+                        'duration_minutes': end_minutes - start_minutes
+                    })
             
-            if day2 and start2 and end2:
-                time_slot = get_time_slot(start2, end2)
-                if time_slot and day2 in timetable:
-                    timetable[day2][time_slot] = {
+            if classday_2 and starttime_2 and endtime_2:
+                start_minutes = time_to_minutes(starttime_2)
+                end_minutes = time_to_minutes(endtime_2)
+                
+                if start_minutes is not None and end_minutes is not None:
+                    schedule_classes.append({
+                        'day': classday_2,
                         'subject_code': subject_code,
                         'classroom': classroom or 'TBA',
-                        'section': section or 'N/A'
-                    }
+                        'section': class_section or 'N/A',
+                        'start_minutes': start_minutes,
+                        'end_minutes': end_minutes,
+                        'start_time': format_time_12hr(starttime_2),
+                        'end_time': format_time_12hr(endtime_2),
+                        'duration_minutes': end_minutes - start_minutes
+                    })
         
         semester_info = {
             'id': acadcalendar_id,
@@ -2656,7 +2974,7 @@ def api_hr_faculty_schedule(personnel_id):
         
         return {
             'success': True,
-            'timetable': timetable,
+            'schedule_classes': schedule_classes,
             'semester_info': semester_info
         }
         

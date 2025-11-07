@@ -251,6 +251,8 @@ async function loadSemesters() {
 
 async function loadSchedule(semesterId) {
   try {
+    document.getElementById('teaching-display').innerHTML = '<div class="timetable-loading"><i class="fas fa-spinner fa-spin"></i><p>Loading schedule...</p></div>';
+    
     const response = await fetch(`/api/faculty/teaching-schedule/${semesterId}`);
     const data = await response.json();
     
@@ -269,49 +271,105 @@ async function loadSchedule(semesterId) {
 
 function displaySchedule(data) {
   const semesterInfo = data.semester_info;
-  const timetable = data.timetable;
+  const scheduleClasses = data.schedule_classes;
   
   document.getElementById('semester-title').textContent = semesterInfo.display;
   document.getElementById('prev-semester-btn').disabled = currentSemesterIndex <= 0;
   document.getElementById('next-semester-btn').disabled = currentSemesterIndex >= allSemesters.length - 1;
   
-  let html = '<div class="timetable-container"><table class="timetable">';
-  html += '<thead><tr><th>Time</th>';
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  
+  const timeSlots = [];
+  for (let hour = 7; hour <= 20; hour++) { 
+    const displayHour = hour > 12 ? hour - 12 : hour;
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const nextHour = hour + 1 > 12 ? (hour + 1) - 12 : hour + 1;
+    const nextPeriod = (hour + 1) >= 12 ? 'PM' : 'AM';
+    
+    timeSlots.push({
+      label: `${displayHour}:00 ${period} - ${nextHour}:00 ${nextPeriod}`,
+      startMinutes: (hour - 7) * 60,
+      endMinutes: (hour - 7 + 1) * 60
+    });
+  }
+  
+  const classesByDay = {};
+  days.forEach(day => {
+    classesByDay[day] = [];
+  });
+  
+  scheduleClasses.forEach(cls => {
+    if (classesByDay[cls.day]) {
+      classesByDay[cls.day].push(cls);
+    }
+  });
+  
+  let html = `
+    <div class="timetable-wrapper">
+      <style>
+        .timetable {
+          table-layout: fixed;
+          width: 100%;
+        }
+        .timetable th, .timetable td {
+          width: calc(100% / 7); /* Equal width for all 7 columns (time + 6 days) */
+        }
+        .time-header {
+          width: calc(100% / 7) !important;
+        }
+        .class-block {
+          cursor: default !important; /* REMOVE QUESTION MARK CURSOR */
+        }
+      </style>
+      <table class="timetable">
+  `;
+  
+  html += '<thead><tr><th class="time-header">Time</th>';
   days.forEach(day => {
     html += `<th>${day}</th>`;
   });
-  html += '</tr></thead><tbody>';
+  html += '</tr></thead>';
+  html += '<tbody>';
   
-  const timeSlots = [
-    '7:30 AM - 9:00 AM',
-    '9:15 AM - 10:45 AM',
-    '11:00 AM - 12:30 PM',
-    '12:45 PM - 2:15 PM',
-    '2:30 PM - 4:00 PM',
-    '4:15 PM - 5:45 PM',
-    '6:00 PM - 7:30 PM',
-    '7:45 PM - 9:00 PM',
-    '9:15 PM - 10:45 PM'
-  ];
-  
-  timeSlots.forEach(timeSlot => {
-    html += `<tr><td class="time-cell">${timeSlot}</td>`;
+  timeSlots.forEach(slot => {
+    html += '<tr>';
+    html += `<td class="time-cell">${slot.label}</td>`;
     
     days.forEach(day => {
-      const classInfo = timetable[day] && timetable[day][timeSlot];
+      const dayClasses = classesByDay[day] || [];
+      const overlappingClasses = dayClasses.filter(cls => {
+        return cls.start_minutes < slot.endMinutes && cls.end_minutes > slot.startMinutes;
+      });
       
-      if (classInfo) {
-        html += `
-          <td class="class-cell">
-            <div class="class-block">
-              <div class="subject-code">${classInfo.subject_code}</div>
-              <div class="room-section">${classInfo.classroom} • ${classInfo.section}</div>
+      const classesToRender = overlappingClasses.filter(cls => {
+        return cls.start_minutes >= slot.startMinutes && cls.start_minutes < slot.endMinutes;
+      });
+      
+      if (classesToRender.length > 0) {
+        html += '<td class="day-cell"><div class="class-container">';
+        
+        classesToRender.forEach(cls => {
+          const pixelsPerMinute = 45 / 60;
+          const offsetFromSlotStart = cls.start_minutes - slot.startMinutes;
+          const topPosition = offsetFromSlotStart * pixelsPerMinute;
+          const height = cls.duration_minutes * pixelsPerMinute;
+          const timeRange = `${cls.start_time} - ${cls.end_time}`;
+          const title = `${cls.subject_code}\n${cls.classroom} • ${cls.section}\n${timeRange}`;
+          
+          html += `
+            <div class="class-block" 
+                 style="top: ${topPosition}px; height: ${height}px;"
+                 title="${title}">
+              <div class="subject-code">${cls.subject_code}</div>
+              <div class="room-section">${cls.classroom} • ${cls.section}</div>
+              <div class="time-range">${timeRange}</div>
             </div>
-          </td>
-        `;
+          `;
+        });
+        
+        html += '</div></td>';
       } else {
-        html += '<td class="class-cell"></td>';
+        html += '<td class="day-cell"><div class="class-container"></div></td>';
       }
     });
     

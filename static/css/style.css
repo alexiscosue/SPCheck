@@ -2236,41 +2236,54 @@ to { opacity: 1; }
   }
 }
 
-/* Timetable Styles */
+/* Timetable Styles - 15-Minute Grid System */
 .timetable-container {
   overflow-x: auto;
   margin-top: 20px;
+  position: relative;
+}
+
+.timetable-wrapper {
+  position: relative;
+  min-width: 100%;
 }
 
 .timetable {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   background: white;
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   border-radius: 8px;
   overflow: hidden;
+  position: relative;
+}
+
+.timetable thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: white;
 }
 
 .timetable th {
   background: #f3f4f6;
   color: #374151;
-  padding: 15px 10px;
+  padding: 12px 8px;
   text-align: center;
   font-weight: 600;
   font-size: 14px;
   border: 1px solid #e5e7eb;
 }
 
-.timetable td {
-  border: 1px solid #e5e7eb;
-  padding: 0;
-  text-align: center;
-  vertical-align: middle;
-  height: 50px;
-  min-height: 50px;
-  max-height: 50px;
-  position: relative;
-  background: #fafafa;
+.timetable th.time-header {
+  width: 140px;
+  min-width: 140px;
+}
+
+.timetable th:not(.time-header) {
+  width: calc((100% - 140px) / 6);
+  min-width: 0;
 }
 
 .timetable td.time-cell {
@@ -2278,65 +2291,166 @@ to { opacity: 1; }
   font-weight: 600;
   color: #6b7280;
   font-size: 12px;
-  padding: 10px;
+  padding: 8px;
   width: 140px;
   min-width: 140px;
+  text-align: center;
+  border: 1px solid #e5e7eb;
+  vertical-align: middle;
+  position: sticky;
+  left: 0;
+  z-index: 5;
 }
 
-.timetable td.class-cell {
+.timetable td.day-cell {
   background: white;
-  padding: 4px; 
+  padding: 0;
+  border: 1px solid #e5e7eb;
+  vertical-align: top;
+  position: relative;
+  height: 45px; 
+  width: calc((100% - 140px) / 6); 
+}
+
+.class-container {
+  position: relative;
+  height: 100%;
+  width: 100%;
 }
 
 .class-block {
-  background: #e5e7eb; 
-  padding: 10px;
-  border-radius: 8px;
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  background: #e5e7eb;
+  padding: 6px;
+  border-radius: 4px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  transition: background-color 0.2s ease; 
+  transition: all 0.2s ease;
   border: 1px solid #d1d5db;
+  overflow: hidden;
+  box-sizing: border-box;
+  cursor: pointer;
+  z-index: 2;
 }
 
 .class-block:hover {
-  background: #d1d5db; 
-  border-color: #9ca3af; 
+  background: #d1d5db;
+  border-color: #9ca3af;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+  transform: translateY(-1px);
 }
 
 .class-block .subject-code {
   font-weight: 700;
-  font-size: 13px;
+  font-size: 12px;
   color: #374151;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
 }
 
 .class-block .room-section {
-  font-size: 11px;
-  color: #6b7280; 
+  font-size: 10px;
+  color: #6b7280;
   font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
 }
 
-@media (max-width: 768px) {
+.class-block .time-range {
+  font-size: 9px;
+  color: #9ca3af;
+  font-weight: 500;
+  text-align: center;
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.class-block[title] {
+  cursor: help;
+}
+
+.timetable td.day-cell:empty::after {
+  display: none;
+}
+
+@media (max-width: 1200px) {
   .timetable {
-    font-size: 11px;
+    font-size: 12px;
   }
   
-  .timetable th, .timetable td {
-    padding: 8px 5px;
+  .timetable th, .timetable td.time-cell {
+    padding: 6px 4px;
+    font-size: 11px;
   }
   
   .class-block {
-    padding: 5px;
+    padding: 4px;
   }
   
   .class-block .subject-code {
-    font-size: 11px;
+    font-size: 10px;
   }
   
   .class-block .room-section {
     font-size: 9px;
+  }
+  
+  .class-block .time-range {
+    font-size: 8px;
+  }
+}
+
+@media (max-width: 768px) {
+  .timetable-container {
+    margin-left: -20px;
+    margin-right: -20px;
+    padding: 0 10px;
+  }
+  
+  .timetable {
+    font-size: 10px;
+  }
+  
+  .timetable th, .timetable td.time-cell {
+    padding: 4px 2px;
+    font-size: 10px;
+  }
+  
+  .timetable td.time-cell {
+    width: 100px;
+    min-width: 100px;
+  }
+  
+  .class-block {
+    padding: 3px;
+  }
+  
+  .class-block .subject-code {
+    font-size: 9px;
+    margin-bottom: 1px;
+  }
+  
+  .class-block .room-section {
+    font-size: 8px;
+  }
+  
+  .class-block .time-range {
+    font-size: 7px;
+    display: none;
   }
 }
 
@@ -2450,20 +2564,35 @@ to { opacity: 1; }
   }
 }
 
-/* HR Timetable Styles */
+/* HR Timetable Styles - 15-Minute Grid System */
 .hr-timetable-container {
   overflow-x: auto;
   margin-top: 15px;
+  position: relative;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: white;
 }
 
+.hr-timetable-wrapper {
+  position: relative;
+  min-width: 100%;
+}
+
 .hr-timetable {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   background: white;
-  font-size: 12px;
+  position: relative;
+  table-layout: fixed;
+}
+
+.hr-timetable thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: white;
 }
 
 .hr-timetable th {
@@ -2472,104 +2601,172 @@ to { opacity: 1; }
   padding: 12px 8px;
   text-align: center;
   font-weight: 600;
+  font-size: 14px;
   border: 1px solid #e5e7eb;
-  white-space: nowrap;
 }
 
-.hr-timetable td {
-  border: 1px solid #e5e7eb;
-  padding: 0;
-  text-align: center;
-  vertical-align: middle;
-  height: 45px;
-  min-height: 45px;
-  max-height: 45px;
-  position: relative;
-  background: #fafafa;
+.hr-timetable th.hr-time-header {
+  width: 120px;
+  min-width: 120px;
+}
+
+.hr-timetable th:not(.hr-time-header) {
+  width: calc((100% - 120px) / 6);
+  min-width: 0;
 }
 
 .hr-timetable td.hr-time-cell {
   background: #f9fafb;
   font-weight: 600;
   color: #6b7280;
+  font-size: 12px;
   padding: 8px;
-  width: 140px;
-  min-width: 140px;
-  font-size: 11px;
-  white-space: nowrap;
+  width: 120px;
+  min-width: 120px;
+  text-align: center;
+  border: 1px solid #e5e7eb;
+  vertical-align: middle;
+  position: sticky;
+  left: 0;
+  z-index: 5;
 }
 
-.hr-timetable td.hr-class-cell {
+.hr-timetable td.hr-day-cell {
   background: white;
-  padding: 2px;
+  padding: 0;
+  border: 1px solid #e5e7eb;
+  vertical-align: top;
+  position: relative;
+  height: 45px; 
+  width: calc((100% - 120px) / 6); 
+}
+
+.hr-class-container {
+  position: relative;
+  height: 100%;
+  width: 100%;
 }
 
 .hr-class-block {
+  position: absolute;
+  left: 3px;
+  right: 3px;
   background: #e5e7eb;
-  padding: 6px 4px;
-  border-radius: 6px;
+  padding: 6px;
+  border-radius: 4px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  transition: background-color 0.2s ease;
+  transition: all 0.2s ease;
   border: 1px solid #d1d5db;
-  height: 100%;
-  min-height: 40px;
+  overflow: hidden;
+  box-sizing: border-box;
+  cursor: default;
+  z-index: 2;
 }
 
 .hr-class-block:hover {
   background: #d1d5db;
   border-color: #9ca3af;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+  transform: translateY(-1px);
 }
 
 .hr-class-block .hr-subject-code {
   font-weight: 700;
-  font-size: 11px;
+  font-size: 12px;
   color: #374151;
   margin-bottom: 2px;
-  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
 }
 
 .hr-class-block .hr-room-section {
   font-size: 10px;
   color: #6b7280;
   font-weight: 500;
-  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.hr-class-block .hr-time-range {
+  font-size: 9px;
+  color: #9ca3af;
+  font-weight: 500;
+  text-align: center;
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.hr-class-block[title] {
+  cursor: default;
+}
+
+.hr-timetable td.hr-day-cell:empty::after {
+  display: none;
 }
 
 .hr-schedule-header {
-  padding: 5px 3px;
+  padding: 15px;
   border-bottom: 1px solid #e5e7eb;
-  margin-bottom: 10px;
   text-align: center;
+  background: #f9fafb;
 }
 
 .hr-schedule-header h4 {
   margin: 0;
   color: #374151;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
 }
 
 .faculty-schedule-container {
-  padding: 15px;
-  background: #f9fafb;
+  padding: 0;
+  background: white;
   border-radius: 8px;
-  margin: 10px 0;
+  margin: 0;
 }
 
-@media (max-width: 768px) {
+.no-teaching-load-message {
+  padding: 1rem;
+}
+
+.no-teaching-load-message i {
+  opacity: 0.7;
+}
+
+@media (max-width: 1200px) {
   .hr-timetable {
-    font-size: 10px;
+    font-size: 12px;
   }
   
-  .hr-timetable th, .hr-timetable td {
+  .hr-timetable th, .hr-timetable td.hr-time-cell {
     padding: 6px 4px;
+    font-size: 11px;
+  }
+  
+  .hr-timetable th.hr-time-header {
+    width: 100px;
+    min-width: 100px;
+  }
+  
+  .hr-timetable td.hr-time-cell {
+    width: 100px;
+    min-width: 100px;
   }
   
   .hr-class-block {
-    padding: 4px 2px;
+    padding: 4px;
   }
   
   .hr-class-block .hr-subject-code {
@@ -2580,11 +2777,79 @@ to { opacity: 1; }
     font-size: 9px;
   }
   
-  .hr-timetable td.hr-time-cell {
-    width: 100px;
-    min-width: 100px;
+  .hr-class-block .hr-time-range {
+    font-size: 8px;
+  }
+}
+
+@media (max-width: 768px) {
+  .hr-timetable-container {
+    margin-left: -10px;
+    margin-right: -10px;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+  
+  .hr-timetable {
     font-size: 10px;
-    padding: 6px;
+  }
+  
+  .hr-timetable th, .hr-timetable td.hr-time-cell {
+    padding: 4px 2px;
+    font-size: 10px;
+  }
+  
+  .hr-timetable th.hr-time-header {
+    width: 80px;
+    min-width: 80px;
+  }
+  
+  .hr-timetable td.hr-time-cell {
+    width: 80px;
+    min-width: 80px;
+  }
+  
+  .hr-class-block {
+    padding: 3px;
+  }
+  
+  .hr-class-block .hr-subject-code {
+    font-size: 9px;
+    margin-bottom: 1px;
+  }
+  
+  .hr-class-block .hr-room-section {
+    font-size: 8px;
+  }
+  
+  .hr-class-block .hr-time-range {
+    font-size: 7px;
+    display: none;
+  }
+  
+  .hr-schedule-header {
+    padding: 10px;
+  }
+  
+  .hr-schedule-header h4 {
+    font-size: 14px;
+  }
+  
+  .no-teaching-load-message {
+    padding: 0.5rem;
+  }
+  
+  .no-teaching-load-message i {
+    font-size: 36px !important;
+  }
+  
+  .no-teaching-load-message h4 {
+    font-size: 16px !important;
+  }
+  
+  .no-teaching-load-message p {
+    font-size: 13px !important;
   }
 }
 
@@ -2597,34 +2862,7 @@ to { opacity: 1; }
   margin: 0 auto;
 }
 
-.sort-icon {
-  margin-left: 5px;
-  font-size: 12px;
-  color: #6b7280;
-}
-
-.sort-asc .sort-icon {
-  color: #3b82f6;
-  content: "↑";
-}
-
-.sort-desc .sort-icon {
-  color: #3b82f6;
-  content: "↓";
-}
-
-th[data-sort] {
-  position: relative;
-  user-select: none;
-}
-
-th[data-sort]:hover {
-  background-color: #f9fafb;
-}
-
-
 /* FOR UPLOADS*/
-
 .custom-upload-label {
   display: flex;
   align-items: center;
@@ -2754,6 +2992,91 @@ th[data-sort]:hover {
 .edit-remarks-btn i {
   font-size: 1.25rem;
 }
+
+.edit-time-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.edit-time-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.edit-time-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.edit-time-btn.active {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+}
+
+.edit-time-btn i {
+  font-size: 1.25rem;
+}
+
+.time-editable {
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+
+.time-editable:focus {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
+  border-radius: 4px;
+  background: #f0fdf4;
+}
+
+/* Remove clock icon from time input */
+.time-editable::-webkit-calendar-picker-indicator {
+  display: none;
+  -webkit-appearance: none;
+}
+
+.time-editable::-webkit-inner-spin-button,
+.time-editable::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* For Firefox */
+.time-editable::-moz-calendar-picker-indicator {
+  display: none;
+}
+
+.time-display {
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.time-display:hover {
+  background: #f3f4f6;
+}
+
+.time-cell {
+  position: relative;
+}
+
 
 #rfidLogsBody th:nth-child(1),
 #rfidLogsBody td:nth-child(1) {
@@ -3020,7 +3343,8 @@ table:has(#rfidLogsBody) thead th:nth-child(4) {
     min-width: auto;
   }
 }
-/* Audit Logs Table Specific Styling */
+
+/* Audit logs */
 #audit-logs-container table {
   table-layout: fixed;
   width: 100%;
@@ -3050,9 +3374,9 @@ table:has(#rfidLogsBody) thead th:nth-child(4) {
   text-align: left;
 }
 
-#audit-logs-container th:nth-child(1) { width: 10%; }
+#audit-logs-container th:nth-child(1) { width: 15%; }
 #audit-logs-container th:nth-child(2) { width: 15%; }
-#audit-logs-container th:nth-child(3) { width: 60%; }
+#audit-logs-container th:nth-child(3) { width: 55%; }
 #audit-logs-container th:nth-child(4) { width: 15%; }
 
 #audit-logs-container tbody tr {
