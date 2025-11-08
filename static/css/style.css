@@ -3076,3 +3076,33 @@ table:has(#rfidLogsBody) thead th:nth-child(4) {
   padding-right: 0;
   text-align: left;
 }
+
+.progress-circle {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: conic-gradient(#8b1538 calc(var(--percentage) * 1%), #e0e0e0 0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.progress-circle::before {
+  content: '';
+  position: absolute;
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: white;
+}
+
+.progress-circle span {
+  position: relative;
+  z-index: 1;
+  font-weight: bold;
+  font-size: 18px;
+  color: #333;
+}
+
+

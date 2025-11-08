@@ -23,7 +23,7 @@
         {% if current_status == 'hrmd' %}
           In Progress
         {% elif hrmd_approval_date %}
-          Approved {{ hrmd_approval_date }}
+          Approved {{ hrmd_approval_date.strftime("%Y-%m-%d") if hrmd_approval_date else '' }}
         {% else %}
           Not yet
         {% endif %}
@@ -36,7 +36,7 @@
         {% if current_status == 'vpa' %}
           In Progress
         {% elif vpa_approval_date %}
-          Approved {{ vpa_approval_date }}
+          Approved {{ vpa_approval_date.strftime("%Y-%m-%d") if vpa_approval_date else '' }}
         {% else %}
           Not yet
         {% endif %}
@@ -49,7 +49,7 @@
         {% if current_status == 'pres' %}
           In Progress
         {% elif pres_approval_date %}
-          Approved {{ pres_approval_date }}
+          Approved {{ pres_approval_date.strftime("%Y-%m-%d") if pres_approval_date else '' }}
         {% else %}
           Not yet
         {% endif %}
@@ -62,20 +62,45 @@
       <!-- Two-column layout -->
       <div class="grid-2" style="grid-column:1 / -1">
 
-        <!-- Regularization -->
+ <!-- Regularization -->
         <div class="card-promotion" style="padding:20px">
-          <div class="card-header"><i class='bx bx-pie-chart-alt'></i><span>Regularization Progress</span></div>
+          <div class="card-header">
+            <i class='bx bx-pie-chart-alt'></i>
+            <span>Regularization Progress</span>
+          </div>
           <div style="display:flex;align-items:center;gap:16px;margin-top:12px">
-            <div class="progress-circle"><span>70%</span></div>
+            <div class="progress-circle" data-percentage="{{ regularization_percentage }}">
+              <span>{{ regularization_percentage }}%</span>
+            </div>
             <div>
-              <p style="font-size:14px"><strong>Status:</strong> Probationary (Year 2 of 3)</p>
-              <p style="font-size:14px"><strong>Master’s Degree:</strong> <span class="status completed">Completed</span></p>
-              <p style="font-size:14px"><strong>Evaluations:</strong> Avg. 4.5/5 <span class="status ok">OK</span></p>
-              <p style="font-size:14px"><strong>Attendance:</strong> 94% <span class="status ok">OK</span></p>
+              <p style="font-size:14px">
+                <strong>Status:</strong> {{ regularization_status }}
+              </p>
+              <p style="font-size:14px">
+                <strong>Tenure Type:</strong> 
+                {% if tenure_type == 'Probationary' %}
+                  <span class="status pending">{{ tenure_type }}</span>
+                {% elif tenure_type == 'Regular' %}
+                  <span class="status ok">{{ tenure_type }}</span>
+                {% elif tenure_type == 'Tenured' %}
+                  <span class="status completed">{{ tenure_type }}</span>
+                {% else %}
+                  <span class="status nu">{{ tenure_type }}</span>
+                {% endif %}
+              </p>
+              <p style="font-size:14px">
+                <strong>Hire Date:</strong> {{ hire_date.strftime('%B %d, %Y') if hire_date else 'Not set' }}
+              </p>
+              <p style="font-size:14px">
+                <strong>Years Employed:</strong> {{ years_employed }} year{{ 's' if years_employed != 1 else '' }}
+              </p>
             </div>
           </div>
-          <p style="font-size:13px;color:var(--muted);margin-top:10px">ℹ️ Regularization is automatic and reviewed by HRMD — no action needed.</p>
+          <p style="font-size:13px;color:var(--muted);margin-top:10px">
+            {{ regularization_message }}
+          </p>
         </div>
+
 
         <!-- Promotion Application -->
         <form id="promotion-doc-upload-form" enctype="multipart/form-data" method="POST" action="/faculty/promotion/upload">
@@ -254,10 +279,20 @@ if ("{{ application_id }}" != "None" && btnResume) {
   updateStep1Status();
 });
 
+document.addEventListener('DOMContentLoaded', function() {
+      const progressCircle = document.querySelector('.progress-circle');
+      
+      if (progressCircle) {
+        const percentage = progressCircle.getAttribute('data-percentage') || 0;
+        progressCircle.style.setProperty('--percentage', percentage);
+      }
+    });
+
 document.getElementById('deleteSubmission').addEventListener('click', function() {
   if (confirm('Are you sure you want to delete this submission?')) {
     fetch("{{ url_for('delete_submission') }}", );
   }});
+
 
   // Initial check on page load
   updateStep1Status();
