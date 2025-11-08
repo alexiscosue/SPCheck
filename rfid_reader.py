@@ -144,7 +144,7 @@ class RFIDReader:
             print(f"⚠️ Failed to log RFID tap: {e}")
     
     def _process_rfid(self, rfid_uid):
-        """Process detected RFID tag and record attendance - 15 min buffer"""
+        """Process detected RFID tag and record attendance with specific time windows"""
         conn = None
         try:
             conn = self.db_pool.get_connection()
@@ -152,37 +152,36 @@ class RFIDReader:
             
             philippines_tz = pytz.timezone('Asia/Manila')
             current_time = datetime.now(philippines_tz).replace(microsecond=0)
+            current_time_only = current_time.time()
+            current_date = current_time.date()
+            current_day = current_time.strftime('%A')
+            
+            print(f"Processing RFID: {rfid_uid} on {current_day} at {current_time_only}")
             
             cursor.execute("SELECT personnel_id FROM rfid WHERE rfid_uid = %s", (rfid_uid,))
             result = cursor.fetchone()
             
             # CASE 1: RFID UID not found in database
             if not result:
-                print(f"⚠️ RFID UID {rfid_uid} not found in database")
-                
+                print(f"RFID UID {rfid_uid} not found in database")
                 notification_data = {
                     'personnel_id': 0, 
                     'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
                     'action': 'unknown_rfid',
                     'status': 'error',
                     'rfid_uid': rfid_uid,
-                    'subject_code': None,
-                    'subject_name': None,
-                    'class_section': None,
-                    'classroom': None,
                     'message': f'Unknown RFID card (UID: {rfid_uid}) - Not registered in system'
                 }
                 self._trigger_notification(notification_data)
-                
                 self._log_rfid_tap(cursor, rfid_uid, None, current_time, None, 'unknown_rfid', 
-                                  f"RFID UID not registered in system")
+                                f"RFID UID not registered in system")
                 conn.commit()
                 cursor.close()
                 self.db_pool.return_connection(conn)
                 return
             
             personnel_id = result[0]
-            print(f"✓ Personnel ID: {personnel_id}")
+            print(f"Personnel ID: {personnel_id}")
             
             cursor.execute("""
                 SELECT firstname, lastname, honorifics
@@ -218,7 +217,7 @@ class RFIDReader:
             
             schedules = cursor.fetchall()
             
-            # CASE 2: Personnel has RFID but no teaching load/class schedule
+            # CASE 2: No teaching schedule
             if not schedules:
                 notification_data = {
                     'personnel_id': personnel_id,
@@ -226,195 +225,354 @@ class RFIDReader:
                     'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
                     'action': 'no_schedule',
                     'status': 'warning',
-                    'subject_code': None,
-                    'subject_name': None,
-                    'class_section': None,
-                    'classroom': None,
-                    'message': f'{person_name} has no teaching load or class schedule for the current semester'
+                    'message': f'{person_name} has no teaching load for current semester'
                 }
                 self._trigger_notification(notification_data)
-                
-                print(f"⚠️ No schedule for personnel {personnel_id} ({person_name})")
                 self._log_rfid_tap(cursor, rfid_uid, personnel_id, current_time, None, 'no_schedule',
-                                  f"Personnel has RFID but no classes scheduled for current semester")
+                                f"No teaching schedule")
+                
+                cursor.execute("""
+                    INSERT INTO auditlogs (personnel_id, action, details, created_at)
+                    VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                """, (personnel_id, "RFID tap - No schedule", 
+                    f"RFID tap but no teaching schedule found\nTime: {current_time.strftime('%H:%M:%S')}\nRFID UID: {rfid_uid}"))
                 
                 conn.commit()
                 cursor.close()
                 self.db_pool.return_connection(conn)
                 return
             
-            current_day = current_time.strftime('%A')
-            current_time_only = current_time.time()
-            
-            print(f"🕐 Current: {current_day} at {current_time_only}")
+            print(f"Found {len(schedules)} schedule(s) for {person_name}")
             
             matching_class = None
+            time_window_type = None
             
             for schedule in schedules:
                 class_id, day1, start1, end1, day2, start2, end2, subject_code, subject_name, class_section, classroom = schedule
                 
-                if day1 == current_day and start1 and end1:
-                    if isinstance(start1, str):
-                        start_time = datetime.strptime(start1[:8], '%H:%M:%S').time()
+                print(f"  Checking: {subject_code} - Day1: {day1} {start1}-{end1}, Day2: {day2} {start2}-{end2}")
+                
+                for day_idx, (day, start, end) in enumerate([(day1, start1, end1), (day2, start2, end2)], 1):
+                    if not day or not start or not end:
+                        continue
+                        
+                    if day != current_day:
+                        continue
+                    
+                    if isinstance(start, str):
+                        start_time = datetime.strptime(start[:8], '%H:%M:%S').time()
                     else:
-                        start_time = start1
+                        start_time = start
                     
-                    if isinstance(end1, str):
-                        end_time = datetime.strptime(end1[:8], '%H:%M:%S').time()
+                    if isinstance(end, str):
+                        end_time = datetime.strptime(end[:8], '%H:%M:%S').time()
                     else:
-                        end_time = end1
+                        end_time = end
                     
-                    buffer_start = (datetime.combine(datetime.today(), start_time) - timedelta(minutes=15)).time()
-                    buffer_end = (datetime.combine(datetime.today(), end_time) + timedelta(minutes=15)).time()
+                    print(f"    Day{day_idx}: {start_time} - {end_time}, Current: {current_time_only}")
                     
-                    if buffer_start <= current_time_only <= buffer_end:
-                        matching_class = (class_id, start_time, subject_code, subject_name, class_section, classroom)
-                        print(f"✓ Matched: {subject_code} - {subject_name}, Section: {class_section or 'N/A'}, Room: {classroom or 'N/A'} ({start_time} - {end_time})")
+                    timein_window_start = (datetime.combine(current_date, start_time) - timedelta(minutes=15)).time()
+                    timein_window_end = (datetime.combine(current_date, end_time) - timedelta(minutes=15)).time()
+                    timeout_window_start = (datetime.combine(current_date, end_time) - timedelta(minutes=15)).time()
+                    timeout_window_end = (datetime.combine(current_date, end_time) + timedelta(minutes=15)).time()
+                    
+                    print(f"    Time-in window: {timein_window_start} to {timein_window_end}")
+                    print(f"    Time-out window: {timeout_window_start} to {timeout_window_end}")
+                    
+                    if timein_window_start <= current_time_only <= timein_window_end:
+                        matching_class = (class_id, start_time, end_time, subject_code, subject_name, class_section, classroom, 'timein_window')
+                        print(f"    MATCHED Time-in window!")
+                        break
+                    
+                    # Check time-out window  
+                    elif timeout_window_start <= current_time_only <= timeout_window_end:
+                        matching_class = (class_id, start_time, end_time, subject_code, subject_name, class_section, classroom, 'timeout_window')
+                        print(f"    MATCHED Time-out window!")
                         break
                 
-                if day2 == current_day and start2 and end2:
-                    if isinstance(start2, str):
-                        start_time = datetime.strptime(start2[:8], '%H:%M:%S').time()
-                    else:
-                        start_time = start2
-                    
-                    if isinstance(end2, str):
-                        end_time = datetime.strptime(end2[:8], '%H:%M:%S').time()
-                    else:
-                        end_time = end2
-                    
-                    buffer_start = (datetime.combine(datetime.today(), start_time) - timedelta(minutes=15)).time()
-                    buffer_end = (datetime.combine(datetime.today(), end_time) + timedelta(minutes=15)).time()
-                    
-                    if buffer_start <= current_time_only <= buffer_end:
-                        matching_class = (class_id, start_time, subject_code, subject_name, class_section, classroom)
-                        print(f"✓ Matched: {subject_code} - {subject_name}, Section: {class_section or 'N/A'}, Room: {classroom or 'N/A'} ({start_time} - {end_time})")
-                        break
+                if matching_class:
+                    break
             
-            # CASE 3: No class within 15-minute buffer
+            # CASE 3: No matching time window
             if not matching_class:
                 notification_data = {
                     'personnel_id': personnel_id,
                     'person_name': person_name,
                     'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
-                    'action': 'tap',
+                    'action': 'outside_buffer',
                     'status': 'outside_buffer',
-                    'subject_code': None,
-                    'subject_name': None,
-                    'class_section': None,
-                    'classroom': None,
-                    'message': f'{person_name} tapped outside class schedule - No class within 15 minutes'
+                    'message': f'Tapped outside valid class time windows'
                 }
                 self._trigger_notification(notification_data)
-                
-                print(f"⚠️ No matching class for {current_day} at {current_time_only}")
                 self._log_rfid_tap(cursor, rfid_uid, personnel_id, current_time, None, 'outside_buffer',
-                                  f"Tapped on {current_day} at {current_time.strftime('%Y-%m-%d %H:%M:%S%z')}, no class within 15min buffer")
+                                f"Outside time windows on {current_day} at {current_time_only}")
+                
+                # Enhanced audit logging for outside buffer
+                cursor.execute("""
+                    INSERT INTO auditlogs (personnel_id, action, details, created_at)
+                    VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                """, (personnel_id, "RFID tap - Outside buffer", 
+                    f"RFID tap outside valid time windows\nDay: {current_day}\nTime: {current_time.strftime('%H:%M:%S')}\nRFID UID: {rfid_uid}"))
                 
                 conn.commit()
                 cursor.close()
                 self.db_pool.return_connection(conn)
                 return
             
-            class_id, class_start_time, subject_code, subject_name, class_section, classroom = matching_class
+            class_id, class_start_time, class_end_time, subject_code, subject_name, class_section, classroom, window_type = matching_class
             
+            print(f"Processing: {subject_code} in {window_type}")
+            
+            # Check for existing attendance for THIS SPECIFIC CLASS AND DATE
             cursor.execute("""
                 SELECT attendance_id, timein, timeout, attendancestatus
                 FROM attendance 
                 WHERE personnel_id = %s AND class_id = %s 
                 AND DATE(timein AT TIME ZONE 'Asia/Manila') = %s
-            """, (personnel_id, class_id, current_time.date()))
+            """, (personnel_id, class_id, current_date))
             
-            existing = cursor.fetchone()
+            existing_record = cursor.fetchone()
             
-            if existing:
-                attendance_id, timein, timeout, status = existing
-                
-                if timeout is None:
+            print(f"Existing record: {existing_record}")
+            
+            # TIME-IN WINDOW PROCESSING
+            if window_type == 'timein_window':
+                if not existing_record:
+                    # NO EXISTING RECORD - CREATE NEW TIME-IN
+                    current_dt = datetime.combine(current_date, current_time_only)
+                    class_start_dt = datetime.combine(current_date, class_start_time)
+                    late_threshold = class_start_dt + timedelta(minutes=15)
+                    
+                    # Determine status
+                    if current_dt <= late_threshold:
+                        status = "Present"
+                        timing_msg = "on time"
+                    else:
+                        status = "Late"
+                        minutes_late = int((current_dt - late_threshold).total_seconds() / 60)
+                        timing_msg = f"{minutes_late} minutes late"
+                    
+                    # Create new attendance record
+                    cursor.execute("SELECT COALESCE(MAX(attendance_id), 70000) FROM attendance")
+                    new_id = cursor.fetchone()[0] + 1
+                    
+                    cursor.execute("""
+                        INSERT INTO attendance (attendance_id, personnel_id, class_id, attendancestatus, timein, timeout)
+                        VALUES (%s, %s, %s, %s, %s, NULL)
+                    """, (new_id, personnel_id, class_id, status, current_time))
+                    
                     notification_data = {
                         'personnel_id': personnel_id,
                         'person_name': person_name,
                         'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
-                        'action': 'timeout',
+                        'action': 'timein',
                         'status': status,
                         'subject_code': subject_code,
                         'subject_name': subject_name,
                         'class_section': class_section,
                         'classroom': classroom,
-                        'message': f'Time-out recorded for {subject_code}'
+                        'message': f'Time-in recorded - {status} ({timing_msg})'
                     }
                     self._trigger_notification(notification_data)
                     
-                    cursor.execute("UPDATE attendance SET timeout = %s WHERE attendance_id = %s", (current_time, attendance_id))
-                    self._log_rfid_tap(cursor, rfid_uid, personnel_id, current_time, class_id, 'timeout_recorded',
-                                      f"Time-out for {subject_code} - {subject_name}, Section: {class_section or 'N/A'}, Room: {classroom or 'N/A'} at {current_time.strftime('%H:%M')}")
+                    self._log_rfid_tap(cursor, rfid_uid, personnel_id, current_time, class_id, 'timein_recorded',
+                                    f"Time-in for {subject_code} - {status}")
                     
-                    conn.commit()
-                    print(f"✓ TIME-OUT: {subject_code} - {subject_name}, Section: {class_section or 'N/A'}, Room: {classroom or 'N/A'} at {current_time.strftime('%H:%M')}")
+                    # Enhanced audit logging for time-in
+                    cursor.execute("""
+                        INSERT INTO auditlogs (personnel_id, action, details, created_at)
+                        VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                    """, (personnel_id, "RFID time-in recorded", 
+                        f"Time-in for {subject_code} - {class_section}\nStatus: {status}\nTime: {current_time.strftime('%H:%M:%S')}\nClassroom: {classroom}\nTiming: {timing_msg}\nRFID UID: {rfid_uid}"))
+                    
+                    print(f"NEW TIME-IN: {subject_code} - {status}")
+                    
                 else:
+                    # EXISTING RECORD FOUND - handle based on current state
+                    attendance_id, timein, timeout, existing_status = existing_record
+                    
+                    if timeout is None:
+                        # Has time-in but no time-out yet
+                        timein_dt = timein.astimezone(philippines_tz)
+                        buffer_end = timein_dt + timedelta(minutes=15)
+                        
+                        if current_time <= buffer_end:
+                            # Within 15-minute buffer - prevent double time-in
+                            notification_data = {
+                                'personnel_id': personnel_id,
+                                'person_name': person_name,
+                                'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
+                                'action': 'buffer_period',
+                                'status': existing_status,
+                                'subject_code': subject_code,
+                                'subject_name': subject_name,
+                                'class_section': class_section,
+                                'classroom': classroom,
+                                'message': f'Already recorded time-in. Wait 15 minutes for time-out.'
+                            }
+                            self._trigger_notification(notification_data)
+                            self._log_rfid_tap(cursor, rfid_uid, personnel_id, current_time, class_id, 'buffer_period',
+                                            f"Within 15-min buffer after time-in")
+                            
+                            # Enhanced audit logging for buffer period
+                            cursor.execute("""
+                                INSERT INTO auditlogs (personnel_id, action, details, created_at)
+                                VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                            """, (personnel_id, "RFID tap - Buffer period", 
+                                f"Attempted time-in during buffer period\nSubject: {subject_code}\nExisting status: {existing_status}\nTime: {current_time.strftime('%H:%M:%S')}\nRFID UID: {rfid_uid}"))
+                            
+                            print(f"BUFFER PERIOD: Wait for time-out")
+                        else:
+                            # Outside buffer but trying to time-in again
+                            notification_data = {
+                                'personnel_id': personnel_id,
+                                'person_name': person_name,
+                                'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
+                                'action': 'duplicate_timein',
+                                'status': existing_status,
+                                'subject_code': subject_code,
+                                'subject_name': subject_name,
+                                'class_section': class_section,
+                                'classroom': classroom,
+                                'message': f'Already recorded time-in for this class'
+                            }
+                            self._trigger_notification(notification_data)
+                            self._log_rfid_tap(cursor, rfid_uid, personnel_id, current_time, class_id, 'duplicate_timein',
+                                            f"Already has time-in record")
+                            
+                            # Enhanced audit logging for duplicate time-in
+                            cursor.execute("""
+                                INSERT INTO auditlogs (personnel_id, action, details, created_at)
+                                VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                            """, (personnel_id, "RFID tap - Duplicate time-in", 
+                                f"Attempted duplicate time-in\nSubject: {subject_code}\nExisting status: {existing_status}\nTime: {current_time.strftime('%H:%M:%S')}\nRFID UID: {rfid_uid}"))
+                            
+                            print(f"DUPLICATE TIME-IN: Already recorded")
+                    else:
+                        # Already completed both time-in and time-out
+                        notification_data = {
+                            'personnel_id': personnel_id,
+                            'person_name': person_name,
+                            'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
+                            'action': 'already_complete',
+                            'status': existing_status,
+                            'subject_code': subject_code,
+                            'subject_name': subject_name,
+                            'class_section': class_section,
+                            'classroom': classroom,
+                            'message': f'Attendance already complete for {subject_code}'
+                        }
+                        self._trigger_notification(notification_data)
+                        self._log_rfid_tap(cursor, rfid_uid, personnel_id, current_time, class_id, 'already_complete',
+                                        f"Attendance complete")
+                        
+                        # Enhanced audit logging for already complete
+                        cursor.execute("""
+                            INSERT INTO auditlogs (personnel_id, action, details, created_at)
+                            VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                        """, (personnel_id, "RFID tap - Already complete", 
+                            f"Attempted time-in but attendance already complete\nSubject: {subject_code}\nStatus: {existing_status}\nTime: {current_time.strftime('%H:%M:%S')}\nRFID UID: {rfid_uid}"))
+                        
+                        print(f"ALREADY COMPLETE: Both time-in and time-out recorded")
+            
+            # TIME-OUT WINDOW PROCESSING  
+            elif window_type == 'timeout_window':
+                if not existing_record:
+                    # No time-in record exists - cannot time-out
                     notification_data = {
                         'personnel_id': personnel_id,
                         'person_name': person_name,
                         'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
-                        'action': 'duplicate',
-                        'status': status,
+                        'action': 'no_timein',
+                        'status': 'error',
                         'subject_code': subject_code,
                         'subject_name': subject_name,
                         'class_section': class_section,
                         'classroom': classroom,
-                        'message': f'Attendance already complete for {subject_code}'
+                        'message': f'Cannot time-out without time-in first'
                     }
                     self._trigger_notification(notification_data)
+                    self._log_rfid_tap(cursor, rfid_uid, personnel_id, current_time, class_id, 'no_timein_first',
+                                    f"Attempted time-out without time-in")
                     
-                    print(f"⚠️ Attendance already complete for {subject_code} - {subject_name}, Section: {class_section or 'N/A'}, Room: {classroom or 'N/A'}")
-                    self._log_rfid_tap(cursor, rfid_uid, personnel_id, current_time, class_id, 'already_complete',
-                                      f"Attendance already complete for {subject_code} - {subject_name}, Section: {class_section or 'N/A'}, Room: {classroom or 'N/A'} (In: {timein}, Out: {timeout})")
+                    # Enhanced audit logging for no time-in
+                    cursor.execute("""
+                        INSERT INTO auditlogs (personnel_id, action, details, created_at)
+                        VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                    """, (personnel_id, "RFID tap - No time-in", 
+                        f"Attempted time-out without time-in\nSubject: {subject_code}\nTime: {current_time.strftime('%H:%M:%S')}\nRFID UID: {rfid_uid}"))
                     
-                    conn.commit()
-            else:
-                current_dt = datetime.combine(datetime.today(), current_time_only)
-                class_start_dt = datetime.combine(datetime.today(), class_start_time)
-                minutes_diff = (current_dt - class_start_dt).total_seconds() / 60
-                
-                status = "Present" if minutes_diff <= 15 else "Late"
-                timing = f"{int(abs(minutes_diff))} mins {'early' if minutes_diff < 0 else 'after start'}"
-                
-                notification_data = {
-                    'personnel_id': personnel_id,
-                    'person_name': person_name,
-                    'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
-                    'action': 'timein',
-                    'status': status,
-                    'subject_code': subject_code,
-                    'subject_name': subject_name,
-                    'class_section': class_section,
-                    'classroom': classroom,
-                    'message': f'Time-in recorded - {status} ({timing})'
-                }
-                self._trigger_notification(notification_data)
-                
-                cursor.execute("SELECT COALESCE(MAX(attendance_id), 70000) FROM attendance")
-                new_id = cursor.fetchone()[0] + 1
-                
-                cursor.execute("""
-                    INSERT INTO attendance (attendance_id, personnel_id, class_id, attendancestatus, timein, timeout)
-                    VALUES (%s, %s, %s, %s, %s, NULL)
-                """, (new_id, personnel_id, class_id, status, current_time))
-                
-                self._log_rfid_tap(cursor, rfid_uid, personnel_id, current_time, class_id, 'timein_recorded',
-                                  f"Time-in for {subject_code} - {subject_name}, Section: {class_section or 'N/A'}, Room: {classroom or 'N/A'} - {status} ({timing})")
-                
-                conn.commit()
-                print(f"✓ TIME-IN: {subject_code} - {subject_name}, Section: {class_section or 'N/A'}, Room: {classroom or 'N/A'} - {status} ({timing})")
+                    print(f"NO TIME-IN: Cannot time-out without time-in")
+                    
+                else:
+                    attendance_id, timein, timeout, existing_status = existing_record
+                    
+                    if timeout is None:
+                        # Valid time-out - record it
+                        cursor.execute("UPDATE attendance SET timeout = %s WHERE attendance_id = %s", 
+                                    (current_time, attendance_id))
+                        
+                        notification_data = {
+                            'personnel_id': personnel_id,
+                            'person_name': person_name,
+                            'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
+                            'action': 'timeout',
+                            'status': existing_status,
+                            'subject_code': subject_code,
+                            'subject_name': subject_name,
+                            'class_section': class_section,
+                            'classroom': classroom,
+                            'message': f'Time-out recorded for {subject_code}'
+                        }
+                        self._trigger_notification(notification_data)
+                        self._log_rfid_tap(cursor, rfid_uid, personnel_id, current_time, class_id, 'timeout_recorded',
+                                        f"Time-out recorded")
+                        
+                        # Enhanced audit logging for time-out
+                        timein_str = timein.astimezone(philippines_tz).strftime('%H:%M:%S') if timein else "N/A"
+                        timeout_str = current_time.strftime('%H:%M:%S')
+                        
+                        cursor.execute("""
+                            INSERT INTO auditlogs (personnel_id, action, details, created_at)
+                            VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                        """, (personnel_id, "RFID time-out recorded", 
+                            f"Time-out for {subject_code} - {class_section}\nStatus: {existing_status}\nTime-in: {timein_str}\nTime-out: {timeout_str}\nDuration: Calculated\nClassroom: {classroom}\nRFID UID: {rfid_uid}"))
+                        
+                        print(f"TIME-OUT: Recorded successfully")
+                        
+                    else:
+                        # Already timed out
+                        notification_data = {
+                            'personnel_id': personnel_id,
+                            'person_name': person_name,
+                            'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
+                            'action': 'duplicate_timeout',
+                            'status': existing_status,
+                            'subject_code': subject_code,
+                            'subject_name': subject_name,
+                            'class_section': class_section,
+                            'classroom': classroom,
+                            'message': f'Already timed out for {subject_code}'
+                        }
+                        self._trigger_notification(notification_data)
+                        self._log_rfid_tap(cursor, rfid_uid, personnel_id, current_time, class_id, 'duplicate_timeout',
+                                        f"Already timed out")
+                        
+                        # Enhanced audit logging for duplicate time-out
+                        cursor.execute("""
+                            INSERT INTO auditlogs (personnel_id, action, details, created_at)
+                            VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                        """, (personnel_id, "RFID tap - Duplicate time-out", 
+                            f"Attempted duplicate time-out\nSubject: {subject_code}\nStatus: {existing_status}\nTime: {current_time.strftime('%H:%M:%S')}\nRFID UID: {rfid_uid}"))
+                        
+                        print(f"DUPLICATE TIME-OUT: Already recorded")
             
+            conn.commit()
             cursor.close()
             self.db_pool.return_connection(conn)
             
         except Exception as e:
-            print(f"❌ Error processing RFID {rfid_uid}: {e}")
-            import traceback
-            traceback.print_exc()
-            
+            print(f"Error processing RFID {rfid_uid}: {e}")
             if conn:
                 try:
                     conn.rollback()

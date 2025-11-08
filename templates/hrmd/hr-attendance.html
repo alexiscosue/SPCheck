@@ -141,7 +141,7 @@
         </div>
       </div>
 
-      <!-- RFID Controls -->
+      <!-- Replace the current rfid-controls section with this: -->
       <div class="rfid-controls">
         <button class="rfid-btn" id="rfidBtn">
           <i class='bx bx-power-off'></i>
@@ -151,9 +151,15 @@
           <span class="status-indicator" id="statusIndicator"></span>
           <span id="statusText">Reader Offline</span>
         </div>
-        <button class="edit-remarks-btn" id="editRemarksBtn">
+        
+        <button class="edit-remarks-btn" id="editRemarksBtn" style="display: none;">
           <i class='bx bx-edit-alt'></i>
           <span id="editRemarksBtnText">Edit Remarks</span>
+        </button>
+        
+        <button class="edit-time-btn" id="editTimeBtn" style="display: none;">
+          <i class='bx bx-time'></i>
+          <span id="editTimeBtnText">Edit Time In/Out</span>
         </button>
       </div>
     </div>
@@ -191,14 +197,44 @@
 {% block extra_scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 <script>
-  document.querySelectorAll('.tab-btn').forEach(btn=>{
-    btn.addEventListener('click',()=>{
-      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+  let isEditingTime = false;
+  let timeEditData = new Map();
+
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       btn.classList.add('active');
       document.getElementById(btn.dataset.tab).classList.add('active');
+      
+      const editRemarksBtn = document.getElementById('editRemarksBtn');
+      const editTimeBtn = document.getElementById('editTimeBtn');
+      
+      if (btn.dataset.tab === 'rfidlogs') {
+        editRemarksBtn.style.display = 'flex';
+        editTimeBtn.style.display = 'none';
+        isEditingRemarks = false;
+        isEditingTime = false;
+        editRemarksBtn.classList.remove('active');
+        editTimeBtn.classList.remove('active');
+      } else if (btn.dataset.tab === 'logs') {
+        editRemarksBtn.style.display = 'none';
+        editTimeBtn.style.display = 'flex';
+        isEditingRemarks = false;
+        isEditingTime = false;
+        editRemarksBtn.classList.remove('active');
+        editTimeBtn.classList.remove('active');
+      } else {
+        editRemarksBtn.style.display = 'none';
+        editTimeBtn.style.display = 'none';
+        isEditingRemarks = false;
+        isEditingTime = false;
+        editRemarksBtn.classList.remove('active');
+        editTimeBtn.classList.remove('active');
+      }
     });
   });
+
 
   function convertTo12Hour(militaryTime) {
     if (!militaryTime || militaryTime === '—') return '—';
@@ -411,28 +447,45 @@
     };
   }
 
+  function sortAttendanceByClassTime(attendanceLogs) {
+    return attendanceLogs.sort((a, b) => {
+        const dateCompare = new Date(b.date) - new Date(a.date);
+        if (dateCompare !== 0) return dateCompare;
+        
+        const timeA = a.time_in === '—' ? '00:00' : a.time_in;
+        const timeB = b.time_in === '—' ? '00:00' : b.time_in;
+        
+        return timeB.localeCompare(timeA);
+    });
+  }
+
   async function fetchFacultyAttendance() {
     try {
-      const response = await fetch('/api/hr/faculty-attendance');
-      const data = await response.json();
-      
-      if (data.success) {
-        facultyLogs = data.attendance_logs || [];
-        statusBreakdown = data.status_breakdown || { present: 0, late: 0, absent: 0 };
+        console.log('🔄 Fetching fresh faculty attendance data...');
         
-        // KPI update function is still called but won't update anything since KPI elements are commented out
-        updateKPICards(data.kpis || {});
+        const response = await fetch('/api/hr/faculty-attendance?t=' + new Date().getTime());
+        const data = await response.json();
         
-        currentPage = 1;
-        renderLogs();
-        updateStatusChart();
-      } else {
-        console.error('Failed to fetch attendance data:', data.error);
-        clearDisplays();
-      }
+        if (data.success) {
+            facultyLogs = sortAttendanceByClassTime(data.attendance_logs || []);
+            statusBreakdown = data.status_breakdown || { present: 0, late: 0, absent: 0 };
+            
+            //console.log(`✅ Loaded ${facultyLogs.length} attendance records sorted by class time`);
+            
+            currentPage = 1;
+            renderLogs();
+            updateStatusChart();
+            
+            return true;
+        } else {
+            //console.error('❌ Failed to fetch attendance data:', data.error);
+            clearDisplays();
+            return false;
+        }
     } catch (error) {
-      console.error('Error fetching attendance data:', error);
-      clearDisplays();
+        console.error('❌ Error fetching attendance data:', error);
+        clearDisplays();
+        return false;
     }
   }
 
@@ -485,23 +538,43 @@
     */
   }
 
-  function renderLogs(){
+  function renderLogs() {
     const tbody = document.getElementById('logsBody');
-    tbody.innerHTML='';
+    tbody.innerHTML = '';
+    
     let search = document.getElementById('logSearch').value.toLowerCase();
     let filter = document.getElementById('logFilter').value;
     
     filteredLogs = facultyLogs.filter(f => {
-      const searchMatch = !search || 
-        f.name.toLowerCase().includes(search) ||
-        f.date.includes(search) ||
-        (f.class_name && f.class_name.toLowerCase().includes(search)) ||
-        (f.room && f.room.toLowerCase().includes(search));
-      
-      const filterMatch = !filter || f.status === filter;
-      
-      return searchMatch && filterMatch;
+        const searchMatch = !search || 
+            f.name.toLowerCase().includes(search) ||
+            f.date.includes(search) ||
+            (f.class_name && f.class_name.toLowerCase().includes(search)) ||
+            (f.room && f.room.toLowerCase().includes(search));
+        
+        const filterMatch = !filter || f.status === filter;
+        
+        return searchMatch && filterMatch;
     });
+    
+    /*
+    console.log(`📊 Rendering ${filteredLogs.length} filtered records`);
+
+    // DEBUG: Check for duplicates
+    const seen = new Set();
+    const duplicates = [];
+    filteredLogs.forEach(log => {
+        const key = `${log.name}_${log.date}_${log.class_name}_${log.class_section}`;
+        if (seen.has(key)) {
+            duplicates.push(key);
+        }
+        seen.add(key);
+    });
+    
+    if (duplicates.length > 0) {
+        console.warn('🚨 DUPLICATES FOUND:', duplicates);
+    }
+    */
     
     const totalRecords = filteredLogs.length;
     const totalPages = Math.ceil(totalRecords / recordsPerPage);
@@ -510,23 +583,222 @@
     const currentPageRecords = filteredLogs.slice(startIndex, endIndex);
     
     if (currentPageRecords.length === 0) {
-      const message = filteredLogs.length === 0 && (search || filter) ? 
-        'No records match your search criteria' : 
-        'No attendance data available';
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #6b7280;">${message}</td></tr>`;
+        const message = filteredLogs.length === 0 && (search || filter) ? 
+            'No records match your search criteria' : 
+            'No attendance data available';
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #6b7280;">${message}</td></tr>`;
     } else {
-      currentPageRecords.forEach(f=>{
-        const tr = document.createElement('tr');
-        const timeIn12Hour = convertTo12Hour(f.time_in);
-        const timeOut12Hour = convertTo12Hour(f.time_out);
-        const className = f.class_name || 'N/A';
+        currentPageRecords.forEach((log, index) => {
+            const tr = document.createElement('tr');
+            const logKey = `${log.name}_${log.date}_${log.class_name}`;
+            const className = log.class_name || 'N/A';
+            
+            //console.log(`📝 Record ${index}: ${log.name} - ${log.date} - ${log.class_name}`);
+            //console.log(`   Time-in: "${log.time_in}", Time-out: "${log.time_out}"`);
+            
+            if (isEditingTime) {
+                const currentTimeIn = timeEditData.has(logKey) ? timeEditData.get(logKey).timeIn : (log.time_in !== '—' ? log.time_in : '');
+                const currentTimeOut = timeEditData.has(logKey) ? timeEditData.get(logKey).timeOut : (log.time_out !== '—' ? log.time_out : '');
+                
+                tr.innerHTML = `
+                    <td>${log.name}</td>
+                    <td>${log.date}</td>
+                    <td>${className}</td>
+                    <td>${log.room || 'N/A'}</td>
+                    <td class="time-cell">
+                        <input type="time" 
+                              class="time-editable" 
+                              value="${currentTimeIn}" 
+                              data-log-key="${logKey}"
+                              data-field="timeIn">
+                    </td>
+                    <td class="time-cell">
+                        <input type="time" 
+                              class="time-editable" 
+                              value="${currentTimeOut}" 
+                              data-log-key="${logKey}"
+                              data-field="timeOut">
+                    </td>
+                    <td><span class="status ${log.status.toLowerCase()}">${log.status}</span></td>
+                `;
+            } else {
+                const timeIn12Hour = convertTo12Hour(log.time_in);
+                const timeOut12Hour = convertTo12Hour(log.time_out);
+                
+                tr.innerHTML = `
+                    <td>${log.name}</td>
+                    <td>${log.date}</td>
+                    <td>${className}</td>
+                    <td>${log.room || 'N/A'}</td>
+                    <td>${timeIn12Hour}</td>
+                    <td>${timeOut12Hour}</td>
+                    <td><span class="status ${log.status.toLowerCase()}">${log.status}</span></td>
+                `;
+            }
+            tbody.appendChild(tr);
+        });
         
-        tr.innerHTML = `<td>${f.name}</td><td>${f.date}</td><td>${className}</td><td>${f.room || 'N/A'}</td><td>${timeIn12Hour}</td><td>${timeOut12Hour}</td><td><span class="status ${f.status.toLowerCase()}">${f.status}</span></td>`;
-        tbody.appendChild(tr);
-      });
+        if (isEditingTime) {
+            const inputs = tbody.querySelectorAll('.time-editable');
+            inputs.forEach(input => {
+                input.addEventListener('change', (e) => {
+                    handleTimeFieldClear(e.target);
+                });
+            });
+        }
     }
     
     updatePaginationControls(currentPage, totalPages, totalRecords);
+  }
+
+  function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        border-radius: 6px;
+        color: white;
+        z-index: 10000;
+        font-weight: 500;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    `;
+    
+    if (type === 'success') {
+        notification.style.background = '#10b981';
+    } else if (type === 'error') {
+        notification.style.background = '#ef4444';
+    } else {
+        notification.style.background = '#3b82f6';
+    }
+    
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.remove();
+    }, 4000);
+  }
+
+  document.getElementById('editTimeBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('editTimeBtn');
+    const btnText = document.getElementById('editTimeBtnText');
+    const btnIcon = btn.querySelector('i');
+    
+    if (!isEditingTime) {
+        isEditingTime = true;
+        timeEditData.clear();
+        btn.classList.add('active');
+        btnText.textContent = 'Save Time Changes';
+        btnIcon.className = 'bx bx-save';
+        renderLogs();
+    } else {
+        if (timeEditData.size > 0) {
+            btn.disabled = true;
+            btnText.textContent = 'Saving...';
+            
+            try {
+                const updates = [];
+                console.log('Saving MULTIPLE time changes:', timeEditData);
+                
+                for (const [logKey, timeData] of timeEditData.entries()) {
+                    const [name, date, className] = logKey.split('_');
+                    const update = {
+                        name,
+                        date,
+                        class_name: className
+                    };
+                  
+                    if ('timeIn' in timeData) {
+                        update.time_in = timeData.timeIn; 
+                        console.log(`   ${name} - Setting time_in to: "${timeData.timeIn}"`);
+                    }
+                    
+                    if ('timeOut' in timeData) {
+                        update.time_out = timeData.timeOut; 
+                        console.log(`   ${name} - Setting time_out to: "${timeData.timeOut}"`);
+                    }
+                    
+                    updates.push(update);
+                    console.log(`   ✅ Added update for ${name}:`, update);
+                }
+                
+                console.log('Sending ALL updates to server:', updates);
+                
+                const response = await fetch('/api/hr/update-attendance-time', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ updates })
+                });
+                
+                const result = await response.json();
+                console.log('Server response:', result);
+                
+                if (result.success) {
+                    showNotification(`Successfully updated ${result.updated_count} attendance record(s)`, 'success');
+                    
+                    await fetchFacultyAttendance();
+                    
+                    isEditingTime = false;
+                    timeEditData.clear();
+                    btn.disabled = false;
+                    btn.classList.remove('active');
+                    btnText.textContent = 'Edit Time In/Out';
+                    btnIcon.className = 'bx bx-time';
+                    renderLogs();
+                    
+                } else {
+                    showNotification('Failed to update time records: ' + result.error, 'error');
+                    btn.disabled = false;
+                    btnText.textContent = 'Save Time Changes';
+                }
+            } catch (error) {
+                console.error('Error updating time records:', error);
+                showNotification('Error updating time records: ' + error.message, 'error');
+                btn.disabled = false;
+                btnText.textContent = 'Save Time Changes';
+            }
+        } else {
+            isEditingTime = false;
+            timeEditData.clear();
+            btn.classList.remove('active');
+            btnText.textContent = 'Edit Time In/Out';
+            btnIcon.className = 'bx bx-time';
+            renderLogs();
+        }
+    }
+  });
+
+  function handleTimeFieldClear(input) {
+    const logKey = input.dataset.logKey;
+    const field = input.dataset.field;
+    
+    if (!timeEditData.has(logKey)) {
+        timeEditData.set(logKey, {});
+    }
+    const logData = timeEditData.get(logKey);
+    const log = filteredLogs.find(f => `${f.name}_${f.date}_${f.class_name}` === logKey);
+    const originalTimeIn = log ? (log.time_in !== '—' ? log.time_in : '') : '';
+    const originalTimeOut = log ? (log.time_out !== '—' ? log.time_out : '') : '';
+    
+    const currentValue = input.value;
+    let originalValue = '';
+    
+    if (field === 'timeIn') {
+        originalValue = originalTimeIn;
+    } else if (field === 'timeOut') {
+        originalValue = originalTimeOut;
+    }
+    
+    //console.log(`Time field change - Key: ${logKey}, Field: ${field}, Original: "${originalValue}", Current: "${currentValue}"`);
+
+    logData[field] = currentValue;
+    //console.log(`✓ Change recorded for ${field}: "${currentValue}"`);
+    
+    timeEditData.set(logKey, logData);
+    
+    //console.log('Current timeEditData:', Array.from(timeEditData.entries()));
   }
 
   function updatePaginationControls(page, totalPages, totalRecords) {
@@ -674,89 +946,134 @@
   }
 
   function displayFacultySchedule(data, container) {
-    const timetable = data.timetable;
+    const scheduleClasses = data.schedule_classes;
     const semesterInfo = data.semester_info;
+    
+    if (!scheduleClasses || scheduleClasses.length === 0) {
+        let semesterDisplay = "No Teaching Load";
+        if (semesterInfo && semesterInfo.display) {
+            semesterDisplay = `No Teaching Load - ${semesterInfo.display}`;
+            if (!semesterInfo.display.includes('Semester')) {
+                semesterDisplay = `No Teaching Load - ${semesterInfo.name} Semester, ${semesterInfo.year}`;
+            }
+        }
+        
+        container.innerHTML = `
+            <div class="hr-schedule-header">
+                <h4>${semesterDisplay}</h4>
+            </div>
+            <div class="no-teaching-load-message">
+                <div style="text-align: center; padding: 3rem; color: #6b7280; background: #f9fafb; border-radius: 8px; margin: 1rem 0;">
+                    <i class='bx bx-calendar-x' style="font-size: 48px; margin-bottom: 1rem; display: block; color: #9ca3af;"></i>
+                    <h4 style="margin: 0 0 0.5rem 0; color: #374151; font-weight: 600;">No Assigned Classes</h4>
+                    <p style="margin: 0; font-size: 14px;">This faculty member has no teaching assignments for this semester.</p>
+                </div>
+            </div>
+        `;
+        container.classList.add('loaded');
+        return;
+    }
     
     let semesterDisplay = semesterInfo.display;
     if (semesterInfo.name && !semesterInfo.name.includes('Semester')) {
-      semesterDisplay = `${semesterInfo.name} Semester, ${semesterInfo.year}`;
+        semesterDisplay = `${semesterInfo.name} Semester, ${semesterInfo.year}`;
     }
-    
-    let html = `
-      <div class="hr-schedule-header">
-        <h4>${semesterDisplay}</h4>
-      </div>
-      <div class="hr-timetable-container">
-        <table class="hr-timetable">
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Monday</th>
-              <th>Tuesday</th>
-              <th>Wednesday</th>
-              <th>Thursday</th>
-              <th>Friday</th>
-              <th>Saturday</th>
-            </tr>
-          </thead>
-          <tbody>
-    `;
-    
-    const timeSlots = [
-      '7:30 AM - 9:00 AM',
-      '9:15 AM - 10:45 AM', 
-      '11:00 AM - 12:30 PM',
-      '12:45 PM - 2:15 PM',
-      '2:30 PM - 4:00 PM',
-      '4:15 PM - 5:45 PM',
-      '6:00 PM - 7:30 PM',
-      '7:45 PM - 9:00 PM',
-      '9:15 PM - 10:45 PM'
-    ];
     
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     
-    timeSlots.forEach(timeSlot => {
-      html += `<tr><td class="hr-time-cell">${timeSlot}</td>`;
-      
-      days.forEach(day => {
-        const classInfo = timetable[day] && timetable[day][timeSlot];
+    const timeSlots = [];
+    for (let hour = 7; hour <= 20; hour++) { 
+        const displayHour = hour > 12 ? hour - 12 : hour;
+        const period = hour >= 12 ? 'PM' : 'AM';
+        const nextHour = hour + 1 > 12 ? (hour + 1) - 12 : hour + 1;
+        const nextPeriod = (hour + 1) >= 12 ? 'PM' : 'AM';
         
-        if (classInfo) {
-          html += `
-            <td class="hr-class-cell">
-              <div class="hr-class-block">
-                <div class="hr-subject-code">${classInfo.subject_code}</div>
-                <div class="hr-room-section">${classInfo.classroom} • ${classInfo.section}</div>
-              </div>
-            </td>
-          `;
-        } else {
-          html += '<td class="hr-class-cell"></td>';
-        }
-      });
-      
-      html += '</tr>';
+        timeSlots.push({
+            label: `${displayHour}:00 ${period} - ${nextHour}:00 ${nextPeriod}`,
+            startMinutes: (hour - 7) * 60,
+            endMinutes: (hour - 7 + 1) * 60
+        });
+    }
+    
+    const classesByDay = {};
+    days.forEach(day => {
+        classesByDay[day] = [];
     });
     
-    html += `
-          </tbody>
-        </table>
-      </div>
+    scheduleClasses.forEach(cls => {
+        if (classesByDay[cls.day]) {
+            classesByDay[cls.day].push(cls);
+        }
+    });
+    
+    let html = `
+        <div class="hr-schedule-header">
+            <h4>${semesterDisplay}</h4>
+        </div>
+        <div class="hr-timetable-container">
+            <div class="hr-timetable-wrapper">
+                <table class="hr-timetable">
+                    <thead>
+                        <tr>
+                            <th class="hr-time-header">Time</th>
     `;
     
-    container.innerHTML = html;
-  }
-
-  function openModal(facultyName){
-    const modal = document.getElementById('classModal');
-    const modalTitle = document.getElementById('modalFacultyName');
-    const tbody = document.getElementById('classBody');
+    days.forEach(day => {
+        html += `<th>${day}</th>`;
+    });
     
-    modalTitle.textContent = facultyName;
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem; color: #6b7280;">Class schedule data not available</td></tr>';
-    modal.classList.add('active');
-  }
+    html += `</tr></thead><tbody>`;
+    
+    timeSlots.forEach(slot => {
+        html += '<tr>';
+        html += `<td class="hr-time-cell">${slot.label}</td>`;
+        
+        days.forEach(day => {
+            const dayClasses = classesByDay[day] || [];
+            const overlappingClasses = dayClasses.filter(cls => {
+                return cls.start_minutes < slot.endMinutes && cls.end_minutes > slot.startMinutes;
+            });
+            
+            const classesToRender = overlappingClasses.filter(cls => {
+                return cls.start_minutes >= slot.startMinutes && cls.start_minutes < slot.endMinutes;
+            });
+            
+            if (classesToRender.length > 0) {
+                html += '<td class="hr-day-cell"><div class="hr-class-container">';
+                
+                classesToRender.forEach(cls => {
+                    const pixelsPerMinute = 45 / 60; 
+                    const offsetFromSlotStart = cls.start_minutes - slot.startMinutes;
+                    const topPosition = offsetFromSlotStart * pixelsPerMinute;
+                    const height = cls.duration_minutes * pixelsPerMinute;
+                    const timeRange = `${cls.start_time} - ${cls.end_time}`;
+                    const title = `${cls.subject_code}\n${cls.classroom} • ${cls.section}\n${timeRange}`;
+                    
+                    html += `
+                        <div class="hr-class-block" 
+                             style="top: ${topPosition}px; height: ${height}px;"
+                             title="${title}">
+                            <div class="hr-subject-code">${cls.subject_code}</div>
+                            <div class="hr-room-section">${cls.classroom} • ${cls.section}</div>
+                            <div class="hr-time-range">${timeRange}</div>
+                        </div>
+                    `;
+                });
+                
+                html += '</div></td>';
+            } else {
+                html += '<td class="hr-day-cell"><div class="hr-class-container"></div></td>';
+            }
+        });
+        
+        html += '</tr>';
+    });
+    
+    html += '</tbody></table></div></div>';
+    
+    container.innerHTML = html;
+    container.classList.add('loaded');
+}
 
   document.getElementById('closeModal').addEventListener('click',()=>document.getElementById('classModal').classList.remove('active'));
   document.getElementById('facultySearch').addEventListener('input', () => {
@@ -1119,11 +1436,23 @@
   });
 
   document.addEventListener('DOMContentLoaded', () => {
-      checkRFIDStatus();
-      fetchFacultyAttendance();
-      fetchFacultyList();
-      fetchRFIDLogs();
-      startNotificationListener();
+    checkRFIDStatus();
+    fetchFacultyAttendance();
+    fetchFacultyList();
+    fetchRFIDLogs();
+    startNotificationListener();
+    
+    const activeTab = document.querySelector('.tab-btn.active');
+    if (activeTab) {
+      const editRemarksBtn = document.getElementById('editRemarksBtn');
+      const editTimeBtn = document.getElementById('editTimeBtn');
+      
+      if (activeTab.dataset.tab === 'rfidlogs') {
+        editRemarksBtn.style.display = 'flex';
+      } else if (activeTab.dataset.tab === 'logs') {
+        editTimeBtn.style.display = 'flex';
+      }
+    }
   });
 
   let autoRefreshInterval = null;
