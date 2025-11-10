@@ -19,6 +19,15 @@
     <option value="Regular">Regular</option>
     <option value="Tenured">Tenured</option>
   </select>
+  
+  <!-- Add Button with Dropdown -->
+  <div class="emp-add-dropdown-container">
+    <button class="emp-add-btn" title="Add Employees/Schedule">+</button>
+    <div class="emp-add-dropdown">
+      <a href="#" onclick="openAddEmployeeModal()">Add Employee</a>
+      <a href="#" onclick="openAddScheduleModal()">Add Schedule</a>
+    </div>
+  </div>
 </div>
 
 <!-- Employees Table -->
@@ -44,6 +53,314 @@
     <tbody id="employeeTableBody" style="text-align: center;"></tbody>
   </table>
 </div>
+
+<!-- Add Employee Modal -->
+<div id="addEmployeeModal" class="emp-modal">
+  <div class="emp-modal-content">
+    <div class="emp-modal-header">
+      <h2>Add New Employee</h2>
+      <span class="emp-close" onclick="closeAddEmployeeModal()">&times;</span>
+    </div>
+    <div class="emp-modal-body">
+      <form id="addEmployeeForm">
+        <div class="emp-form-section">
+          <h3>User Account</h3>
+          <div class="emp-form-row">
+            <div class="emp-form-group">
+              <label for="email">Email *</label>
+              <input type="email" id="email" name="email" required placeholder="user@spc.edu.ph">
+              <div class="emp-error-message" id="emailError"></div>
+            </div>
+            <div class="emp-form-group" style="position: relative;">
+              <label for="password">Password *</label>
+              <input type="password" id="password" name="password" required minlength="6" style="padding-right: 40px;">
+              <span class="password-toggle" onclick="togglePasswordVisibility('password')" style="position: absolute; right: 12px; top: 32px; cursor: pointer; font-size: 18px;">
+                <i class='bx bx-hide'></i>
+              </span>
+              <div class="emp-error-message" id="passwordError"></div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="emp-form-section">
+          <h3>Personal Information</h3>
+          <div class="emp-form-row">
+            <div class="emp-form-group">
+              <label for="employee_no">Employee Number *</label>
+              <input type="text" id="employee_no" name="employee_no" required 
+                    placeholder="e.g., 10-1223" maxlength="7"
+                    oninput="formatEmployeeNumber(this)">
+              <div class="emp-error-message" id="employeeNoError"></div>
+            </div>
+            <div class="emp-form-group">
+              <label for="hire_date">Hire Date *</label>
+              <input type="date" id="hire_date" name="hire_date" required 
+                    max="{{ today_date }}" 
+                    pattern="\d{4}-\d{2}-\d{2}">
+            </div>
+          </div>
+          <div class="emp-form-row">
+            <div class="emp-form-group">
+              <label for="firstname">First Name *</label>
+              <input type="text" id="firstname" name="firstname" required>
+            </div>
+            <div class="emp-form-group">
+              <label for="lastname">Last Name *</label>
+              <input type="text" id="lastname" name="lastname" required>
+            </div>
+          </div>
+          <div class="emp-form-row">
+            <div class="emp-form-group">
+              <label for="honorifics">Honorifics</label>
+              <input type="text" id="honorifics" name="honorifics" placeholder="e.g., Ph.D., M.A.">
+            </div>
+            <div class="emp-form-group">
+              <label for="phone">Contact Number *</label>
+              <input type="tel" id="phone" name="phone" required placeholder="+63 912 345 6789" pattern="\+63\s[0-9]{3}\s[0-9]{3}\s[0-9]{4}" maxlength="16">
+              <div class="emp-error-message" id="phoneError"></div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="emp-form-section">
+          <h3>Employment Details</h3>
+          <div class="emp-form-row">
+            <div class="emp-form-group">
+              <label for="college_id">College *</label>
+              <select id="college_id" name="college_id" required>
+                <option value="">Select College</option>
+                <!-- Colleges will be populated dynamically -->
+              </select>
+            </div>
+            <div class="emp-form-group">
+              <label for="role_id">Role *</label>
+              <select id="role_id" name="role_id" required>
+                <option value="">Select Role</option>
+                <option value="20001">Faculty</option>
+                <option value="20002">Dean</option>
+                <option value="20003">HR</option>
+                <option value="20004">VP/President</option>
+              </select>
+            </div>
+          </div>
+          <div class="emp-form-row">
+            <div class="emp-form-group">
+              <label for="employment_status">Employment Status *</label>
+              <select id="employment_status" name="employment_status" required>
+                <option value="">Select Status</option>
+                <option value="Full-Time">Full-Time</option>
+                <option value="Part-Time">Part-Time</option>
+                <option value="Probationary">Probationary</option>
+                <option value="Regular">Regular</option>
+                <option value="Tenured">Tenured</option>
+              </select>
+            </div>
+            <div class="emp-form-group">
+              <label for="position">Position *</label>
+              <select id="position" name="position" required>
+                <option value="">Select Position</option>
+                <option value="Instructor">Instructor</option>
+                <option value="Assistant Professor">Assistant Professor</option>
+                <option value="Associate Professor">Associate Professor</option>
+                <option value="Professor">Professor</option>
+                <option value="Dean">Dean</option>
+                <option value="HR Staff">HR Staff</option>
+                <option value="Vice President">Vice President</option>
+                <option value="President">President</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        
+        <div class="emp-form-actions">
+          <button type="button" class="emp-btn-cancel" id="cancelEmployeeButton" onclick="closeAddEmployeeModal()">Cancel</button>
+          <button type="submit" class="emp-btn-submit">Add Employee</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Add Schedule Modal -->
+<div id="addScheduleModal" class="emp-modal">
+  <div class="emp-modal-content">
+    <div class="emp-modal-header">
+      <h2>Add New Schedule</h2>
+      <span class="emp-close" onclick="closeAddScheduleModal()">&times;</span>
+    </div>
+    <div class="emp-modal-body">
+      <form id="addScheduleForm">
+        <div class="emp-form-section">
+          <h3>Schedule Information</h3>
+          <div class="emp-form-row">
+            <div class="emp-form-group">
+              <label for="semester_id">Semester *</label>
+              <select id="semester_id" name="semester_id" required>
+                <option value="">Select Semester</option>
+                <!-- Semesters will be populated dynamically -->
+              </select>
+              <div class="emp-error-message" id="semesterError"></div>
+            </div>
+            <div class="emp-form-group">
+              <label for="personnel_id">Faculty *</label>
+              <select id="personnel_id" name="personnel_id" required>
+                <option value="">Select Faculty/Dean</option>
+                <!-- Faculty/Dean will be populated dynamically -->
+              </select>
+              <div class="emp-error-message" id="personnelError"></div>
+            </div>
+          </div>
+          <div class="emp-form-row">
+            <div class="emp-form-group">
+              <label for="subject_id">Class *</label>
+              <select id="subject_id" name="subject_id" required>
+                <option value="">Select Class</option>
+                <!-- Subjects will be populated dynamically -->
+              </select>
+              <div class="emp-error-message" id="subjectError"></div>
+            </div>
+            <div class="emp-form-group">
+              <label for="units">Units *</label>
+              <select id="units" name="units" required>
+                <option value="">Select Units</option>
+                <option value="1">1 Unit</option>
+                <option value="2">2 Units</option>
+                <option value="3">3 Units</option>
+                <option value="4">4 Units</option>
+              </select>
+              <div class="emp-error-message" id="unitsError"></div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="emp-form-section">
+          <h3>Class Schedule - Day 1</h3>
+          <div class="emp-form-row">
+            <div class="emp-form-group">
+              <label for="classday_1">Day *</label>
+              <select id="classday_1" name="classday_1" required>
+                <option value="">Select Day</option>
+                <option value="Monday">Monday</option>
+                <option value="Tuesday">Tuesday</option>
+                <option value="Wednesday">Wednesday</option>
+                <option value="Thursday">Thursday</option>
+                <option value="Friday">Friday</option>
+                <option value="Saturday">Saturday</option>
+              </select>
+              <div class="emp-error-message" id="classday1Error"></div>
+            </div>
+            <div class="emp-form-group">
+              <label for="starttime_1">Start Time *</label>
+              <select id="starttime_1" name="starttime_1" required>
+                <option value="">Select Start Time</option>
+                <!-- Time slots will be populated dynamically -->
+              </select>
+              <div class="emp-error-message" id="starttime1Error"></div>
+            </div>
+            <div class="emp-form-group">
+              <label for="endtime_1">End Time</label>
+              <select id="endtime_1" name="endtime_1" disabled>
+                <option value="">Calculated End Time</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        
+        <div class="emp-form-section">
+          <h3>Class Schedule - Day 2</h3>
+          <div class="emp-form-row">
+            <div class="emp-form-group">
+              <label for="classday_2">Day</label>
+              <select id="classday_2" name="classday_2" disabled>
+                <option value="">Select Day</option>
+                <option value="Monday">Monday</option>
+                <option value="Tuesday">Tuesday</option>
+                <option value="Wednesday">Wednesday</option>
+                <option value="Thursday">Thursday</option>
+                <option value="Friday">Friday</option>
+                <option value="Saturday">Saturday</option>
+              </select>
+            </div>
+            <div class="emp-form-group">
+              <label for="starttime_2">Start Time</label>
+              <select id="starttime_2" name="starttime_2" disabled>
+                <option value="">Select Start Time</option>
+                <!-- Time slots will be populated dynamically -->
+              </select>
+            </div>
+            <div class="emp-form-group">
+              <label for="endtime_2">End Time</label>
+              <select id="endtime_2" name="endtime_2" disabled>
+                <option value="">Calculated End Time</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        
+        <div class="emp-form-section">
+          <h3>Class Details</h3>
+          <div class="emp-form-row">
+            <div class="emp-form-group">
+              <label for="classroom">Classroom *</label>
+              <input type="text" id="classroom" name="classroom" required placeholder="e.g., Room 101">
+              <div class="emp-error-message" id="classroomError"></div>
+            </div>
+            <div class="emp-form-group">
+              <label for="classsection">Section *</label>
+              <input type="text" id="classsection" name="classsection" required placeholder="e.g., Section A">
+              <div class="emp-error-message" id="classsectionError"></div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="emp-form-actions">
+          <button type="button" class="emp-btn-cancel" id="cancelScheduleButton" onclick="closeAddScheduleModal()">Cancel</button>
+          <button type="submit" class="emp-btn-submit">Add Schedule</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Confirmation Modal for Employee -->
+<div id="confirmationModal" class="emp-modal">
+  <div class="emp-modal-content" style="max-width: 500px;">
+    <div class="emp-modal-header">
+      <h2>Confirm Employee Addition</h2>
+    </div>
+    <div class="emp-modal-body">
+      <p>Are you sure you want to add this employee to the system?</p>
+      <div class="emp-confirmation-actions">
+        <button type="button" class="emp-btn-cancel" id="cancelEmployeeButton" onclick="closeConfirmationModal()">Cancel</button>
+        <button type="button" class="emp-btn-confirm-icon" id="confirmButton" onclick="processEmployeeAddition()">
+          <i class='bx bx-file'></i>
+          <span class="emp-button-text">Add</span>
+          <div class="emp-loading-spinner" style="display: none;"></div>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirmation Modal for Schedule -->
+<div id="confirmationScheduleModal" class="emp-modal">
+  <div class="emp-modal-content" style="max-width: 500px;">
+    <div class="emp-modal-header">
+      <h2>Confirm Schedule Addition</h2>
+    </div>
+    <div class="emp-modal-body">
+      <p>Are you sure you want to add this schedule to the system?</p>
+      <div class="emp-confirmation-actions">
+        <button type="button" class="emp-btn-cancel" id="cancelScheduleButton" onclick="closeConfirmationScheduleModal()">Cancel</button>
+        <button type="button" class="emp-btn-confirm-icon" id="confirmScheduleButton" onclick="processScheduleAddition()">
+          <i class='bx bx-file'></i>
+          <span class="emp-button-text">Add</span>
+          <div class="emp-loading-spinner" style="display: none;"></div>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -53,6 +370,884 @@ const recordsPerPage = 10;
 let filteredEmployees = [];
 let allEmployees = [];
 let currentSort = { column: null, direction: 'asc' }; 
+let colleges = [];
+let pendingEmployeeData = null;
+let pendingScheduleData = null;
+
+const timeSlots = [];
+for (let hour = 7; hour <= 20; hour++) { 
+  for (let minute = 0; minute < 60; minute += 15) {
+    const maxStartTime = new Date(`2000-01-01T${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`);
+    const maxEndTime = new Date(maxStartTime.getTime() + (4 * 60 * 60000)); 
+    
+    if (maxEndTime.getHours() <= 21) { 
+      const period = hour >= 12 ? 'PM' : 'AM';
+      const displayHour = hour > 12 ? hour - 12 : hour;
+      const displayMinute = minute.toString().padStart(2, '0');
+      
+      const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`;
+      const displayString = `${displayHour}:${displayMinute} ${period}`;
+      
+      timeSlots.push({ value: timeString, display: displayString });
+    }
+  }
+}
+
+function togglePasswordVisibility(fieldId) {
+  const passwordField = document.getElementById(fieldId);
+  const toggleIcon = passwordField.nextElementSibling.querySelector('i');
+  
+  if (passwordField.type === 'password') {
+    passwordField.type = 'text';
+    toggleIcon.className = 'bx bx-show';
+  } else {
+    passwordField.type = 'password';
+    toggleIcon.className = 'bx bx-hide';
+  }
+}
+
+function validateEmail(email) {
+  return email.toLowerCase().includes('@spc.edu.ph');
+}
+
+function showNotification(message, type = 'info') {
+  const notification = document.createElement('div');
+  notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 12px 20px;
+      border-radius: 6px;
+      color: white;
+      z-index: 10000;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  `;
+  
+  if (type === 'success') {
+      notification.style.background = '#10b981';
+  } else if (type === 'error') {
+      notification.style.background = '#ef4444';
+  } else {
+      notification.style.background = '#3b82f6';
+  }
+  
+  notification.textContent = message;
+  document.body.appendChild(notification);
+  
+  setTimeout(() => {
+      notification.remove();
+  }, 4000);
+}
+
+function formatEmployeeNumber(input) {
+  let numbers = input.value.replace(/\D/g, '');
+  
+  numbers = numbers.substring(0, 6);
+  
+  let formatted = '';
+  if (numbers.length > 0) {
+    formatted = numbers.substring(0, 2);
+  }
+  if (numbers.length > 2) {
+    formatted += '-' + numbers.substring(2, 6);
+  }
+  
+  input.value = formatted;
+}
+
+function validateEmployeeNumber(employeeNo) {
+  const employeeRegex = /^\d{2}-\d{4}$/;
+  return employeeRegex.test(employeeNo);
+}
+
+function formatPhoneNumber(input) {
+  let numbers = input.value.replace(/\D/g, '');
+
+  if (numbers.startsWith('63')) {
+    numbers = numbers.substring(2);
+  }
+  
+  let formatted = '+63 ';
+  if (numbers.length > 0) {
+    formatted += numbers.substring(0, 3);
+  }
+  if (numbers.length > 3) {
+    formatted += ' ' + numbers.substring(3, 6);
+  }
+  if (numbers.length > 6) {
+    formatted += ' ' + numbers.substring(6, 10);
+  }
+  
+  input.value = formatted;
+}
+
+function validatePhoneNumber(phone) {
+  const phoneRegex = /^\+63\s[0-9]{3}\s[0-9]{3}\s[0-9]{4}$/;
+  return phoneRegex.test(phone);
+}
+
+function updatePositionOptions() {
+  const roleSelect = document.getElementById('role_id');
+  const positionSelect = document.getElementById('position');
+  const selectedRole = roleSelect.value;
+  
+  positionSelect.innerHTML = '<option value="">Select Position</option>';
+  
+  if (selectedRole === '20001' || selectedRole === '20002') {
+    addPositionOption(positionSelect, 'Instructor', 'Instructor');
+    addPositionOption(positionSelect, 'Assistant Professor', 'Assistant Professor');
+    addPositionOption(positionSelect, 'Associate Professor', 'Associate Professor');
+    addPositionOption(positionSelect, 'Professor', 'Professor');
+  } else if (selectedRole === '20003') {
+    addPositionOption(positionSelect, 'HR Staff', 'HR Staff');
+  } else if (selectedRole === '20004') {
+    addPositionOption(positionSelect, 'Vice President', 'Vice President');
+    addPositionOption(positionSelect, 'President', 'President');
+  }
+}
+
+function addPositionOption(selectElement, value, text) {
+  const option = document.createElement('option');
+  option.value = value;
+  option.textContent = text;
+  selectElement.appendChild(option);
+}
+
+document.getElementById('role_id').addEventListener('change', updatePositionOptions);
+
+async function openAddEmployeeModal() {
+  document.getElementById('addEmployeeForm').reset();
+  clearErrorMessages();
+  
+  await populateCollegeDropdown();
+  document.getElementById('addEmployeeModal').style.display = 'block';
+}
+
+function closeAddEmployeeModal() {
+  document.getElementById('addEmployeeModal').style.display = 'none';
+  clearErrorMessages();
+}
+
+async function openAddScheduleModal() {
+  document.getElementById('addScheduleForm').reset();
+  clearErrorMessages();
+  resetScheduleForm();
+  
+  await populateSemesterDropdown();
+  await populateFacultyDropdown();
+  
+  const subjectSelect = document.getElementById('subject_id');
+  subjectSelect.innerHTML = '<option value="">Select Faculty First</option>';
+  subjectSelect.disabled = true;
+  
+  populateTimeSlots();
+  
+  document.getElementById('addScheduleModal').style.display = 'block';
+}
+
+function closeAddScheduleModal() {
+  document.getElementById('addScheduleModal').style.display = 'none';
+  clearErrorMessages();
+}
+
+function resetScheduleForm() {
+  document.getElementById('endtime_1').innerHTML = '<option value="">Calculated End Time</option>';
+  document.getElementById('endtime_2').innerHTML = '<option value="">Calculated End Time</option>';
+  document.getElementById('endtime_1').disabled = true;
+  document.getElementById('endtime_2').disabled = true;
+  document.getElementById('starttime_2').disabled = true;
+  document.getElementById('classday_2').disabled = true;
+}
+
+function openConfirmationModal() {
+  document.getElementById('confirmationModal').style.display = 'block';
+}
+
+function closeConfirmationModal() {
+  document.getElementById('confirmationModal').style.display = 'none';
+  document.getElementById('addEmployeeModal').style.display = 'block';
+  resetConfirmationButton(); 
+}
+
+function openConfirmationScheduleModal() {
+  document.getElementById('confirmationScheduleModal').style.display = 'block';
+}
+
+function closeConfirmationScheduleModal() {
+  document.getElementById('confirmationScheduleModal').style.display = 'none';
+  document.getElementById('addScheduleModal').style.display = 'block';
+  resetConfirmationScheduleButton(); 
+}
+
+function clearErrorMessages() {
+  document.querySelectorAll('.emp-error-message').forEach(el => {
+    el.textContent = '';
+  });
+}
+
+function resetConfirmationButton() {
+  const confirmButton = document.getElementById('confirmButton');
+  const buttonText = confirmButton.querySelector('.emp-button-text');
+  const spinner = confirmButton.querySelector('.emp-loading-spinner');
+  const cancelButton = document.getElementById('confirmationModal').querySelector('.emp-btn-cancel');
+  
+  confirmButton.disabled = false;
+  cancelButton.disabled = false; 
+  buttonText.textContent = 'Add';
+  buttonText.style.display = 'inline';
+  spinner.style.display = 'none';
+  
+  confirmButton.onclick = function() {
+    processEmployeeAddition();
+  };
+}
+
+function resetConfirmationScheduleButton() {
+  const confirmButton = document.getElementById('confirmScheduleButton');
+  const buttonText = confirmButton.querySelector('.emp-button-text');
+  const spinner = confirmButton.querySelector('.emp-loading-spinner');
+  const cancelButton = document.getElementById('confirmationScheduleModal').querySelector('.emp-btn-cancel');
+  
+  confirmButton.disabled = false;
+  cancelButton.disabled = false;
+  buttonText.textContent = 'Add';
+  buttonText.style.display = 'inline';
+  spinner.style.display = 'none';
+
+  confirmButton.onclick = function() {
+    processScheduleAddition();
+  };
+}
+
+async function populateCollegeDropdown() {
+  if (colleges.length === 0) {
+    try {
+      const response = await fetch('/api/hr/colleges-list');
+      const data = await response.json();
+      if (data.success) {
+        colleges = data.colleges;
+      }
+    } catch (error) {
+      console.error('Error fetching colleges:', error);
+    }
+  }
+  
+  const collegeSelect = document.getElementById('college_id');
+  collegeSelect.innerHTML = '<option value="">Select College</option>';
+  colleges.forEach(college => {
+    const option = document.createElement('option');
+    option.value = college.college_id;
+    option.textContent = college.collegename;
+    collegeSelect.appendChild(option);
+  });
+}
+
+async function populateSemesterDropdown() {
+  try {
+    const response = await fetch('/api/faculty/semesters');
+    const data = await response.json();
+    
+    if (data.success) {
+      const semesterSelect = document.getElementById('semester_id');
+      semesterSelect.innerHTML = '<option value="">Select Semester</option>';
+      
+      data.semesters.forEach(semester => {
+        const option = document.createElement('option');
+        option.value = semester.id;
+        option.textContent = semester.text;
+        semesterSelect.appendChild(option);
+      });
+    }
+  } catch (error) {
+    console.error('Error fetching semesters:', error);
+  }
+}
+
+async function populateFacultyDropdown() {
+  try {
+    const response = await fetch('/api/hr/faculty-list');
+    const data = await response.json();
+    
+    if (data.success) {
+      const facultySelect = document.getElementById('personnel_id');
+      facultySelect.innerHTML = '<option value="">Select Faculty</option>';
+      
+      data.faculty_list.forEach(faculty => {
+        const option = document.createElement('option');
+        option.value = faculty.personnel_id;
+        option.textContent = faculty.name;
+        facultySelect.appendChild(option);
+      });
+    }
+  } catch (error) {
+    console.error('Error fetching faculty list:', error);
+  }
+}
+
+async function populateSubjectsDropdown(personnelId = null) {
+  try {
+    let url = '/api/hr/subjects-list';
+    
+    if (personnelId) {
+      url = `/api/hr/subjects-by-faculty/${personnelId}`;
+    }
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.success) {
+      const subjectSelect = document.getElementById('subject_id');
+      subjectSelect.innerHTML = '<option value="">Select Class</option>';
+      
+      data.subjects.forEach(subject => {
+        const option = document.createElement('option');
+        option.value = subject.subject_id;
+        option.textContent = `${subject.subjectcode} - ${subject.subjectname}`;
+        option.setAttribute('data-units', subject.units);
+        subjectSelect.appendChild(option);
+      });
+    }
+  } catch (error) {
+    console.error('Error fetching subjects list:', error);
+  }
+}
+
+function populateTimeSlots() {
+  const startTime1Select = document.getElementById('starttime_1');
+  const startTime2Select = document.getElementById('starttime_2');
+  
+  startTime1Select.innerHTML = '<option value="">Select Start Time</option>';
+  startTime2Select.innerHTML = '<option value="">Select Start Time</option>';
+  
+  timeSlots.forEach(slot => {
+    const option1 = document.createElement('option');
+    option1.value = slot.value;
+    option1.textContent = slot.display;
+    startTime1Select.appendChild(option1);
+    
+    const option2 = document.createElement('option');
+    option2.value = slot.value;
+    option2.textContent = slot.display;
+    startTime2Select.appendChild(option2);
+  });
+}
+
+function calculateEndTimeOptions(startTime, units) {
+  if (!startTime || !units) return [];
+  
+  const start = new Date(`2000-01-01T${startTime}`);
+  const maxEndTime = new Date(`2000-01-01T21:00:00`); 
+  
+  const options = [];
+  
+  switch (parseInt(units)) {
+    case 1:
+      // 1 unit: only 1 hour option
+      const end1 = new Date(start.getTime() + 60 * 60000);
+      if (end1 <= maxEndTime) { 
+        options.push({
+          value: end1.toTimeString().slice(0, 8),
+          display: formatTimeForDisplay(end1.toTimeString().slice(0, 8)),
+          remainingHours: 0
+        });
+      }
+      break;
+      
+    case 2:
+      // 2 units: 1 hour (enable day 2) or 2 hours (disable day 2)
+      const end2_1 = new Date(start.getTime() + 60 * 60000);
+      if (end2_1 <= maxEndTime) {
+        options.push({
+          value: end2_1.toTimeString().slice(0, 8),
+          display: formatTimeForDisplay(end2_1.toTimeString().slice(0, 8)),
+          remainingHours: 1
+        });
+      }
+      
+      const end2_2 = new Date(start.getTime() + 120 * 60000);
+      if (end2_2 <= maxEndTime) {
+        options.push({
+          value: end2_2.toTimeString().slice(0, 8),
+          display: formatTimeForDisplay(end2_2.toTimeString().slice(0, 8)),
+          remainingHours: 0
+        });
+      }
+      break;
+      
+    case 3:
+      // 3 units: 1.5 hours (enable day 2) or 3 hours (disable day 2)
+      const end3_1 = new Date(start.getTime() + 90 * 60000);
+      if (end3_1 <= maxEndTime) {
+        options.push({
+          value: end3_1.toTimeString().slice(0, 8),
+          display: formatTimeForDisplay(end3_1.toTimeString().slice(0, 8)),
+          remainingHours: 1.5
+        });
+      }
+      
+      const end3_2 = new Date(start.getTime() + 180 * 60000);
+      if (end3_2 <= maxEndTime) {
+        options.push({
+          value: end3_2.toTimeString().slice(0, 8),
+          display: formatTimeForDisplay(end3_2.toTimeString().slice(0, 8)),
+          remainingHours: 0
+        });
+      }
+      break;
+      
+    case 4:
+      // 4 units: 2 hours (enable day 2) or 4 hours (disable day 2)
+      const end4_1 = new Date(start.getTime() + 120 * 60000);
+      if (end4_1 <= maxEndTime) {
+        options.push({
+          value: end4_1.toTimeString().slice(0, 8),
+          display: formatTimeForDisplay(end4_1.toTimeString().slice(0, 8)),
+          remainingHours: 2
+        });
+      }
+      
+      const end4_2 = new Date(start.getTime() + 240 * 60000);
+      if (end4_2 <= maxEndTime) {
+        options.push({
+          value: end4_2.toTimeString().slice(0, 8),
+          display: formatTimeForDisplay(end4_2.toTimeString().slice(0, 8)),
+          remainingHours: 0
+        });
+      }
+      break;
+  }
+  
+  return options;
+}
+
+function formatTimeForDisplay(timeString) {
+  const [hours, minutes] = timeString.split(':');
+  const hour = parseInt(hours);
+  const period = hour >= 12 ? 'PM' : 'AM';
+  const displayHour = hour > 12 ? hour - 12 : hour;
+  return `${displayHour}:${minutes} ${period}`;
+}
+
+function updateEndTimes() {
+  const units = document.getElementById('units').value;
+  const startTime1 = document.getElementById('starttime_1').value;
+  
+  const endTime1Select = document.getElementById('endtime_1');
+  const classday2Select = document.getElementById('classday_2');
+  const starttime2Select = document.getElementById('starttime_2');
+  const endTime2Select = document.getElementById('endtime_2');
+  
+  endTime1Select.innerHTML = '<option value="">Calculated End Time</option>';
+  endTime2Select.innerHTML = '<option value="">Calculated End Time</option>';
+  
+  classday2Select.disabled = true;
+  classday2Select.value = '';
+  starttime2Select.disabled = true;
+  starttime2Select.value = '';
+  endTime2Select.disabled = true;
+  
+  if (startTime1 && units) {
+    const endTimeOptions = calculateEndTimeOptions(startTime1, units);
+    
+    if (endTimeOptions.length > 0) {
+      endTimeOptions.forEach(option => {
+        const optElement = document.createElement('option');
+        optElement.value = option.value;
+        optElement.textContent = option.display;
+        optElement.setAttribute('data-remaining-hours', option.remainingHours);
+        endTime1Select.appendChild(optElement);
+      });
+
+      if (parseInt(units) === 1) {
+        endTime1Select.disabled = true; 
+        if (endTimeOptions.length === 1) {
+          endTime1Select.value = endTimeOptions[0].value;
+          handleEndTime1Change(); 
+        }
+      } else {
+        endTime1Select.disabled = false;
+        
+        if (endTimeOptions.length === 1) {
+          endTime1Select.value = endTimeOptions[0].value;
+          handleEndTime1Change();
+        }
+      }
+    } else {
+      endTime1Select.innerHTML = '<option value="">No valid end times</option>';
+      endTime1Select.disabled = true;
+    }
+  } else {
+    endTime1Select.disabled = true;
+  }
+}
+
+function handleEndTime1Change() {
+  const endTime1Select = document.getElementById('endtime_1');
+  const selectedOption = endTime1Select.options[endTime1Select.selectedIndex];
+  const classday2Select = document.getElementById('classday_2');
+  const starttime2Select = document.getElementById('starttime_2');
+  const endTime2Select = document.getElementById('endtime_2');
+  
+  classday2Select.disabled = true;
+  classday2Select.value = '';
+  starttime2Select.disabled = true;
+  starttime2Select.value = '';
+  endTime2Select.disabled = true;
+  endTime2Select.innerHTML = '<option value="">Calculated End Time</option>';
+  
+  if (selectedOption && selectedOption.value) {
+    const remainingHours = parseFloat(selectedOption.getAttribute('data-remaining-hours'));
+    
+    if (remainingHours > 0) {
+      classday2Select.disabled = false;
+      starttime2Select.disabled = false;
+    }
+  }
+}
+
+function updateDay2EndTime() {
+  const units = document.getElementById('units').value;
+  const startTime2 = document.getElementById('starttime_2').value;
+  const endTime1Select = document.getElementById('endtime_1');
+  const selectedOption = endTime1Select.options[endTime1Select.selectedIndex];
+  const remainingHours = selectedOption ? parseFloat(selectedOption.getAttribute('data-remaining-hours')) : 0;
+  
+  const endTime2Select = document.getElementById('endtime_2');
+  const maxEndTime = new Date(`2000-01-01T21:00:00`); 
+  
+  if (startTime2 && remainingHours > 0) {
+    const start = new Date(`2000-01-01T${startTime2}`);
+    const duration = remainingHours * 60; 
+    const end = new Date(start.getTime() + duration * 60000);
+    
+    if (end <= maxEndTime) {
+      const endTime = end.toTimeString().slice(0, 8);
+      endTime2Select.innerHTML = `<option value="${endTime}">${formatTimeForDisplay(endTime)}</option>`;
+    } else {
+      endTime2Select.innerHTML = '<option value="">Time exceeds 9 PM limit</option>';
+    }
+  } else {
+    endTime2Select.innerHTML = '<option value="">Calculated End Time</option>';
+  }
+}
+
+window.onclick = function(event) {
+  const addEmployeeModal = document.getElementById('addEmployeeModal');
+  const addScheduleModal = document.getElementById('addScheduleModal');
+  const confirmModal = document.getElementById('confirmationModal');
+  const confirmScheduleModal = document.getElementById('confirmationScheduleModal');
+  
+  if (event.target === addEmployeeModal) {
+    closeAddEmployeeModal();
+  }
+  if (event.target === addScheduleModal) {
+    closeAddScheduleModal();
+  }
+  if (event.target === confirmModal) {
+    closeConfirmationModal();
+  }
+  if (event.target === confirmScheduleModal) {
+    closeConfirmationScheduleModal();
+  }
+}
+
+document.getElementById('addEmployeeForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  
+  clearErrorMessages();
+  
+  const formData = new FormData(this);
+  const employeeData = {
+    email: formData.get('email'),
+    password: formData.get('password'),
+    employee_no: formData.get('employee_no'),
+    firstname: formData.get('firstname'),
+    lastname: formData.get('lastname'),
+    honorifics: formData.get('honorifics'),
+    phone: formData.get('phone'),
+    hire_date: formData.get('hire_date'),
+    college_id: parseInt(formData.get('college_id')),
+    role_id: parseInt(formData.get('role_id')),
+    employment_status: formData.get('employment_status'),
+    position: formData.get('position')
+  };
+  
+  let isValid = true;
+  
+  if (!employeeData.email) {
+    document.getElementById('emailError').textContent = 'Email is required';
+    isValid = false;
+  } else if (!validateEmail(employeeData.email)) {
+    document.getElementById('emailError').textContent = 'Email must be from @spc.edu.ph domain';
+    isValid = false;
+  }
+  
+  if (!employeeData.password || employeeData.password.length < 6) {
+    document.getElementById('passwordError').textContent = 'Password must be at least 6 characters';
+    isValid = false;
+  }
+  
+  if (!employeeData.employee_no) {
+    document.getElementById('employeeNoError').textContent = 'Employee number is required';
+    isValid = false;
+  } else if (!validateEmployeeNumber(employeeData.employee_no)) {
+    document.getElementById('employeeNoError').textContent = 'Employee number must be in format: XX-XXXX (e.g., 10-1223)';
+    isValid = false;
+  }
+  
+  if (!employeeData.phone) {
+    document.getElementById('phoneError').textContent = 'Contact number is required';
+    isValid = false;
+  } else if (!validatePhoneNumber(employeeData.phone)) {
+    document.getElementById('phoneError').textContent = 'Please use format: +63 912 345 6789';
+    isValid = false;
+  }
+  
+  if (!isValid) return;
+  
+  pendingEmployeeData = employeeData;
+  document.getElementById('addEmployeeModal').style.display = 'none';
+  openConfirmationModal();
+});
+
+document.getElementById('addScheduleForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  clearErrorMessages();
+  
+  const formData = new FormData(this);
+  const getValueOrNull = (value) => value === '' ? null : value;
+  
+  const scheduleData = {
+    semester_id: parseInt(formData.get('semester_id')),
+    personnel_id: parseInt(formData.get('personnel_id')),
+    subject_id: parseInt(formData.get('subject_id')),
+    units: parseInt(formData.get('units')),
+    classday_1: getValueOrNull(formData.get('classday_1')),
+    starttime_1: getValueOrNull(formData.get('starttime_1')),
+    endtime_1: getValueOrNull(document.getElementById('endtime_1').value),
+    classday_2: getValueOrNull(formData.get('classday_2')),
+    starttime_2: getValueOrNull(formData.get('starttime_2')),
+    endtime_2: getValueOrNull(document.getElementById('endtime_2').value),
+    classroom: getValueOrNull(formData.get('classroom')),
+    classsection: getValueOrNull(formData.get('classsection'))
+  };
+  
+  let isValid = true;
+  
+  const requiredFields = [
+    { field: 'semester_id', name: 'Semester', errorId: 'semesterError' },
+    { field: 'personnel_id', name: 'Faculty', errorId: 'personnelError' },
+    { field: 'subject_id', name: 'Class', errorId: 'subjectError' },
+    { field: 'units', name: 'Units', errorId: 'unitsError' },
+    { field: 'classday_1', name: 'Day 1', errorId: 'classday1Error' },
+    { field: 'starttime_1', name: 'Start Time for Day 1', errorId: 'starttime1Error' },
+    { field: 'endtime_1', name: 'End Time for Day 1', errorId: null },
+    { field: 'classroom', name: 'Classroom', errorId: 'classroomError' },
+    { field: 'classsection', name: 'Section', errorId: 'classsectionError' }
+  ];
+  
+  requiredFields.forEach(({ field, name, errorId }) => {
+    if (!scheduleData[field]) {
+      if (errorId) {
+        document.getElementById(errorId).textContent = `${name} is required`;
+      } else {
+        showNotification(`${name} is required`, 'error'); 
+      }
+      isValid = false;
+    }
+  });
+  
+  if (!isValid) return;
+  
+  const endTime1Select = document.getElementById('endtime_1');
+  const selectedOption = endTime1Select.options[endTime1Select.selectedIndex];
+  const remainingHours = selectedOption ? parseFloat(selectedOption.getAttribute('data-remaining-hours')) : 0;
+  
+  if (remainingHours > 0) {
+    if (!scheduleData.classday_2 || !scheduleData.starttime_2) {
+      showNotification('For the selected end time, both Day 2 and Start Time for Day 2 are required.', 'error'); 
+      isValid = false;
+    }
+  }
+  
+  if (!isValid) return;
+  
+  try {
+    const conflictCheck = await checkScheduleConflicts(scheduleData);
+    if (!conflictCheck.success) {
+      showNotification(conflictCheck.error, 'error'); 
+      return;
+    }
+  } catch (error) {
+    console.error('Error checking schedule conflicts:', error);
+    showNotification('Error checking schedule conflicts. Please try again.', 'error'); 
+    return;
+  }
+  
+  pendingScheduleData = scheduleData;
+  document.getElementById('addScheduleModal').style.display = 'none';
+  openConfirmationScheduleModal();
+});
+
+async function checkScheduleConflicts(scheduleData) {
+  try {
+    const response = await fetch('/api/hr/check-schedule-conflicts', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(scheduleData)
+    });
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error checking schedule conflicts:', error);
+    return { success: false, error: 'Error checking schedule conflicts' };
+  }
+}
+
+async function processEmployeeAddition() {
+  if (!pendingEmployeeData) return;
+  
+  const confirmButton = document.getElementById('confirmButton');
+  const buttonText = confirmButton.querySelector('.emp-button-text');
+  const spinner = confirmButton.querySelector('.emp-loading-spinner');
+  const cancelButton = document.getElementById('confirmationModal').querySelector('.emp-btn-cancel');
+  
+  confirmButton.disabled = true;
+  cancelButton.disabled = true;
+  buttonText.textContent = 'Adding...';
+  spinner.style.display = 'inline-block';
+  
+  try {
+    const response = await fetch('/api/hr/add-employee', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(pendingEmployeeData)
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      resetConfirmationButton();
+      document.getElementById('confirmationModal').style.display = 'none';
+      document.getElementById('addEmployeeModal').style.display = 'none';
+      document.getElementById('addEmployeeForm').reset();
+      clearErrorMessages();
+      await populateTable();
+      showNotification('Employee added successfully!', 'success');
+    } else {
+      resetConfirmationButton();
+      closeConfirmationModal();
+      document.getElementById('addEmployeeModal').style.display = 'block';
+      
+      if (result.error.includes('email') || result.error.includes('Email')) {
+        document.getElementById('emailError').textContent = result.error;
+      } else if (result.error.includes('employee number')) {
+        document.getElementById('employeeNoError').textContent = result.error;
+      } else {
+        showNotification('Error adding employee: ' + result.error, 'error');
+      }
+    }
+  } catch (error) {
+    console.error('Error adding employee:', error);
+    
+    resetConfirmationButton();
+    closeConfirmationModal();
+    document.getElementById('addEmployeeModal').style.display = 'block';
+    showNotification('Error adding employee. Please try again.', 'error');
+  }
+  
+  pendingEmployeeData = null;
+}
+
+async function processScheduleAddition() {
+  if (!pendingScheduleData) return;
+  
+  const confirmButton = document.getElementById('confirmScheduleButton');
+  const buttonText = confirmButton.querySelector('.emp-button-text');
+  const spinner = confirmButton.querySelector('.emp-loading-spinner');
+  const cancelButton = document.getElementById('confirmationScheduleModal').querySelector('.emp-btn-cancel');
+  
+  confirmButton.disabled = true;
+  cancelButton.disabled = true;
+  buttonText.textContent = 'Adding...';
+  spinner.style.display = 'inline-block';
+  
+  try {
+    const response = await fetch('/api/hr/add-schedule', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(pendingScheduleData)
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      resetConfirmationScheduleButton();
+      document.getElementById('confirmationScheduleModal').style.display = 'none';
+      document.getElementById('addScheduleModal').style.display = 'none';
+      document.getElementById('addScheduleForm').reset();
+      clearErrorMessages();
+      resetScheduleForm();
+      showNotification('Schedule added successfully!', 'success');
+    } else {
+      resetConfirmationScheduleButton();
+      closeConfirmationScheduleModal();
+      document.getElementById('addScheduleModal').style.display = 'block';
+      showNotification('Error adding schedule: ' + result.error, 'error');
+    }
+  } catch (error) {
+    console.error('Error adding schedule:', error);
+    
+    resetConfirmationScheduleButton();
+    closeConfirmationScheduleModal();
+    document.getElementById('addScheduleModal').style.display = 'block';
+    showNotification('Error adding schedule. Please try again.', 'error');
+  }
+  
+  pendingScheduleData = null;
+}
+
+document.getElementById('units').addEventListener('change', updateEndTimes);
+document.getElementById('starttime_1').addEventListener('change', updateEndTimes);
+document.getElementById('endtime_1').addEventListener('change', handleEndTime1Change);
+document.getElementById('starttime_2').addEventListener('change', updateDay2EndTime);
+
+document.getElementById('personnel_id').addEventListener('change', function() {
+  const selectedFacultyId = this.value;
+  if (selectedFacultyId) {
+    populateSubjectsDropdown(selectedFacultyId);
+  } else {
+    populateSubjectsDropdown(); 
+  }
+});
+
+document.getElementById('personnel_id').addEventListener('change', function() {
+  const selectedFacultyId = this.value;
+  const subjectSelect = document.getElementById('subject_id');
+  
+  if (selectedFacultyId) {
+    subjectSelect.disabled = false;
+    populateSubjectsDropdown(selectedFacultyId);
+  } else {
+    subjectSelect.disabled = true;
+    subjectSelect.innerHTML = '<option value="">Select Faculty First</option>';
+  }
+});
+
+document.getElementById('subject_id').addEventListener('change', function() {
+  const selectedOption = this.options[this.selectedIndex];
+  if (selectedOption && selectedOption.getAttribute('data-units')) {
+    document.getElementById('units').value = selectedOption.getAttribute('data-units');
+    updateEndTimes();
+  }
+});
 
 async function fetchEmployeesData() {
   try {
@@ -274,6 +1469,31 @@ function setupFilters() {
       renderEmployees();
     });
   });
+  
+  const addBtn = document.querySelector('.emp-add-btn');
+  const addDropdown = document.querySelector('.emp-add-dropdown');
+  
+  addBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    addDropdown.classList.toggle('emp-show');
+  });
+  
+  document.addEventListener('click', function() {
+    addDropdown.classList.remove('emp-show');
+  });
+  
+  const phoneInput = document.getElementById('phone');
+  if (phoneInput) {
+    phoneInput.addEventListener('input', function() {
+      formatPhoneNumber(this);
+    });
+    
+    phoneInput.addEventListener('blur', function() {
+      if (this.value && !validatePhoneNumber(this.value)) {
+        document.getElementById('phoneError').textContent = 'Please use format: +63 912 345 6789';
+      }
+    });
+  }
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

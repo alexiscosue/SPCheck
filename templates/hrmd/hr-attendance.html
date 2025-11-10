@@ -1073,7 +1073,7 @@
     
     container.innerHTML = html;
     container.classList.add('loaded');
-}
+  }
 
   document.getElementById('closeModal').addEventListener('click',()=>document.getElementById('classModal').classList.remove('active'));
   document.getElementById('facultySearch').addEventListener('input', () => {
@@ -1202,47 +1202,46 @@
     btn.disabled = true;
     
     try {
-      if (rfidReaderActive) {
-        const response = await fetch('/api/rfid/stop', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'}
-        });
-        
-        const result = await response.json();
-        if (result.success) {
-          updateRFIDUI(false);
-          alert('RFID reader stopped successfully.');
-          await fetchFacultyAttendance(); 
+        if (rfidReaderActive) {
+            const response = await fetch('/api/rfid/stop', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'}
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                updateRFIDUI(false);
+                showNotification('RFID reader stopped successfully.', 'success'); // REPLACED ALERT
+                await fetchFacultyAttendance(); 
+            } else {
+                showNotification('Failed to stop RFID reader: ' + result.error, 'error'); // REPLACED ALERT
+            }
         } else {
-          alert('Failed to stop RFID reader: ' + result.error);
+            const response = await fetch('/api/rfid/start', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'}
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                updateRFIDUI(true, result.port);
+                
+                if (result.already_running) {
+                    showNotification('RFID reader was already running on ' + result.port, 'info'); // REPLACED ALERT
+                } else {
+                    showNotification('RFID reader started successfully. Faculty can now tap their RFID cards.', 'success'); // REPLACED ALERT
+                }
+                
+                startAutoRefresh();
+            } else {
+                showNotification('Failed to start RFID reader: ' + result.error, 'error'); // REPLACED ALERT
+            }
         }
-      } else {
-
-        const response = await fetch('/api/rfid/start', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'}
-        });
-        
-        const result = await response.json();
-        if (result.success) {
-          updateRFIDUI(true, result.port);
-          
-          if (result.already_running) {
-            alert('RFID reader was already running on ' + result.port);
-          } else {
-            alert('RFID reader started successfully. Faculty can now tap their RFID cards.');
-          }
-          
-          startAutoRefresh();
-        } else {
-          alert('Failed to start RFID reader: ' + result.error);
-        }
-      }
     } catch (error) {
-      console.error('Error toggling RFID reader:', error);
-      alert('Error: ' + error.message);
+        console.error('Error toggling RFID reader:', error);
+        showNotification('Error: ' + error.message, 'error'); // REPLACED ALERT
     } finally {
-      btn.disabled = false;
+        btn.disabled = false;
     }
   });
 
@@ -1383,56 +1382,56 @@
   });
 
   document.getElementById('editRemarksBtn').addEventListener('click', async () => {
-      const btn = document.getElementById('editRemarksBtn');
-      const btnText = document.getElementById('editRemarksBtnText');
-      const btnIcon = btn.querySelector('i');
-      
-      if (!isEditingRemarks) {
-          isEditingRemarks = true;
-          remarksEditData.clear();
-          btn.classList.add('active');
-          btnText.textContent = 'Save Remarks';
-          btnIcon.className = 'bx bx-save';
-          renderRFIDLogs();
-      } else {
-          if (remarksEditData.size > 0) {
-              btn.disabled = true;
-              
-              try {
-                  const updates = Array.from(remarksEditData.entries()).map(([log_id, remarks]) => ({
-                      log_id,
-                      remarks
-                  }));
-                  
-                  const response = await fetch('/api/hr/update-rfid-remarks', {
-                      method: 'POST',
-                      headers: {'Content-Type': 'application/json'},
-                      body: JSON.stringify({ updates })
-                  });
-                  
-                  const result = await response.json();
-                  
-                  if (result.success) {
-                      alert(`Successfully updated ${result.updated_count} remark(s)`);
-                      await fetchRFIDLogs();
-                  } else {
-                      alert('Failed to update remarks: ' + result.error);
-                  }
-              } catch (error) {
-                  console.error('Error updating remarks:', error);
-                  alert('Error updating remarks: ' + error.message);
-              } finally {
-                  btn.disabled = false;
-              }
-          }
-          
-          isEditingRemarks = false;
-          remarksEditData.clear();
-          btn.classList.remove('active');
-          btnText.textContent = 'Edit Remarks';
-          btnIcon.className = 'bx bx-edit-alt';
-          renderRFIDLogs();
-      }
+    const btn = document.getElementById('editRemarksBtn');
+    const btnText = document.getElementById('editRemarksBtnText');
+    const btnIcon = btn.querySelector('i');
+    
+    if (!isEditingRemarks) {
+        isEditingRemarks = true;
+        remarksEditData.clear();
+        btn.classList.add('active');
+        btnText.textContent = 'Save Remarks';
+        btnIcon.className = 'bx bx-save';
+        renderRFIDLogs();
+    } else {
+        if (remarksEditData.size > 0) {
+            btn.disabled = true;
+            
+            try {
+                const updates = Array.from(remarksEditData.entries()).map(([log_id, remarks]) => ({
+                    log_id,
+                    remarks
+                }));
+                
+                const response = await fetch('/api/hr/update-rfid-remarks', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ updates })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showNotification(`Successfully updated ${result.updated_count} remark(s)`, 'success'); // REPLACED ALERT
+                    await fetchRFIDLogs();
+                } else {
+                    showNotification('Failed to update remarks: ' + result.error, 'error'); // REPLACED ALERT
+                }
+            } catch (error) {
+                console.error('Error updating remarks:', error);
+                showNotification('Error updating remarks: ' + error.message, 'error'); // REPLACED ALERT
+            } finally {
+                btn.disabled = false;
+            }
+        }
+        
+        isEditingRemarks = false;
+        remarksEditData.clear();
+        btn.classList.remove('active');
+        btnText.textContent = 'Edit Remarks';
+        btnIcon.className = 'bx bx-edit-alt';
+        renderRFIDLogs();
+    }
   });
 
   document.addEventListener('DOMContentLoaded', () => {

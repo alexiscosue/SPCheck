@@ -22,6 +22,14 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = 'spc-faculty-system-2025-secret-key'
 
+# ========== SESSION CONFIGURATION ==========
+app.config['SESSION_PERMANENT'] = False
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=60)  # 1 hour max session
+
+@app.before_request
+def make_session_permanent():
+    session.permanent = False
+
 def convert_to_24hour(time_str):
     """Convert time string to 24-hour format. Default to AM if no period specified."""
     if not time_str:
@@ -74,11 +82,11 @@ class ConnectionPool:
     
     def _create_connection(self):
         conn = pg8000.dbapi.connect(
-            host=os.getenv('DB_HOST', 'dpg-d3ue6mbe5dus739khe70-a.oregon-postgres.render.com'),
+            host=os.getenv('DB_HOST', 'dpg-d48ontqli9vc739e8i90-a.oregon-postgres.render.com'),
             port=int(os.getenv('DB_PORT', 5432)),
-            database=os.getenv('DB_NAME', 'spcheck'),
+            database=os.getenv('DB_NAME', 'spcheck_nf0n'),
             user=os.getenv('DB_USER', 'spcheck_user'),
-            password=os.getenv('DB_PASSWORD', 'Z2Z7rEXFpHmge1rgxM2qBXBERkDAuC7c'),
+            password=os.getenv('DB_PASSWORD', 'lW8SHs3IYfSzdldtFVSgfdnlIaguJhtf'),
             ssl_context=True
         )
 
@@ -335,7 +343,7 @@ ROLE_REDIRECTS = {
 }
 
 def get_personnel_info(user_id):
-    """Get personnel information - OPTIMIZED with single query"""
+    """Get personnel information with profile picture - OPTIMIZED with single query"""
     cache_key = f"personnel_info_{user_id}"
     cached = get_cached(cache_key, ttl=600)
     if cached:
@@ -356,7 +364,8 @@ def get_personnel_info(user_id):
                 u.email,
                 pr.position,
                 pr.employmentstatus,
-                p.personnel_id
+                p.personnel_id,
+                pr.profilepic
             FROM personnel p
             LEFT JOIN college c ON p.college_id = c.college_id
             LEFT JOIN roles r ON p.role_id = r.role_id
@@ -370,9 +379,14 @@ def get_personnel_info(user_id):
         return_db_connection(conn)
         
         if result:
-            firstname, lastname, honorifics, collegename, employee_no, rolename, email, position, employmentstatus, personnel_id = result
+            firstname, lastname, honorifics, collegename, employee_no, rolename, email, position, employmentstatus, personnel_id, profilepic = result
             
             full_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+            
+            profile_image_base64 = None
+            if profilepic:
+                binary_image = bytes(profilepic)
+                profile_image_base64 = f'data:image/jpeg;base64,{base64.b64encode(binary_image).decode("utf-8")}'
             
             info = {
                 'personnel_name': full_name,
@@ -388,7 +402,8 @@ def get_personnel_info(user_id):
                 'email': email or 'email@spc.edu.ph',
                 'position': position or 'Full-Time Employee',
                 'employment_status': employmentstatus or 'Regular',
-                'personnel_id': personnel_id
+                'personnel_id': personnel_id,
+                'profile_image_base64': profile_image_base64  # ADD THIS
             }
             
             set_cached(cache_key, info)
@@ -409,7 +424,8 @@ def get_personnel_info(user_id):
         'role_name': 'Staff',
         'email': 'email@spc.edu.ph',
         'position': 'Full-Time Employee',
-        'employment_status': 'Regular'
+        'employment_status': 'Regular',
+        'profile_image_base64': None
     }
 
 def get_faculty_info(user_id):
@@ -767,7 +783,7 @@ def handle_rfid_notification(notification_data):
 rfid_reader.add_notification_callback(handle_rfid_notification)
 
 @app.route('/api/faculty/current-personnel')
-@require_auth([20001, 20002])
+@require_auth([20001, 20002, 20003, 20004])
 def api_current_personnel():
     """Get current user's personnel ID"""
     try:
@@ -932,7 +948,24 @@ def api_faculty_semesters():
         for sem in semesters:
             acadcalendar_id, semester, acadyear, start_date, end_date, is_current = sem
             
-            display_text = f"{semester}, AY {acadyear}"
+            if 'Semester' not in semester:
+                if 'First' in semester:
+                    semester_display = 'First Semester'
+                elif 'Second' in semester:
+                    semester_display = 'Second Semester'
+                elif 'Summer' in semester:
+                    semester_display = 'Summer Semester'
+                else:
+                    semester_display = semester + ' Semester'
+            else:
+                semester_display = semester
+            
+            if 'AY' in acadyear:
+                year_display = acadyear
+            else:
+                year_display = f'AY {acadyear}'
+            
+            display_text = f"{semester_display}, {year_display}"
             
             if is_current and current_semester_id is None:
                 current_semester_id = acadcalendar_id
@@ -2991,10 +3024,10 @@ def api_hr_faculty_schedule(personnel_id):
 @require_auth([20003])
 def api_hr_employees_list():
     """OPTIMIZED: Get all employees data for HR directory"""
-    cache_key = "hr_employees_list"
-    cached = get_cached(cache_key, ttl=300)
-    if cached:
-        return cached
+    # cache_key = "hr_employees_list"
+    # cached = get_cached(cache_key, ttl=300)
+    # if cached:
+    #     return cached
     
     try:
         conn = get_db_connection()
@@ -3046,7 +3079,7 @@ def api_hr_employees_list():
             elif role_display == 'dean':
                 role_display = 'Dean'
             elif role_display == 'vppres':
-                role_display = 'Admin'
+                role_display = 'VP/Pres'
             
             employees_list.append({
                 'personnel_id': personnel_id,
@@ -3065,7 +3098,7 @@ def api_hr_employees_list():
             'employees': employees_list
         }
         
-        set_cached(cache_key, result)
+        # set_cached(cache_key, result)
         return result
         
     except Exception as e:
@@ -3074,11 +3107,462 @@ def api_hr_employees_list():
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
 
+@app.route('/api/hr/add-employee', methods=['POST'])
+@require_auth([20003])
+def api_hr_add_employee():
+    """Add new employee with user account, personnel, and profile records"""
+    try:
+        data = request.get_json()
+        
+        email = data.get('email')
+        password = data.get('password')
+        employee_no = data.get('employee_no')  
+        firstname = data.get('firstname')
+        lastname = data.get('lastname')
+        honorifics = data.get('honorifics')
+        phone = data.get('phone')
+        hire_date = data.get('hire_date')
+        college_id = data.get('college_id')
+        role_id = data.get('role_id')
+        employment_status = data.get('employment_status')
+        position = data.get('position')
+        
+        if not all([email, password, employee_no, firstname, lastname, hire_date, college_id, role_id, employment_status, position, phone]):
+            return {'success': False, 'error': 'All required fields must be filled'}
+        
+        import re
+        phone_pattern = r'^\+63\s[0-9]{3}\s[0-9]{3}\s[0-9]{4}$'
+        if not re.match(phone_pattern, phone):
+            return {'success': False, 'error': 'Phone number must be in format: +63 912 345 6789'}
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT user_id FROM users WHERE email = %s", (email,))
+        if cursor.fetchone():
+            cursor.close()
+            return_db_connection(conn)
+            return {'success': False, 'error': 'Email already exists'}
+        
+        cursor.execute("SELECT personnel_id FROM personnel WHERE employee_no = %s", (employee_no,))
+        if cursor.fetchone():
+            cursor.close()
+            return_db_connection(conn)
+            return {'success': False, 'error': 'Employee number already exists'}
+        
+        cursor.execute("SELECT COALESCE(MAX(user_id), 10000) FROM users")
+        max_user_id = cursor.fetchone()[0]
+        new_user_id = max_user_id + 1
+        
+        cursor.execute("SELECT COALESCE(MAX(personnel_id), 30000) FROM personnel")
+        max_personnel_id = cursor.fetchone()[0]
+        new_personnel_id = max_personnel_id + 1
+        
+        cursor.execute("SELECT COALESCE(MAX(profile_id), 90000) FROM profile")
+        max_profile_id = cursor.fetchone()[0]
+        new_profile_id = max_profile_id + 1
+        
+        cursor.execute("""
+            INSERT INTO users (user_id, email, password, role_id, lastlogin, lastlogout)
+            VALUES (%s, %s, %s, %s, NULL, NULL)
+        """, (new_user_id, email, password, role_id))
+        
+        cursor.execute("""
+            INSERT INTO personnel (personnel_id, employee_no, firstname, lastname, phone, hiredate, college_id, user_id, role_id, honorifics)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (new_personnel_id, employee_no, firstname, lastname, phone, hire_date, college_id, new_user_id, role_id, honorifics))
+        
+        cursor.execute("""
+            INSERT INTO profile (profile_id, personnel_id, bio, employmentstatus, position, profilepic, 
+                               licenses, degrees, certificates, publications, awards,
+                               licensesname, degreesname, certificatesname, publicationsname, awardsname)
+            VALUES (%s, %s, '', %s, %s, NULL, 
+                    ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[],
+                    ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[])
+        """, (new_profile_id, new_personnel_id, employment_status, position))
+        
+        conn.commit()
+        cursor.close()
+        return_db_connection(conn)
+        
+        hr_user_id = session['user_id']
+        hr_personnel_info = get_personnel_info(hr_user_id)
+        hr_personnel_id = hr_personnel_info.get('personnel_id')
+
+        cursor = conn.cursor()
+        cursor.execute("SELECT collegename FROM college WHERE college_id = %s", (college_id,))
+        college_result = cursor.fetchone()
+        college_name = college_result[0] if college_result else "Unknown College"
+        
+        cursor.execute("SELECT rolename FROM roles WHERE role_id = %s", (role_id,))
+        role_result = cursor.fetchone()
+        role_name = role_result[0] if role_result else "Unknown Role"
+        
+        cursor.close()
+        
+        employee_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+        audit_details = f"HR added new employee: {employee_name}\nEmail: {email}\nRole: {role_name}\nEmployee Number: {employee_no}\nCollege: {college_name}\nEmployment Status: {employment_status}\nPosition: {position}"
+        
+        log_audit_action(
+            hr_personnel_id,
+            "Employee added",
+            audit_details
+        )
+        
+        return {'success': True, 'message': 'Employee added successfully'}
+        
+    except Exception as e:
+        print(f"Error adding employee: {e}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+            cursor.close()
+            return_db_connection(conn)
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/hr/subjects-list')
+@require_auth([20003])
+def api_hr_subjects_list():
+    """Get all subjects for schedule dropdown"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT subject_id, subjectcode, subjectname, units 
+            FROM subjects 
+            ORDER BY subjectcode
+        """)
+        
+        subjects = cursor.fetchall()
+        cursor.close()
+        return_db_connection(conn)
+        
+        subjects_list = []
+        for subject in subjects:
+            subject_id, subjectcode, subjectname, units = subject
+            subjects_list.append({
+                'subject_id': subject_id,
+                'subjectcode': subjectcode,
+                'subjectname': subjectname,
+                'units': units
+            })
+        
+        return {
+            'success': True,
+            'subjects': subjects_list
+        }
+        
+    except Exception as e:
+        print(f"Error fetching subjects list: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/hr/subjects-by-faculty/<int:personnel_id>')
+@require_auth([20003])
+def api_hr_subjects_by_faculty(personnel_id):
+    """Get subjects filtered by faculty's college"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT college_id FROM personnel WHERE personnel_id = %s", (personnel_id,))
+        faculty_college = cursor.fetchone()
+        
+        if not faculty_college or not faculty_college[0]:
+            cursor.close()
+            return_db_connection(conn)
+            return {'success': False, 'error': 'Faculty college not found'}
+        
+        college_id = faculty_college[0]
+        
+        cursor.execute("""
+            SELECT subject_id, subjectcode, subjectname, units 
+            FROM subjects 
+            WHERE college_id = %s
+            ORDER BY subjectcode
+        """, (college_id,))
+        
+        subjects = cursor.fetchall()
+        cursor.close()
+        return_db_connection(conn)
+        
+        subjects_list = []
+        for subject in subjects:
+            subject_id, subjectcode, subjectname, units = subject
+            subjects_list.append({
+                'subject_id': subject_id,
+                'subjectcode': subjectcode,
+                'subjectname': subjectname,
+                'units': units
+            })
+        
+        return {
+            'success': True,
+            'subjects': subjects_list
+        }
+        
+    except Exception as e:
+        print(f"Error fetching subjects by faculty: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/hr/check-schedule-conflicts', methods=['POST'])
+@require_auth([20003])
+def api_hr_check_schedule_conflicts():
+    """Check for schedule conflicts before adding new schedule"""
+    try:
+        data = request.get_json()
+        
+        semester_id = data.get('semester_id')
+        personnel_id = data.get('personnel_id')
+        classday_1 = data.get('classday_1')
+        starttime_1 = data.get('starttime_1')
+        endtime_1 = data.get('endtime_1')
+        classday_2 = data.get('classday_2')
+        starttime_2 = data.get('starttime_2')
+        endtime_2 = data.get('endtime_2')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        def format_time_ampm(time_str):
+            if not time_str:
+                return "N/A"
+            try:
+                time_part = time_str.split('+')[0]  
+                hours, minutes, seconds = map(int, time_part.split(':'))
+                period = 'AM' if hours < 12 else 'PM'
+                display_hour = hours if hours <= 12 else hours - 12
+                if display_hour == 0:
+                    display_hour = 12
+                return f"{display_hour}:{minutes:02d} {period}"
+            except:
+                return time_str
+        
+        conflicts = []
+        
+        if classday_1 and starttime_1 and endtime_1:
+            cursor.execute("""
+                SELECT s.class_id, sub.subjectcode, sub.subjectname, s.classday_1, s.starttime_1, s.endtime_1, 
+                       s.classday_2, s.starttime_2, s.endtime_2, s.classsection, s.classroom
+                FROM schedule s
+                JOIN subjects sub ON s.subject_id = sub.subject_id
+                WHERE s.personnel_id = %s 
+                AND s.acadcalendar_id = %s
+                AND s.classday_1 = %s
+                AND (
+                    (s.starttime_1 < %s AND s.endtime_1 > %s) OR
+                    (s.starttime_1 < %s AND s.endtime_1 > %s) OR
+                    (%s < s.starttime_1 AND %s > s.endtime_1) OR
+                    (s.starttime_1 = %s AND s.endtime_1 = %s)
+                )
+            """, (personnel_id, semester_id, classday_1, starttime_1, starttime_1, endtime_1, endtime_1, starttime_1, endtime_1, starttime_1, endtime_1))
+            
+            day1_conflicts = cursor.fetchall()
+            for conflict in day1_conflicts:
+                start_time_formatted = format_time_ampm(str(conflict[4]))
+                end_time_formatted = format_time_ampm(str(conflict[5]))
+                conflicts.append(f"🚫 CONFLICT with {conflict[1]} - {conflict[2]}\n   📅 Day: {conflict[3]}\n   ⏰ Time: {start_time_formatted} - {end_time_formatted}\n   🏫 Room: {conflict[10]}\n   👥 Section: {conflict[9]}")
+        
+        if classday_1 and starttime_1 and endtime_1:
+            cursor.execute("""
+                SELECT s.class_id, sub.subjectcode, sub.subjectname, s.classday_1, s.starttime_1, s.endtime_1, 
+                       s.classday_2, s.starttime_2, s.endtime_2, s.classsection, s.classroom
+                FROM schedule s
+                JOIN subjects sub ON s.subject_id = sub.subject_id
+                WHERE s.personnel_id = %s 
+                AND s.acadcalendar_id = %s
+                AND s.classday_2 = %s
+                AND (
+                    (s.starttime_2 < %s AND s.endtime_2 > %s) OR
+                    (s.starttime_2 < %s AND s.endtime_2 > %s) OR
+                    (%s < s.starttime_2 AND %s > s.endtime_2) OR
+                    (s.starttime_2 = %s AND s.endtime_2 = %s)
+                )
+            """, (personnel_id, semester_id, classday_1, starttime_1, starttime_1, endtime_1, endtime_1, starttime_1, endtime_1, starttime_1, endtime_1))
+            
+            day1_day2_conflicts = cursor.fetchall()
+            for conflict in day1_day2_conflicts:
+                start_time_formatted = format_time_ampm(str(conflict[7]))
+                end_time_formatted = format_time_ampm(str(conflict[8]))
+                conflict_info = f"🚫 CONFLICT with {conflict[1]} - {conflict[2]}\n   📅 Day: {conflict[6]}\n   ⏰ Time: {start_time_formatted} - {end_time_formatted}\n   🏫 Room: {conflict[10]}\n   👥 Section: {conflict[9]}"
+                if conflict_info not in [c.split('\n')[0] for c in conflicts]:  # Check if already added
+                    conflicts.append(conflict_info)
+        
+        if classday_2 and starttime_2 and endtime_2:
+            cursor.execute("""
+                SELECT s.class_id, sub.subjectcode, sub.subjectname, s.classday_1, s.starttime_1, s.endtime_1, 
+                       s.classday_2, s.starttime_2, s.endtime_2, s.classsection, s.classroom
+                FROM schedule s
+                JOIN subjects sub ON s.subject_id = sub.subject_id
+                WHERE s.personnel_id = %s 
+                AND s.acadcalendar_id = %s
+                AND (
+                    (s.classday_1 = %s AND (
+                        (s.starttime_1 < %s AND s.endtime_1 > %s) OR
+                        (s.starttime_1 < %s AND s.endtime_1 > %s) OR
+                        (%s < s.starttime_1 AND %s > s.endtime_1) OR
+                        (s.starttime_1 = %s AND s.endtime_1 = %s)
+                    )) OR
+                    (s.classday_2 = %s AND (
+                        (s.starttime_2 < %s AND s.endtime_2 > %s) OR
+                        (s.starttime_2 < %s AND s.endtime_2 > %s) OR
+                        (%s < s.starttime_2 AND %s > s.endtime_2) OR
+                        (s.starttime_2 = %s AND s.endtime_2 = %s)
+                    ))
+                )
+            """, (personnel_id, semester_id, classday_2, starttime_2, starttime_2, endtime_2, endtime_2, starttime_2, endtime_2, starttime_2, endtime_2,
+                  classday_2, starttime_2, starttime_2, endtime_2, endtime_2, starttime_2, endtime_2, starttime_2, endtime_2))
+            
+            day2_conflicts = cursor.fetchall()
+            for conflict in day2_conflicts:
+                if conflict[6]:  
+                    start_time_formatted = format_time_ampm(str(conflict[7]))
+                    end_time_formatted = format_time_ampm(str(conflict[8]))
+                    conflict_info = f"🚫 CONFLICT with {conflict[1]} - {conflict[2]}\n   📅 Day: {conflict[6]}\n   ⏰ Time: {start_time_formatted} - {end_time_formatted}\n   🏫 Room: {conflict[10]}\n   👥 Section: {conflict[9]}"
+                else:
+                    start_time_formatted = format_time_ampm(str(conflict[4]))
+                    end_time_formatted = format_time_ampm(str(conflict[5]))
+                    conflict_info = f"🚫 CONFLICT with {conflict[1]} - {conflict[2]}\n   📅 Day: {conflict[3]}\n   ⏰ Time: {start_time_formatted} - {end_time_formatted}\n   🏫 Room: {conflict[10]}\n   👥 Section: {conflict[9]}"
+                
+                if conflict_info not in [c.split('\n')[0] for c in conflicts]:
+                    conflicts.append(conflict_info)
+        
+        cursor.close()
+        return_db_connection(conn)
+        
+        if conflicts:
+            conflict_message = "❌ SCHEDULE CONFLICTS DETECTED:\n\n" + "\n\n".join(conflicts) + "\n\nPlease choose a different time slot."
+            return {
+                'success': False,
+                'error': conflict_message
+            }
+        else:
+            return {'success': True, 'message': 'No schedule conflicts found'}
+        
+    except Exception as e:
+        print(f"Error checking schedule conflicts: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': f'Error checking schedule conflicts: {str(e)}'}
+
+@app.route('/api/hr/add-schedule', methods=['POST'])
+@require_auth([20003])
+def api_hr_add_schedule():
+    """Add new schedule"""
+    try:
+        data = request.get_json()
+        
+        semester_id = data.get('semester_id')
+        personnel_id = data.get('personnel_id')
+        subject_id = data.get('subject_id')
+        units = data.get('units')
+        classday_1 = data.get('classday_1')
+        starttime_1 = data.get('starttime_1')
+        endtime_1 = data.get('endtime_1')
+        classday_2 = data.get('classday_2')
+        starttime_2 = data.get('starttime_2')
+        endtime_2 = data.get('endtime_2')
+        classroom = data.get('classroom')
+        classsection = data.get('classsection')
+        
+        required_fields = ['semester_id', 'personnel_id', 'subject_id', 'units', 
+                          'classday_1', 'starttime_1', 'endtime_1', 'classroom', 'classsection']
+        
+        for field in required_fields:
+            if not data.get(field):
+                return {'success': False, 'error': f'All required fields must be filled. Missing: {field}'}
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        conflict_check = api_hr_check_schedule_conflicts()
+        if not conflict_check.get('success'):
+            return conflict_check
+        
+        cursor.execute("SELECT COALESCE(MAX(class_id), 60000) FROM schedule")
+        max_class_id = cursor.fetchone()[0]
+        new_class_id = max_class_id + 1
+        
+        cursor.execute("SELECT acadcalendar_id FROM acadcalendar WHERE acadcalendar_id = %s", (semester_id,))
+        semester_info = cursor.fetchone()
+
+        if not semester_info:
+            cursor.close()
+            return_db_connection(conn)
+            return {'success': False, 'error': 'Invalid semester selected'}
+
+        cursor.execute("""
+            INSERT INTO schedule (
+                class_id, personnel_id, subject_id,
+                classday_1, starttime_1, endtime_1,
+                classday_2, starttime_2, endtime_2,
+                classroom, acadcalendar_id, classsection
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            new_class_id, personnel_id, subject_id,
+            classday_1, starttime_1, endtime_1,
+            classday_2, starttime_2, endtime_2,
+            classroom, semester_id, classsection
+        ))
+        
+        conn.commit()
+        cursor.close()
+        return_db_connection(conn)
+        
+        hr_user_id = session['user_id']
+        hr_personnel_info = get_personnel_info(hr_user_id)
+        hr_personnel_id = hr_personnel_info.get('personnel_id')
+        
+        cursor = conn.cursor()
+        cursor.execute("SELECT firstname, lastname, honorifics FROM personnel WHERE personnel_id = %s", (personnel_id,))
+        faculty_info = cursor.fetchone()
+        faculty_name = f"{faculty_info[0]} {faculty_info[1]}, {faculty_info[2]}" if faculty_info and faculty_info[2] else f"{faculty_info[0]} {faculty_info[1]}" if faculty_info else "Unknown"
+        
+        cursor.execute("SELECT subjectcode, subjectname, units FROM subjects WHERE subject_id = %s", (subject_id,))
+        subject_info = cursor.fetchone()
+        subject_name = f"{subject_info[0]} - {subject_info[1]}" if subject_info else "Unknown"
+        subject_units = subject_info[2] if subject_info else units
+        
+        cursor.close()
+        
+        schedule_info = f"{classday_1} {starttime_1}-{endtime_1}"
+        if classday_2 and starttime_2 and endtime_2:
+            schedule_info += f" & {classday_2} {starttime_2}-{endtime_2}"
+        
+        audit_details = f"HR added new schedule for {faculty_name}\nSubject: {subject_name}\nUnits: {subject_units}\nSchedule: {schedule_info}\nSection: {classsection}"
+        
+        log_audit_action(
+            hr_personnel_id,
+            "Schedule added",
+            audit_details
+        )
+        
+        return {'success': True, 'message': 'Schedule added successfully'}
+        
+    except Exception as e:
+        print(f"Error adding schedule: {e}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+            cursor.close()
+            return_db_connection(conn)
+        return {'success': False, 'error': str(e)}
+
 @app.route('/hr_employee_profile/<int:personnel_id>')
 @require_auth([20003])
 def hr_employee_profile(personnel_id):
     """HR view of employee profile"""
     try:
+
+        hr_info = get_personnel_info(session['user_id'])
+        
         conn = get_db_connection()
         cursor = conn.cursor()
         
@@ -3111,7 +3595,10 @@ def hr_employee_profile(personnel_id):
             full_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
             
             employee_info = {
-                'hr_name': full_name,
+                'hr_name': hr_info['hr_name'],  
+                'college': hr_info['college'],  
+                'profile_image_base64': hr_info['profile_image_base64'], 
+                'employee_name': full_name,
                 'college': collegename or 'College of Computer Studies',
                 'employee_no': employee_no,
                 'email': email or 'email@spc.edu.ph',
@@ -3136,6 +3623,8 @@ def hr_employee_profile(personnel_id):
 def faculty_employee_profile(personnel_id):
     """HR view of faculty/dean profile"""
     try:
+        hr_info = get_personnel_info(session['user_id'])
+        
         conn = get_db_connection()
         cursor = conn.cursor()
         
@@ -3168,6 +3657,9 @@ def faculty_employee_profile(personnel_id):
             full_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
             
             employee_info = {
+                'hr_name': hr_info['hr_name'],  
+                'college': hr_info['college'],   
+                'profile_image_base64': hr_info['profile_image_base64'], 
                 'faculty_name': full_name,
                 'college': collegename or 'College of Computer Studies',
                 'employee_no': employee_no,
@@ -3193,6 +3685,8 @@ def faculty_employee_profile(personnel_id):
 def vp_employee_profile(personnel_id):
     """HR view of VP/President profile"""
     try:
+        hr_info = get_personnel_info(session['user_id'])
+        
         conn = get_db_connection()
         cursor = conn.cursor()
         
@@ -3225,6 +3719,9 @@ def vp_employee_profile(personnel_id):
             full_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
             
             employee_info = {
+                'hr_name': hr_info['hr_name'],  
+                'college': hr_info['college'],  
+                'profile_image_base64': hr_info['profile_image_base64'],  
                 'vp_name': full_name,
                 'college': collegename or 'College of Computer Studies',
                 'employee_no': employee_no,
@@ -3309,7 +3806,6 @@ def clear_viewing_session():
     session.pop('viewing_personnel_id', None)
     return {'success': True}
 
-# Login route
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -3319,6 +3815,14 @@ def login():
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
+            
+            cursor.execute("SELECT user_id FROM users WHERE email = %s", (email,))
+            user_exists = cursor.fetchone()
+            
+            if not user_exists:
+                cursor.close()
+                return_db_connection(conn)
+                return render_template('login.html', error="User does not exist.")
             
             cursor.execute("""
                 SELECT u.user_id, u.email, u.role_id, u.lastlogin, u.lastlogout
@@ -3374,12 +3878,12 @@ def login():
                         personnel_result[0],
                         "Failed login attempt",
                         f"Failed login attempt for email: {email}",
-                        evidence="Invalid credentials provided"
+                        evidence="Invalid password provided"
                     )
                 
                 cursor.close()
                 return_db_connection(conn)
-                return render_template('login.html', error="Invalid credentials. Please try again.")
+                return render_template('login.html', error="Invalid password. Please try again.")
                 
         except Exception as e:
             print(f"Database error: {e}")
@@ -3502,6 +4006,7 @@ def hr_dashboard():
 @require_auth([20003])
 def hr_employees():
     personnel_info = get_personnel_info(session['user_id'])
+    personnel_info['today_date'] = datetime.now().strftime('%Y-%m-%d')
     return render_template('hrmd/hr-employees.html', **personnel_info)
 
 @app.route('/hr_employees_return')
@@ -3949,7 +4454,7 @@ def get_promotion_details(application_id):
 
 # Route to serve profile image as base64 for embedding
 @app.route('/api/profile/image-base64/<int:personnel_id>')
-@require_auth([20003])  # HR only
+@require_auth([20001, 20002, 20003, 20004])
 def get_profile_image_base64(personnel_id):
     """Get profile picture as base64 for embedding in HTML"""
     try:
