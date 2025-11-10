@@ -3422,11 +3422,12 @@ def faculty_promotion():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Get faculty ID and hire date
+    # Get faculty ID, hire date, AND current rank from profile table
     cursor.execute("""
-        SELECT personnel_id, hiredate 
-        FROM personnel 
-        WHERE user_id = %s
+        SELECT p.personnel_id, p.hiredate, pr.position 
+        FROM personnel p
+        LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+        WHERE p.user_id = %s
     """, (user_id,))
     
     result = cursor.fetchone()
@@ -3436,7 +3437,23 @@ def faculty_promotion():
         return_db_connection(conn)
         return "Faculty record not found", 400
     
-    faculty_id, hire_date = result
+    faculty_id, hire_date, current_rank = result
+    
+    # Define rank hierarchy
+    rank_hierarchy = [
+        "Instructor",
+        "Assistant Professor",
+        "Associate Professor",
+        "Professor"
+    ]
+    
+    # Get available ranks (only higher ranks)
+    available_ranks = []
+    if current_rank in rank_hierarchy:
+        current_index = rank_hierarchy.index(current_rank)
+        available_ranks = rank_hierarchy[current_index + 1:]
+    else:
+        available_ranks = rank_hierarchy  # If no rank set, show all
     
     # === REGULARIZATION CALCULATION ===
     from datetime import date
@@ -3473,7 +3490,6 @@ def faculty_promotion():
         elif 3 <= years_employed < 7:
             # Regular (3-7 years)
             tenure_type = "Regular"
-            # Calculate progress from 3 to 7 years
             years_past_probation = years_employed - 3
             months_past_probation = (years_past_probation * 12) + months_employed
             regular_period_months = 48  # 4 years (from year 3 to 7)
@@ -3489,21 +3505,69 @@ def faculty_promotion():
             regularization_status = f"Tenured Employee"
             regularization_message = "✅ You have achieved Tenured status."
     
-    # === EXISTING PROMOTION APPLICATION CHECK ===
+    # === CURRENT PROMOTION APPLICATION (ONLY ACTIVE) ===
     cursor.execute("""
         SELECT application_id, current_status, date_submitted, 
                hrmd_approval_date, vpa_approval_date, pres_approval_date, 
                final_decision, resume, cover_letter, 
-               resume_filename, cover_letter_filename
+               resume_filename, cover_letter_filename, requested_rank
         FROM promotion_application 
         WHERE faculty_id = %s 
+          AND final_decision IS NULL
         ORDER BY date_submitted DESC 
         LIMIT 1
     """, (faculty_id,))
     
     row = cursor.fetchone()
+    
+    # === APPLICATION HISTORY (ALL APPLICATIONS) ===
+    cursor.execute("""
+        SELECT date_submitted, current_status, final_decision,
+               hrmd_approval_date, vpa_approval_date, pres_approval_date,
+               requested_rank
+        FROM promotion_application 
+        WHERE faculty_id = %s 
+        ORDER BY date_submitted DESC
+    """, (faculty_id,))
+    
+    history_rows = cursor.fetchall()
+    
+    # NOW close cursor and return connection
     cursor.close()
     return_db_connection(conn)
+    
+    # Build history list
+    application_history = []
+    for h in history_rows:
+        date_sub = h[0]
+        status = h[1]
+        decision = h[2]
+        hrmd_date = h[3]
+        vpa_date = h[4]
+        pres_date = h[5]
+        requested_pos = h[6]
+        
+        # Map integer decision to text
+        if decision == 1:
+            decision_text = 'Approved'
+            remarks = 'Application approved'
+        elif decision == 0:
+            decision_text = 'Rejected'
+            remarks = 'Application rejected'
+        else:
+            decision_text = 'Pending'
+            remarks = 'Pending review'
+        
+        application_history.append({
+            'date_submitted': date_sub,
+            'current_status': status,
+            'final_decision': decision_text,
+            'remarks': remarks,
+            'hrmd_approval_date': hrmd_date,
+            'vpa_approval_date': vpa_date,
+            'pres_approval_date': pres_date,
+            'requested_position': requested_pos
+        })
     
     # Build template data
     template_data = {
@@ -3515,6 +3579,11 @@ def faculty_promotion():
         'years_employed': years_employed,
         'months_employed': months_employed,
         'hire_date': hire_date,
+        # Rank data
+        'current_rank': current_rank,
+        'available_ranks': available_ranks,
+        # Application history
+        'application_history': application_history,
         # Existing promotion data
         'application_id': None,
         'current_status': None,
@@ -3527,6 +3596,7 @@ def faculty_promotion():
         'cover_letter': None,
         'resume_filename': None,
         'cover_letter_filename': None,
+        'requested_rank': None,
         'upload_locked': False
     }
     
@@ -3544,10 +3614,12 @@ def faculty_promotion():
             'cover_letter': row[8],
             'resume_filename': row[9],
             'cover_letter_filename': row[10],
+            'requested_rank': row[11],
             'upload_locked': row[1] in ['hrmd', 'vpa', 'pres']
         })
     
     return render_template('faculty&dean/faculty-promotion.html', **template_data)
+
 
 
 
@@ -3752,8 +3824,6 @@ def vp_promotions():
                 'submitteddate': datesubmitted.strftime('%Y-%m-%d') if datesubmitted else 'NA'
             })
         
-        print("VP Promotions List: {promotions_list}")
-        
         return render_template(
             'vp&pres/vp-promotion.html',
             **personnel_info,
@@ -3865,33 +3935,53 @@ def promotion_document_upload():
 
     faculty_id = result[0]
 
+    # Get requested rank from form
+    requested_rank = request.form.get('requested_rank')
+    
+    if not requested_rank:
+        cursor.close()
+        conn.close()
+        return "Please select a rank to apply for.", 400
+
     resume_cv_data = None
+    resume_cv_filename = None
     cover_letter_data = None
+    cover_letter_filename = None
 
-    if 'resume_cv' in request.files:
-        resume_file = request.files['resume_cv']
-        if resume_file and resume_file.filename:
-            resume_cv_data = resume_file.read()
-            resume_cv_filename = resume_file.filename
+    # Get resume file using request.files.get()
+    resume_file = request.files.get('resume_cv')
+    if resume_file and resume_file.filename:
+        resume_cv_data = resume_file.read()
+        resume_cv_filename = resume_file.filename
 
-    if 'cover_letter' in request.files:
-        cover_letter_file = request.files['cover_letter']
-        if cover_letter_file and cover_letter_file.filename:
-            cover_letter_data = cover_letter_file.read()
-            cover_letter_filename = cover_letter_file.filename
+    # Get cover letter file using request.files.get()
+    cover_letter_file = request.files.get('cover_letter')
+    if cover_letter_file and cover_letter_file.filename:
+        cover_letter_data = cover_letter_file.read()
+        cover_letter_filename = cover_letter_file.filename
 
-    # Insert new application row
+    # Validate that both files are uploaded
+    if not resume_cv_data or not cover_letter_data:
+        cursor.close()
+        conn.close()
+        return "Both Resume/CV and Cover Letter are required.", 400
+
+    # Insert new application row with requested_rank
     cursor.execute("""
         INSERT INTO promotion_application (
-            faculty_id, cover_letter, resume, resume_filename, cover_letter_filename, date_submitted, current_status
-        ) VALUES (%s, %s, %s, %s, %s, NOW(), %s)
+            faculty_id, cover_letter, resume, resume_filename, cover_letter_filename, 
+            requested_rank, date_submitted, current_status
+        ) VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s)
         RETURNING application_id
-    """, (faculty_id, cover_letter_data, resume_cv_data, resume_cv_filename, cover_letter_filename, 'hrmd'))
+    """, (faculty_id, cover_letter_data, resume_cv_data, resume_cv_filename, 
+          cover_letter_filename, requested_rank, 'hrmd'))
+    
     conn.commit()
     cursor.close()
     conn.close()
 
     return redirect(url_for('faculty_promotion'))
+
 
 @app.route('/faculty/promotion/view_resume')
 @require_auth([20001, 20002])
@@ -3970,59 +4060,62 @@ def view_cover_letter():
         return "Cover Letter not found", 404
 
     
-@app.route('/faculty/promotion/delete')
+@app.route('/delete_submission', methods=['POST'])  # Changed route and added POST
 @require_auth([20001, 20002])
 def delete_submission():
     userid = session.get("user_id")
     if not userid:
-        return "Unauthorized", 401
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Get faculty_id
-    cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (userid,))
-    result = cursor.fetchone()
-    if not result:
+    try:
+        # Get faculty_id
+        cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (userid,))
+        result = cursor.fetchone()
+        if not result:
+            cursor.close()
+            return_db_connection(conn)
+            return jsonify({'success': False, 'error': 'Faculty record not found'}), 400
+
+        faculty_id = result[0]
+
+        # Delete only ACTIVE (non-finalized) application
+        cursor.execute("""
+            DELETE FROM promotion_application
+            WHERE faculty_id = %s AND final_decision IS NULL
+        """, (faculty_id,))
+        
+        deleted_count = cursor.rowcount
+        
+        if deleted_count == 0:
+            cursor.close()
+            return_db_connection(conn)
+            return jsonify({'success': False, 'error': 'No active application found to delete'}), 400
+
+        conn.commit()
         cursor.close()
-        conn.close()
-        return "Faculty record not found", 400
+        return_db_connection(conn)
 
-    faculty_id = result[0]
-
-    # Get latest application id
-    cursor.execute("""
-        SELECT application_id FROM promotion_application
-        WHERE faculty_id = %s
-        ORDER BY date_submitted DESC LIMIT 1
-    """, (faculty_id,))
-    app_row = cursor.fetchone()
-
-    if not app_row:
+        return jsonify({'success': True, 'message': 'Application deleted successfully'})
+    
+    except Exception as e:
+        conn.rollback()
         cursor.close()
-        conn.close()
-        return "No application found to delete.", 400
+        return_db_connection(conn)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
-    application_id = app_row[0]
-
-    # Delete application
-    cursor.execute("DELETE FROM promotion_application WHERE application_id = %s", (application_id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-    return redirect(url_for('faculty_promotion'))  # Redirect to main page
 
 
 @app.route('/api/promotion/details/<int:application_id>')
 @require_auth([20003, 20004])
 def get_promotion_details(application_id):
-    """Get detailed promotion information - OPTIMIZED with correct column names"""
+    """Get detailed promotion information - COMPLETE VERSION"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # All column names corrected to snake_case
         cursor.execute("""
             SELECT 
                 pa.application_id,
@@ -4037,7 +4130,9 @@ def get_promotion_details(application_id):
                 pa.date_submitted,
                 u.email,
                 pa.cover_letter_filename,
-                pa.resume_filename
+                pa.resume_filename,
+                pa.cover_letter,
+                pa.resume
             FROM promotion_application pa
             JOIN personnel p ON pa.faculty_id = p.personnel_id
             LEFT JOIN college c ON p.college_id = c.college_id
@@ -4053,13 +4148,17 @@ def get_promotion_details(application_id):
         if result:
             (appid, facultyid, firstname, lastname, honorifics, phone, 
              collegename, currentrank, currentstatus, datesubmitted, 
-             email, coverletterfilename, resumefilename) = result
+             email, coverletterfilename, resumefilename, cover_letter_blob, resume_blob) = result
             
             fullname = f"{honorifics} {firstname} {lastname}" if honorifics else f"{firstname} {lastname}"
             
+            # Check if BLOBs exist
+            has_cover_letter = cover_letter_blob is not None and len(cover_letter_blob) > 0
+            has_resume = resume_blob is not None and len(resume_blob) > 0
+            
             data = {
-                'application_id': appid,
-                'faculty_id': facultyid,
+                'applicationid': appid,
+                'facultyid': facultyid,
                 'name': fullname,
                 'email': email or 'N/A',
                 'phone': phone or 'N/A',
@@ -4068,10 +4167,15 @@ def get_promotion_details(application_id):
                 'requestedrank': 'Associate Professor',
                 'status': currentstatus,
                 'datesubmitted': datesubmitted.strftime('%Y-%m-%d') if datesubmitted else 'N/A',
+                'has_resume': has_resume,
+                'has_cover_letter': has_cover_letter,
                 'resume_filename': resumefilename or 'resume.pdf',
                 'cover_letter_filename': coverletterfilename or 'cover_letter.pdf',
-                'profileimage': None  # Load separately
+                'profileimage': None
             }
+            
+            print(f"=== Document Check for Application {appid} ===")
+            print(f"Cover Letter: {has_cover_letter}, Resume: {has_resume}")
             
             return jsonify({'success': True, 'data': data})
         else:
@@ -4082,6 +4186,7 @@ def get_promotion_details(application_id):
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 
 @app.route('/api/profile/image-base64/<int:personnel_id>')

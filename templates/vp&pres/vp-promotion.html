@@ -19,7 +19,7 @@
       <div class="icon eval"><i class='bx bx-check-circle'></i></div>
       <div>
         <div class="title">Approved This Month</div>
-        <div class="value">{{ promotions|selectattr('status', 'equalto', 'approved')|list|length }}</div>
+        <div class="value">{{ promotions|selectattr('status', 'equalto', 'Approved')|list|length }}</div>
       </div>
     </div>
     <div class="kpi card">
@@ -277,7 +277,7 @@ function loadProfileImage(photo, personnelId) {
     btn.addEventListener('click', (e) => {
       currentRow = e.target.closest('tr');
       currentApplicationId = e.target.getAttribute('data-application-id');
-      
+
       loadPromotionDetails(currentApplicationId);
       
       reviewModal.style.display = 'flex';
@@ -301,14 +301,26 @@ function loadProfileImage(photo, personnelId) {
           document.getElementById('modalFacultyPhone').textContent = data.phone;
           document.getElementById('modalSubmissionStatus').textContent = data.status;
           
-          // Set profile image
+          // Set profile image - load asynchronously
           const profileImageElement = document.getElementById('modalProfileImage');
-          if (data.profileimage) {
-            profileImageElement.src = data.profileimage;
-          } else {
-            profileImageElement.style.backgroundColor = '#e0e0e0';
-          }
+          profileImageElement.style.backgroundColor = '#e0e0e0'; // Set placeholder
           
+          // Load profile image separately (non-blocking)
+          if (data.facultyid) {
+            fetch(`/api/profile/image-base64/${data.facultyid}`)
+              .then(response => response.json())
+              .then(imgData => {
+                if (imgData.success && imgData.image) {
+                  profileImageElement.src = imgData.image;
+                } else {
+                  console.log('No profile image available');
+                }
+              })
+              .catch(error => {
+                console.error('Error loading profile image:', error);
+              });
+          }
+        
           // Update button text and visibility based on status
           const rejectBtn = document.getElementById('rejectBtn');
           const forwardApproveBtn = document.getElementById('forwardApproveBtn');
