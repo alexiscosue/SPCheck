@@ -104,7 +104,7 @@
           </thead>
           <tbody id="promotionsBody">
             {% for promo in promotions %}
-            <tr data-status="{{ promo.status }}" data-dept="{{ promo.department }}">
+            <tr data-status="{{ promo.status }}" data-dept="{{ promo.department }}" data-faculty-id="{{ promo.faculty_id }}">
               <td style="display:flex;gap:10px;align-items:center">
                 <img class="faculty-photo" data-personnel-id="{{ promo.faculty_id }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#f0f0f0;" alt="Loading...">
                 {{ promo.name }}
@@ -387,12 +387,17 @@ const pdfViewer = document.getElementById('pdfViewer');
 const pdfFrame = document.getElementById('pdfFrame');
 let currentRow = null;
 let currentApplicationId = null;
+let currentFacultyId = null;
 let currentStatus = null;
 
 document.querySelectorAll('.review-promotion-btn').forEach(btn => {
   btn.addEventListener('click', (e) => {
     currentRow = e.target.closest('tr');
     currentApplicationId = e.target.getAttribute('data-application-id');
+    currentFacultyId = currentRow.getAttribute('data-faculty-id');
+    
+    console.log('Captured Faculty ID:', currentFacultyId);
+    
     loadPromotionDetails(currentApplicationId);
     reviewModal.style.display = 'flex';
   });
@@ -488,6 +493,18 @@ closeModal.addEventListener('click', () => {
   pdfFrame.src = '';
 });
 
+// VIEW PROFILE BUTTON
+document.getElementById('viewProfileBtn').addEventListener('click', () => {
+  console.log('View Profile clicked. Faculty ID:', currentFacultyId);
+  
+  if (!currentFacultyId) {
+    alert('Faculty ID not available. Please close and reopen the modal.');
+    return;
+  }
+  
+  window.location.href = `/vp_employee_profile/${currentFacultyId}`;
+});
+
 // REJECT
 document.getElementById('rejectBtn').addEventListener('click', () => {
   if (!currentApplicationId) return alert('No application selected');
@@ -552,7 +569,7 @@ document.getElementById('forwardApproveBtn').addEventListener('click', () => {
   });
 });
 
-// REGULARIZATION REVIEW FUNCTIONALITY
+// REGULARIZATION REVIEW
 document.querySelectorAll('.review-regularization-btn').forEach(btn => {
   btn.addEventListener('click', function() {
     const regularizationId = this.getAttribute('data-regularization-id');
@@ -579,9 +596,7 @@ document.querySelectorAll('.review-regularization-btn').forEach(btn => {
     fetch(endpoint, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        regularization_id: regularizationId
-      })
+      body: JSON.stringify({ regularization_id: regularizationId })
     })
     .then(response => response.json())
     .then(result => {
@@ -598,6 +613,5 @@ document.querySelectorAll('.review-regularization-btn').forEach(btn => {
     });
   });
 });
-
 </script>
 {% endblock %}

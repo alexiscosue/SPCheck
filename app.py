@@ -3607,7 +3607,8 @@ def hr_employee_profile(personnel_id):
                 'position': position or 'Full-Time Employee',
                 'employment_status': employmentstatus or 'Regular',
                 'firstname': firstname,
-                'is_hr_viewing': True
+                'is_hr_viewing': True,
+                'is_vp_viewing': False
             }
             
             session['viewing_personnel_id'] = personnel_id
@@ -3621,7 +3622,7 @@ def hr_employee_profile(personnel_id):
         return "Error loading profile", 500
 
 @app.route('/faculty_employee_profile/<int:personnel_id>')
-@require_auth([20003])
+@require_auth([20003, 20004])
 def faculty_employee_profile(personnel_id):
     """HR view of faculty/dean profile"""
     try:
@@ -3669,7 +3670,8 @@ def faculty_employee_profile(personnel_id):
                 'position': position or 'Full-Time Employee',
                 'employment_status': employmentstatus or 'Regular',
                 'firstname': firstname,
-                'is_hr_viewing': True
+                'is_hr_viewing': True,
+                'is_vp_viewing': False
             }
             
             session['viewing_personnel_id'] = personnel_id
@@ -3683,7 +3685,7 @@ def faculty_employee_profile(personnel_id):
         return "Error loading profile", 500
     
 @app.route('/vp_employee_profile/<int:personnel_id>')
-@require_auth([20003])
+@require_auth([20004])
 def vp_employee_profile(personnel_id):
     """HR view of VP/President profile"""
     try:
@@ -3731,7 +3733,8 @@ def vp_employee_profile(personnel_id):
                 'position': position or 'Full-Time Employee',
                 'employment_status': employmentstatus or 'Regular',
                 'firstname': firstname,
-                'is_hr_viewing': True
+                'is_hr_viewing': False,
+                'is_vp_viewing': True
             }
             
             session['viewing_personnel_id'] = personnel_id

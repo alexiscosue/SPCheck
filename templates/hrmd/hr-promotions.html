@@ -107,7 +107,7 @@
           </thead>
           <tbody id="promotionsBody">
             {% for promo in promotions %}
-            <tr data-status="{{ promo.status }}" data-dept="{{ promo.department }}">
+            <tr data-status="{{ promo.status }}" data-dept="{{ promo.department }}" data-faculty-id="{{ promo.faculty_id }}">
               <td style="display:flex;gap:10px;align-items:center">
                 <img class="faculty-photo" data-personnel-id="{{ promo.faculty_id }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#f0f0f0;" alt="Loading...">
                 {{ promo.name }}
@@ -284,7 +284,6 @@ tabs.forEach(tab => {
     contents.forEach(c => c.classList.remove('active'));
     document.getElementById(target).classList.add('active');
     
-    // Toggle filters visibility
     if (target === 'promotions') {
       promotionFilters.style.display = 'flex';
       regularizationFilters.style.display = 'none';
@@ -303,7 +302,7 @@ const promotionsBody = document.getElementById('promotionsBody');
 
 function filterPromotionsTable() {
   const searchTerm = searchPromotionInput.value.toLowerCase().trim();
-  const selectedDept = filterPromotionDept.value; // Don't lowercase - match exact value
+  const selectedDept = filterPromotionDept.value;
   const selectedStatus = filterPromotionStatus.value.toLowerCase();
   
   const rows = promotionsBody.getElementsByTagName('tr');
@@ -315,7 +314,7 @@ function filterPromotionsTable() {
     if (cells.length === 0) continue;
     
     const facultyName = cells[0].textContent.toLowerCase();
-    const department = row.getAttribute('data-dept'); // Don't lowercase
+    const department = row.getAttribute('data-dept');
     const rowStatus = row.getAttribute('data-status').toLowerCase();
     
     let showRow = true;
@@ -324,7 +323,6 @@ function filterPromotionsTable() {
       showRow = false;
     }
     
-    // Exact match for department
     if (selectedDept && department !== selectedDept) {
       showRow = false;
     }
@@ -350,7 +348,7 @@ const regularizationsBody = document.getElementById('regularizationsBody');
 
 function filterRegularizationsTable() {
   const searchTerm = searchRegularizationInput.value.toLowerCase().trim();
-  const selectedDept = filterRegularizationDept.value; // Don't lowercase - match exact value
+  const selectedDept = filterRegularizationDept.value;
   const selectedTenure = filterRegularizationTenure.value.toLowerCase();
   const selectedStatus = filterRegularizationStatus.value.toLowerCase();
   
@@ -363,7 +361,7 @@ function filterRegularizationsTable() {
     if (cells.length === 0) continue;
     
     const facultyName = cells[0].textContent.toLowerCase();
-    const department = row.getAttribute('data-dept'); // Don't lowercase
+    const department = row.getAttribute('data-dept');
     const tenure = row.getAttribute('data-tenure').toLowerCase();
     const status = row.getAttribute('data-status').toLowerCase();
     
@@ -373,7 +371,6 @@ function filterRegularizationsTable() {
       showRow = false;
     }
     
-    // Exact match for department
     if (selectedDept && department !== selectedDept) {
       showRow = false;
     }
@@ -395,8 +392,6 @@ filterRegularizationDept.addEventListener('change', filterRegularizationsTable);
 filterRegularizationTenure.addEventListener('change', filterRegularizationsTable);
 filterRegularizationStatus.addEventListener('change', filterRegularizationsTable);
 
-
-
 // PROMOTION REVIEW MODAL
 const reviewModal = document.getElementById('hrReviewModal');
 const closeModal = document.getElementById('closeModal');
@@ -404,11 +399,19 @@ const pdfViewer = document.getElementById('pdfViewer');
 const pdfFrame = document.getElementById('pdfFrame');
 let currentRow = null;
 let currentApplicationId = null;
+let currentFacultyId = null;
+let currentStatus = null;
 
 document.querySelectorAll('.review-promotion-btn').forEach(btn => {
   btn.addEventListener('click', (e) => {
     currentRow = e.target.closest('tr');
     currentApplicationId = e.target.getAttribute('data-application-id');
+    
+    // Get faculty ID from the row's data attribute
+    currentFacultyId = currentRow.getAttribute('data-faculty-id');
+    
+    console.log('Captured Faculty ID:', currentFacultyId);
+    
     loadPromotionDetails(currentApplicationId);
     reviewModal.style.display = 'flex';
   });
@@ -497,6 +500,18 @@ closeModal.addEventListener('click', () => {
   pdfFrame.src = '';
 });
 
+// VIEW PROFILE BUTTON - PLACE HERE AFTER VARIABLES ARE DEFINED
+document.getElementById('viewProfileBtn').addEventListener('click', () => {
+  console.log('View Profile clicked. Faculty ID:', currentFacultyId);
+  
+  if (!currentFacultyId) {
+    alert('Faculty ID not available. Please close and reopen the modal.');
+    return;
+  }
+  
+  window.location.href = `hr_employee_profile/${currentFacultyId}`;
+});
+
 // FORWARD TO VPAA
 document.getElementById('forwardBtn').addEventListener('click', () => {
   if (!currentApplicationId) return alert('No application selected');
@@ -558,4 +573,5 @@ document.querySelectorAll('.initiate-reg-btn').forEach(btn => {
   });
 });
 </script>
+
 {% endblock %}
