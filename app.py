@@ -16,6 +16,8 @@ import time
 from flask import make_response
 from io import BytesIO
 import base64
+from PIL import Image
+
 
 load_dotenv()
 
@@ -3917,70 +3919,140 @@ def faculty_evaluations():
 @app.route('/faculty_promotion')
 @require_auth([20001, 20002])
 def faculty_promotion():
-    userid = session.get('user_id')
-    if not userid:
+    user_id = session.get('user_id')
+    if not user_id:
         return "Unauthorized", 401
-
+    
     conn = get_db_connection()
     cursor = conn.cursor()
-
-    cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (userid,))
+    
+    # Get faculty ID and hire date
+    cursor.execute("""
+        SELECT personnel_id, hiredate 
+        FROM personnel 
+        WHERE user_id = %s
+    """, (user_id,))
+    
     result = cursor.fetchone()
+    
     if not result:
         cursor.close()
-        conn.close()
+        return_db_connection(conn)
         return "Faculty record not found", 400
-
-    faculty_id = result[0]
-
+    
+    faculty_id, hire_date = result
+    
+    # === REGULARIZATION CALCULATION ===
+    from datetime import date
+    today = date.today()
+    years_employed = 0
+    months_employed = 0
+    regularization_percentage = 0
+    regularization_status = "No hire date"
+    regularization_message = "Contact HRMD to update your hire date."
+    tenure_type = "Unknown"
+    
+    if hire_date:
+        # Calculate years and months
+        years_employed = today.year - hire_date.year
+        months_employed = today.month - hire_date.month
+        
+        if months_employed < 0:
+            years_employed -= 1
+            months_employed += 12
+        
+        # Total months employed
+        total_months_employed = (years_employed * 12) + months_employed
+        
+        # Determine tenure type and calculate percentage
+        if years_employed < 3:
+            # Probationary (0-3 years)
+            tenure_type = "Probationary"
+            probation_months = 36  # 3 years
+            regularization_percentage = min(round((total_months_employed / probation_months) * 100), 100)
+            regularization_status = f"Probationary (Year {years_employed + 1} of 3)"
+            months_remaining = probation_months - total_months_employed
+            regularization_message = f"ℹ️ {months_remaining} months until Regular status."
+            
+        elif 3 <= years_employed < 7:
+            # Regular (3-7 years)
+            tenure_type = "Regular"
+            # Calculate progress from 3 to 7 years
+            years_past_probation = years_employed - 3
+            months_past_probation = (years_past_probation * 12) + months_employed
+            regular_period_months = 48  # 4 years (from year 3 to 7)
+            regularization_percentage = min(round((months_past_probation / regular_period_months) * 100), 100)
+            regularization_status = f"Regular Employee (Year {years_employed - 2} of 4)"
+            years_to_tenure = 7 - years_employed
+            regularization_message = f"✅ You are a Regular employee. {years_to_tenure} year{'s' if years_to_tenure != 1 else ''} until Tenured status."
+            
+        else:
+            # Tenured (7+ years)
+            tenure_type = "Tenured"
+            regularization_percentage = 100
+            regularization_status = f"Tenured Employee"
+            regularization_message = "✅ You have achieved Tenured status."
+    
+    # === EXISTING PROMOTION APPLICATION CHECK ===
     cursor.execute("""
-        SELECT application_id, current_status, date_submitted, hrmd_approval_date, 
-               vpa_approval_date, pres_approval_date, final_decision, resume, cover_letter, 
+        SELECT application_id, current_status, date_submitted, 
+               hrmd_approval_date, vpa_approval_date, pres_approval_date, 
+               final_decision, resume, cover_letter, 
                resume_filename, cover_letter_filename
-        FROM promotion_application
-        WHERE faculty_id = %s
-        ORDER BY date_submitted DESC
+        FROM promotion_application 
+        WHERE faculty_id = %s 
+        ORDER BY date_submitted DESC 
         LIMIT 1
     """, (faculty_id,))
+    
     row = cursor.fetchone()
-
     cursor.close()
-    conn.close()
-
+    return_db_connection(conn)
+    
+    # Build template data
+    template_data = {
+        # Regularization data
+        'regularization_percentage': regularization_percentage,
+        'regularization_status': regularization_status,
+        'regularization_message': regularization_message,
+        'tenure_type': tenure_type,
+        'years_employed': years_employed,
+        'months_employed': months_employed,
+        'hire_date': hire_date,
+        # Existing promotion data
+        'application_id': None,
+        'current_status': None,
+        'date_submitted': None,
+        'hrmd_approval_date': None,
+        'vpa_approval_date': None,
+        'pres_approval_date': None,
+        'final_decision': None,
+        'resume_cv': None,
+        'cover_letter': None,
+        'resume_filename': None,
+        'cover_letter_filename': None,
+        'upload_locked': False
+    }
+    
+    # Update with existing application data if found
     if row:
-        application_id = row[0]
-        return render_template(
-            'faculty&dean/faculty-promotion.html',
-            application_id=application_id,
-            current_status=row[1],
-            date_submitted=row[2],
-            hrmd_approval_date=row[3],
-            vpa_approval_date=row[4],
-            pres_approval_date=row[5],
-            final_decision=row[6],
-            resume_cv=row[7],
-            cover_letter=row[8],
-            resume_filename=row[9],
-            cover_letter_filename=row[10],
-            upload_locked=row[1] in {"hrmd", "vpa", "pres"}
-        )
-    else:
-        # No active application found
-        return render_template(
-            'faculty&dean/faculty-promotion.html',
-            application_id=None,
-            current_status=None,
-            date_submitted=None,
-            hrmd_approval_date=None,
-            vpa_approval_date=None,
-            pres_approval_date=None,
-            final_decision=None,
-            resume_cv=None,
-            cover_letter=None,
-            resume_filename=None,
-            cover_letter_filename=None,
-            upload_locked=False
-        )
+        template_data.update({
+            'application_id': row[0],
+            'current_status': row[1],
+            'date_submitted': row[2],
+            'hrmd_approval_date': row[3],
+            'vpa_approval_date': row[4],
+            'pres_approval_date': row[5],
+            'final_decision': row[6],
+            'resume_cv': row[7],
+            'cover_letter': row[8],
+            'resume_filename': row[9],
+            'cover_letter_filename': row[10],
+            'upload_locked': row[1] in ['hrmd', 'vpa', 'pres']
+        })
+    
+    return render_template('faculty&dean/faculty-promotion.html', **template_data)
+
 
 
 @app.route('/faculty_profile')
@@ -4079,8 +4151,8 @@ def hr_promotions():
             status_display = str(current_status).replace('_', ' ').title() if current_status else 'Pending HR Review'
             
             promotions_list.append({
-                'applicationid': application_id,
-                'facultyid': faculty_id,
+                'application_id': application_id,
+                'faculty_id': faculty_id,
                 'name': fullname,
                 'department': collegename or 'N/A',
                 'currentrank': current_rank or 'Instructor',
@@ -4122,8 +4194,88 @@ def hr_settings():
 @app.route('/vp_promotions')
 @require_auth([20004])
 def vp_promotions():
-    personnel_info = get_personnel_info(session['user_id'])
-    return render_template('vp&pres/vp-promotion.html', **personnel_info)
+    """VP/President Promotions Dashboard with database query"""
+    try:
+        personnel_info = get_personnel_info(session['user_id'])
+        
+        # Get user's role to determine what they should see
+        user_role = session.get('user_role')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Fetch all promotion applications with faculty details
+        cursor.execute("""
+            SELECT 
+                pa.application_id,
+                pa.faculty_id,
+                p.firstname,
+                p.lastname,
+                p.honorifics,
+                c.collegename,
+                pr.position as current_rank,
+                pa.current_status,
+                pa.date_submitted,
+                pa.hrmd_approval_date,
+                pa.vpa_approval_date,
+                pa.pres_approval_date
+            FROM promotion_application pa
+            JOIN personnel p ON pa.faculty_id = p.personnel_id
+            LEFT JOIN college c ON p.college_id = c.college_id
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            ORDER BY pa.date_submitted DESC
+        """)
+        
+        promotions = cursor.fetchall()
+        cursor.close()
+        return_db_connection(conn)
+        
+        # Format promotion data for template
+        promotions_list = []
+        for promo in promotions:
+            (applicationid, facultyid, firstname, lastname, honorifics, 
+             collegename, currentrank, currentstatus, datesubmitted, 
+             hrmdapproval, vpaapproval, presapproval) = promo
+            
+            # Build full name with honorifics
+            if honorifics:
+                fullname = f"{honorifics} {firstname} {lastname}"
+            else:
+                fullname = f"{firstname} {lastname}"
+            
+            # Map status enum to display text
+            status_display = str(currentstatus).replace('_', ' ').title() if currentstatus else 'Pending Review'
+            
+            promotions_list.append({
+                'application_id': applicationid,
+                'faculty_id': facultyid,
+                'name': fullname,
+                'department': collegename or 'NA',
+                'currentrank': currentrank or 'Instructor',
+                'requestedrank': 'Associate Professor',  # Default value
+                'status': status_display,
+                'submitteddate': datesubmitted.strftime('%Y-%m-%d') if datesubmitted else 'NA'
+            })
+        
+        print("VP Promotions List: {promotions_list}")
+        
+        return render_template(
+            'vp&pres/vp-promotion.html',
+            **personnel_info,
+            promotions=promotions_list,
+            user_role='vpaa' if user_role == 20004 else 'president'  # Determine which role
+        )
+        
+    except Exception as e:
+        print(f"Error in vp_promotions route: {e}")
+        import traceback
+        traceback.print_exc()
+        return render_template(
+            'vp&pres/vp-promotion.html',
+            **get_personnel_info(session['user_id']),
+            promotions=[],
+            user_role='vpaa'
+        )
 
 @app.route('/vp_profile')
 @require_auth([20004])
@@ -4232,11 +4384,6 @@ def promotion_document_upload():
         if cover_letter_file and cover_letter_file.filename:
             cover_letter_data = cover_letter_file.read()
             cover_letter_filename = cover_letter_file.filename
-
-    if resume_cv_data is None or cover_letter_data is None:
-        cursor.close()
-        conn.close()
-        return "Both resume and cover letter must be uploaded.", 400
 
     # Insert new application row
     cursor.execute("""
@@ -4373,13 +4520,14 @@ def delete_submission():
 
 
 @app.route('/api/promotion/details/<int:application_id>')
-@require_auth([20003])
+@require_auth([20003, 20004])
 def get_promotion_details(application_id):
-    """Get detailed promotion information for modal"""
+    """Get detailed promotion information - OPTIMIZED with correct column names"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
+        # All column names corrected to snake_case
         cursor.execute("""
             SELECT 
                 pa.application_id,
@@ -4394,8 +4542,7 @@ def get_promotion_details(application_id):
                 pa.date_submitted,
                 u.email,
                 pa.cover_letter_filename,
-                pa.resume_filename,
-                pr.profilepic
+                pa.resume_filename
             FROM promotion_application pa
             JOIN personnel p ON pa.faculty_id = p.personnel_id
             LEFT JOIN college c ON p.college_id = c.college_id
@@ -4409,50 +4556,39 @@ def get_promotion_details(application_id):
         return_db_connection(conn)
         
         if result:
-            (app_id, faculty_id, firstname, lastname, honorifics, phone, 
-             collegename, current_rank, current_status, date_submitted, 
-             email, cover_letter_filename, resume_filename, profilepic) = result
+            (appid, facultyid, firstname, lastname, honorifics, phone, 
+             collegename, currentrank, currentstatus, datesubmitted, 
+             email, coverletterfilename, resumefilename) = result
             
-            if honorifics:
-                fullname = f"{honorifics} {firstname} {lastname}"
-            else:
-                fullname = f"{firstname} {lastname}"
+            fullname = f"{honorifics} {firstname} {lastname}" if honorifics else f"{firstname} {lastname}"
             
-            # Convert profile picture to base64
-            profile_image_base64 = None
-            if profilepic:
-                binary_image = bytes(profilepic)
-                profile_image_base64 = f'data:image/jpeg;base64,{base64.b64encode(binary_image).decode("utf-8")}'
-            
-            return {
-                'success': True,
-                'data': {
-                    'applicationid': app_id,
-                    'facultyid': faculty_id,
-                    'name': fullname,
-                    'email': email or 'N/A',
-                    'phone': phone or 'N/A',
-                    'department': collegename or 'N/A',
-                    'currentrank': current_rank or 'Instructor',
-                    'status': str(current_status) if current_status else 'Pending',
-                    'submitteddate': date_submitted.strftime('%Y-%m-%d') if date_submitted else 'N/A',
-                    'has_cover_letter': bool(cover_letter_filename),
-                    'has_resume': bool(resume_filename),
-                    'cover_letter_filename': cover_letter_filename,
-                    'resume_filename': resume_filename,
-                    'profileimage': profile_image_base64
-                }
+            data = {
+                'application_id': appid,
+                'faculty_id': facultyid,
+                'name': fullname,
+                'email': email or 'N/A',
+                'phone': phone or 'N/A',
+                'department': collegename or 'N/A',
+                'currentrank': currentrank or 'Instructor',
+                'requestedrank': 'Associate Professor',
+                'status': currentstatus,
+                'datesubmitted': datesubmitted.strftime('%Y-%m-%d') if datesubmitted else 'N/A',
+                'resume_filename': resumefilename or 'resume.pdf',
+                'cover_letter_filename': coverletterfilename or 'cover_letter.pdf',
+                'profileimage': None  # Load separately
             }
+            
+            return jsonify({'success': True, 'data': data})
         else:
-            return {'success': False, 'error': 'Application not found'}, 404
+            return jsonify({'success': False, 'error': 'Application not found'}), 404
             
     except Exception as e:
         print(f"Error fetching promotion details: {e}")
         import traceback
         traceback.print_exc()
-        return {'success': False, 'error': str(e)}, 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
-# Route to serve profile image as base64 for embedding
+
 @app.route('/api/profile/image-base64/<int:personnel_id>')
 @require_auth([20001, 20002, 20003, 20004])
 def get_profile_image_base64(personnel_id):
@@ -4461,11 +4597,10 @@ def get_profile_image_base64(personnel_id):
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        cursor.execute("""
-            SELECT profilepic 
-            FROM profile 
-            WHERE personnel_id = %s
-        """, (personnel_id,))
+        cursor.execute(
+            "SELECT profilepic FROM profile WHERE personnel_id = %s",
+            (personnel_id,)
+        )
         
         result = cursor.fetchone()
         cursor.close()
@@ -4473,19 +4608,57 @@ def get_profile_image_base64(personnel_id):
         
         if result and result[0]:
             binary_image = bytes(result[0])
-            base64_image = base64.b64encode(binary_image).decode('utf-8')
-            return {'success': True, 'image': f'data:image/jpeg;base64,{base64_image}'}
+            
+            # Try to resize with PIL
+            try:
+                from PIL import Image
+                import io
+                
+                img = Image.open(io.BytesIO(binary_image))
+                
+                # Convert palette/RGBA images to RGB for JPEG compatibility
+                if img.mode in ('P', 'RGBA', 'LA'):
+                    # Create white background for transparent images
+                    rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+                    if img.mode == 'P':
+                        img = img.convert('RGBA')
+                    rgb_img.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                    img = rgb_img
+                elif img.mode != 'RGB':
+                    img = img.convert('RGB')
+                
+                # Resize
+                img.thumbnail((100, 100), Image.Resampling.LANCZOS)
+                
+                # Save as JPEG
+                buffer = io.BytesIO()
+                img.save(buffer, format='JPEG', quality=85)
+                buffer.seek(0)
+                
+                base64_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            except Exception as resize_error:
+                print(f"Could not resize image, using original: {resize_error}")
+                # Fallback to original if resize fails
+                base64_image = base64.b64encode(binary_image).decode('utf-8')
+            
+            return jsonify({
+                'success': True,
+                'image': f"data:image/jpeg;base64,{base64_image}"
+            })
         else:
-            return {'success': False, 'image': None}
+            return jsonify({'success': False, 'image': None})
             
     except Exception as e:
         print(f"Error fetching profile image: {e}")
         import traceback
         traceback.print_exc()
-        return {'success': False, 'error': str(e)}, 500
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+
 
 @app.route('/api/promotion/document/<int:application_id>/<doc_type>')
-@require_auth([20003])  # HR only
+@require_auth([20003, 20004])  # HR only
 def get_promotion_document(application_id, doc_type):
     """Serve PDF documents from promotion_application table"""
     try:
@@ -4556,6 +4729,225 @@ def forward_to_vpaa():
         print(f"Error forwarding to VPAA: {str(e)}")
         conn.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# Add these routes to your Python file (paste.txt)
+
+@app.route('/api/promotion/forward-to-president', methods=['POST'])
+@require_auth([20004])  # Only VPAA (role 20004) can forward to President
+def forward_to_president():
+    """Forward promotion application from VPAA to President"""
+    try:
+        data = request.get_json()
+        application_id = data.get('application_id')
+        
+        if not application_id:
+            return jsonify({'success': False, 'error': 'Application ID is required'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check current status
+        cursor.execute(
+            "SELECT current_status FROM promotion_application WHERE application_id = %s",
+            (application_id,)
+        )
+        result = cursor.fetchone()
+        
+        if not result:
+            cursor.close()
+            return_db_connection(conn)
+            return jsonify({'success': False, 'error': 'Application not found'}), 404
+        
+        current_status = result[0]
+        
+        if current_status.lower() != 'vpa':
+            cursor.close()
+            return_db_connection(conn)
+            return jsonify({'success': False, 'error': 'Application is not at VPAA stage'}), 400
+        
+        # Update status to President review
+        philippines_tz = pytz.timezone('Asia/Manila')
+        current_time = datetime.now(philippines_tz)
+        
+        cursor.execute(
+            """UPDATE promotion_application 
+               SET current_status = %s, vpa_approval_date = %s 
+               WHERE application_id = %s""",
+            ('pres', current_time, application_id)
+        )
+        
+        conn.commit()
+        cursor.close()
+        return_db_connection(conn)
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Application forwarded to President successfully'
+        })
+        
+    except Exception as e:
+        print(f"Error forwarding to President: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/promotion/approve', methods=['POST'])
+@require_auth([20004])  # Only President (role 20004) can give final approval
+def approve_promotion():
+    """Final approval of promotion application by President"""
+    try:
+        data = request.get_json()
+        application_id = data.get('application_id')
+        
+        if not application_id:
+            return jsonify({'success': False, 'error': 'Application ID is required'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check current status
+        cursor.execute(
+            "SELECT current_status, faculty_id FROM promotion_application WHERE application_id = %s",
+            (application_id,)
+        )
+        result = cursor.fetchone()
+        
+        if not result:
+            cursor.close()
+            return_db_connection(conn)
+            return jsonify({'success': False, 'error': 'Application not found'}), 404
+        
+        current_status, faculty_id = result
+        
+        if current_status.lower() != 'pres':
+            cursor.close()
+            return_db_connection(conn)
+            return jsonify({'success': False, 'error': 'Application is not at President stage'}), 400
+        
+        # Update status to approved
+        philippines_tz = pytz.timezone('Asia/Manila')
+        current_time = datetime.now(philippines_tz)
+        
+        cursor.execute(
+            """UPDATE promotion_application 
+               SET current_status = %s, 
+                   pres_approval_date = %s,
+                   final_decision = %s 
+               WHERE application_id = %s""",
+            ('approved', current_time, 1, application_id)
+        )
+        
+        conn.commit()
+        
+        # Log audit action
+        user_id = session.get('userid')
+        personnel_info = get_personnel_info(user_id)
+        personnel_id = personnel_info.get('personnelid')
+        
+        if personnel_id:
+            log_audit_action(
+                personnel_id,
+                "Promotion approved",
+                f"President approved promotion application ID {application_id}",
+                before_value=f"Status: {current_status}",
+                after_value="Status: Approved"
+            )
+        
+        cursor.close()
+        return_db_connection(conn)
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Promotion application approved successfully'
+        })
+        
+    except Exception as e:
+        print(f"Error approving promotion: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/promotion/reject', methods=['POST'])
+@require_auth([20003, 20004])  # HR, VPAA, and President can reject
+def reject_promotion():
+    """Reject promotion application"""
+    try:
+        data = request.get_json()
+        application_id = data.get('application_id')
+        remarks = data.get('remarks', '')
+        
+        if not application_id:
+            return jsonify({'success': False, 'error': 'Application ID is required'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check if application exists
+        cursor.execute(
+            "SELECT current_status, faculty_id FROM promotion_application WHERE application_id = %s",
+            (application_id,)
+        )
+        result = cursor.fetchone()
+        
+        if not result:
+            cursor.close()
+            return_db_connection(conn)
+            return jsonify({'success': False, 'error': 'Application not found'}), 404
+        
+        current_status, faculty_id = result
+        
+        # Update status to rejected
+        philippines_tz = pytz.timezone('Asia/Manila')
+        current_time = datetime.now(philippines_tz)
+        
+        cursor.execute(
+            """UPDATE promotion_application 
+               SET current_status = %s, 
+                   final_decision = %s 
+               WHERE application_id = %s""",
+            ('rejected', f'Rejected: {remarks}' if remarks else 'Rejected', application_id)
+        )
+        
+        conn.commit()
+        
+        # Log audit action
+        user_id = session.get('userid')
+        personnel_info = get_personnel_info(user_id)
+        personnel_id = personnel_info.get('personnelid')
+        
+        if personnel_id:
+            log_audit_action(
+                personnel_id,
+                "Promotion rejected",
+                f"Rejected promotion application ID {application_id}",
+                before_value=f"Status: {current_status}",
+                after_value="Status: Rejected",
+                evidence=remarks
+            )
+        
+        cursor.close()
+        return_db_connection(conn)
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Promotion application rejected'
+        })
+        
+    except Exception as e:
+        print(f"Error rejecting promotion: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 
 if __name__ == "__main__":

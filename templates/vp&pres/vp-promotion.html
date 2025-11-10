@@ -6,6 +6,31 @@
 
 {% block content %}
 <section class="grid">
+  <!-- Summary KPI -->
+  <div class="kpis card">
+    <div class="kpi card">
+      <div class="icon promo"><i class='bx bx-award'></i></div>
+      <div>
+        <div class="title">Pending Review</div>
+        <div class="value">{{ promotions|selectattr('status', 'equalto', 'Pres')|list|length if user_role == 'vpaa' else promotions|selectattr('status', 'equalto', 'Pres')|list|length }}</div>
+      </div>
+    </div>
+    <div class="kpi card">
+      <div class="icon eval"><i class='bx bx-check-circle'></i></div>
+      <div>
+        <div class="title">Approved This Month</div>
+        <div class="value">{{ promotions|selectattr('status', 'equalto', 'approved')|list|length }}</div>
+      </div>
+    </div>
+    <div class="kpi card">
+      <div class="icon fac"><i class='bx bx-user'></i></div>
+      <div>
+        <div class="title">Total Applications</div>
+        <div class="value">{{ promotions|length }}</div>
+      </div>
+    </div>
+  </div>
+
   <!-- Filters -->
   <div class="filters" style="grid-column:1/-1">
     <input type="text" id="searchName" placeholder="Search by faculty name">
@@ -16,7 +41,9 @@
     </select>
     <select id="filterStatus">
       <option value="">All Status</option>
-      <option value="pending">Pending</option>
+      <option value="Hrmd">For HRMD Checking</option>
+      <option value="Vpa">For VPAA Checking</option>
+      <option value="Pres">For President Checking</option>
       <option value="approved">Approved</option>
       <option value="rejected">Rejected</option>
     </select>
@@ -36,7 +63,7 @@
           <thead>
             <tr>
               <th>Faculty</th>
-              <th>Dept</th>
+              <th>Department</th>
               <th>Current Rank</th>
               <th>Requested</th>
               <th>Status</th>
@@ -45,18 +72,38 @@
             </tr>
           </thead>
           <tbody id="promotionsBody">
-            <tr data-status="Pending HR Review">
+            {% for promo in promotions %}
+            <tr data-status="{{ promo.status }}">
               <td style="display:flex;gap:10px;align-items:center">
-                <img src="{{ url_for('static', filename='img/people.png') }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover">
-                Dr. Maria Cruz
+                <img class="faculty-photo" data-personnel-id="{{ promo.faculty_id }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#f0f0f0;cursor:pointer;" alt="Loading...">
+                {{ promo.name }}
               </td>
-              <td>Education</td>
-              <td>Assistant Professor</td>
-              <td>Promotion (Assoc Prof)</td>
-              <td><span class="status pending">VPAA Review</span></td>
-              <td>2025-09-01</td>
-              <td><button class="btn-action review-btn" style="background:#f1c40f;color:#111">Review</button></td>
+              <td>{{ promo.department }}</td>
+              <td>{{ promo.currentrank }}</td>
+              <td>Promotion ({{ promo.requestedrank }})</td>
+              <td>
+                {% if 'hrmd' in promo.status|lower %}
+                <span class="status pending">For HRMD Approval</span>
+                {% elif 'vpa' in promo.status|lower or 'vpaa' in promo.status|lower %}
+                <span class="status warn">For VPAA Approval</span>
+                {% elif 'pres' in promo.status|lower %}
+                <span class="status warn">For President Approval</span>
+                {% elif 'approved' in promo.status|lower %}
+                <span class="status ok">Approved</span>
+                {% elif 'rejected' in promo.status|lower %}
+                <span class="status rejected">Rejected</span>
+                {% else %}
+                <span class="status pending">{{ promo.status|title }}</span>
+                {% endif %}
+              </td>
+              <td>{{ promo.submitteddate }}</td>
+              <td><button class="btn-action review-btn" style="background:#f1c40f;color:#111" data-faculty-name="{{ promo.name }}" data-application-id="{{ promo.application_id }}">Review</button></td>
             </tr>
+            {% else %}
+            <tr>
+              <td colspan="7" style="text-align:center">No promotion requests found</td>
+            </tr>
+            {% endfor %}
           </tbody>
         </table>
       </div>
@@ -79,18 +126,18 @@
           <tbody>
             <tr>
               <td style="display:flex;gap:10px;align-items:center">
-                <img src="{{ url_for('static', filename='img/people.png') }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover">
+                <div style="width:36px;height:36px;border-radius:6px;background:#f0f0f0;"></div>
                 Dr. Carlos Santos
               </td>
               <td>IT</td>
               <td>Instructor</td>
               <td>2025-10-01</td>
-              <td><span class="status ok">VPAA Review</span></td>
+              <td><span class="status ok">Eligible</span></td>
               <td><button class="btn-action review-btn" style="background:#f1c40f;color:#111">Review</button></td>
             </tr>
             <tr>
               <td style="display:flex;gap:10px;align-items:center">
-                <img src="{{ url_for('static', filename='img/people.png') }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover">
+                <div style="width:36px;height:36px;border-radius:6px;background:#f0f0f0;"></div>
                 Prof. Ana dela Cruz
               </td>
               <td>Education</td>
@@ -106,35 +153,41 @@
   </div>
 </section>
 
-<!-- VP Review Modal -->
+<!-- VP/President Review Modal -->
 <div class="hr-modal-wrapper" id="hrReviewModal">
   <div class="hr-modal-content">
     <div class="hr-banner"></div>
 
     <div class="hr-profile-header">
-      <img src="{{ url_for('static', filename='img/people.png') }}" alt="Faculty" class="hr-profile-img">
+      <img src="" alt="Faculty" class="hr-profile-img" id="modalProfileImage" style="width:80px;height:80px;border-radius:8px;object-fit:cover;background:#f0f0f0;">
       <div class="hr-profile-info">
-        <h2 id="modalFacultyName">Dr. Maria Cruz</h2>
-        <p>Assistant Professor • Education Department</p>
-        <p>Applied for promotion to Associate Professor.</p>
+        <h2 id="modalFacultyName">Loading...</h2>
+        <p id="modalFacultyPosition">Loading...</p>
+        <p id="modalFacultyRequest">Loading...</p>
 
         <div class="hr-profile-contact">
-          <span><i class='bx bx-envelope'></i> Email: mcruz@spc.edu.ph</span>
-          <span><i class='bx bx-phone'></i> Contact: +63 912 345 6789</span>
+          <span><i class='bx bx-envelope'></i> Email: <span id="modalFacultyEmail">N/A</span></span>
+          <span><i class='bx bx-phone'></i> Contact: <span id="modalFacultyPhone">N/A</span></span>
         </div>
 
         <div class="hr-profile-status">
-          <strong>Submission Status:</strong> Pending VP Review
+          <strong>Submission Status:</strong> 
+          <span id="modalSubmissionStatus">Loading...</span>
         </div>
       </div>
     </div>
 
     <div class="hr-documents">
       <h3>Uploaded Documents</h3>
-      <div class="hr-stats">
-        <div class="hr-stat-card"><a href="#"><i class='bx bx-file'></i> Cover Letter</a></div>
-        <div class="hr-stat-card"><a href="#"><i class='bx bx-file'></i> Resume</a></div>
-        <div class="hr-stat-card"><a href="#"><i class='bx bx-file'></i> Eval Report</a></div>
+      <div class="hr-stats" id="documentLinks">
+        <div class="hr-stat-card"><a href="#" id="coverLetterLink"><i class='bx bx-file'></i> Cover Letter</a></div>
+        <div class="hr-stat-card"><a href="#" id="resumeLink"><i class='bx bx-file'></i> Resume</a></div>
+      </div>
+
+      <!-- PDF Viewer -->
+      <div id="pdfViewer" style="margin-top:20px;display:none;">
+        <h4 id="pdfTitle">Document Preview</h4>
+        <iframe id="pdfFrame" style="width:100%;height:500px;border:1px solid #ddd;border-radius:8px;"></iframe>
       </div>
 
       <textarea id="hrNotes" placeholder="Add notes (optional)"></textarea>
@@ -142,7 +195,7 @@
 
     <div class="hr-modal-footer">
       <button id="rejectBtn" class="btn reject">Reject</button>
-      <button id="approveBtn" class="btn forward">Approve</button>
+      <button id="forwardApproveBtn" class="btn forward">Forward/Approve</button>
       <button id="viewProfileBtn" class="btn btn-view">View Profile</button>
       <button id="closeModal" class="btn close">Close</button>
     </div>
@@ -152,62 +205,346 @@
 
 {% block extra_scripts %}
 <script>
-// Tabs
-const tabs = document.querySelectorAll('.tab');
-const contents = document.querySelectorAll('.tab-content');
-tabs.forEach(tab => {
-  tab.addEventListener('click', () => {
-    tabs.forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    const target = tab.getAttribute('data-tab');
-    contents.forEach(c => c.classList.remove('active'));
-    document.getElementById(target).classList.add('active');
+  // Load profile images for table
+  // Replace the image loading code with this optimized version
+document.addEventListener('DOMContentLoaded', function() {
+    const facultyPhotos = document.querySelectorAll('.faculty-photo');
+    
+    // Create an Intersection Observer for lazy loading
+    const imageObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const photo = entry.target;
+                const personnelId = photo.getAttribute('data-personnel-id');
+                
+                if (personnelId && !photo.src) {
+                    loadProfileImage(photo, personnelId);
+                }
+                observer.unobserve(photo);
+            }
+        });
+    }, {
+        rootMargin: '50px' // Start loading 50px before entering viewport
+    });
+    
+    facultyPhotos.forEach(photo => {
+        imageObserver.observe(photo);
+    });
+});
+
+function loadProfileImage(photo, personnelId) {
+    fetch(`/api/profile/image-base64/${personnelId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.image) {
+                photo.src = data.image;
+            } else {
+                photo.style.display = 'none';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading profile image:', error);
+            photo.style.display = 'none';
+        });
+}
+
+
+  // Tabs
+  const tabs = document.querySelectorAll('.tab');
+  const contents = document.querySelectorAll('.tab-content');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const target = tab.getAttribute('data-tab');
+      contents.forEach(c => c.classList.remove('active'));
+      document.getElementById(target).classList.add('active');
+    });
   });
-});
 
-// VP Review Modal Logic
-const reviewModal = document.getElementById('hrReviewModal');
-const closeModal = document.getElementById('closeModal');
-let currentRow = null;
+  // VP/President Review Modal Logic
+  const reviewModal = document.getElementById('hrReviewModal');
+  const closeModal = document.getElementById('closeModal');
+  const pdfViewer = document.getElementById('pdfViewer');
+  const pdfFrame = document.getElementById('pdfFrame');
+  const pdfTitle = document.getElementById('pdfTitle');
+  let currentRow = null;
+  let currentApplicationId = null;
+  let currentStatus = null;
 
-// Open modal
-document.querySelectorAll('.review-btn').forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    currentRow = e.target.closest('tr');
-    const facultyName = currentRow.children[0].textContent.trim();
-    document.getElementById('modalFacultyName').textContent = facultyName;
-    reviewModal.style.display = 'flex';
+  // Open modal and load data
+  document.querySelectorAll('.review-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      currentRow = e.target.closest('tr');
+      currentApplicationId = e.target.getAttribute('data-application-id');
+      
+      loadPromotionDetails(currentApplicationId);
+      
+      reviewModal.style.display = 'flex';
+    });
   });
-});
 
-// Close modal
-closeModal.addEventListener('click', () => reviewModal.style.display = 'none');
-
-// Reject
-document.getElementById('rejectBtn').addEventListener('click', () => {
-  if(currentRow){
-    currentRow.querySelector('.status').textContent = 'Rejected';
-    currentRow.querySelector('.status').className = 'status rejected';
-    currentRow.querySelector('.btn-action').textContent = 'View';
-    currentRow.querySelector('.btn-action').disabled = true;
+  function loadPromotionDetails(applicationId) {
+    fetch(`/api/promotion/details/${applicationId}`)  // Fixed: Added backticks
+      .then(response => response.json())
+      .then(result => {
+        if (result.success) {
+          const data = result.data;
+          currentStatus = data.status;
+          
+          document.getElementById('modalFacultyName').textContent = data.name;
+          document.getElementById('modalFacultyPosition').textContent = 
+            `${data.currentrank} • ${data.department}`;  // Fixed: Added backticks
+          document.getElementById('modalFacultyRequest').textContent = 
+            `Applied for promotion to ${data.requestedrank || 'Associate Professor'}.`;  // Fixed
+          document.getElementById('modalFacultyEmail').textContent = data.email;
+          document.getElementById('modalFacultyPhone').textContent = data.phone;
+          document.getElementById('modalSubmissionStatus').textContent = data.status;
+          
+          // Set profile image
+          const profileImageElement = document.getElementById('modalProfileImage');
+          if (data.profileimage) {
+            profileImageElement.src = data.profileimage;
+          } else {
+            profileImageElement.style.backgroundColor = '#e0e0e0';
+          }
+          
+          // Update button text and visibility based on status
+          const rejectBtn = document.getElementById('rejectBtn');
+          const forwardApproveBtn = document.getElementById('forwardApproveBtn');
+          
+          if (data.status.toLowerCase() === 'vpa') {
+            // VPAA can forward to President
+            rejectBtn.style.display = 'inline-block';
+            forwardApproveBtn.style.display = 'inline-block';
+            forwardApproveBtn.textContent = 'Forward to President';
+          } else if (data.status.toLowerCase() === 'pres') {
+            // President can approve
+            rejectBtn.style.display = 'inline-block';
+            forwardApproveBtn.style.display = 'inline-block';
+            forwardApproveBtn.textContent = 'Approve';
+          } else {
+            // Not for this user to review
+            rejectBtn.style.display = 'none';
+            forwardApproveBtn.style.display = 'none';
+          }
+          
+          setupDocumentLinks(applicationId, data);
+        } else {
+          alert('Error loading promotion details: ' + result.error);
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to load promotion details');
+      });
   }
-  reviewModal.style.display = 'none';
-});
 
-// Approve (VP has final approval authority)
-document.getElementById('approveBtn').addEventListener('click', () => {
-  if(currentRow){
-    currentRow.querySelector('.status').textContent = 'Approved';
-    currentRow.querySelector('.status').className = 'status ok';
-    currentRow.querySelector('.btn-action').textContent = 'Completed';
-    currentRow.querySelector('.btn-action').disabled = true;
+  function setupDocumentLinks(applicationId, data) {
+    const coverLetterLink = document.getElementById('coverLetterLink');
+    const resumeLink = document.getElementById('resumeLink');
+    
+    if (data.has_cover_letter) {
+      coverLetterLink.onclick = (e) => {
+        e.preventDefault();
+        viewDocument(applicationId, 'cover_letter', data.cover_letter_filename);
+      };
+      coverLetterLink.style.opacity = '1';
+      coverLetterLink.style.pointerEvents = 'auto';
+    } else {
+      coverLetterLink.style.opacity = '0.5';
+      coverLetterLink.style.pointerEvents = 'none';
+    }
+    
+    if (data.has_resume) {
+      resumeLink.onclick = (e) => {
+        e.preventDefault();
+        viewDocument(applicationId, 'resume', data.resume_filename);
+      };
+      resumeLink.style.opacity = '1';
+      resumeLink.style.pointerEvents = 'auto';
+    } else {
+      resumeLink.style.opacity = '0.5';
+      resumeLink.style.pointerEvents = 'none';
+    }
   }
-  reviewModal.style.display = 'none';
-});
 
-// Close modal if click outside content
-window.addEventListener('click', (e) => {
-  if(e.target === reviewModal) reviewModal.style.display = 'none';
-});
+  function viewDocument(applicationId, docType, filename) {
+    const url = `/api/promotion/document/${applicationId}/${docType}`;
+    pdfFrame.src = url;
+    pdfTitle.textContent = `Preview: ${filename || docType}`;  // Fixed: Added backticks
+    pdfViewer.style.display = 'block';
+  }
+
+  // Close modal
+  closeModal.addEventListener('click', () => {
+    reviewModal.style.display = 'none';
+    pdfViewer.style.display = 'none';
+    pdfFrame.src = '';
+  });
+
+  // Reject
+  document.getElementById('rejectBtn').addEventListener('click', () => {
+    if (!currentApplicationId) {
+      alert('No application selected');
+      return;
+    }
+
+    fetch('/api/promotion/reject', {  // Updated to use reject endpoint
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        application_id: currentApplicationId,
+        remarks: document.getElementById('hrNotes').value || ''
+      })
+    })
+    .then(response => response.json())
+    .then(result => {
+      if (result.success) {
+        if (currentRow) {
+          currentRow.querySelector('.status').innerHTML = '<span class="status rejected">Rejected</span>';
+          currentRow.setAttribute('data-status', 'rejected');
+          currentRow.querySelector('.btn-action').textContent = 'View';
+          currentRow.querySelector('.btn-action').disabled = true;
+        }
+        
+        alert(result.message || 'Application rejected');
+        reviewModal.style.display = 'none';
+        pdfViewer.style.display = 'none';
+        pdfFrame.src = '';
+      } else {
+        alert('Error: ' + result.error);
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      alert('Failed to reject application');
+    });
+  });
+
+  // Forward to President or Approve
+  document.getElementById('forwardApproveBtn').addEventListener('click', () => {
+    if (!currentApplicationId) {
+      alert('No application selected');
+      return;
+    }
+
+    let endpoint = '';
+    let newStatus = '';
+    let statusDisplay = '';
+    let buttonText = '';
+
+    if (currentStatus.toLowerCase() === 'vpa') {
+      // VPAA forwards to President
+      endpoint = '/api/promotion/forward-to-president';
+      newStatus = 'Pres';
+      statusDisplay = '<span class="status warn">For President Approval</span>';
+      buttonText = 'Pending';
+    } else if (currentStatus.toLowerCase() === 'pres') {
+      // President approves
+      endpoint = '/api/promotion/approve';
+      newStatus = 'active';
+      statusDisplay = '<span class="status ok">Approved</span>';
+      buttonText = 'Completed';
+    } else {
+      alert('Invalid status for this action');
+      return;
+    }
+
+    fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        application_id: currentApplicationId
+      })
+    })
+    .then(response => response.json())
+    .then(result => {
+      if (result.success) {
+        if (currentRow) {
+          currentRow.querySelector('.status').innerHTML = statusDisplay;
+          currentRow.setAttribute('data-status', newStatus);
+          currentRow.querySelector('.btn-action').textContent = buttonText;
+          currentRow.querySelector('.btn-action').disabled = true;
+        }
+        
+        alert(result.message || 'Action completed successfully');
+        reviewModal.style.display = 'none';
+        pdfViewer.style.display = 'none';
+        pdfFrame.src = '';
+      } else {
+        alert('Error: ' + result.error);
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      alert('Failed to complete action');
+    });
+  });
+
+  // Close modal if click outside content
+  window.addEventListener('click', (e) => {
+    if (e.target === reviewModal) {
+      reviewModal.style.display = 'none';
+      pdfViewer.style.display = 'none';
+      pdfFrame.src = '';
+    }
+  });
+
+  // Filtering functionality
+  document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchName');
+    const deptFilter = document.getElementById('filterDept');
+    const statusFilter = document.getElementById('filterStatus');
+    const tableBody = document.getElementById('promotionsBody');
+
+    function filterTable() {
+      const searchTerm = searchInput.value.toLowerCase().trim();
+      const selectedDept = deptFilter.value.toLowerCase();
+      const selectedStatus = statusFilter.value.toLowerCase();
+      
+      const rows = tableBody.getElementsByTagName('tr');
+      
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const cells = row.getElementsByTagName('td');
+        
+        if (cells.length === 0) continue;
+        
+        const facultyName = cells[0].textContent.toLowerCase();
+        const department = cells[1].textContent.toLowerCase();
+        const rowStatus = row.getAttribute('data-status').toLowerCase();
+        
+        let showRow = true;
+        
+        // Check search term
+        if (searchTerm && !facultyName.includes(searchTerm)) {
+          showRow = false;
+        }
+        
+        // Check department filter
+        if (selectedDept && department !== selectedDept.toLowerCase()) {
+          showRow = false;
+        }
+        
+        // Check status filter
+        if (selectedStatus && !rowStatus.includes(selectedStatus)) {
+          showRow = false;
+        }
+        
+        row.style.display = showRow ? '' : 'none';
+      }
+    }
+
+    // Add event listeners
+    searchInput.addEventListener('input', filterTable);
+    deptFilter.addEventListener('change', filterTable);
+    statusFilter.addEventListener('change', filterTable);
+  });
 </script>
 {% endblock %}
+
