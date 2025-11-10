@@ -1,201 +1,242 @@
 {% extends "hrmd/hr-base.html" %}
 
-{% block title %}Admin Dashboard{% endblock %}
-
-{% block page_title %}Faculty Promotions{% endblock %}
+{% block title %}Promotions & Regularizations{% endblock %}
+{% block page_title %}Faculty Promotions & Regularizations{% endblock %}
 
 {% block content %}
-    <section class="grid">
+<section class="grid">
 
-      <!-- Summary KPI -->
-      <div class="kpis card">
-        <div class="kpi card">
-          <div class="icon promo"><i class='bx bx-award'></i></div>
-          <div>
-            <div class="title">Pending Requests</div>
-            <div class="value">{{ promotions|selectattr('status', 'equalto', 'Hrmd')|list|length }}</div>
-          </div>
-        </div>
-        <div class="kpi card">
-          <div class="icon eval"><i class='bx bx-check-circle'></i></div>
-          <div>
-            <div class="title">Approved This Month</div>
-            <div class="value">{{ promotions|selectattr('status', 'equalto', 'approved')|list|length }}</div>
-          </div>
-        </div>
-        <div class="kpi card">
-          <div class="icon fac"><i class='bx bx-user'></i></div>
-          <div>
-            <div class="title">Total Applications</div>
-            <div class="value">{{ promotions|length }}</div>
-          </div>
-        </div>
+  <!-- Summary KPI -->
+  <div class="kpis card">
+    <div class="kpi card">
+      <div class="icon promo"><i class='bx bx-award'></i></div>
+      <div>
+        <div class="title">Pending Promotions</div>
+        <div class="value">{{ promotions|selectattr('status', 'equalto', 'Hrmd')|list|length }}</div>
       </div>
-
-      <div class="filters" style="grid-column:1/-1">
-        <input type="text" id="searchName" placeholder="Search by faculty name">
-        <select id="filterDept">
-          <option value="">All Departments</option>
-          <option value="IT">IT</option>
-          <option value="CS">CS</option>
-        </select>
-        <select id="filterStatus">
-          <option value="">All Status</option>
-          <option value="Hrmd">For HRMD Checking</option>
-          <option value="Vpa">For VPAA Checking</option>
-          <option value="Pres">For the President's Checking</option>
-          <option value="pending">Pending</option>
-          <option value="approved">Approved</option>
-          <option value="rejected">Rejected</option>
-        </select>
+    </div>
+    <div class="kpi card">
+      <div class="icon eval"><i class='bx bx-check-circle'></i></div>
+      <div>
+        <div class="title">Eligible for Regularization</div>
+        <div class="value">{{ regularizations|length }}</div>
       </div>
-
-      <!-- Tabs for Promotions & Regularizations -->
-      <div class="card" style="grid-column:1 / -1; padding:20px">
-        <div class="tabs_profile">
-          <div class="tab active" data-tab="promotions">Promotions</div>
-          <div class="tab" data-tab="regularizations">Regularizations</div>
-        </div>
-
-        <!-- Promotions Table -->
-        <div class="tab-content active" id="promotions">
-          <div class="table">
-            <table>
-              <thead>
-                <tr>
-                  <th>Faculty</th>
-                  <th>Department</th>
-                  <th>Current Rank</th>
-                  <th>Requested</th>
-                  <th>Status</th>
-                  <th>Submitted</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="promotionsBody">
-                {% for promo in promotions %}
-                <tr data-status="{{ promo.status }}">
-                  <td style="display:flex;gap:10px;align-items:center">
-                    <img class="faculty-photo" data-personnel-id="{{ promo.facultyid }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#f0f0f0;cursor:pointer;" alt="Loading...">
-                    {{ promo.name }}
-                  </td>
-                  <td>{{ promo.department }}</td>
-                  <td>{{ promo.currentrank }}</td>
-                  <td>Promotion ({{ promo.requestedrank }})</td>
-                  <td>
-                    {% if 'hrmd' in promo.status|lower %}
-                    <span class="status pending">For HRMD Approval</span>
-                    {% elif 'vpa' in promo.status|lower or 'vpaa' in promo.status|lower %}
-                    <span class="status warn">For VPAA Approval</span>
-                    {% elif 'pres' in promo.status|lower %}
-                    <span class="status warn">For President Approval</span>
-                    {% elif 'approved' in promo.status|lower %}
-                    <span class="status ok">Approved</span>
-                    {% elif 'rejected' in promo.status|lower %}
-                    <span class="status rejected">Rejected</span>
-                    {% else %}
-                    <span class="status pending">{{ promo.status|title }}</span>
-                    {% endif %}
-                  </td>
-                  <td>{{ promo.submitteddate }}</td>
-                  <td><button class="btn-action review-btn" style="background:#f1c40f;color:#111" data-faculty-name="{{ promo.name }}" data-application-id="{{ promo.application_id }}">Review</button></td>
-                </tr>
-                {% else %}
-                <tr>
-                  <td colspan="7" style="text-align:center">No promotion requests found</td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Regularizations Table -->
-        <div class="tab-content" id="regularizations">
-          <div class="table">
-            <table>
-              <thead>
-                <tr>
-                  <th>Faculty</th>
-                  <th>Dept</th>
-                  <th>Current Rank</th>
-                  <th>Eligibility Date</th>
-                  <th>Status</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td style="display:flex;gap:10px;align-items:center">
-                    <div style="width:36px;height:36px;border-radius:6px;background:#f0f0f0;"></div>
-                    Dr. Carlos Santos
-                  </td>
-                  <td>IT</td>
-                  <td>Instructor</td>
-                  <td>2025-10-01</td>
-                  <td><span class="status ok">Eligible</span></td>
-                  <td><button class="btn-action review-btn" style="background:#f1c40f;color:#111">Review</button></td>
-                </tr>
-                <tr>
-                  <td style="display:flex;gap:10px;align-items:center">
-                    <div style="width:36px;height:36px;border-radius:6px;background:#f0f0f0;"></div>
-                    Prof. Ana dela Cruz
-                  </td>
-                  <td>Education</td>
-                  <td>Assistant Professor</td>
-                  <td>2025-10-05</td>
-                  <td><span class="status ok">Eligible</span></td>
-                  <td><button class="btn-action review-btn" style="background:#f1c40f;color:#111">Review</button></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
+    </div>
+    <div class="kpi card">
+      <div class="icon fac"><i class='bx bx-user'></i></div>
+      <div>
+        <div class="title">Total Applications</div>
+        <div class="value">{{ promotions|length }}</div>
       </div>
-
-    </section>
+    </div>
   </div>
 
-  <div class="hr-modal-wrapper" id="hrReviewModal">
+<!-- PROMOTION FILTERS (only visible when Promotions tab active) -->
+<div class="filters" id="promotionFilters" style="grid-column:1/-1">
+  <input type="text" id="searchPromotionName" placeholder="Search by faculty name">
+  <select id="filterPromotionDept">
+    <option value="">All Departments</option>
+    <option value="College of Arts and Sciences">College of Arts and Sciences</option>
+    <option value="College of Business Administration">College of Business Administration</option>
+    <option value="College of Computer Studies">College of Computer Studies</option>
+    <option value="College of Criminology">College of Criminology</option>
+    <option value="College of Education">College of Education</option>
+    <option value="College of Engineering">College of Engineering</option>
+    <option value="Office of the President">Office of the President</option>
+  </select>
+  <select id="filterPromotionStatus">
+    <option value="">All Status</option>
+    <option value="Hrmd">For HRMD Checking</option>
+    <option value="Vpa">For VPAA Checking</option>
+    <option value="Pres">For President Checking</option>
+    <option value="approved">Approved</option>
+    <option value="rejected">Rejected</option>
+  </select>
+</div>
+
+<!-- REGULARIZATION FILTERS (only visible when Regularizations tab active) -->
+<div class="filters" id="regularizationFilters" style="grid-column:1/-1; display:none;">
+  <input type="text" id="searchRegularizationName" placeholder="Search by faculty name">
+  <select id="filterRegularizationDept">
+    <option value="">All Departments</option>
+    <option value="College of Arts and Sciences">College of Arts and Sciences</option>
+    <option value="College of Business Administration">College of Business Administration</option>
+    <option value="College of Computer Studies">College of Computer Studies</option>
+    <option value="College of Criminology">College of Criminology</option>
+    <option value="College of Education">College of Education</option>
+    <option value="College of Engineering">College of Engineering</option>
+    <option value="Office of the President">Office of the President</option>
+  </select>
+  <select id="filterRegularizationTenure">
+    <option value="">All Eligible Tenure</option>
+    <option value="Regular">Eligible for Regular</option>
+    <option value="Tenured">Eligible for Tenured</option>
+  </select>
+  <select id="filterRegularizationStatus">
+    <option value="">All Status</option>
+    <option value="eligible">Eligible (Not Yet Initiated)</option>
+    <option value="vpa">For VPAA Review</option>
+    <option value="pres">For President Review</option>
+    <option value="approved">Approved</option>
+    <option value="rejected">Rejected</option>
+  </select>
+</div>
+
+
+  <!-- Tabs for Promotions & Regularizations -->
+  <div class="card" style="grid-column:1 / -1; padding:20px">
+    <div class="tabs_profile">
+      <div class="tab active" data-tab="promotions">Promotions</div>
+      <div class="tab" data-tab="regularizations">Regularizations</div>
+    </div>
+
+    <!-- Promotions Table -->
+    <div class="tab-content active" id="promotions">
+      <div class="table">
+        <table>
+          <thead>
+            <tr>
+              <th>Faculty</th>
+              <th>Department</th>
+              <th>Current Rank</th>
+              <th>Requested</th>
+              <th>Status</th>
+              <th>Submitted</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="promotionsBody">
+            {% for promo in promotions %}
+            <tr data-status="{{ promo.status }}" data-dept="{{ promo.department }}">
+              <td style="display:flex;gap:10px;align-items:center">
+                <img class="faculty-photo" data-personnel-id="{{ promo.faculty_id }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#f0f0f0;" alt="Loading...">
+                {{ promo.name }}
+              </td>
+              <td>{{ promo.department }}</td>
+              <td>{{ promo.currentrank }}</td>
+              <td><strong>{{ promo.requestedrank }}</strong></td>
+              <td>
+                {% if 'hrmd' in promo.status|lower %}
+                <span class="status pending">For HRMD Approval</span>
+                {% elif 'vpa' in promo.status|lower %}
+                <span class="status warn">For VPAA Approval</span>
+                {% elif 'pres' in promo.status|lower %}
+                <span class="status warn">For President Approval</span>
+                {% elif 'approved' in promo.status|lower %}
+                <span class="status ok">Approved</span>
+                {% elif 'rejected' in promo.status|lower %}
+                <span class="status rejected">Rejected</span>
+                {% else %}
+                <span class="status pending">{{ promo.status|title }}</span>
+                {% endif %}
+              </td>
+              <td>{{ promo.submitteddate }}</td>
+              <td><button class="btn-action review-promotion-btn" style="background:#f1c40f;color:#111" data-application-id="{{ promo.application_id }}">Review</button></td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="7" style="text-align:center">No promotion requests found</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Regularizations Table -->
+    <div class="tab-content" id="regularizations">
+      <div class="table">
+        <table>
+          <thead>
+            <tr>
+              <th>Faculty</th>
+              <th>Department</th>
+              <th>Current Rank</th>
+              <th>Current Tenure</th>
+              <th>Years of Service</th>
+              <th>Eligible For</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="regularizationsBody">
+            {% for reg in regularizations %}
+            <tr data-dept="{{ reg.department }}" data-tenure="{{ reg.eligible_for }}" data-status="{{ reg.reg_status }}">
+              <td style="display:flex;gap:10px;align-items:center">
+                <img class="faculty-photo" data-personnel-id="{{ reg.personnel_id }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#f0f0f0;" alt="Loading...">
+                {{ reg.name }}
+              </td>
+              <td>{{ reg.department }}</td>
+              <td>{{ reg.current_rank }}</td>
+              <td><span class="status pending">{{ reg.current_tenure }}</span></td>
+              <td>{{ reg.years_of_service }} years</td>
+              <td><span class="status ok">{{ reg.eligible_for }}</span></td>
+              <td>
+                {% if reg.has_application %}
+                  <span class="status {{ reg.status_class }}">{{ reg.status }}</span>
+                {% else %}
+                  <button class="btn-action initiate-reg-btn" 
+                          style="background:#22c55e;color:#fff" 
+                          data-personnel-id="{{ reg.personnel_id }}"
+                          data-faculty-name="{{ reg.name }}"
+                          data-eligible-for="{{ reg.eligible_for }}">
+                    Initiate
+                  </button>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="7" style="text-align:center">No eligible faculty found</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+</section>
+
+<!-- Promotion Review Modal -->
+<div class="hr-modal-wrapper" id="hrReviewModal">
   <div class="hr-modal-content">
     <div class="hr-banner"></div>
-
+    
     <div class="hr-profile-header">
       <img src="" alt="Faculty" class="hr-profile-img" id="modalProfileImage" style="width:80px;height:80px;border-radius:8px;object-fit:cover;background:#f0f0f0;">
       <div class="hr-profile-info">
         <h2 id="modalFacultyName">Loading...</h2>
         <p id="modalFacultyPosition">Loading...</p>
         <p id="modalFacultyRequest">Loading...</p>
-
+        
         <div class="hr-profile-contact">
           <span><i class='bx bx-envelope'></i> Email: <span id="modalFacultyEmail">N/A</span></span>
           <span><i class='bx bx-phone'></i> Contact: <span id="modalFacultyPhone">N/A</span></span>
         </div>
-
+        
         <div class="hr-profile-status">
           <strong>Submission Status:</strong> 
           <span id="modalSubmissionStatus">Loading...</span>
         </div>
       </div>
     </div>
-
+    
     <div class="hr-documents">
       <h3>Uploaded Documents</h3>
       <div class="hr-stats" id="documentLinks">
         <div class="hr-stat-card"><a href="#" id="coverLetterLink"><i class='bx bx-file'></i> Cover Letter</a></div>
         <div class="hr-stat-card"><a href="#" id="resumeLink"><i class='bx bx-file'></i> Resume</a></div>
       </div>
-
-      <!-- PDF Viewer -->
+      
       <div id="pdfViewer" style="margin-top:20px;display:none;">
         <h4 id="pdfTitle">Document Preview</h4>
         <iframe id="pdfFrame" style="width:100%;height:500px;border:1px solid #ddd;border-radius:8px;"></iframe>
       </div>
-
+      
       <textarea id="hrNotes" placeholder="Add notes (optional)"></textarea>
     </div>
-
+    
     <div class="hr-modal-footer">
       <button id="rejectBtn" class="btn reject">Reject</button>
       <button id="forwardBtn" class="btn forward">Forward to VPAA</button>
@@ -204,92 +245,195 @@
     </div>
   </div>
 </div>
+
 {% endblock %}
 
 {% block extra_scripts %}
-  <script>
-    // Load profile images for table
-    document.addEventListener('DOMContentLoaded', function() {
-      const facultyPhotos = document.querySelectorAll('.faculty-photo');
-      facultyPhotos.forEach(photo => {
-        const personnelId = photo.getAttribute('data-personnel-id');
-        if (personnelId) {
-          fetch(`/api/profile/image-base64/${personnelId}`)
-            .then(response => response.json())
-            .then(data => {
-              if (data.success && data.image) {
-                photo.src = data.image;
-              } else {
-                photo.style.display = 'none';
-              }
-            })
-            .catch(error => {
-              console.error('Error loading profile image:', error);
-              photo.style.display = 'none';
-            });
-        }
-      });
-    });
+<script>
+// Load profile images
+document.addEventListener('DOMContentLoaded', function() {
+  const facultyPhotos = document.querySelectorAll('.faculty-photo');
+  facultyPhotos.forEach(photo => {
+    const personnelId = photo.getAttribute('data-personnel-id');
+    if (personnelId) {
+      fetch(`/api/profile/image-base64/${personnelId}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.success && data.image) {
+            photo.src = data.image;
+          } else {
+            photo.style.display = 'none';
+          }
+        })
+        .catch(() => photo.style.display = 'none');
+    }
+  });
+});
 
-    // Tabs
-    const tabs = document.querySelectorAll('.tab');
-    const contents = document.querySelectorAll('.tab-content');
-    tabs.forEach(tab => {
-      tab.addEventListener('click', () => {
-        tabs.forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        const target = tab.getAttribute('data-tab');
-        contents.forEach(c => c.classList.remove('active'));
-        document.getElementById(target).classList.add('active');
-      });
-    });
+// Tabs with filter visibility toggle
+const tabs = document.querySelectorAll('.tab');
+const contents = document.querySelectorAll('.tab-content');
+const promotionFilters = document.getElementById('promotionFilters');
+const regularizationFilters = document.getElementById('regularizationFilters');
 
-    // HR Review Modal Logic
-    const reviewModal = document.getElementById('hrReviewModal');
-    const closeModal = document.getElementById('closeModal');
-    const pdfViewer = document.getElementById('pdfViewer');
-    const pdfFrame = document.getElementById('pdfFrame');
-    const pdfTitle = document.getElementById('pdfTitle');
-    let currentRow = null;
-    let currentApplicationId = null;
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    tabs.forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const target = tab.getAttribute('data-tab');
+    contents.forEach(c => c.classList.remove('active'));
+    document.getElementById(target).classList.add('active');
+    
+    // Toggle filters visibility
+    if (target === 'promotions') {
+      promotionFilters.style.display = 'flex';
+      regularizationFilters.style.display = 'none';
+    } else {
+      promotionFilters.style.display = 'none';
+      regularizationFilters.style.display = 'flex';
+    }
+  });
+});
 
-    // Open modal and load data
-    document.querySelectorAll('.review-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        currentRow = e.target.closest('tr');
-        currentApplicationId = e.target.getAttribute('data-application-id');
-        
-        loadPromotionDetails(currentApplicationId);
-        
-        reviewModal.style.display = 'flex';
-      });
-    });
+// PROMOTION FILTERING
+const searchPromotionInput = document.getElementById('searchPromotionName');
+const filterPromotionDept = document.getElementById('filterPromotionDept');
+const filterPromotionStatus = document.getElementById('filterPromotionStatus');
+const promotionsBody = document.getElementById('promotionsBody');
 
-    function loadPromotionDetails(applicationId) {
+function filterPromotionsTable() {
+  const searchTerm = searchPromotionInput.value.toLowerCase().trim();
+  const selectedDept = filterPromotionDept.value; // Don't lowercase - match exact value
+  const selectedStatus = filterPromotionStatus.value.toLowerCase();
+  
+  const rows = promotionsBody.getElementsByTagName('tr');
+  
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const cells = row.getElementsByTagName('td');
+    
+    if (cells.length === 0) continue;
+    
+    const facultyName = cells[0].textContent.toLowerCase();
+    const department = row.getAttribute('data-dept'); // Don't lowercase
+    const rowStatus = row.getAttribute('data-status').toLowerCase();
+    
+    let showRow = true;
+    
+    if (searchTerm && !facultyName.includes(searchTerm)) {
+      showRow = false;
+    }
+    
+    // Exact match for department
+    if (selectedDept && department !== selectedDept) {
+      showRow = false;
+    }
+    
+    if (selectedStatus && !rowStatus.includes(selectedStatus)) {
+      showRow = false;
+    }
+    
+    row.style.display = showRow ? '' : 'none';
+  }
+}
+
+searchPromotionInput.addEventListener('input', filterPromotionsTable);
+filterPromotionDept.addEventListener('change', filterPromotionsTable);
+filterPromotionStatus.addEventListener('change', filterPromotionsTable);
+
+// REGULARIZATION FILTERING
+const searchRegularizationInput = document.getElementById('searchRegularizationName');
+const filterRegularizationDept = document.getElementById('filterRegularizationDept');
+const filterRegularizationTenure = document.getElementById('filterRegularizationTenure');
+const filterRegularizationStatus = document.getElementById('filterRegularizationStatus');
+const regularizationsBody = document.getElementById('regularizationsBody');
+
+function filterRegularizationsTable() {
+  const searchTerm = searchRegularizationInput.value.toLowerCase().trim();
+  const selectedDept = filterRegularizationDept.value; // Don't lowercase - match exact value
+  const selectedTenure = filterRegularizationTenure.value.toLowerCase();
+  const selectedStatus = filterRegularizationStatus.value.toLowerCase();
+  
+  const rows = regularizationsBody.getElementsByTagName('tr');
+  
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const cells = row.getElementsByTagName('td');
+    
+    if (cells.length === 0) continue;
+    
+    const facultyName = cells[0].textContent.toLowerCase();
+    const department = row.getAttribute('data-dept'); // Don't lowercase
+    const tenure = row.getAttribute('data-tenure').toLowerCase();
+    const status = row.getAttribute('data-status').toLowerCase();
+    
+    let showRow = true;
+    
+    if (searchTerm && !facultyName.includes(searchTerm)) {
+      showRow = false;
+    }
+    
+    // Exact match for department
+    if (selectedDept && department !== selectedDept) {
+      showRow = false;
+    }
+    
+    if (selectedTenure && tenure !== selectedTenure) {
+      showRow = false;
+    }
+    
+    if (selectedStatus && status !== selectedStatus) {
+      showRow = false;
+    }
+    
+    row.style.display = showRow ? '' : 'none';
+  }
+}
+
+searchRegularizationInput.addEventListener('input', filterRegularizationsTable);
+filterRegularizationDept.addEventListener('change', filterRegularizationsTable);
+filterRegularizationTenure.addEventListener('change', filterRegularizationsTable);
+filterRegularizationStatus.addEventListener('change', filterRegularizationsTable);
+
+
+
+// PROMOTION REVIEW MODAL
+const reviewModal = document.getElementById('hrReviewModal');
+const closeModal = document.getElementById('closeModal');
+const pdfViewer = document.getElementById('pdfViewer');
+const pdfFrame = document.getElementById('pdfFrame');
+let currentRow = null;
+let currentApplicationId = null;
+
+document.querySelectorAll('.review-promotion-btn').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    currentRow = e.target.closest('tr');
+    currentApplicationId = e.target.getAttribute('data-application-id');
+    loadPromotionDetails(currentApplicationId);
+    reviewModal.style.display = 'flex';
+  });
+});
+
+function loadPromotionDetails(applicationId) {
   fetch(`/api/promotion/details/${applicationId}`)
     .then(response => response.json())
     .then(result => {
       if (result.success) {
         const data = result.data;
-        
         document.getElementById('modalFacultyName').textContent = data.name;
-        document.getElementById('modalFacultyPosition').textContent = 
-          `${data.currentrank} • ${data.department}`;
-        document.getElementById('modalFacultyRequest').textContent = 
-          'Applied for promotion to Associate Professor.';
+        document.getElementById('modalFacultyPosition').textContent = `${data.currentrank} • ${data.department}`;
+        document.getElementById('modalFacultyRequest').textContent = `Applied for promotion to ${data.requestedrank || 'Not specified'}.`;
         document.getElementById('modalFacultyEmail').textContent = data.email;
         document.getElementById('modalFacultyPhone').textContent = data.phone;
         document.getElementById('modalSubmissionStatus').textContent = data.status;
         
-        // Set profile image
-        const profileImageElement = document.getElementById('modalProfileImage');
+        const profileImg = document.getElementById('modalProfileImage');
         if (data.profileimage) {
-          profileImageElement.src = data.profileimage;
+          profileImg.src = data.profileimage;
         } else {
-          profileImageElement.style.backgroundColor = '#e0e0e0';
+          profileImg.style.backgroundColor = '#e0e0e0';
         }
         
-        // Show/hide buttons based on status
         const rejectBtn = document.getElementById('rejectBtn');
         const forwardBtn = document.getElementById('forwardBtn');
         
@@ -303,176 +447,74 @@
         
         setupDocumentLinks(applicationId, data);
       } else {
-        alert('Error loading promotion details: ' + result.error);
+        alert('Error: ' + result.error);
       }
     })
     .catch(error => {
       console.error('Error:', error);
-      alert('Failed to load promotion details');
+      alert('Failed to load details');
     });
 }
 
-
-    function setupDocumentLinks(applicationId, data) {
-      const coverLetterLink = document.getElementById('coverLetterLink');
-      const resumeLink = document.getElementById('resumeLink');
-      
-      if (data.has_cover_letter) {
-        coverLetterLink.onclick = (e) => {
-          e.preventDefault();
-          viewDocument(applicationId, 'cover_letter', data.cover_letter_filename);
-        };
-        coverLetterLink.style.opacity = '1';
-        coverLetterLink.style.pointerEvents = 'auto';
-      } else {
-        coverLetterLink.style.opacity = '0.5';
-        coverLetterLink.style.pointerEvents = 'none';
-      }
-      
-      if (data.has_resume) {
-        resumeLink.onclick = (e) => {
-          e.preventDefault();
-          viewDocument(applicationId, 'resume', data.resume_filename);
-        };
-        resumeLink.style.opacity = '1';
-        resumeLink.style.pointerEvents = 'auto';
-      } else {
-        resumeLink.style.opacity = '0.5';
-        resumeLink.style.pointerEvents = 'none';
-      }
-    }
-
-    function viewDocument(applicationId, docType, filename) {
-      const url = `/api/promotion/document/${applicationId}/${docType}`;
-      pdfFrame.src = url;
-      pdfTitle.textContent = `Preview: ${filename || docType}`;
-      pdfViewer.style.display = 'block';
-    }
-
-    // Close modal
-    closeModal.addEventListener('click', () => {
-      reviewModal.style.display = 'none';
-      pdfViewer.style.display = 'none';
-      pdfFrame.src = '';
-    });
-
-    // Reject
-    document.getElementById('rejectBtn').addEventListener('click', () => {
-      if(currentRow){
-        currentRow.querySelector('.status').textContent = 'Rejected';
-        currentRow.querySelector('.status').className = 'status rejected';
-        currentRow.querySelector('.btn-action').textContent = 'View';
-        currentRow.querySelector('.btn-action').disabled = true;
-      }
-      reviewModal.style.display = 'none';
-      pdfViewer.style.display = 'none';
-      pdfFrame.src = '';
-    });
-
-    // Forward to VPAA
-    document.getElementById('forwardBtn').addEventListener('click', () => {
-      if(currentRow){
-        currentRow.querySelector('.status').textContent = 'VPAA Review';
-        currentRow.querySelector('.status').className = 'status warn';
-        currentRow.querySelector('.btn-action').textContent = 'Pending';
-        currentRow.querySelector('.btn-action').disabled = true;
-      }
-      reviewModal.style.display = 'none';
-      pdfViewer.style.display = 'none';
-      pdfFrame.src = '';
-    });
-
-    // Close modal if click outside content
-    window.addEventListener('click', (e) => {
-      if(e.target === reviewModal) {
-        reviewModal.style.display = 'none';
-        pdfViewer.style.display = 'none';
-        pdfFrame.src = '';
-      }
-    });
-
-
-  document.addEventListener('DOMContentLoaded', function() {
-  const searchInput = document.getElementById('searchName');
-  const deptFilter = document.getElementById('filterDept');
-  const statusFilter = document.getElementById('filterStatus');
-  const tableBody = document.getElementById('promotionsBody');
-
-  function filterTable() {
-    const searchTerm = searchInput.value.toLowerCase().trim();
-    const selectedDept = deptFilter.value.toLowerCase();
-    const selectedStatus = statusFilter.value.toLowerCase();
-    
-    const rows = tableBody.getElementsByTagName('tr');
-    
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      const cells = row.getElementsByTagName('td');
-      
-      if (cells.length === 0) continue;
-      
-      const facultyName = cells[0].textContent.toLowerCase();
-      const department = cells[1].textContent.toLowerCase();
-      const rowStatus = row.getAttribute('data-status').toLowerCase();
-      
-      let showRow = true;
-      
-      // Check search term
-      if (searchTerm && !facultyName.includes(searchTerm)) {
-        showRow = false;
-      }
-      
-      // Check department filter
-      if (selectedDept && department !== selectedDept.toLowerCase()) {
-        showRow = false;
-      }
-      
-      // Check status filter
-      if (selectedStatus && !rowStatus.includes(selectedStatus)) {
-        showRow = false;
-      }
-      
-      row.style.display = showRow ? '' : 'none';
-    }
+function setupDocumentLinks(applicationId, data) {
+  const coverLetterLink = document.getElementById('coverLetterLink');
+  const resumeLink = document.getElementById('resumeLink');
+  
+  if (data.has_cover_letter) {
+    coverLetterLink.onclick = (e) => {
+      e.preventDefault();
+      viewDocument(applicationId, 'cover_letter', data.cover_letter_filename);
+    };
+    coverLetterLink.style.opacity = '1';
+    coverLetterLink.style.pointerEvents = 'auto';
+  } else {
+    coverLetterLink.style.opacity = '0.5';
+    coverLetterLink.style.pointerEvents = 'none';
   }
+  
+  if (data.has_resume) {
+    resumeLink.onclick = (e) => {
+      e.preventDefault();
+      viewDocument(applicationId, 'resume', data.resume_filename);
+    };
+    resumeLink.style.opacity = '1';
+    resumeLink.style.pointerEvents = 'auto';
+  } else {
+    resumeLink.style.opacity = '0.5';
+    resumeLink.style.pointerEvents = 'none';
+  }
+}
 
-  // Add event listeners
-  searchInput.addEventListener('input', filterTable);
-  deptFilter.addEventListener('change', filterTable);
-  statusFilter.addEventListener('change', filterTable);
+function viewDocument(applicationId, docType, filename) {
+  pdfFrame.src = `/api/promotion/document/${applicationId}/${docType}`;
+  document.getElementById('pdfTitle').textContent = `Preview: ${filename || docType}`;
+  pdfViewer.style.display = 'block';
+}
+
+closeModal.addEventListener('click', () => {
+  reviewModal.style.display = 'none';
+  pdfViewer.style.display = 'none';
+  pdfFrame.src = '';
 });
 
+// FORWARD TO VPAA
 document.getElementById('forwardBtn').addEventListener('click', () => {
-  if (!currentApplicationId) {
-    alert('No application selected');
-    return;
-  }
-
+  if (!currentApplicationId) return alert('No application selected');
+  
+  if (!confirm('Forward this application to VPAA for review?')) return;
+  
   fetch('/api/promotion/forward-to-vpaa', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      application_id: currentApplicationId,
-    })
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({application_id: currentApplicationId})
   })
   .then(response => response.json())
   .then(result => {
     if (result.success) {
-      if (currentRow) {
-        currentRow.querySelector('.status').innerHTML = '<span class="status warn">For VPAA Approval</span>';
-        currentRow.setAttribute('data-status', 'Vpaa');
-        currentRow.querySelector('.btn-action').textContent = 'Pending';
-        currentRow.querySelector('.btn-action').disabled = true;
-      }
-      
       alert('Application forwarded to VPAA successfully');
-      reviewModal.style.display = 'none';
-      pdfViewer.style.display = 'none';
-      pdfFrame.src = '';
+      location.reload();
     } else {
-      alert('Error forwarding application: ' + result.error);
+      alert('Error: ' + result.error);
     }
   })
   .catch(error => {
@@ -480,5 +522,40 @@ document.getElementById('forwardBtn').addEventListener('click', () => {
     alert('Failed to forward application');
   });
 });
-  </script>
+
+// INITIATE REGULARIZATION
+document.querySelectorAll('.initiate-reg-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const personnelId = this.getAttribute('data-personnel-id');
+    const facultyName = this.getAttribute('data-faculty-name');
+    const eligibleFor = this.getAttribute('data-eligible-for');
+    
+    if (!confirm(`Initiate regularization to ${eligibleFor} status for ${facultyName}?`)) {
+      return;
+    }
+    
+    fetch('/api/regularization/initiate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        faculty_id: personnelId,
+        notes: `Initiated by HR for ${eligibleFor} status`
+      })
+    })
+    .then(response => response.json())
+    .then(result => {
+      if (result.success) {
+        alert(result.message);
+        location.reload();
+      } else {
+        alert('Error: ' + result.error);
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      alert('Failed to initiate regularization');
+    });
+  });
+});
+</script>
 {% endblock %}

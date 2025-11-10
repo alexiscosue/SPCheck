@@ -1,8 +1,7 @@
 {% extends "vp&pres/vp-base.html" %}
 
-{% block title %}Dashboard{% endblock %}
-
-{% block page_title %}Faculty Promotions{% endblock %}
+{% block title %}Promotions & Regularizations{% endblock %}
+{% block page_title %}Faculty Promotions & Regularizations{% endblock %}
 
 {% block content %}
 <section class="grid">
@@ -12,7 +11,7 @@
       <div class="icon promo"><i class='bx bx-award'></i></div>
       <div>
         <div class="title">Pending Review</div>
-        <div class="value">{{ promotions|selectattr('status', 'equalto', 'Pres')|list|length if user_role == 'vpaa' else promotions|selectattr('status', 'equalto', 'Pres')|list|length }}</div>
+        <div class="value">{{ promotions|selectattr('status', 'equalto', 'Vpa')|list|length if user_role == 20004 else promotions|selectattr('status', 'equalto', 'Pres')|list|length }}</div>
       </div>
     </div>
     <div class="kpi card">
@@ -31,19 +30,51 @@
     </div>
   </div>
 
-  <!-- Filters -->
-  <div class="filters" style="grid-column:1/-1">
-    <input type="text" id="searchName" placeholder="Search by faculty name">
-    <select id="filterDept">
+  <!-- PROMOTION FILTERS -->
+  <div class="filters" id="promotionFilters" style="grid-column:1/-1">
+    <input type="text" id="searchPromotionName" placeholder="Search by faculty name">
+    <select id="filterPromotionDept">
       <option value="">All Departments</option>
-      <option value="IT">IT</option>
-      <option value="CS">CS</option>
+      <option value="College of Arts and Sciences">College of Arts and Sciences</option>
+      <option value="College of Business Administration">College of Business Administration</option>
+      <option value="College of Computer Studies">College of Computer Studies</option>
+      <option value="College of Criminology">College of Criminology</option>
+      <option value="College of Education">College of Education</option>
+      <option value="College of Engineering">College of Engineering</option>
+      <option value="Office of the President">Office of the President</option>
     </select>
-    <select id="filterStatus">
+    <select id="filterPromotionStatus">
       <option value="">All Status</option>
       <option value="Hrmd">For HRMD Checking</option>
       <option value="Vpa">For VPAA Checking</option>
       <option value="Pres">For President Checking</option>
+      <option value="approved">Approved</option>
+      <option value="rejected">Rejected</option>
+    </select>
+  </div>
+
+  <!-- REGULARIZATION FILTERS -->
+  <div class="filters" id="regularizationFilters" style="grid-column:1/-1; display:none;">
+    <input type="text" id="searchRegularizationName" placeholder="Search by faculty name">
+    <select id="filterRegularizationDept">
+      <option value="">All Departments</option>
+      <option value="College of Arts and Sciences">College of Arts and Sciences</option>
+      <option value="College of Business Administration">College of Business Administration</option>
+      <option value="College of Computer Studies">College of Computer Studies</option>
+      <option value="College of Criminology">College of Criminology</option>
+      <option value="College of Education">College of Education</option>
+      <option value="College of Engineering">College of Engineering</option>
+      <option value="Office of the President">Office of the President</option>
+    </select>
+    <select id="filterRegularizationTenure">
+      <option value="">All Eligible Tenure</option>
+      <option value="Regular">Eligible for Regular</option>
+      <option value="Tenured">Eligible for Tenured</option>
+    </select>
+    <select id="filterRegularizationStatus">
+      <option value="">All Status</option>
+      <option value="vpa">For VPAA Review</option>
+      <option value="pres">For President Review</option>
       <option value="approved">Approved</option>
       <option value="rejected">Rejected</option>
     </select>
@@ -73,18 +104,18 @@
           </thead>
           <tbody id="promotionsBody">
             {% for promo in promotions %}
-            <tr data-status="{{ promo.status }}">
+            <tr data-status="{{ promo.status }}" data-dept="{{ promo.department }}">
               <td style="display:flex;gap:10px;align-items:center">
-                <img class="faculty-photo" data-personnel-id="{{ promo.faculty_id }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#f0f0f0;cursor:pointer;" alt="Loading...">
+                <img class="faculty-photo" data-personnel-id="{{ promo.faculty_id }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#f0f0f0;" alt="Loading...">
                 {{ promo.name }}
               </td>
               <td>{{ promo.department }}</td>
               <td>{{ promo.currentrank }}</td>
-              <td>Promotion ({{ promo.requestedrank }})</td>
+              <td><strong>{{ promo.requestedrank }}</strong></td>
               <td>
                 {% if 'hrmd' in promo.status|lower %}
                 <span class="status pending">For HRMD Approval</span>
-                {% elif 'vpa' in promo.status|lower or 'vpaa' in promo.status|lower %}
+                {% elif 'vpa' in promo.status|lower %}
                 <span class="status warn">For VPAA Approval</span>
                 {% elif 'pres' in promo.status|lower %}
                 <span class="status warn">For President Approval</span>
@@ -97,7 +128,7 @@
                 {% endif %}
               </td>
               <td>{{ promo.submitteddate }}</td>
-              <td><button class="btn-action review-btn" style="background:#f1c40f;color:#111" data-faculty-name="{{ promo.name }}" data-application-id="{{ promo.application_id }}">Review</button></td>
+              <td><button class="btn-action review-promotion-btn" style="background:#f1c40f;color:#111" data-application-id="{{ promo.application_id }}">Review</button></td>
             </tr>
             {% else %}
             <tr>
@@ -116,37 +147,47 @@
           <thead>
             <tr>
               <th>Faculty</th>
-              <th>Dept</th>
+              <th>Department</th>
               <th>Current Rank</th>
-              <th>Eligibility Date</th>
+              <th>Current Tenure</th>
+              <th>Years of Service</th>
+              <th>Eligible For</th>
               <th>Status</th>
-              <th>Action</th>
             </tr>
           </thead>
-          <tbody>
-            <tr>
-              <td style="display:flex;gap:10px;align-items:center">
-                <div style="width:36px;height:36px;border-radius:6px;background:#f0f0f0;"></div>
-                Dr. Carlos Santos
-              </td>
-              <td>IT</td>
-              <td>Instructor</td>
-              <td>2025-10-01</td>
-              <td><span class="status ok">Eligible</span></td>
-              <td><button class="btn-action review-btn" style="background:#f1c40f;color:#111">Review</button></td>
-            </tr>
-            <tr>
-              <td style="display:flex;gap:10px;align-items:center">
-                <div style="width:36px;height:36px;border-radius:6px;background:#f0f0f0;"></div>
-                Prof. Ana dela Cruz
-              </td>
-              <td>Education</td>
-              <td>Assistant Professor</td>
-              <td>2025-10-05</td>
-              <td><span class="status ok">Eligible</span></td>
-              <td><button class="btn-action review-btn" style="background:#f1c40f;color:#111">Review</button></td>
-            </tr>
-          </tbody>
+            <tbody id="regularizationsBody">
+              {% for reg in regularizations %}
+              <tr data-dept="{{ reg.department }}" data-tenure="{{ reg.eligible_for }}" data-status="{{ reg.reg_status }}">
+                <td style="display:flex;gap:10px;align-items:center">
+                  <img class="faculty-photo" data-personnel-id="{{ reg.personnel_id }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#f0f0f0;" alt="Loading...">
+                  {{ reg.name }}
+                </td>
+                <td>{{ reg.department }}</td>
+                <td>{{ reg.current_rank }}</td>
+                <td><span class="status pending">{{ reg.current_tenure }}</span></td>
+                <td>{{ reg.years_of_service }} years</td>
+                <td><span class="status ok">{{ reg.eligible_for }}</span></td>
+                <td>
+                  {% if reg.reg_status == 'vpa' or reg.reg_status == 'pres' %}
+                    <button class="btn-action review-regularization-btn" 
+                            style="background:#3b82f6;color:#fff" 
+                            data-regularization-id="{{ reg.regularization_id }}"
+                            data-faculty-name="{{ reg.name }}"
+                            data-status="{{ reg.reg_status }}"
+                            data-eligible-for="{{ reg.eligible_for }}">
+                      Review
+                    </button>
+                  {% else %}
+                    <span class="status {{ reg.status_class }}">{{ reg.status }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="7" style="text-align:center">No regularization applications found</td>
+              </tr>
+              {% endfor %}
+            </tbody>
         </table>
       </div>
     </div>
@@ -184,7 +225,6 @@
         <div class="hr-stat-card"><a href="#" id="resumeLink"><i class='bx bx-file'></i> Resume</a></div>
       </div>
 
-      <!-- PDF Viewer -->
       <div id="pdfViewer" style="margin-top:20px;display:none;">
         <h4 id="pdfTitle">Document Preview</h4>
         <iframe id="pdfFrame" style="width:100%;height:500px;border:1px solid #ddd;border-radius:8px;"></iframe>
@@ -205,358 +245,359 @@
 
 {% block extra_scripts %}
 <script>
-  // Load profile images for table
-  // Replace the image loading code with this optimized version
+// Load profile images
 document.addEventListener('DOMContentLoaded', function() {
-    const facultyPhotos = document.querySelectorAll('.faculty-photo');
-    
-    // Create an Intersection Observer for lazy loading
-    const imageObserver = new IntersectionObserver((entries, observer) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                const photo = entry.target;
-                const personnelId = photo.getAttribute('data-personnel-id');
-                
-                if (personnelId && !photo.src) {
-                    loadProfileImage(photo, personnelId);
-                }
-                observer.unobserve(photo);
-            }
-        });
-    }, {
-        rootMargin: '50px' // Start loading 50px before entering viewport
+  const facultyPhotos = document.querySelectorAll('.faculty-photo');
+  const imageObserver = new IntersectionObserver((entries, observer) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const photo = entry.target;
+        const personnelId = photo.getAttribute('data-personnel-id');
+        if (personnelId && !photo.src) {
+          loadProfileImage(photo, personnelId);
+        }
+        observer.unobserve(photo);
+      }
     });
-    
-    facultyPhotos.forEach(photo => {
-        imageObserver.observe(photo);
-    });
+  }, { rootMargin: '50px' });
+  
+  facultyPhotos.forEach(photo => imageObserver.observe(photo));
 });
 
 function loadProfileImage(photo, personnelId) {
-    fetch(`/api/profile/image-base64/${personnelId}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.success && data.image) {
-                photo.src = data.image;
-            } else {
-                photo.style.display = 'none';
-            }
-        })
-        .catch(error => {
-            console.error('Error loading profile image:', error);
-            photo.style.display = 'none';
-        });
+  fetch(`/api/profile/image-base64/${personnelId}`)
+    .then(response => response.json())
+    .then(data => {
+      if (data.success && data.image) {
+        photo.src = data.image;
+      } else {
+        photo.style.display = 'none';
+      }
+    })
+    .catch(() => photo.style.display = 'none');
 }
 
+// Tabs with filter toggle
+const tabs = document.querySelectorAll('.tab');
+const contents = document.querySelectorAll('.tab-content');
+const promotionFilters = document.getElementById('promotionFilters');
+const regularizationFilters = document.getElementById('regularizationFilters');
 
-  // Tabs
-  const tabs = document.querySelectorAll('.tab');
-  const contents = document.querySelectorAll('.tab-content');
-  tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      tabs.forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      const target = tab.getAttribute('data-tab');
-      contents.forEach(c => c.classList.remove('active'));
-      document.getElementById(target).classList.add('active');
-    });
-  });
-
-  // VP/President Review Modal Logic
-  const reviewModal = document.getElementById('hrReviewModal');
-  const closeModal = document.getElementById('closeModal');
-  const pdfViewer = document.getElementById('pdfViewer');
-  const pdfFrame = document.getElementById('pdfFrame');
-  const pdfTitle = document.getElementById('pdfTitle');
-  let currentRow = null;
-  let currentApplicationId = null;
-  let currentStatus = null;
-
-  // Open modal and load data
-  document.querySelectorAll('.review-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      currentRow = e.target.closest('tr');
-      currentApplicationId = e.target.getAttribute('data-application-id');
-
-      loadPromotionDetails(currentApplicationId);
-      
-      reviewModal.style.display = 'flex';
-    });
-  });
-
-  function loadPromotionDetails(applicationId) {
-    fetch(`/api/promotion/details/${applicationId}`)  // Fixed: Added backticks
-      .then(response => response.json())
-      .then(result => {
-        if (result.success) {
-          const data = result.data;
-          currentStatus = data.status;
-          
-          document.getElementById('modalFacultyName').textContent = data.name;
-          document.getElementById('modalFacultyPosition').textContent = 
-            `${data.currentrank} • ${data.department}`;  // Fixed: Added backticks
-          document.getElementById('modalFacultyRequest').textContent = 
-            `Applied for promotion to ${data.requestedrank || 'Associate Professor'}.`;  // Fixed
-          document.getElementById('modalFacultyEmail').textContent = data.email;
-          document.getElementById('modalFacultyPhone').textContent = data.phone;
-          document.getElementById('modalSubmissionStatus').textContent = data.status;
-          
-          // Set profile image - load asynchronously
-          const profileImageElement = document.getElementById('modalProfileImage');
-          profileImageElement.style.backgroundColor = '#e0e0e0'; // Set placeholder
-          
-          // Load profile image separately (non-blocking)
-          if (data.facultyid) {
-            fetch(`/api/profile/image-base64/${data.facultyid}`)
-              .then(response => response.json())
-              .then(imgData => {
-                if (imgData.success && imgData.image) {
-                  profileImageElement.src = imgData.image;
-                } else {
-                  console.log('No profile image available');
-                }
-              })
-              .catch(error => {
-                console.error('Error loading profile image:', error);
-              });
-          }
-        
-          // Update button text and visibility based on status
-          const rejectBtn = document.getElementById('rejectBtn');
-          const forwardApproveBtn = document.getElementById('forwardApproveBtn');
-          
-          if (data.status.toLowerCase() === 'vpa') {
-            // VPAA can forward to President
-            rejectBtn.style.display = 'inline-block';
-            forwardApproveBtn.style.display = 'inline-block';
-            forwardApproveBtn.textContent = 'Forward to President';
-          } else if (data.status.toLowerCase() === 'pres') {
-            // President can approve
-            rejectBtn.style.display = 'inline-block';
-            forwardApproveBtn.style.display = 'inline-block';
-            forwardApproveBtn.textContent = 'Approve';
-          } else {
-            // Not for this user to review
-            rejectBtn.style.display = 'none';
-            forwardApproveBtn.style.display = 'none';
-          }
-          
-          setupDocumentLinks(applicationId, data);
-        } else {
-          alert('Error loading promotion details: ' + result.error);
-        }
-      })
-      .catch(error => {
-        console.error('Error:', error);
-        alert('Failed to load promotion details');
-      });
-  }
-
-  function setupDocumentLinks(applicationId, data) {
-    const coverLetterLink = document.getElementById('coverLetterLink');
-    const resumeLink = document.getElementById('resumeLink');
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    tabs.forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const target = tab.getAttribute('data-tab');
+    contents.forEach(c => c.classList.remove('active'));
+    document.getElementById(target).classList.add('active');
     
-    if (data.has_cover_letter) {
-      coverLetterLink.onclick = (e) => {
-        e.preventDefault();
-        viewDocument(applicationId, 'cover_letter', data.cover_letter_filename);
-      };
-      coverLetterLink.style.opacity = '1';
-      coverLetterLink.style.pointerEvents = 'auto';
+    if (target === 'promotions') {
+      promotionFilters.style.display = 'flex';
+      regularizationFilters.style.display = 'none';
     } else {
-      coverLetterLink.style.opacity = '0.5';
-      coverLetterLink.style.pointerEvents = 'none';
+      promotionFilters.style.display = 'none';
+      regularizationFilters.style.display = 'flex';
     }
-    
-    if (data.has_resume) {
-      resumeLink.onclick = (e) => {
-        e.preventDefault();
-        viewDocument(applicationId, 'resume', data.resume_filename);
-      };
-      resumeLink.style.opacity = '1';
-      resumeLink.style.pointerEvents = 'auto';
-    } else {
-      resumeLink.style.opacity = '0.5';
-      resumeLink.style.pointerEvents = 'none';
-    }
-  }
-
-  function viewDocument(applicationId, docType, filename) {
-    const url = `/api/promotion/document/${applicationId}/${docType}`;
-    pdfFrame.src = url;
-    pdfTitle.textContent = `Preview: ${filename || docType}`;  // Fixed: Added backticks
-    pdfViewer.style.display = 'block';
-  }
-
-  // Close modal
-  closeModal.addEventListener('click', () => {
-    reviewModal.style.display = 'none';
-    pdfViewer.style.display = 'none';
-    pdfFrame.src = '';
   });
+});
 
-  // Reject
-  document.getElementById('rejectBtn').addEventListener('click', () => {
-    if (!currentApplicationId) {
-      alert('No application selected');
-      return;
-    }
+// PROMOTION FILTERING
+const searchPromotionInput = document.getElementById('searchPromotionName');
+const filterPromotionDept = document.getElementById('filterPromotionDept');
+const filterPromotionStatus = document.getElementById('filterPromotionStatus');
+const promotionsBody = document.getElementById('promotionsBody');
 
-    fetch('/api/promotion/reject', {  // Updated to use reject endpoint
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        application_id: currentApplicationId,
-        remarks: document.getElementById('hrNotes').value || ''
-      })
-    })
+function filterPromotionsTable() {
+  const searchTerm = searchPromotionInput.value.toLowerCase().trim();
+  const selectedDept = filterPromotionDept.value;
+  const selectedStatus = filterPromotionStatus.value.toLowerCase();
+  
+  const rows = promotionsBody.getElementsByTagName('tr');
+  
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const cells = row.getElementsByTagName('td');
+    
+    if (cells.length === 0) continue;
+    
+    const facultyName = cells[0].textContent.toLowerCase();
+    const department = row.getAttribute('data-dept');
+    const rowStatus = row.getAttribute('data-status').toLowerCase();
+    
+    let showRow = true;
+    
+    if (searchTerm && !facultyName.includes(searchTerm)) showRow = false;
+    if (selectedDept && department !== selectedDept) showRow = false;
+    if (selectedStatus && !rowStatus.includes(selectedStatus)) showRow = false;
+    
+    row.style.display = showRow ? '' : 'none';
+  }
+}
+
+searchPromotionInput.addEventListener('input', filterPromotionsTable);
+filterPromotionDept.addEventListener('change', filterPromotionsTable);
+filterPromotionStatus.addEventListener('change', filterPromotionsTable);
+
+// REGULARIZATION FILTERING
+const searchRegularizationInput = document.getElementById('searchRegularizationName');
+const filterRegularizationDept = document.getElementById('filterRegularizationDept');
+const filterRegularizationTenure = document.getElementById('filterRegularizationTenure');
+const filterRegularizationStatus = document.getElementById('filterRegularizationStatus');
+const regularizationsBody = document.getElementById('regularizationsBody');
+
+function filterRegularizationsTable() {
+  const searchTerm = searchRegularizationInput.value.toLowerCase().trim();
+  const selectedDept = filterRegularizationDept.value;
+  const selectedTenure = filterRegularizationTenure.value.toLowerCase();
+  const selectedStatus = filterRegularizationStatus.value.toLowerCase();
+  
+  const rows = regularizationsBody.getElementsByTagName('tr');
+  
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const cells = row.getElementsByTagName('td');
+    
+    if (cells.length === 0) continue;
+    
+    const facultyName = cells[0].textContent.toLowerCase();
+    const department = row.getAttribute('data-dept');
+    const tenure = row.getAttribute('data-tenure').toLowerCase();
+    const status = row.getAttribute('data-status').toLowerCase();
+    
+    let showRow = true;
+    
+    if (searchTerm && !facultyName.includes(searchTerm)) showRow = false;
+    if (selectedDept && department !== selectedDept) showRow = false;
+    if (selectedTenure && tenure !== selectedTenure) showRow = false;
+    if (selectedStatus && status !== selectedStatus) showRow = false;
+    
+    row.style.display = showRow ? '' : 'none';
+  }
+}
+
+searchRegularizationInput.addEventListener('input', filterRegularizationsTable);
+filterRegularizationDept.addEventListener('change', filterRegularizationsTable);
+filterRegularizationTenure.addEventListener('change', filterRegularizationsTable);
+filterRegularizationStatus.addEventListener('change', filterRegularizationsTable);
+
+// PROMOTION REVIEW MODAL
+const reviewModal = document.getElementById('hrReviewModal');
+const closeModal = document.getElementById('closeModal');
+const pdfViewer = document.getElementById('pdfViewer');
+const pdfFrame = document.getElementById('pdfFrame');
+let currentRow = null;
+let currentApplicationId = null;
+let currentStatus = null;
+
+document.querySelectorAll('.review-promotion-btn').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    currentRow = e.target.closest('tr');
+    currentApplicationId = e.target.getAttribute('data-application-id');
+    loadPromotionDetails(currentApplicationId);
+    reviewModal.style.display = 'flex';
+  });
+});
+
+function loadPromotionDetails(applicationId) {
+  fetch(`/api/promotion/details/${applicationId}`)
     .then(response => response.json())
     .then(result => {
       if (result.success) {
-        if (currentRow) {
-          currentRow.querySelector('.status').innerHTML = '<span class="status rejected">Rejected</span>';
-          currentRow.setAttribute('data-status', 'rejected');
-          currentRow.querySelector('.btn-action').textContent = 'View';
-          currentRow.querySelector('.btn-action').disabled = true;
+        const data = result.data;
+        currentStatus = data.status;
+        
+        document.getElementById('modalFacultyName').textContent = data.name;
+        document.getElementById('modalFacultyPosition').textContent = `${data.currentrank} • ${data.department}`;
+        document.getElementById('modalFacultyRequest').textContent = `Applied for promotion to ${data.requestedrank || 'Not specified'}.`;
+        document.getElementById('modalFacultyEmail').textContent = data.email;
+        document.getElementById('modalFacultyPhone').textContent = data.phone;
+        document.getElementById('modalSubmissionStatus').textContent = data.status;
+        
+        const profileImg = document.getElementById('modalProfileImage');
+        if (data.profileimage) {
+          profileImg.src = data.profileimage;
+        } else {
+          profileImg.style.backgroundColor = '#e0e0e0';
         }
         
-        alert(result.message || 'Application rejected');
-        reviewModal.style.display = 'none';
-        pdfViewer.style.display = 'none';
-        pdfFrame.src = '';
+        const rejectBtn = document.getElementById('rejectBtn');
+        const forwardApproveBtn = document.getElementById('forwardApproveBtn');
+        
+        if (data.status.toLowerCase() === 'vpa') {
+          rejectBtn.style.display = 'inline-block';
+          forwardApproveBtn.style.display = 'inline-block';
+          forwardApproveBtn.textContent = 'Forward to President';
+        } else if (data.status.toLowerCase() === 'pres') {
+          rejectBtn.style.display = 'inline-block';
+          forwardApproveBtn.style.display = 'inline-block';
+          forwardApproveBtn.textContent = 'Approve';
+        } else {
+          rejectBtn.style.display = 'none';
+          forwardApproveBtn.style.display = 'none';
+        }
+        
+        setupDocumentLinks(applicationId, data);
       } else {
         alert('Error: ' + result.error);
       }
     })
     .catch(error => {
       console.error('Error:', error);
-      alert('Failed to reject application');
+      alert('Failed to load details');
     });
-  });
+}
 
-  // Forward to President or Approve
-  document.getElementById('forwardApproveBtn').addEventListener('click', () => {
-    if (!currentApplicationId) {
-      alert('No application selected');
-      return;
-    }
+function setupDocumentLinks(applicationId, data) {
+  const coverLetterLink = document.getElementById('coverLetterLink');
+  const resumeLink = document.getElementById('resumeLink');
+  
+  if (data.has_cover_letter) {
+    coverLetterLink.onclick = (e) => {
+      e.preventDefault();
+      viewDocument(applicationId, 'cover_letter', data.cover_letter_filename);
+    };
+    coverLetterLink.style.opacity = '1';
+    coverLetterLink.style.pointerEvents = 'auto';
+  } else {
+    coverLetterLink.style.opacity = '0.5';
+    coverLetterLink.style.pointerEvents = 'none';
+  }
+  
+  if (data.has_resume) {
+    resumeLink.onclick = (e) => {
+      e.preventDefault();
+      viewDocument(applicationId, 'resume', data.resume_filename);
+    };
+    resumeLink.style.opacity = '1';
+    resumeLink.style.pointerEvents = 'auto';
+  } else {
+    resumeLink.style.opacity = '0.5';
+    resumeLink.style.pointerEvents = 'none';
+  }
+}
 
-    let endpoint = '';
-    let newStatus = '';
-    let statusDisplay = '';
-    let buttonText = '';
+function viewDocument(applicationId, docType, filename) {
+  pdfFrame.src = `/api/promotion/document/${applicationId}/${docType}`;
+  document.getElementById('pdfTitle').textContent = `Preview: ${filename || docType}`;
+  pdfViewer.style.display = 'block';
+}
 
-    if (currentStatus.toLowerCase() === 'vpa') {
-      // VPAA forwards to President
-      endpoint = '/api/promotion/forward-to-president';
-      newStatus = 'Pres';
-      statusDisplay = '<span class="status warn">For President Approval</span>';
-      buttonText = 'Pending';
-    } else if (currentStatus.toLowerCase() === 'pres') {
-      // President approves
-      endpoint = '/api/promotion/approve';
-      newStatus = 'active';
-      statusDisplay = '<span class="status ok">Approved</span>';
-      buttonText = 'Completed';
+closeModal.addEventListener('click', () => {
+  reviewModal.style.display = 'none';
+  pdfViewer.style.display = 'none';
+  pdfFrame.src = '';
+});
+
+// REJECT
+document.getElementById('rejectBtn').addEventListener('click', () => {
+  if (!currentApplicationId) return alert('No application selected');
+  
+  if (!confirm('Reject this application?')) return;
+  
+  fetch('/api/promotion/reject', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      application_id: currentApplicationId,
+      remarks: document.getElementById('hrNotes').value || ''
+    })
+  })
+  .then(response => response.json())
+  .then(result => {
+    if (result.success) {
+      alert(result.message || 'Application rejected');
+      location.reload();
     } else {
-      alert('Invalid status for this action');
+      alert('Error: ' + result.error);
+    }
+  })
+  .catch(error => {
+    console.error('Error:', error);
+    alert('Failed to reject application');
+  });
+});
+
+// FORWARD/APPROVE
+document.getElementById('forwardApproveBtn').addEventListener('click', () => {
+  if (!currentApplicationId) return alert('No application selected');
+  
+  let endpoint = '';
+  if (currentStatus.toLowerCase() === 'vpa') {
+    endpoint = '/api/promotion/forward-to-president';
+  } else if (currentStatus.toLowerCase() === 'pres') {
+    endpoint = '/api/promotion/approve';
+  } else {
+    return alert('Invalid status for this action');
+  }
+  
+  if (!confirm('Proceed with this action?')) return;
+  
+  fetch(endpoint, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ application_id: currentApplicationId })
+  })
+  .then(response => response.json())
+  .then(result => {
+    if (result.success) {
+      alert(result.message || 'Action completed successfully');
+      location.reload();
+    } else {
+      alert('Error: ' + result.error);
+    }
+  })
+  .catch(error => {
+    console.error('Error:', error);
+    alert('Failed to complete action');
+  });
+});
+
+// REGULARIZATION REVIEW FUNCTIONALITY
+document.querySelectorAll('.review-regularization-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const regularizationId = this.getAttribute('data-regularization-id');
+    const facultyName = this.getAttribute('data-faculty-name');
+    const status = this.getAttribute('data-status');
+    const eligibleFor = this.getAttribute('data-eligible-for');
+    
+    let actionText = '';
+    let endpoint = '';
+    
+    if (status === 'vpa') {
+      actionText = `Forward regularization to ${eligibleFor} status for ${facultyName} to President for approval?`;
+      endpoint = '/api/regularization/forward-to-president';
+    } else if (status === 'pres') {
+      actionText = `Approve regularization to ${eligibleFor} status for ${facultyName}?`;
+      endpoint = '/api/regularization/approve-by-president';
+    } else {
+      alert('Invalid status for review');
       return;
     }
-
+    
+    if (!confirm(actionText)) return;
+    
     fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
-        application_id: currentApplicationId
+        regularization_id: regularizationId
       })
     })
     .then(response => response.json())
     .then(result => {
       if (result.success) {
-        if (currentRow) {
-          currentRow.querySelector('.status').innerHTML = statusDisplay;
-          currentRow.setAttribute('data-status', newStatus);
-          currentRow.querySelector('.btn-action').textContent = buttonText;
-          currentRow.querySelector('.btn-action').disabled = true;
-        }
-        
-        alert(result.message || 'Action completed successfully');
-        reviewModal.style.display = 'none';
-        pdfViewer.style.display = 'none';
-        pdfFrame.src = '';
+        alert(result.message);
+        location.reload();
       } else {
         alert('Error: ' + result.error);
       }
     })
     .catch(error => {
       console.error('Error:', error);
-      alert('Failed to complete action');
+      alert('Failed to process regularization');
     });
   });
+});
 
-  // Close modal if click outside content
-  window.addEventListener('click', (e) => {
-    if (e.target === reviewModal) {
-      reviewModal.style.display = 'none';
-      pdfViewer.style.display = 'none';
-      pdfFrame.src = '';
-    }
-  });
-
-  // Filtering functionality
-  document.addEventListener('DOMContentLoaded', function() {
-    const searchInput = document.getElementById('searchName');
-    const deptFilter = document.getElementById('filterDept');
-    const statusFilter = document.getElementById('filterStatus');
-    const tableBody = document.getElementById('promotionsBody');
-
-    function filterTable() {
-      const searchTerm = searchInput.value.toLowerCase().trim();
-      const selectedDept = deptFilter.value.toLowerCase();
-      const selectedStatus = statusFilter.value.toLowerCase();
-      
-      const rows = tableBody.getElementsByTagName('tr');
-      
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        const cells = row.getElementsByTagName('td');
-        
-        if (cells.length === 0) continue;
-        
-        const facultyName = cells[0].textContent.toLowerCase();
-        const department = cells[1].textContent.toLowerCase();
-        const rowStatus = row.getAttribute('data-status').toLowerCase();
-        
-        let showRow = true;
-        
-        // Check search term
-        if (searchTerm && !facultyName.includes(searchTerm)) {
-          showRow = false;
-        }
-        
-        // Check department filter
-        if (selectedDept && department !== selectedDept.toLowerCase()) {
-          showRow = false;
-        }
-        
-        // Check status filter
-        if (selectedStatus && !rowStatus.includes(selectedStatus)) {
-          showRow = false;
-        }
-        
-        row.style.display = showRow ? '' : 'none';
-      }
-    }
-
-    // Add event listeners
-    searchInput.addEventListener('input', filterTable);
-    deptFilter.addEventListener('change', filterTable);
-    statusFilter.addEventListener('change', filterTable);
-  });
 </script>
 {% endblock %}
-
