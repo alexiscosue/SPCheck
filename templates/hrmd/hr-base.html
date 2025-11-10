@@ -61,13 +61,20 @@
       <button class="toggle" id="btnToggle"><i class='bx bx-menu'></i></button>
       <h2 style="margin-left:10px">{% block page_title %}HR Portal{% endblock %}</h2>
       <div class="actions" style="margin-left:auto">
+        <!-- Notification commented out for future use -->
+        <!--
         <div class="notif" title="Notifications" aria-live="polite">
           <i class='bx bx-bell' style="font-size:20px;color:var(--muted)"></i>
           <div class="badge" id="notifBadge">6</div>
         </div>
+        -->
 
         <div class="profile" title="HR profile">
-          <img src="{{ url_for('static', filename='img/people.png') }}" alt="Profile">
+          {% if profile_image_base64 %}
+            <img src="{{ profile_image_base64 }}" alt="Profile" style="width:40px;height:40px;border-radius:50%;object-fit:cover">
+          {% else %}
+            <img src="{{ url_for('static', filename='img/people.png') }}" alt="Profile">
+          {% endif %}
           <div style="text-align:left">
             <div style="font-weight:700">{{ hr_name }}</div>
             <div style="font-size:12px;color:var(--muted)">{{ college }}</div>
@@ -86,23 +93,42 @@
     btnToggle.addEventListener('click', () => sidebar.classList.toggle('collapsed'));
 
     document.addEventListener('DOMContentLoaded', function() {
-
-    const currentPath = window.location.pathname;
-    const isHROwnPage = currentPath === '/hr_profile' || 
-                        currentPath === '/hr_settings' || 
-                        currentPath === '/hr_dashboard' ||
-                        currentPath === '/hr_attendance' ||
-                        currentPath === '/hr_promotions' ||
-                        currentPath === '/hr_evaluations';
-    
-    if (isHROwnPage) {
-        // Clear viewing session
+      const currentPath = window.location.pathname;
+      const isHROwnPage = currentPath === '/hr_profile' || 
+                          currentPath === '/hr_settings' || 
+                          currentPath === '/hr_dashboard' ||
+                          currentPath === '/hr_attendance' ||
+                          currentPath === '/hr_promotions' ||
+                          currentPath === '/hr_evaluations';
+      
+      if (isHROwnPage) {
         fetch('/clear-viewing-session', {
             method: 'GET',
             credentials: 'include'
         });
-    }
-});
+      }
+
+      // ALWAYS load the logged-in user's profile image for topbar
+      fetch('/api/faculty/current-personnel')
+        .then(response => response.json())
+        .then(data => {
+          if (data.success && data.personnel_id) {
+            fetch(`/api/profile/image-base64/${data.personnel_id}`)
+              .then(response => response.json())
+              .then(profileData => {
+                if (profileData.success && profileData.image) {
+                  // Update the profile image in topbar
+                  const profileImg = document.querySelector('.profile img');
+                  if (profileImg) {
+                    profileImg.src = profileData.image;
+                  }
+                }
+              })
+              .catch(error => console.error('Error loading profile image:', error));
+          }
+        })
+        .catch(error => console.error('Error fetching personnel ID:', error));
+    });
   </script>
 
   {% block extra_scripts %}{% endblock %}

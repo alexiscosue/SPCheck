@@ -11,7 +11,6 @@
     <button class="tablink active" data-tab="personal">Personal Info</button>
     <button class="tablink" data-tab="documents">Documents</button>
     <button class="tablink" data-tab="password">Password</button>
-    <button class="tablink" data-tab="system">System Config</button>
     <button class="tablink" data-tab="security">Security</button>
   </div>
 
@@ -197,34 +196,8 @@
     </form>
   </div>
 
-  <!-- System Config Tab (KEEP ORIGINAL CONTENT) -->
-  <div id="system" class="tab-content">
-    <form>
-      <label>Grading Scale</label>
-      <select>
-        <option>1–4</option>
-        <option>1–5</option>
-      </select>
-      <label>Flag Threshold</label>
-      <input type="number" min="1" placeholder="E.g., 2">
-      <button type="submit" class="btn-primary" onclick="showToast(event)">Save</button>
-    </form>
-    <h4 style="margin-top:20px">Departments & Roles</h4>
-    <button class="btn-primary" style="margin-bottom:10px">Manage Departments</button>
-    <table class="table">
-      <thead><tr><th>Department</th><th>Role</th><th>Actions</th></tr></thead>
-      <tbody>
-        <tr><td>IT</td><td>Admin</td><td>Edit</td></tr>
-        <tr><td>CS</td><td>HR Staff</td><td>Edit</td></tr>
-      </tbody>
-    </table>
-  </div>
-
   <!-- Security Tab -->
   <div id="security" class="tab-content">
-    <h4>User Roles</h4>
-    <button class="btn-primary">Manage Access</button>
-    
     <h4 style="margin-top:20px">Audit Logs</h4>
     <div id="audit-logs-container">
       <div class="search-filter">
