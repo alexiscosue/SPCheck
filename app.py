@@ -3713,6 +3713,7 @@ def vp_employee_profile(personnel_id):
             WHERE p.personnel_id = %s
         """, (personnel_id,))
         
+        print(f"Executing SQL for VP profile with personnel_id: {personnel_id}")
         result = cursor.fetchone()
         cursor.close()
         return_db_connection(conn)

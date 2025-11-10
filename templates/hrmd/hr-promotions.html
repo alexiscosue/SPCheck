@@ -246,6 +246,14 @@
   </div>
 </div>
 
+<div id="modal-loading" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:10000;">
+  <div style="background:rgba(0,0,0,0.8); padding:40px 50px; border-radius:16px; text-align:center;">
+    <i class="fas fa-spinner fa-spin" style="font-size:56px; color:#ffffff; margin-bottom:20px;"></i>
+    <p style="font-size:18px; color:#ffffff; margin:0; font-weight:500;">Loading application details...</p>
+  </div>
+</div>
+
+
 {% endblock %}
 
 {% block extra_scripts %}
@@ -269,6 +277,14 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 });
+
+// Show/Hide Loading Modal
+function showModalLoading(show) {
+  const loading = document.getElementById('modal-loading');
+  if (loading) {
+    loading.style.display = show ? 'flex' : 'none';
+  }
+}
 
 // Tabs with filter visibility toggle
 const tabs = document.querySelectorAll('.tab');
@@ -319,17 +335,9 @@ function filterPromotionsTable() {
     
     let showRow = true;
     
-    if (searchTerm && !facultyName.includes(searchTerm)) {
-      showRow = false;
-    }
-    
-    if (selectedDept && department !== selectedDept) {
-      showRow = false;
-    }
-    
-    if (selectedStatus && !rowStatus.includes(selectedStatus)) {
-      showRow = false;
-    }
+    if (searchTerm && !facultyName.includes(searchTerm)) showRow = false;
+    if (selectedDept && department !== selectedDept) showRow = false;
+    if (selectedStatus && !rowStatus.includes(selectedStatus)) showRow = false;
     
     row.style.display = showRow ? '' : 'none';
   }
@@ -367,21 +375,10 @@ function filterRegularizationsTable() {
     
     let showRow = true;
     
-    if (searchTerm && !facultyName.includes(searchTerm)) {
-      showRow = false;
-    }
-    
-    if (selectedDept && department !== selectedDept) {
-      showRow = false;
-    }
-    
-    if (selectedTenure && tenure !== selectedTenure) {
-      showRow = false;
-    }
-    
-    if (selectedStatus && status !== selectedStatus) {
-      showRow = false;
-    }
+    if (searchTerm && !facultyName.includes(searchTerm)) showRow = false;
+    if (selectedDept && department !== selectedDept) showRow = false;
+    if (selectedTenure && tenure !== selectedTenure) showRow = false;
+    if (selectedStatus && status !== selectedStatus) showRow = false;
     
     row.style.display = showRow ? '' : 'none';
   }
@@ -406,14 +403,12 @@ document.querySelectorAll('.review-promotion-btn').forEach(btn => {
   btn.addEventListener('click', (e) => {
     currentRow = e.target.closest('tr');
     currentApplicationId = e.target.getAttribute('data-application-id');
-    
-    // Get faculty ID from the row's data attribute
     currentFacultyId = currentRow.getAttribute('data-faculty-id');
     
     console.log('Captured Faculty ID:', currentFacultyId);
     
+    showModalLoading(true);  // Show loading
     loadPromotionDetails(currentApplicationId);
-    reviewModal.style.display = 'flex';
   });
 });
 
@@ -449,11 +444,17 @@ function loadPromotionDetails(applicationId) {
         }
         
         setupDocumentLinks(applicationId, data);
+        
+        // Hide loading and show modal
+        showModalLoading(false);
+        reviewModal.style.display = 'flex';
       } else {
+        showModalLoading(false);
         alert('Error: ' + result.error);
       }
     })
     .catch(error => {
+      showModalLoading(false);
       console.error('Error:', error);
       alert('Failed to load details');
     });
@@ -500,7 +501,7 @@ closeModal.addEventListener('click', () => {
   pdfFrame.src = '';
 });
 
-// VIEW PROFILE BUTTON - PLACE HERE AFTER VARIABLES ARE DEFINED
+// VIEW PROFILE BUTTON
 document.getElementById('viewProfileBtn').addEventListener('click', () => {
   console.log('View Profile clicked. Faculty ID:', currentFacultyId);
   
@@ -509,7 +510,7 @@ document.getElementById('viewProfileBtn').addEventListener('click', () => {
     return;
   }
   
-  window.location.href = `hr_employee_profile/${currentFacultyId}`;
+  window.location.href = `/hr_employee_profile/${currentFacultyId}`;
 });
 
 // FORWARD TO VPAA
@@ -573,5 +574,5 @@ document.querySelectorAll('.initiate-reg-btn').forEach(btn => {
   });
 });
 </script>
-
 {% endblock %}
+

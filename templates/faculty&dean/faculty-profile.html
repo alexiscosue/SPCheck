@@ -1,14 +1,19 @@
 {% if is_hr_viewing %}
     {% extends "hrmd/hr-base.html" %}
-{% else if is_vp_viewing %}
+{% elif is_vp_viewing %}
     {% extends "vp&pres/vp-base.html" %}
 {% else %}
     {% extends "faculty&dean/faculty-base.html" %}
 {% endif %}
 
-{% block title %}{% if is_hr_viewing %}{{ firstname }}'s Profile{% else %}My Profile{% endif %}{% endblock %}
+{% block title %}
+  {% if is_hr_viewing}
+    {{ firstname }}'s Profile
+      {% elif is_vp_viewing %}
+        {{ firstname }}'s Profile
+          {% else %}My Profile{% endif %}{% endblock %}
 
-{% block page_title %}{% if is_hr_viewing %}{{ firstname }}'s Profile{% else %}My Profile{% endif %}{% endblock %}
+{% block page_title %}{% if is_hr_viewing or is_vp_viewing %}{{ firstname }}'s Profile{% else %}My Profile{% endif %}{% endblock %}
 
 {% block content %}
 <!-- Profile Header -->
