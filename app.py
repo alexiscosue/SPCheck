@@ -3990,11 +3990,20 @@ def faculty_promotion():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Get faculty ID, hire date, AND current rank from profile table
+    # ✅ Get faculty info for base template (name, college, profile image)
     cursor.execute("""
-        SELECT p.personnel_id, p.hiredate, pr.position 
+        SELECT 
+            p.personnel_id, 
+            p.hiredate, 
+            pr.position,
+            p.firstname,
+            p.lastname,
+            p.honorifics,
+            c.collegename,
+            pr.profilepic
         FROM personnel p
         LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+        LEFT JOIN college c ON p.college_id = c.college_id
         WHERE p.user_id = %s
     """, (user_id,))
     
@@ -4005,7 +4014,19 @@ def faculty_promotion():
         return_db_connection(conn)
         return "Faculty record not found", 400
     
-    faculty_id, hire_date, current_rank = result
+    faculty_id, hire_date, current_rank, firstname, lastname, honorifics, college, profilepic = result
+    
+    # ✅ Build faculty name for base template
+    if honorifics:
+        faculty_name = f"{firstname} {lastname}, {honorifics}"
+    else:
+        faculty_name = f"{firstname} {lastname}"
+    
+    # ✅ Convert profile pic to base64
+    profile_image_base64 = ''
+    if profilepic:
+        import base64
+        profile_image_base64 = f"data:image/jpeg;base64,{base64.b64encode(bytes(profilepic)).decode('utf-8')}"
     
     # Define rank hierarchy
     rank_hierarchy = [
@@ -4032,6 +4053,7 @@ def faculty_promotion():
     regularization_status = "No hire date"
     regularization_message = "Contact HRMD to update your hire date."
     tenure_type = "Unknown"
+    can_apply_for_promotion = False
     
     if hire_date:
         # Calculate years and months
@@ -4054,6 +4076,7 @@ def faculty_promotion():
             regularization_status = f"Probationary (Year {years_employed + 1} of 3)"
             months_remaining = probation_months - total_months_employed
             regularization_message = f"ℹ️ {months_remaining} months until eligible for Regular status."
+            can_apply_for_promotion = False
             
         elif 3 <= years_employed < 7:
             # Regular (3-7 years)
@@ -4065,6 +4088,7 @@ def faculty_promotion():
             regularization_status = f"Regular Employee (Year {years_past_probation + 1} of 4)"
             years_to_tenure = 7 - years_employed
             regularization_message = f"✅ You are a Regular employee. {years_to_tenure} year{'s' if years_to_tenure != 1 else ''} until eligible for Tenured status."
+            can_apply_for_promotion = True
             
         else:
             # Tenured (7+ years)
@@ -4072,6 +4096,7 @@ def faculty_promotion():
             regularization_percentage = 100
             regularization_status = "Tenured Employee"
             regularization_message = "✅ You have achieved Tenured status."
+            can_apply_for_promotion = True
     
     # === CHECK FOR ACTIVE REGULARIZATION APPLICATION ===
     cursor.execute("""
@@ -4177,6 +4202,12 @@ def faculty_promotion():
     
     # Build template data
     template_data = {
+        # ✅ Base template variables
+        'faculty_name': faculty_name,
+        'college': college or 'College of Computer Studies',
+        'profile_image_base64': profile_image_base64,
+        
+        # Promotion-specific data
         'regularization_percentage': regularization_percentage,
         'regularization_status': regularization_status,
         'regularization_message': regularization_message,
@@ -4188,6 +4219,7 @@ def faculty_promotion():
         'current_rank': current_rank,
         'available_ranks': available_ranks,
         'application_history': application_history,
+        'can_apply_for_promotion': can_apply_for_promotion,
         'application_id': None,
         'current_status': None,
         'date_submitted': None,
@@ -4221,6 +4253,8 @@ def faculty_promotion():
         })
     
     return render_template('faculty&dean/faculty-promotion.html', **template_data)
+
+
 
 
 @app.route('/faculty_profile')
@@ -4328,7 +4362,6 @@ def hr_promotions():
             })
         
         # === FETCH ELIGIBLE FACULTY + ACTIVE REGULARIZATIONS ===
-        # First get eligible faculty (not yet in process)
         cursor.execute("""
             SELECT 
                 p.personnel_id,
@@ -4356,7 +4389,6 @@ def hr_promotions():
             
             UNION ALL
             
-            -- Also get active regularization applications
             SELECT 
                 p.personnel_id,
                 p.firstname,
@@ -4434,7 +4466,10 @@ def hr_promotions():
                 'has_application': bool(reg_status)
             })
         
-        return render_template('hrmd/hr-promotions.html', 
+        return render_template('hrmd/hr-promotions.html',
+                             hr_name=personnel_info.get('hr_name', 'HR Admin'),
+                             college=personnel_info.get('college', 'HRMD'),
+                             profile_image_base64=personnel_info.get('profile_image_base64', ''),
                              personnelinfo=personnel_info,
                              promotions=promotions_list,
                              regularizations=regularizations_list)
@@ -4443,11 +4478,16 @@ def hr_promotions():
         print(f"Error in hr_promotions route: {e}")
         import traceback
         traceback.print_exc()
-        return render_template('hrmd/hr-promotions.html', 
-                             personnelinfo=get_personnel_info(session['user_id']),
+        
+        personnel_info = get_personnel_info(session['user_id'])
+        
+        return render_template('hrmd/hr-promotions.html',
+                             hr_name=personnel_info.get('hr_name', 'HR Admin'),
+                             college=personnel_info.get('college', 'HRMD'),
+                             profile_image_base64=personnel_info.get('profile_image_base64', ''),
+                             personnelinfo=personnel_info,
                              promotions=[],
                              regularizations=[])
-
 
 
 @app.route('/hr_profile')
@@ -4467,7 +4507,7 @@ def hr_settings():
     return render_template('hrmd/hr-settings.html', **personnel_info)
 
 @app.route('/vp_promotions')
-@require_auth([20004, 20005])  # VPAA and President
+@require_auth([20004, 20005])
 def vp_promotions():
     """VP/President Promotions Dashboard with promotions and regularizations"""
     try:
@@ -4527,7 +4567,7 @@ def vp_promotions():
                 'submitteddate': date_submitted.strftime('%Y-%m-%d') if date_submitted else 'N/A'
             })
         
-        # === FETCH ACTIVE REGULARIZATIONS (only those in progress for VP/Pres review) ===
+        # === FETCH ACTIVE REGULARIZATIONS ===
         cursor.execute("""
             SELECT 
                 p.personnel_id,
@@ -4603,7 +4643,10 @@ def vp_promotions():
                 'has_application': True
             })
         
-        return render_template('vp&pres/vp-promotion.html', 
+        return render_template('vp&pres/vp-promotion.html',
+                             vp_name=personnel_info.get('vp_name', 'VP Admin'),
+                             college=personnel_info.get('college', 'Office of the VP'),
+                             profile_image_base64=personnel_info.get('profile_image_base64', ''),
                              personnelinfo=personnel_info,
                              promotions=promotions_list,
                              regularizations=regularizations_list,
@@ -4613,11 +4656,19 @@ def vp_promotions():
         print(f"Error in vp_promotions route: {e}")
         import traceback
         traceback.print_exc()
-        return render_template('vp&pres/vp-promotion.html', 
-                             personnelinfo=get_personnel_info(session['user_id']),
+        
+        personnel_info = get_personnel_info(session['user_id'])
+        
+        return render_template('vp&pres/vp-promotion.html',
+                             vp_name=personnel_info.get('vp_name', 'VP Admin'),
+                             college=personnel_info.get('college', 'Office of the VP'),
+                             profile_image_base64=personnel_info.get('profile_image_base64', ''),
+                             personnelinfo=personnel_info,
                              promotions=[],
                              regularizations=[],
                              user_role=session.get('user_role'))
+
+
 
 
 # === REGULARIZATION API ROUTES FOR VP/PRESIDENT ===
@@ -5700,6 +5751,78 @@ def approve_regularization():
         if conn:
             conn.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/faculty/promotion/eligibility')
+@require_auth([20001, 20002])
+def api_promotion_eligibility():
+    """Check if faculty is eligible for promotion"""
+    try:
+        user_id = session.get('user_id')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get faculty hire date
+        cursor.execute("""
+            SELECT personnel_id, hiredate 
+            FROM personnel 
+            WHERE user_id = %s
+        """, (user_id,))
+        
+        result = cursor.fetchone()
+        if not result:
+            cursor.close()
+            return_db_connection(conn)
+            return jsonify({'success': False, 'error': 'Faculty not found'})
+        
+        personnel_id, hire_date = result
+        
+        # Calculate years employed
+        from datetime import date
+        today = date.today()
+        years_employed = 0
+        can_apply = False
+        tenure_type = "Unknown"
+        
+        if hire_date:
+            years_employed = today.year - hire_date.year
+            months_employed = today.month - hire_date.month
+            
+            if months_employed < 0:
+                years_employed -= 1
+            
+            # Determine eligibility
+            if years_employed >= 3:
+                can_apply = True
+                tenure_type = "Regular" if years_employed < 7 else "Tenured"
+            else:
+                can_apply = False
+                tenure_type = "Probationary"
+        
+        # Check for active promotion application
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM promotion_application 
+            WHERE faculty_id = %s AND final_decision IS NULL
+        """, (personnel_id,))
+        
+        has_active = cursor.fetchone()[0] > 0
+        
+        cursor.close()
+        return_db_connection(conn)
+        
+        return jsonify({
+            'success': True,
+            'can_apply': can_apply,
+            'tenure_type': tenure_type,
+            'years_employed': years_employed,
+            'has_active_application': has_active
+        })
+        
+    except Exception as e:
+        print(f"Error checking promotion eligibility: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
 
 
 if __name__ == "__main__":
