@@ -5,458 +5,509 @@
 {% block page_title %}My Application{% endblock %}
 
 {% block content %}
-    <section class="grid">
+<section class="grid">
 
-      <!-- Stepper -->
-      <div class="card" style="grid-column:1 / -1; padding:20px">
-  <h3>Promotion Application Progress</h3>
-  <div class="stepper">
-    <div class="step active {% if resume_cv and cover_letter %}done{% endif %}">
-      <div class="circle">1</div>
-      Submitted
-      <small>{{ date_submitted.strftime("%Y-%m-%d") if date_submitted else '' }}</small>
-    </div>
-    <div class="step {% if current_status == 'hrmd' %}active{% elif hrmd_approval_date %}done{% endif %}">
-      <div class="circle">2</div>
-      HRMD Review
-      <small>
-        {% if current_status == 'hrmd' %}
-          In Progress
-        {% elif hrmd_approval_date %}
-          Approved {{ hrmd_approval_date.strftime("%Y-%m-%d") if hrmd_approval_date else '' }}
-        {% else %}
-          Not yet
-        {% endif %}
-      </small>
-    </div>
-    <div class="step {% if current_status == 'vpa' %}active{% elif vpa_approval_date %}done{% endif %}">
-      <div class="circle">3</div>
-      VP Admin Review
-      <small>
-        {% if current_status == 'vpa' %}
-          In Progress
-        {% elif vpa_approval_date %}
-          Approved {{ vpa_approval_date.strftime("%Y-%m-%d") if vpa_approval_date else '' }}
-        {% else %}
-          Not yet
-        {% endif %}
-      </small>
-    </div>
-    <div class="step {% if current_status == 'pres' %}active{% elif pres_approval_date %}done{% endif %}">
-      <div class="circle">4</div>
-      President Approval
-      <small>
-        {% if current_status == 'pres' %}
-          In Progress
-        {% elif pres_approval_date %}
-          Approved {{ pres_approval_date.strftime("%Y-%m-%d") if pres_approval_date else '' }}
-        {% else %}
-          Not yet
-        {% endif %}
-      </small>
+  <!-- Stepper -->
+  <div class="card" style="grid-column:1 / -1; padding:20px">
+    <h3>Promotion Application Progress</h3>
+    <div class="stepper">
+      <div class="step active {% if resume_cv and cover_letter %}done{% endif %}">
+        <div class="circle">1</div>
+        Submitted
+        <small>{{ date_submitted.strftime("%Y-%m-%d") if date_submitted else '' }}</small>
+      </div>
+      <div class="step {% if current_status == 'hrmd' %}active{% elif hrmd_approval_date %}done{% endif %}">
+        <div class="circle">2</div>
+        HRMD Review
+        <small>
+          {% if current_status == 'hrmd' %}
+            In Progress
+          {% elif hrmd_approval_date %}
+            Approved {{ hrmd_approval_date.strftime("%Y-%m-%d") if hrmd_approval_date else '' }}
+          {% else %}
+            Not yet
+          {% endif %}
+        </small>
+      </div>
+      <div class="step {% if current_status == 'vpa' %}active{% elif vpa_approval_date %}done{% endif %}">
+        <div class="circle">3</div>
+        VP Admin Review
+        <small>
+          {% if current_status == 'vpa' %}
+            In Progress
+          {% elif vpa_approval_date %}
+            Approved {{ vpa_approval_date.strftime("%Y-%m-%d") if vpa_approval_date else '' }}
+          {% else %}
+            Not yet
+          {% endif %}
+        </small>
+      </div>
+      <div class="step {% if current_status == 'pres' %}active{% elif pres_approval_date %}done{% endif %}">
+        <div class="circle">4</div>
+        President Approval
+        <small>
+          {% if current_status == 'pres' %}
+            In Progress
+          {% elif pres_approval_date %}
+            Approved {{ pres_approval_date.strftime("%Y-%m-%d") if pres_approval_date else '' }}
+          {% else %}
+            Not yet
+          {% endif %}
+        </small>
+      </div>
     </div>
   </div>
-</div>
 
-      <!-- Two-column layout -->
-      <div class="grid-2" style="grid-column:1 / -1">
+  <!-- Two-column layout -->
+  <div class="grid-2" style="grid-column:1 / -1">
 
- <!-- Regularization -->
-        <div class="card-promotion" style="padding:20px">
-          <div class="card-header">
-            <i class='bx bx-pie-chart-alt'></i>
-            <span>Regularization Progress</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:16px;margin-top:12px">
-            <div class="progress-circle" data-percentage="{{ regularization_percentage }}">
-              <span>{{ regularization_percentage }}%</span>
-            </div>
-            <div>
-              <p style="font-size:14px">
-                <strong>Status:</strong> {{ regularization_status }}
-              </p>
-              <p style="font-size:14px">
-                <strong>Tenure Type:</strong> 
-                {% if tenure_type == 'Probationary' %}
-                  <span class="status pending">{{ tenure_type }}</span>
-                {% elif tenure_type == 'Regular' %}
-                  <span class="status ok">{{ tenure_type }}</span>
-                {% elif tenure_type == 'Tenured' %}
-                  <span class="status completed">{{ tenure_type }}</span>
-                {% else %}
-                  <span class="status nu">{{ tenure_type }}</span>
-                {% endif %}
-              </p>
-              <p style="font-size:14px">
-                <strong>Hire Date:</strong> {{ hire_date.strftime('%B %d, %Y') if hire_date else 'Not set' }}
-              </p>
-              <p style="font-size:14px">
-                <strong>Years Employed:</strong> {{ years_employed }} year{{ 's' if years_employed != 1 else '' }}
-              </p>
-            </div>
-          </div>
-          <p style="font-size:13px;color:var(--muted);margin-top:10px">
-            {{ regularization_message }}
+    <!-- Regularization Status (View Only - HR Initiated) -->
+    <div class="card-promotion" style="padding:20px">
+      <div class="card-header">
+        <i class='bx bx-shield-check'></i>
+        <span>Tenure Regularization Status</span>
+      </div>
+      
+      {% if regularization_status_data %}
+      <!-- Faculty has an active regularization process -->
+      <div style="margin-top:16px;">
+        <div style="background:#f0f9ff; border-left:4px solid #3b82f6; border-radius:8px; padding:16px; margin-bottom:16px;">
+          <p style="margin:0 0 8px 0; font-size:14px; color:#1e40af; font-weight:600;">
+            <i class='bx bx-info-circle'></i> Regularization Initiated by HR
+          </p>
+          <p style="margin:0; font-size:13px; color:#1e3a8a; line-height:1.6;">
+            Your regularization to <strong>{{ regularization_status_data.requested_tenure }}</strong> status is currently being processed.
           </p>
         </div>
-
-<!-- Promotion Application -->
-<div class="card-promotion" style="padding:20px;">
-  
-  {% if available_ranks and available_ranks|length > 0 %}
-  <!-- User CAN apply for promotion -->
-  <form id="promotion-doc-upload-form" enctype="multipart/form-data" method="POST" action="/faculty/promotion/upload">
-
-    <!-- Current Rank Display -->
-    <div style="padding:12px; background:#f0f9ff; border-left:4px solid #3b82f6; border-radius:6px; margin-bottom:15px;">
-      <p style="margin:0; font-size:13px; color:#1e40af;">
-        <strong>Your Current Rank:</strong> {{ current_rank or 'Not set' }}
-      </p>
-    </div>
-
-{% if not upload_locked %}
-<!-- Requested Rank Selection - STYLED LIKE UPLOAD FIELDS -->
-<div class="upload-field" style="position: relative; margin-bottom:10px; z-index: 100;">
-  <select id="requested_rank" name="requested_rank" required {% if upload_locked %}disabled{% endif %} style="display:none;">
-    <option value="">Select rank to apply for...</option>
-    {% for rank in available_ranks %}
-      <option value="{{ rank }}">{{ rank }}</option>
-    {% endfor %}
-  </select>
-  <div class="custom-upload-label" id="rank-selector" style="cursor:pointer; display: flex; align-items: center; width: 100%;">
-    <div style="display: flex; align-items: center; gap: 8px;">
-      <i class='bx bx-award'></i>
-      <span class="label-text" style="font-weight: strong;">Requested Rank for Promotion</span>
-    </div>
-    <span class="status nu" id="requested_rank_status">Not Selected</span>
-  </div>
-  <!-- Dropdown appears when clicked -->
-  <div id="rank-dropdown" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #ddd; border-radius:6px; margin-top:4px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:1000; max-height:200px; overflow-y:auto;">
-    {% for rank in available_ranks %}
-      <div class="rank-option" data-value="{{ rank }}" style="padding:12px; cursor:pointer; transition:background 0.2s; border-bottom:1px solid #f0f0f0; font-size:14px; color:#333;">
-        {{ rank }}
+        
+        <!-- Regularization Progress Stepper -->
+        <div class="stepper" style="margin-top:16px;">
+          <div class="step {% if regularization_status_data.hrmd_date %}done{% else %}active{% endif %}">
+            <div class="circle">1</div>
+            HR Endorsement
+            <small>{{ regularization_status_data.hrmd_date.strftime("%Y-%m-%d") if regularization_status_data.hrmd_date else 'Pending' }}</small>
+          </div>
+          <div class="step {% if regularization_status_data.vpa_date %}done{% elif regularization_status_data.current_status == 'vpa' %}active{% endif %}">
+            <div class="circle">2</div>
+            VP Admin Review
+            <small>{{ regularization_status_data.vpa_date.strftime("%Y-%m-%d") if regularization_status_data.vpa_date else 'Not yet' }}</small>
+          </div>
+          <div class="step {% if regularization_status_data.pres_date %}done{% elif regularization_status_data.current_status == 'pres' %}active{% endif %}">
+            <div class="circle">3</div>
+            President Approval
+            <small>{{ regularization_status_data.pres_date.strftime("%Y-%m-%d") if regularization_status_data.pres_date else 'Not yet' }}</small>
+          </div>
+        </div>
+        
+        <div style="margin-top:16px; padding:12px; background:#fef3c7; border-left:4px solid #f59e0b; border-radius:6px;">
+          <p style="margin:0; font-size:13px; color:#92400e;">
+            <strong>Current Stage:</strong> {{ regularization_status_data.current_status|title }}
+          </p>
+        </div>
       </div>
-    {% endfor %}
-  </div>
-</div>
-
-{% else %}
-    <div style="margin-top:5px;"> 
-      <div style="padding:12px; background:#fef3c7; border-left:4px solid #f59e0b; border-radius:6px; margin-bottom:10px;">
-        <p style="margin:0; font-size:13px; color:#92400e;">
-          <strong>Requested Rank:</strong> {{ requested_rank or 'Not specified' }}
+      
+      {% else %}
+      <!-- No active regularization process -->
+      <div style="margin-top:16px;">
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
+          <div class="progress-circle" data-percentage="{{ regularization_percentage }}">
+            <span>{{ regularization_percentage }}%</span>
+          </div>
+          <div>
+            <p style="font-size:14px">
+              <strong>Current Status:</strong> {{ regularization_status }}
+            </p>
+            <p style="font-size:14px">
+              <strong>Tenure Type:</strong> 
+              {% if tenure_type == 'Probationary' %}
+                <span class="status pending">{{ tenure_type }}</span>
+              {% elif tenure_type == 'Regular' %}
+                <span class="status ok">{{ tenure_type }}</span>
+              {% elif tenure_type == 'Tenured' %}
+                <span class="status completed">{{ tenure_type }}</span>
+              {% else %}
+                <span class="status nu">{{ tenure_type }}</span>
+              {% endif %}
+            </p>
+            <p style="font-size:14px">
+              <strong>Hire Date:</strong> {{ hire_date.strftime('%B %d, %Y') if hire_date else 'Not set' }}
+            </p>
+            <p style="font-size:14px">
+              <strong>Years Employed:</strong> {{ years_employed }} year{{ 's' if years_employed != 1 else '' }}
+            </p>
+          </div>
+        </div>
+        
+        <div style="padding:12px; background:#fffbeb; border-left:4px solid #fbbf24; border-radius:6px;">
+          <p style="margin:0; font-size:13px; color:#92400e;">
+            <i class='bx bx-info-circle'></i> <strong>Note:</strong> Regularization is initiated by HR once you meet the eligibility criteria (3+ years of service with required degree). No application is needed from your end.
+          </p>
+        </div>
+        
+        <p style="font-size:13px;color:var(--muted);margin-top:12px">
+          {{ regularization_message }}
         </p>
       </div>
+      {% endif %}
     </div>
 
-{% endif %}
-    <div class="upload-field" style="position: relative;">
-      <input id="resume_cv" type="file" name="resume_cv" style="display:none;" required {% if upload_locked %}disabled{% endif %}/>
-      <label for="resume_cv" class="custom-upload-label">
-        <i class='bx bx-file'></i>
-        <span class="label-text">Resume / CV</span>
-        {% if resume_cv is not none %}
-          <span class="status ok" id="resume_cv_status"> {{ resume_filename }}</span>    
-        {% else %}
-          <span class="status nu" id="resume_cv_status">Not Uploaded</span>
-        {% endif %}
-      </label>
-    </div>
-
-    <div class="upload-field" style="margin-top:10px; position: relative;">
-      <input id="cover_letter" type="file" name="cover_letter" style="display:none;" required {% if upload_locked %}disabled{% endif %}/>
-      <label for="cover_letter" class="custom-upload-label">
-        <i class='bx bx-file'></i>
-        <span class="label-text">Cover Letter</span>
-        {% if cover_letter is not none %}
-          <span class="status ok" id="cover_letter_status"> {{cover_letter_filename}}</span>   
-        {% else %}
-          <span class="status nu" id="cover_letter_status">Not Uploaded</span>
-        {% endif %}
-      </label>
-    </div>
-
-    {% if not upload_locked %}
-    <button class="btn-primary" style="margin-top:15px" type="submit">
-      <i class='bx bx-upload'></i> Submit Application
-    </button>
-    {% else %}
-    <div style="margin-top:10px;">
-      <button id="showResumeBtn" class="btn-primary" type="button" style="margin-top:5px;"> View Resume / CV </button>
-      <button id="showCoverLetterBtn" class="btn-primary" type="button" style="margin-top:5px;">View Cover Letter</button>
-      <button id="deleteSubmission" class="btn-primary" type="button" style="margin-top:5px;"><i class='bx bx-trash'></i> Delete Submission</button>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:10px">⚠️ Uploads are locked after submission.</p>
-    </div>
-    {% endif %}
-
-  </form>
-
-  {% else %}
-  <!-- User has reached HIGHEST RANK -->
-  <div style="text-align:center; padding:40px 20px;">
-    <div style="background:#f0fdf4; border:2px solid #86efac; border-radius:12px; padding:30px; margin-bottom:20px;">
-      <i class='bx bx-trophy' style="font-size:64px; color:#22c55e; display:block; margin-bottom:15px;"></i>
-      <h3 style="margin:0 0 10px 0; color:#166534; font-size:20px;">Congratulations!</h3>
-      <p style="margin:0; color:#15803d; font-size:15px; line-height:1.6;">
-        You have reached the highest academic rank: <strong>{{ current_rank }}</strong>
-      </p>
-    </div>
-    
-    <div style="padding:16px; background:#fffbeb; border-left:4px solid #fbbf24; border-radius:6px; text-align:left;">
-      <p style="margin:0 0 8px 0; font-size:13px; color:#92400e; font-weight:600;">
-        <i class='bx bx-info-circle'></i> No Further Promotions Available
-      </p>
-      <p style="margin:0; font-size:13px; color:#78350f; line-height:1.5;">
-        As a Professor, you hold the highest academic rank in the university. Continue your excellent work in teaching, research, and service to the institution.
-      </p>
-    </div>
-  </div>
-  {% endif %}
-
-</div>
-
-{% if application_id %}
-<div id="document-modal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:9999; justify-content:center; align-items:center;">
-  <div class="modal-content" style="position:relative; width:80%; max-width:800px; height:80%; background:#fff; border-radius:8px; box-shadow:0 0 15px rgba(0,0,0,0.3); overflow:hidden; display:flex; flex-direction:column;">
-    <div class="modal-header" style="padding:10px 15px; background:#ececec; display:flex; justify-content:space-between; align-items:center;">
-      <h3 id="modal-title" style="margin:0; font-size:1.25rem;">Resume / CV</h3>
-      <button id="modal-close" style="background:none; border:none; font-size:1.5rem; cursor:pointer;">&times;</button>
-    </div>
-    <div class="modal-body" style="flex-grow:1; overflow:auto;">
-      <embed id="modal-embed" type="application/pdf" style="width:100%; height:100%; border:none;"></embed>
-    </div>
-  </div>
-</div>
-{% endif %}
-
-<!-- Bottom Section - Always Visible -->
-<div style="grid-column:1 / -1; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
-  <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
-
-    <!-- SPC Guidelines -->
+    <!-- Promotion Application -->
     <div class="card-promotion" style="padding:20px;">
-      <h4 style="margin:0 0 15px 0; font-size:16px; font-weight:600; color:#333; display:flex; align-items:center; gap:8px;">
-        📘 SPC Guidelines
-      </h4>
-      <ul style="line-height:1.8; font-size:14px; margin:0; padding-left:20px; color:#555;">
-        <li><strong>Regularization:</strong> Teaching: 3 yrs with Master's; Non-Teaching: 6 mos with good evaluation.</li>
-        <li><strong>Promotion:</strong> Degree-based (Bachelor's → Master's → Doctorate).</li>
-        <li>Research involvement recognized separately, not part of rank promotion.</li>
-      </ul>
-    </div>
-
-<!-- Application History -->
-<div class="card-promotion" style="padding:20px;">
-  <h4 style="margin:0 0 15px 0; font-size:16px; font-weight:600; color:#333; display:flex; align-items:center; gap:8px;">
-    📂 Application History
-  </h4>
-  {% if application_history and application_history|length > 0 %}
-  <div class="history-table-wrapper">
-    <table>
-      <thead>
-        <tr>
-          <th>Date Submitted</th>
-          <th>Requested Position</th>
-          <th>Status</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for app in application_history %}
-        <tr>
-          <td>{{ app.date_submitted.strftime('%b %d, %Y') if app.date_submitted else 'N/A' }}</td>
-          <td><strong>{{ app.requested_position or 'Not specified' }}</strong></td>
-          <td>
-            {% if 'approved' in app.final_decision|lower %}
-              <span class="status ok">✓ Approved</span>
-            {% elif 'rejected' in app.final_decision|lower %}
-              <span class="status rejected">✗ Rejected</span>
-            {% else %}
-              <span class="status pending">⏳ {{ app.current_status|title }}</span>
-            {% endif %}
-          </td>
-          <td>
-            <button class="btn-view-history" 
-                    data-date="{{ app.date_submitted.strftime('%B %d, %Y') if app.date_submitted else 'N/A' }}"
-                    data-status="{{ app.current_status }}"
-                    data-decision="{{ app.final_decision }}"
-                    data-remarks="{{ app.remarks or 'No remarks' }}"
-                    data-hrmd-date="{{ app.hrmd_approval_date.strftime('%B %d, %Y') if app.hrmd_approval_date else 'Not yet approved' }}"
-                    data-vpa-date="{{ app.vpa_approval_date.strftime('%B %d, %Y') if app.vpa_approval_date else 'Not yet approved' }}"
-                    data-pres-date="{{ app.pres_approval_date.strftime('%B %d, %Y') if app.pres_approval_date else 'Not yet approved' }}"
-                    data-requested-pos="{{ app.requested_position or 'Not specified' }}"
-                    style="padding:6px 12px; background:#3b82f6; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:12px; font-weight:500;">
-              <i class='bx bx-show'></i> View
-            </button>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% else %}
-  <div class="table-empty-state">
-    <i class='bx bx-history'></i>
-    <p>No previous applications found.</p>
-  </div>
-  {% endif %}
-</div>
-
-    <!-- Need Help -->
-    <div class="card-promotion" style="padding:20px;">
-      <h4 style="margin:0 0 15px 0; font-size:16px; font-weight:600; color:#333; display:flex; align-items:center; gap:8px;">
-        ❓ Need Help?
-      </h4>
-      <ul style="line-height:1.8; font-size:14px; margin:0; padding-left:20px; color:#555;">
-        <li>📄 For promotion document requirements, check the HRMD portal or ask your department secretary.</li>
-        <li>📧 For questions on regularization, email <strong>hrmd@spc.edu.ph</strong>.</li>
-        <li>📞 For urgent concerns, call the HRMD office at (032) 123-4567.</li>
-      </ul>
-    </div>
-
-  </div>
-</div>
-
-<!-- Application History Details Modal -->
-<div id="historyModal" class="history-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:9999; justify-content:center; align-items:center;">
-  <div class="history-modal-content" style="position:relative; width:90%; max-width:700px; background:#fff; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,0.3); overflow:hidden; animation: slideIn 0.3s ease;">
-    
-    <!-- Modal Header -->
-    <div style="background:linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); padding:24px; color:#fff; position:relative;">
-      <h3 style="margin:0; font-size:20px; font-weight:600; display:flex; align-items:center; gap:10px;">
-        <i class='bx bx-file-blank'></i> Application Details
-      </h3>
-      <button id="closeHistoryModal" style="position:absolute; top:20px; right:20px; background:rgba(255,255,255,0.2); border:none; color:#fff; font-size:24px; width:36px; height:36px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s;">
-        &times;
-      </button>
-    </div>
-
-    <!-- Modal Body -->
-    <div style="padding:24px; max-height:500px; overflow-y:auto;">
       
-      <!-- Status Badge -->
-      <div style="margin-bottom:24px; padding:16px; background:#f8fafc; border-radius:8px; border-left:4px solid #3b82f6;">
-        <div style="display:flex; align-items:center; justify-content:space-between;">
-          <div>
-            <p style="margin:0; font-size:13px; color:#64748b; font-weight:500;">Application Status</p>
-            <p id="modalStatus" style="margin:4px 0 0 0; font-size:16px; font-weight:600; color:#1e293b;"></p>
-          </div>
-          <div id="modalDecisionBadge" style="padding:8px 16px; border-radius:8px; font-weight:600; font-size:14px;"></div>
-        </div>
-      </div>
+      {% if available_ranks and available_ranks|length > 0 %}
+      <!-- User CAN apply for promotion -->
+      <form id="promotion-doc-upload-form" enctype="multipart/form-data" method="POST" action="/faculty/promotion/upload">
 
-      <!-- Details Grid -->
-      <div style="display:grid; gap:20px;">
+        <!-- Current Rank Display -->
+        <div style="padding:12px; background:#f0f9ff; border-left:4px solid #3b82f6; border-radius:6px; margin-bottom:15px;">
+          <p style="margin:0; font-size:13px; color:#1e40af;">
+            <strong>Your Current Rank:</strong> {{ current_rank or 'Not set' }}
+          </p>
+        </div>
+
+        {% if not upload_locked %}
+        <!-- Requested Rank Selection - STYLED LIKE UPLOAD FIELDS -->
+        <div class="upload-field" style="position: relative; margin-bottom:10px; z-index: 100;">
+          <select id="requested_rank" name="requested_rank" required {% if upload_locked %}disabled{% endif %} style="display:none;">
+            <option value="">Select rank to apply for...</option>
+            {% for rank in available_ranks %}
+              <option value="{{ rank }}">{{ rank }}</option>
+            {% endfor %}
+          </select>
+          <div class="custom-upload-label" id="rank-selector" style="cursor:pointer; display: flex; align-items: center; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <i class='bx bx-award'></i>
+              <span class="label-text" style="font-weight: strong;">Requested Rank for Promotion</span>
+            </div>
+            <span class="status nu" id="requested_rank_status">Not Selected</span>
+          </div>
+          <!-- Dropdown appears when clicked -->
+          <div id="rank-dropdown" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #ddd; border-radius:6px; margin-top:4px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:1000; max-height:200px; overflow-y:auto;">
+            {% for rank in available_ranks %}
+              <div class="rank-option" data-value="{{ rank }}" style="padding:12px; cursor:pointer; transition:background 0.2s; border-bottom:1px solid #f0f0f0; font-size:14px; color:#333;">
+                {{ rank }}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        {% else %}
+        <div style="margin-top:5px;"> 
+          <div style="padding:12px; background:#fef3c7; border-left:4px solid #f59e0b; border-radius:6px; margin-bottom:10px;">
+            <p style="margin:0; font-size:13px; color:#92400e;">
+              <strong>Requested Rank:</strong> {{ requested_rank or 'Not specified' }}
+            </p>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="upload-field" style="position: relative;">
+          <input id="resume_cv" type="file" name="resume_cv" style="display:none;" required {% if upload_locked %}disabled{% endif %}/>
+          <label for="resume_cv" class="custom-upload-label">
+            <i class='bx bx-file'></i>
+            <span class="label-text">Resume / CV</span>
+            {% if resume_cv is not none %}
+              <span class="status ok" id="resume_cv_status"> {{ resume_filename }}</span>    
+            {% else %}
+              <span class="status nu" id="resume_cv_status">Not Uploaded</span>
+            {% endif %}
+          </label>
+        </div>
+
+        <div class="upload-field" style="margin-top:10px; position: relative;">
+          <input id="cover_letter" type="file" name="cover_letter" style="display:none;" required {% if upload_locked %}disabled{% endif %}/>
+          <label for="cover_letter" class="custom-upload-label">
+            <i class='bx bx-file'></i>
+            <span class="label-text">Cover Letter</span>
+            {% if cover_letter is not none %}
+              <span class="status ok" id="cover_letter_status"> {{cover_letter_filename}}</span>   
+            {% else %}
+              <span class="status nu" id="cover_letter_status">Not Uploaded</span>
+            {% endif %}
+          </label>
+        </div>
+
+        {% if not upload_locked %}
+        <button class="btn-primary" style="margin-top:15px" type="submit">
+          <i class='bx bx-upload'></i> Submit Application
+        </button>
+        {% else %}
+        <div style="margin-top:10px;">
+          <button id="showResumeBtn" class="btn-primary" type="button" style="margin-top:5px;"> View Resume / CV </button>
+          <button id="showCoverLetterBtn" class="btn-primary" type="button" style="margin-top:5px;">View Cover Letter</button>
+          <button id="deleteSubmission" class="btn-primary" type="button" style="margin-top:5px;"><i class='bx bx-trash'></i> Delete Submission</button>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:10px">⚠️ Uploads are locked after submission.</p>
+        </div>
+        {% endif %}
+
+      </form>
+
+      {% else %}
+      <!-- User has reached HIGHEST RANK -->
+      <div style="text-align:center; padding:40px 20px;">
+        <div style="background:#f0fdf4; border:2px solid #86efac; border-radius:12px; padding:30px; margin-bottom:20px;">
+          <i class='bx bx-trophy' style="font-size:64px; color:#22c55e; display:block; margin-bottom:15px;"></i>
+          <h3 style="margin:0 0 10px 0; color:#166534; font-size:20px;">Congratulations!</h3>
+          <p style="margin:0; color:#15803d; font-size:15px; line-height:1.6;">
+            You have reached the highest academic rank: <strong>{{ current_rank }}</strong>
+          </p>
+        </div>
         
-        <!-- Requested Position -->
-        <div style="padding:16px; background:#eff6ff; border-radius:8px; border-left:4px solid #3b82f6;">
-          <p style="margin:0; font-size:12px; color:#1e40af; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">
-            🎯 Requested Position
+        <div style="padding:16px; background:#fffbeb; border-left:4px solid #fbbf24; border-radius:6px; text-align:left;">
+          <p style="margin:0 0 8px 0; font-size:13px; color:#92400e; font-weight:600;">
+            <i class='bx bx-info-circle'></i> No Further Promotions Available
           </p>
-          <p id="modalRequestedPos" style="margin:8px 0 0 0; font-size:16px; color:#1e3a8a; font-weight:600;"></p>
-        </div>
-
-        <!-- Date Submitted -->
-        <div>
-          <p style="margin:0; font-size:12px; color:#64748b; font-weight:500; text-transform:uppercase; letter-spacing:0.5px;">
-            📅 Date Submitted
+          <p style="margin:0; font-size:13px; color:#78350f; line-height:1.5;">
+            As a Professor, you hold the highest academic rank in the university. Continue your excellent work in teaching, research, and service to the institution.
           </p>
-          <p id="modalDate" style="margin:6px 0 0 0; font-size:15px; color:#1e293b; font-weight:500;"></p>
         </div>
-
-        <!-- Approval Timeline -->
-        <div style="padding:16px; background:#f0fdf4; border-radius:8px; border-left:4px solid #22c55e;">
-          <p style="margin:0 0 12px 0; font-size:12px; color:#166534; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">
-            ✓ Approval Timeline
-          </p>
-          
-          <div style="display:grid; gap:12px;">
-            <!-- HRMD Approval -->
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span style="font-size:14px; color:#166534; font-weight:500;">
-                <i class='bx bx-check-circle'></i> HRMD Approval
-              </span>
-              <span id="modalHrmdDate" style="font-size:13px; color:#15803d; font-weight:600;"></span>
-            </div>
-            
-            <!-- VPAA Approval -->
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span style="font-size:14px; color:#166534; font-weight:500;">
-                <i class='bx bx-check-circle'></i> VPAA Approval
-              </span>
-              <span id="modalVpaDate" style="font-size:13px; color:#15803d; font-weight:600;"></span>
-            </div>
-            
-            <!-- President Approval -->
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span style="font-size:14px; color:#166534; font-weight:500;">
-                <i class='bx bx-check-circle'></i> President Approval
-              </span>
-              <span id="modalPresDate" style="font-size:13px; color:#15803d; font-weight:600;"></span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Current Status -->
-        <div>
-          <p style="margin:0; font-size:12px; color:#64748b; font-weight:500; text-transform:uppercase; letter-spacing:0.5px;">
-            🔄 Current Stage
-          </p>
-          <p id="modalCurrentStatus" style="margin:6px 0 0 0; font-size:15px; color:#1e293b; font-weight:500;"></p>
-        </div>
-
-        <!-- Remarks -->
-        <div style="padding:16px; background:#fef3c7; border-radius:8px; border-left:4px solid #f59e0b;">
-          <p style="margin:0; font-size:12px; color:#92400e; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">
-            💬 Remarks
-          </p>
-          <p id="modalRemarks" style="margin:8px 0 0 0; font-size:14px; color:#451a03; line-height:1.6;"></p>
-        </div>
-
       </div>
-    </div>
+      {% endif %}
 
-    <!-- Modal Footer -->
-    <div style="padding:16px 24px; background:#f8fafc; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:10px;">
-      <button onclick="document.getElementById('historyModal').style.display='none'" style="padding:10px 20px; background:#fff; color:#64748b; border:1px solid #cbd5e1; border-radius:8px; cursor:pointer; font-weight:500; font-size:14px; transition:all 0.2s;">
-        Close
-      </button>
     </div>
 
   </div>
-</div>
 
-<style>
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-20px);
+  {% if application_id %}
+  <div id="document-modal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:9999; justify-content:center; align-items:center;">
+    <div class="modal-content" style="position:relative; width:80%; max-width:800px; height:80%; background:#fff; border-radius:8px; box-shadow:0 0 15px rgba(0,0,0,0.3); overflow:hidden; display:flex; flex-direction:column;">
+      <div class="modal-header" style="padding:10px 15px; background:#ececec; display:flex; justify-content:space-between; align-items:center;">
+        <h3 id="modal-title" style="margin:0; font-size:1.25rem;">Resume / CV</h3>
+        <button id="modal-close" style="background:none; border:none; font-size:1.5rem; cursor:pointer;">&times;</button>
+      </div>
+      <div class="modal-body" style="flex-grow:1; overflow:auto;">
+        <embed id="modal-embed" type="application/pdf" style="width:100%; height:100%; border:none;"></embed>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Bottom Section - Always Visible -->
+  <div style="grid-column:1 / -1; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+
+      <!-- SPC Guidelines -->
+      <div class="card-promotion" style="padding:20px;">
+        <h4 style="margin:0 0 15px 0; font-size:16px; font-weight:600; color:#333; display:flex; align-items:center; gap:8px;">
+          📘 SPC Guidelines
+        </h4>
+        <ul style="line-height:1.8; font-size:14px; margin:0; padding-left:20px; color:#555;">
+          <li><strong>Regularization:</strong> HR-initiated once eligible (3+ years with Master's degree).</li>
+          <li><strong>Promotion:</strong> Faculty-initiated, degree-based (requires documents).</li>
+          <li>Research involvement recognized separately, not part of rank promotion.</li>
+        </ul>
+      </div>
+
+      <!-- Application History -->
+      <div class="card-promotion" style="padding:20px;">
+        <h4 style="margin:0 0 15px 0; font-size:16px; font-weight:600; color:#333; display:flex; align-items:center; gap:8px;">
+          📂 Application History
+        </h4>
+        {% if application_history and application_history|length > 0 %}
+        <div class="history-table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Date Submitted</th>
+                <th>Requested Position</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for app in application_history %}
+              <tr>
+                <td>{{ app.date_submitted.strftime('%b %d, %Y') if app.date_submitted else 'N/A' }}</td>
+                <td><strong>{{ app.requested_position or 'Not specified' }}</strong></td>
+                <td>
+                  {% if 'approved' in app.final_decision|lower %}
+                    <span class="status ok">✓ Approved</span>
+                  {% elif 'rejected' in app.final_decision|lower %}
+                    <span class="status rejected">✗ Rejected</span>
+                  {% else %}
+                    <span class="status pending">⏳ {{ app.current_status|title }}</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <button class="btn-view-history" 
+                          data-date="{{ app.date_submitted.strftime('%B %d, %Y') if app.date_submitted else 'N/A' }}"
+                          data-status="{{ app.current_status }}"
+                          data-decision="{{ app.final_decision }}"
+                          data-remarks="{{ app.remarks or 'No remarks' }}"
+                          data-hrmd-date="{{ app.hrmd_approval_date.strftime('%B %d, %Y') if app.hrmd_approval_date else 'Not yet approved' }}"
+                          data-vpa-date="{{ app.vpa_approval_date.strftime('%B %d, %Y') if app.vpa_approval_date else 'Not yet approved' }}"
+                          data-pres-date="{{ app.pres_approval_date.strftime('%B %d, %Y') if app.pres_approval_date else 'Not yet approved' }}"
+                          data-requested-pos="{{ app.requested_position or 'Not specified' }}"
+                          style="padding:6px 12px; background:#7b1113; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:12px; font-weight:500;">
+                    <i class='bx bx-show'></i> View
+                  </button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="table-empty-state">
+          <i class='bx bx-history'></i>
+          <p>No previous applications found.</p>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Need Help -->
+      <div class="card-promotion" style="padding:20px;">
+        <h4 style="margin:0 0 15px 0; font-size:16px; font-weight:600; color:#333; display:flex; align-items:center; gap:8px;">
+          ❓ Need Help?
+        </h4>
+        <ul style="line-height:1.8; font-size:14px; margin:0; padding-left:20px; color:#555;">
+          <li>📄 For promotion document requirements, check the HRMD portal or ask your department secretary.</li>
+          <li>📧 For questions on regularization, email <strong>hrmd@spc.edu.ph</strong>.</li>
+          <li>📞 For urgent concerns, call the HRMD office at (032) 123-4567.</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Application History Details Modal -->
+  <div id="historyModal" class="history-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:9999; justify-content:center; align-items:center;">
+    <div class="history-modal-content" style="position:relative; width:90%; max-width:700px; background:#fff; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,0.3); overflow:hidden; animation: slideIn 0.3s ease;">
+      
+      <!-- Modal Header -->
+      <div style="background:linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); padding:24px; color:#fff; position:relative;">
+        <h3 style="margin:0; font-size:20px; font-weight:600; display:flex; align-items:center; gap:10px;">
+          <i class='bx bx-file-blank'></i> Application Details
+        </h3>
+        <button id="closeHistoryModal" style="position:absolute; top:20px; right:20px; background:rgba(255,255,255,0.2); border:none; color:#fff; font-size:24px; width:36px; height:36px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s;">
+          &times;
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div style="padding:24px; max-height:500px; overflow-y:auto;">
+        
+        <!-- Status Badge -->
+        <div style="margin-bottom:24px; padding:16px; background:#f8fafc; border-radius:8px; border-left:4px solid #3b82f6;">
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <div>
+              <p style="margin:0; font-size:13px; color:#64748b; font-weight:500;">Application Status</p>
+              <p id="modalStatus" style="margin:4px 0 0 0; font-size:16px; font-weight:600; color:#1e293b;"></p>
+            </div>
+            <div id="modalDecisionBadge" style="padding:8px 16px; border-radius:8px; font-weight:600; font-size:14px;"></div>
+          </div>
+        </div>
+
+        <!-- Details Grid -->
+        <div style="display:grid; gap:20px;">
+          
+          <!-- Requested Position -->
+          <div style="padding:16px; background:#eff6ff; border-radius:8px; border-left:4px solid #3b82f6;">
+            <p style="margin:0; font-size:12px; color:#1e40af; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">
+              🎯 Requested Position
+            </p>
+            <p id="modalRequestedPos" style="margin:8px 0 0 0; font-size:16px; color:#1e3a8a; font-weight:600;"></p>
+          </div>
+
+          <!-- Date Submitted -->
+          <div>
+            <p style="margin:0; font-size:12px; color:#64748b; font-weight:500; text-transform:uppercase; letter-spacing:0.5px;">
+              📅 Date Submitted
+            </p>
+            <p id="modalDate" style="margin:6px 0 0 0; font-size:15px; color:#1e293b; font-weight:500;"></p>
+          </div>
+
+          <!-- Approval Timeline -->
+          <div style="padding:16px; background:#f0fdf4; border-radius:8px; border-left:4px solid #22c55e;">
+            <p style="margin:0 0 12px 0; font-size:12px; color:#166534; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">
+              ✓ Approval Timeline
+            </p>
+            
+            <div style="display:grid; gap:12px;">
+              <!-- HRMD Approval -->
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:14px; color:#166534; font-weight:500;">
+                  <i class='bx bx-check-circle'></i> HRMD Approval
+                </span>
+                <span id="modalHrmdDate" style="font-size:13px; color:#15803d; font-weight:600;"></span>
+              </div>
+              
+              <!-- VPAA Approval -->
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:14px; color:#166534; font-weight:500;">
+                  <i class='bx bx-check-circle'></i> VPAA Approval
+                </span>
+                <span id="modalVpaDate" style="font-size:13px; color:#15803d; font-weight:600;"></span>
+              </div>
+              
+              <!-- President Approval -->
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:14px; color:#166534; font-weight:500;">
+                  <i class='bx bx-check-circle'></i> President Approval
+                </span>
+                <span id="modalPresDate" style="font-size:13px; color:#15803d; font-weight:600;"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Current Status -->
+          <div>
+            <p style="margin:0; font-size:12px; color:#64748b; font-weight:500; text-transform:uppercase; letter-spacing:0.5px;">
+              🔄 Current Stage
+            </p>
+            <p id="modalCurrentStatus" style="margin:6px 0 0 0; font-size:15px; color:#1e293b; font-weight:500;"></p>
+          </div>
+
+          <!-- Remarks -->
+          <div style="padding:16px; background:#fef3c7; border-radius:8px; border-left:4px solid #f59e0b;">
+            <p style="margin:0; font-size:12px; color:#92400e; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">
+              💬 Remarks
+            </p>
+            <p id="modalRemarks" style="margin:8px 0 0 0; font-size:14px; color:#451a03; line-height:1.6;"></p>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div style="padding:16px 24px; background:#f8fafc; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:10px;">
+        <button onclick="document.getElementById('historyModal').style.display='none'" style="padding:10px 20px; background:#fff; color:#64748b; border:1px solid #cbd5e1; border-radius:8px; cursor:pointer; font-weight:500; font-size:14px; transition:all 0.2s;">
+          Close
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <style>
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+
+  .btn-view-history:hover {
+    transform: translateY(-2px);
+    transition: all 0.2s;
   }
-}
 
-.btn-view-history:hover {
-  background: #2563eb !important;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
-  transition: all 0.2s;
-}
-
-#closeHistoryModal:hover {
-  background: rgba(255,255,255,0.3) !important;
-  transform: rotate(90deg);
-}
-</style>
+  #closeHistoryModal:hover {
+    background: rgba(255,255,255,0.3) !important;
+    transform: rotate(90deg);
+  }
+  </style>
 
 </section>
 
-    {% endblock %}
+{% endblock %}
 
 {% block extra_scripts %}
-  <script>
+<script>
 
 // RANK SELECTION - STYLED LIKE FILE UPLOAD (FIXED)
 document.addEventListener('DOMContentLoaded', function() {
@@ -465,20 +516,15 @@ document.addEventListener('DOMContentLoaded', function() {
   const rankSelect = document.getElementById('requested_rank');
   const rankStatus = document.getElementById('requested_rank_status');
   
-  console.log('Rank selector elements:', { rankSelector, rankDropdown, rankSelect, rankStatus });
-  
   if (rankSelector && rankDropdown && rankSelect && rankStatus) {
     // Toggle dropdown when selector is clicked
     rankSelector.addEventListener('click', function(e) {
       e.preventDefault();
       e.stopPropagation();
       
-      console.log('Rank selector clicked, disabled:', rankSelect.disabled);
-      
       if (!rankSelect.disabled) {
         const isVisible = rankDropdown.style.display === 'block';
         rankDropdown.style.display = isVisible ? 'none' : 'block';
-        console.log('Dropdown toggled to:', rankDropdown.style.display);
       }
     });
     
@@ -488,8 +534,6 @@ document.addEventListener('DOMContentLoaded', function() {
         e.stopPropagation();
         const value = this.getAttribute('data-value');
         const text = this.textContent.trim();
-        
-        console.log('Rank selected:', text);
         
         // Update hidden select
         rankSelect.value = value;
@@ -518,13 +562,10 @@ document.addEventListener('DOMContentLoaded', function() {
         rankDropdown.style.display = 'none';
       }
     });
-  } else {
-    console.error('Rank selector elements not found');
   }
 });
 
-
-    // FILE UPLOADING - with null checks
+// FILE UPLOADING - with null checks
 const resumeInput = document.getElementById('resume_cv');
 if (resumeInput) {
   resumeInput.addEventListener('change', function(event) {
@@ -615,26 +656,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
 // PROGRESS CIRCLE - CRITICAL FIX
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('Progress circle script running...');
-  
   const progressCircle = document.querySelector('.progress-circle');
   
   if (progressCircle) {
     const percentage = progressCircle.getAttribute('data-percentage');
-    console.log('Found progress circle with percentage:', percentage);
     
     if (percentage !== null && percentage !== undefined) {
       progressCircle.style.setProperty('--percentage', percentage);
-      console.log('CSS variable --percentage set to:', percentage);
-      
-      // Verify it was set
-      const computedStyle = getComputedStyle(progressCircle);
-      console.log('Computed --percentage value:', computedStyle.getPropertyValue('--percentage'));
-    } else {
-      console.error('No percentage attribute found on progress circle');
     }
-  } else {
-    console.error('Progress circle element not found');
   }
 });
 
@@ -726,6 +755,5 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 
-
-  </script>
+</script>
 {% endblock %}
