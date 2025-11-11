@@ -3312,12 +3312,72 @@ def api_hr_subjects_by_faculty(personnel_id):
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
 
+def check_internal_schedule_conflicts(schedule_data):
+    """Check for conflicts within the same schedule (Day 1 vs Day 2)"""
+    classday_1 = schedule_data.get('classday_1')
+    starttime_1 = schedule_data.get('starttime_1')
+    endtime_1 = schedule_data.get('endtime_1')
+    classday_2 = schedule_data.get('classday_2')
+    starttime_2 = schedule_data.get('starttime_2')
+    endtime_2 = schedule_data.get('endtime_2')
+    
+    if (classday_1 and classday_2 and classday_1 == classday_2 and
+        starttime_1 and endtime_1 and starttime_2 and endtime_2):
+        
+        def time_to_minutes(time_str):
+            """Convert time string to minutes since midnight"""
+            if not time_str:
+                return 0
+            try:
+                time_part = time_str.split('+')[0] 
+                hours, minutes, seconds = map(int, time_part.split(':'))
+                return hours * 60 + minutes
+            except:
+                return 0
+        
+        start1 = time_to_minutes(starttime_1)
+        end1 = time_to_minutes(endtime_1)
+        start2 = time_to_minutes(starttime_2)
+        end2 = time_to_minutes(endtime_2)
+        
+        if (start1 < end2 and end1 > start2) or (start2 < end1 and end2 > start1):
+            def format_time_ampm(time_str):
+                """Format time in 12-hour format"""
+                if not time_str:
+                    return "N/A"
+                try:
+                    time_part = time_str.split('+')[0]
+                    hours, minutes, seconds = map(int, time_part.split(':'))
+                    period = 'AM' if hours < 12 else 'PM'
+                    display_hour = hours if hours <= 12 else hours - 12
+                    if display_hour == 0:
+                        display_hour = 12
+                    return f"{display_hour}:{minutes:02d} {period}"
+                except:
+                    return time_str
+            
+            start1_display = format_time_ampm(starttime_1)
+            end1_display = format_time_ampm(endtime_1)
+            start2_display = format_time_ampm(starttime_2)
+            end2_display = format_time_ampm(endtime_2)
+            
+            return {
+                'success': False,
+                'error': f"❌ INTERNAL SCHEDULE CONFLICT DETECTED:\n\nBoth Day 1 and Day 2 are on {classday_1} with overlapping times:\n   📅 Day 1: {start1_display} - {end1_display}\n   📅 Day 2: {start2_display} - {end2_display}\n\nPlease choose different days or non-overlapping time slots."
+            }
+    
+    return {'success': True}
+
 @app.route('/api/hr/check-schedule-conflicts', methods=['POST'])
 @require_auth([20003])
 def api_hr_check_schedule_conflicts():
     """Check for schedule conflicts before adding new schedule"""
     try:
         data = request.get_json()
+        
+        internal_conflict = check_internal_schedule_conflicts(data)
+        if not internal_conflict['success']:
+            return internal_conflict
         
         semester_id = data.get('semester_id')
         personnel_id = data.get('personnel_id')

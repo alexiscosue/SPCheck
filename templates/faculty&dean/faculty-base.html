@@ -67,10 +67,10 @@
         -->
 
         <div class="profile" title="Faculty profile">
-          {% if profile_image_base64 %}
+          {% if profile_image_base64 and profile_image_base64 != '' %}
             <img src="{{ profile_image_base64 }}" alt="Profile" style="width:40px;height:40px;border-radius:50%;object-fit:cover">
           {% else %}
-            <img src="{{ url_for('static', filename='img/people.png') }}" alt="Profile">
+            <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Profile" style="width:40px;height:40px;border-radius:50%;object-fit:cover">
           {% endif %}
           <div style="text-align:left">
             <div style="font-weight:700">{{ faculty_name }}</div>
@@ -98,7 +98,11 @@
               .then(response => response.json())
               .then(profileData => {
                 if (profileData.success && profileData.image) {
-                  document.getElementById('profileImage').src = profileData.image;
+                  // Update the profile image in the top bar
+                  const profileImg = document.querySelector('.profile img');
+                  if (profileImg) {
+                    profileImg.src = profileData.image;
+                  }
                 }
               })
               .catch(error => console.error('Error loading profile image:', error));

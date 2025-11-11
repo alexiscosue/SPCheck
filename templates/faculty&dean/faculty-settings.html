@@ -440,13 +440,12 @@ async function loadProfileData() {
       populateForm();
     } else {
       showToast('Error loading profile data: ' + data.error, 'error');
+      showLoading(false);
     }
   } catch (error) {
     console.error('Error loading profile:', error);
     showToast('Failed to load profile data', 'error');
-  } finally {
-    // Remove the immediate showLoading(false) call to let the loading indicator
-    // stay visible for the exact duration of the data fetching
+    showLoading(false);
   }
 }
 
@@ -469,6 +468,7 @@ function populateForm() {
   displayDocuments('certificates', currentProfile.certificates || [], currentProfile.certificates_filename || []);
   displayDocuments('publications', currentProfile.publications || [], currentProfile.publications_filename || []);
   displayDocuments('awards', currentProfile.awards || [], currentProfile.awards_filename || []);
+  
   showLoading(false);
 }
 

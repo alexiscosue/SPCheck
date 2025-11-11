@@ -377,19 +377,14 @@ let pendingScheduleData = null;
 const timeSlots = [];
 for (let hour = 7; hour <= 20; hour++) { 
   for (let minute = 0; minute < 60; minute += 15) {
-    const maxStartTime = new Date(`2000-01-01T${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`);
-    const maxEndTime = new Date(maxStartTime.getTime() + (4 * 60 * 60000)); 
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour > 12 ? hour - 12 : hour;
+    const displayMinute = minute.toString().padStart(2, '0');
     
-    if (maxEndTime.getHours() <= 21) { 
-      const period = hour >= 12 ? 'PM' : 'AM';
-      const displayHour = hour > 12 ? hour - 12 : hour;
-      const displayMinute = minute.toString().padStart(2, '0');
-      
-      const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`;
-      const displayString = `${displayHour}:${displayMinute} ${period}`;
-      
-      timeSlots.push({ value: timeString, display: displayString });
-    }
+    const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`;
+    const displayString = `${displayHour}:${displayMinute} ${period}`;
+    
+    timeSlots.push({ value: timeString, display: displayString });
   }
 }
 
@@ -422,6 +417,10 @@ function showNotification(message, type = 'info') {
       z-index: 10000;
       font-weight: 500;
       box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      max-width: 500px;
   `;
   
   if (type === 'success') {
@@ -432,12 +431,47 @@ function showNotification(message, type = 'info') {
       notification.style.background = '#3b82f6';
   }
   
-  notification.textContent = message;
-  document.body.appendChild(notification);
+  const messageSpan = document.createElement('span');
+  messageSpan.style.cssText = `
+    flex: 1;
+    white-space: pre-line;
+    line-height: 1.5;
+  `;
+  messageSpan.textContent = message;
+  notification.appendChild(messageSpan);
   
-  setTimeout(() => {
+  if (type === 'error') {
+    const closeBtn = document.createElement('button');
+    closeBtn.innerHTML = '&times;';
+    closeBtn.style.cssText = `
+      background: none;
+      border: none;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 0;
+      margin: 0;
+      line-height: 1;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.8;
+      transition: opacity 0.2s;
+      flex-shrink: 0;
+    `;
+    closeBtn.onmouseover = () => closeBtn.style.opacity = '1';
+    closeBtn.onmouseout = () => closeBtn.style.opacity = '0.8';
+    closeBtn.onclick = () => notification.remove();
+    notification.appendChild(closeBtn);
+  } else {
+    setTimeout(() => {
       notification.remove();
-  }, 4000);
+    }, 4000);
+  }
+  
+  document.body.appendChild(notification);
 }
 
 function formatEmployeeNumber(input) {
@@ -1012,83 +1046,123 @@ document.getElementById('addEmployeeForm').addEventListener('submit', async func
 });
 
 document.getElementById('addScheduleForm').addEventListener('submit', async function(e) {
-  e.preventDefault();
-  clearErrorMessages();
-  
-  const formData = new FormData(this);
-  const getValueOrNull = (value) => value === '' ? null : value;
-  
-  const scheduleData = {
-    semester_id: parseInt(formData.get('semester_id')),
-    personnel_id: parseInt(formData.get('personnel_id')),
-    subject_id: parseInt(formData.get('subject_id')),
-    units: parseInt(formData.get('units')),
-    classday_1: getValueOrNull(formData.get('classday_1')),
-    starttime_1: getValueOrNull(formData.get('starttime_1')),
-    endtime_1: getValueOrNull(document.getElementById('endtime_1').value),
-    classday_2: getValueOrNull(formData.get('classday_2')),
-    starttime_2: getValueOrNull(formData.get('starttime_2')),
-    endtime_2: getValueOrNull(document.getElementById('endtime_2').value),
-    classroom: getValueOrNull(formData.get('classroom')),
-    classsection: getValueOrNull(formData.get('classsection'))
-  };
-  
-  let isValid = true;
-  
-  const requiredFields = [
-    { field: 'semester_id', name: 'Semester', errorId: 'semesterError' },
-    { field: 'personnel_id', name: 'Faculty', errorId: 'personnelError' },
-    { field: 'subject_id', name: 'Class', errorId: 'subjectError' },
-    { field: 'units', name: 'Units', errorId: 'unitsError' },
-    { field: 'classday_1', name: 'Day 1', errorId: 'classday1Error' },
-    { field: 'starttime_1', name: 'Start Time for Day 1', errorId: 'starttime1Error' },
-    { field: 'endtime_1', name: 'End Time for Day 1', errorId: null },
-    { field: 'classroom', name: 'Classroom', errorId: 'classroomError' },
-    { field: 'classsection', name: 'Section', errorId: 'classsectionError' }
-  ];
-  
-  requiredFields.forEach(({ field, name, errorId }) => {
-    if (!scheduleData[field]) {
-      if (errorId) {
-        document.getElementById(errorId).textContent = `${name} is required`;
-      } else {
-        showNotification(`${name} is required`, 'error'); 
-      }
-      isValid = false;
+    e.preventDefault();
+    clearErrorMessages();
+    
+    const formData = new FormData(this);
+    const getValueOrNull = (value) => value === '' ? null : value;
+    
+    const scheduleData = {
+        semester_id: parseInt(formData.get('semester_id')),
+        personnel_id: parseInt(formData.get('personnel_id')),
+        subject_id: parseInt(formData.get('subject_id')),
+        units: parseInt(formData.get('units')),
+        classday_1: getValueOrNull(formData.get('classday_1')),
+        starttime_1: getValueOrNull(formData.get('starttime_1')),
+        endtime_1: getValueOrNull(document.getElementById('endtime_1').value),
+        classday_2: getValueOrNull(formData.get('classday_2')),
+        starttime_2: getValueOrNull(formData.get('starttime_2')),
+        endtime_2: getValueOrNull(document.getElementById('endtime_2').value),
+        classroom: getValueOrNull(formData.get('classroom')),
+        classsection: getValueOrNull(formData.get('classsection'))
+    };
+    
+    let isValid = true;
+    
+    const requiredFields = [
+        { field: 'semester_id', name: 'Semester', errorId: 'semesterError' },
+        { field: 'personnel_id', name: 'Faculty', errorId: 'personnelError' },
+        { field: 'subject_id', name: 'Class', errorId: 'subjectError' },
+        { field: 'units', name: 'Units', errorId: 'unitsError' },
+        { field: 'classday_1', name: 'Day 1', errorId: 'classday1Error' },
+        { field: 'starttime_1', name: 'Start Time for Day 1', errorId: 'starttime1Error' },
+        { field: 'endtime_1', name: 'End Time for Day 1', errorId: null },
+        { field: 'classroom', name: 'Classroom', errorId: 'classroomError' },
+        { field: 'classsection', name: 'Section', errorId: 'classsectionError' }
+    ];
+    
+    requiredFields.forEach(({ field, name, errorId }) => {
+        if (!scheduleData[field]) {
+            if (errorId) {
+                document.getElementById(errorId).textContent = `${name} is required`;
+            } else {
+                showNotification(`${name} is required`, 'error'); 
+            }
+            isValid = false;
+        }
+    });
+    
+    if (!isValid) return;
+    
+    const endTime1Select = document.getElementById('endtime_1');
+    const selectedOption = endTime1Select.options[endTime1Select.selectedIndex];
+    const remainingHours = selectedOption ? parseFloat(selectedOption.getAttribute('data-remaining-hours')) : 0;
+    
+    if (remainingHours > 0) {
+        if (!scheduleData.classday_2 || !scheduleData.starttime_2) {
+            showNotification('For the selected end time, both Day 2 and Start Time for Day 2 are required.', 'error'); 
+            isValid = false;
+        }
     }
-  });
-  
-  if (!isValid) return;
-  
-  const endTime1Select = document.getElementById('endtime_1');
-  const selectedOption = endTime1Select.options[endTime1Select.selectedIndex];
-  const remainingHours = selectedOption ? parseFloat(selectedOption.getAttribute('data-remaining-hours')) : 0;
-  
-  if (remainingHours > 0) {
-    if (!scheduleData.classday_2 || !scheduleData.starttime_2) {
-      showNotification('For the selected end time, both Day 2 and Start Time for Day 2 are required.', 'error'); 
-      isValid = false;
+    
+    if (!isValid) return;
+    
+    // NEW VALIDATION: Check for internal schedule conflicts
+    const internalConflictCheck = validateInternalScheduleConflicts(scheduleData);
+    if (!internalConflictCheck.success) {
+        showNotification(internalConflictCheck.error, 'error'); 
+        return;
     }
-  }
-  
-  if (!isValid) return;
-  
-  try {
-    const conflictCheck = await checkScheduleConflicts(scheduleData);
-    if (!conflictCheck.success) {
-      showNotification(conflictCheck.error, 'error'); 
-      return;
+    
+    // EXISTING VALIDATION: Check for conflicts with existing schedules in database
+    try {
+        const conflictCheck = await checkScheduleConflicts(scheduleData);
+        if (!conflictCheck.success) {
+            showNotification(conflictCheck.error, 'error'); 
+            return;
+        }
+    } catch (error) {
+        console.error('Error checking schedule conflicts:', error);
+        showNotification('Error checking schedule conflicts. Please try again.', 'error'); 
+        return;
     }
-  } catch (error) {
-    console.error('Error checking schedule conflicts:', error);
-    showNotification('Error checking schedule conflicts. Please try again.', 'error'); 
-    return;
-  }
-  
-  pendingScheduleData = scheduleData;
-  document.getElementById('addScheduleModal').style.display = 'none';
-  openConfirmationScheduleModal();
+    
+    pendingScheduleData = scheduleData;
+    document.getElementById('addScheduleModal').style.display = 'none';
+    openConfirmationScheduleModal();
 });
+
+function validateInternalScheduleConflicts(scheduleData) {
+    const { classday_1, starttime_1, endtime_1, classday_2, starttime_2, endtime_2 } = scheduleData;
+    
+    // If both days are the same, check for time overlaps
+    if (classday_1 && classday_2 && classday_1 === classday_2) {
+        const start1 = convertTimeToMinutes(starttime_1);
+        const end1 = convertTimeToMinutes(endtime_1);
+        const start2 = convertTimeToMinutes(starttime_2);
+        const end2 = convertTimeToMinutes(endtime_2);
+        
+        // Check if time ranges overlap
+        if ((start1 < end2 && end1 > start2) || (start2 < end1 && end2 > start1)) {
+            return {
+                success: false,
+                error: `❌ SCHEDULE CONFLICT DETECTED:\n\nBoth Day 1 and Day 2 are on ${classday_1} with overlapping times:\n   Day 1: ${formatTimeForDisplay(starttime_1)} - ${formatTimeForDisplay(endtime_1)}\n   Day 2: ${formatTimeForDisplay(starttime_2)} - ${formatTimeForDisplay(endtime_2)}\n\nPlease choose different days or non-overlapping time slots.`
+            };
+        }
+    }
+    
+    return { success: true };
+}
+
+function convertTimeToMinutes(timeStr) {
+    if (!timeStr) return 0;
+    
+    // Handle both "HH:MM:SS" and "HH:MM" formats
+    const timePart = timeStr.split('+')[0]; // Remove timezone if present
+    const [hours, minutes] = timePart.split(':').map(part => parseInt(part));
+    
+    return hours * 60 + minutes;
+}
 
 async function checkScheduleConflicts(scheduleData) {
   try {
