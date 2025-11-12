@@ -17,6 +17,8 @@ from flask import make_response
 from io import BytesIO
 import base64
 from PIL import Image
+import gspread
+from google.oauth2.service_account import Credentials
 
 
 load_dotenv()
@@ -318,6 +320,108 @@ def get_db_connection():
 
 def return_db_connection(conn):
     db_pool.return_connection(conn)
+
+
+
+# ========== Google Sheets ==========
+def get_students_score_records():
+    SERVICE_ACCOUNT_FILE = 'spcheck-ingest-key.json'
+    SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+    
+    try:
+        print("🟡 [SHEETS] Attempting to authorize Google Sheets API...")
+        creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+        gc = gspread.authorize(creds)
+        print("✅ [SHEETS] Authorization successful.")
+        
+        url = 'https://docs.google.com/spreadsheets/d/1uWiA1_c5fVqYf1dNwAZgtA5xAaUrgMAHH3BtABIZh-Y/edit'
+        SHEET_NAME = 'Students Score'
+        
+        sh = gc.open_by_url(url)
+        print(f"✅ [SHEETS] Opened spreadsheet: {sh.title}")
+        
+        worksheet = sh.worksheet(SHEET_NAME)
+        print(f"✅ [SHEETS] Accessed worksheet: {SHEET_NAME}")
+        
+        records = worksheet.get_all_records()
+        print(f"✅ [SHEETS] Successfully fetched {len(records)} records.")
+        return records
+    except FileNotFoundError:
+        print(f"❌ [SHEETS] ERROR: Service account file '{SERVICE_ACCOUNT_FILE}' not found.")
+        raise
+    except gspread.exceptions.SpreadsheetNotFound:
+        print(f"❌ [SHEETS] ERROR: Spreadsheet URL not found or unauthorized.")
+        raise
+    except gspread.exceptions.WorksheetNotFound:
+        print(f"❌ [SHEETS] ERROR: Worksheet '{SHEET_NAME}' not found.")
+        raise
+    except Exception as e:
+        print(f"❌ [SHEETS] Unhandled error during Sheets fetching: {e}")
+        raise
+
+def get_supervisors_score_records():
+    """Fetch all score records from the 'Supervisor Score' tab of the Google Sheet."""
+    SERVICE_ACCOUNT_FILE = 'spcheck-ingest-key.json'
+    SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+    SHEET_NAME = 'Supervisors Score'  
+    
+    try:
+        print(f"🟡 [SHEETS] Attempting to fetch records from: {SHEET_NAME}")
+        creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+        gc = gspread.authorize(creds)
+        
+        url = 'https://docs.google.com/spreadsheets/d/1uWiA1_c5fVqYf1dNwAZgtA5xAaUrgMAHH3BtABIZh-Y/edit'
+        sh = gc.open_by_url(url)
+        
+        worksheet = sh.worksheet(SHEET_NAME)
+        records = worksheet.get_all_records()
+        print(f"✅ [SHEETS] Successfully fetched {len(records)} records from {SHEET_NAME}.")
+        return records
+    except FileNotFoundError:
+        print(f"❌ [SHEETS] ERROR: Service account file '{SERVICE_ACCOUNT_FILE}' not found for {SHEET_NAME}.")
+        raise
+    except gspread.exceptions.SpreadsheetNotFound:
+        print(f"❌ [SHEETS] ERROR: Spreadsheet URL not found or unauthorized for {SHEET_NAME}.")
+        return []
+    except gspread.exceptions.WorksheetNotFound:
+        print(f"❌ [SHEETS] ERROR: Worksheet '{SHEET_NAME}' not found. Returning empty list.")
+        return []
+    except Exception as e:
+        print(f"❌ [SHEETS] Unhandled error fetching {SHEET_NAME} data: {e}")
+        return []
+
+def get_peers_score_records():
+    """Fetch all score records from the 'Peer Score' tab of the Google Sheet."""
+    SERVICE_ACCOUNT_FILE = 'spcheck-ingest-key.json'
+    SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+    SHEET_NAME = 'Peers Score'  
+    
+    try:
+        print(f"🟡 [SHEETS] Attempting to fetch records from: {SHEET_NAME}")
+        creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+        gc = gspread.authorize(creds)
+        
+        url = 'https://docs.google.com/spreadsheets/d/1uWiA1_c5fVqYf1dNwAZgtA5xAaUrgMAHH3BtABIZh-Y/edit'
+        sh = gc.open_by_url(url)
+        
+        worksheet = sh.worksheet(SHEET_NAME)
+        records = worksheet.get_all_records()
+        print(f"✅ [SHEETS] Successfully fetched {len(records)} records from {SHEET_NAME}.")
+        return records
+    except FileNotFoundError:
+        print(f"❌ [SHEETS] ERROR: Service account file '{SERVICE_ACCOUNT_FILE}' not found for {SHEET_NAME}.")
+        raise
+    except gspread.exceptions.SpreadsheetNotFound:
+        print(f"❌ [SHEETS] ERROR: Spreadsheet URL not found or unauthorized for {SHEET_NAME}.")
+        return []
+    except gspread.exceptions.WorksheetNotFound:
+        print(f"❌ [SHEETS] ERROR: Worksheet '{SHEET_NAME}' not found. Returning empty list.")
+        return []
+    except Exception as e:
+        print(f"❌ [SHEETS] Unhandled error fetching {SHEET_NAME} data: {e}")
+        return []
+
+
 
 # ========== CACHED DATA ==========
 _cache = {}
@@ -4292,8 +4396,219 @@ def hr_employees_return():
 @app.route('/hr_evaluations')
 @require_auth([20003])
 def hr_evaluations():
+    current_term_id = 80001
     personnel_info = get_personnel_info(session['user_id'])
-    return render_template('hrmd/hr-evaluations.html', **personnel_info)
+    return render_template('hrmd/hr-evaluations.html', acadcalendar_id=current_term_id, **personnel_info)
+
+@app.route('/api/hr/evaluations', methods=['GET'])
+@require_auth([20003])
+def api_hr_evaluations():
+    term = request.args.get('term')
+    dept = request.args.get('dept', '')
+    search = request.args.get('search', '')
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Define the term ID for use in all queries
+    current_term_id = term if term else '80001'
+
+    # --- KPI 1, 2, 3, & 4 Calculation (Combined Query) ---
+    cursor.execute("""
+        WITH faculty_data AS (
+            SELECT 
+                p.personnel_id,
+                p.college_id,
+                -- Weighted Overall Score
+                COALESCE(
+                    SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
+                    SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
+                    SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
+                0) AS overall_score,
+                -- Student Response Count
+                COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.total_responses ELSE 0 END), 0) AS student_responses_count
+            FROM personnel p
+            LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s
+            WHERE p.role_id IN (20001, 20002)
+            GROUP BY p.personnel_id, p.college_id
+        ),
+        department_avg AS (
+            SELECT 
+                fd.college_id,
+                AVG(fd.overall_score) AS dept_avg_score
+            FROM faculty_data fd
+            WHERE fd.overall_score > 0 -- Only consider departments with non-zero evaluation scores
+            GROUP BY fd.college_id
+            ORDER BY dept_avg_score DESC
+            LIMIT 1
+        )
+        SELECT 
+            -- General KPIs
+            (SELECT COUNT(fd.personnel_id) FROM faculty_data fd) AS total_faculty,
+            (SELECT COALESCE(AVG(fd.overall_score), 0) FROM faculty_data fd) AS average_rating,
+            (SELECT SUM(CASE WHEN fd.student_responses_count >= 10 THEN 1 ELSE 0 END) FROM faculty_data fd) AS met_response_rate_count,
+            (SELECT COUNT(CASE WHEN fd.student_responses_count > 0 THEN 1 ELSE NULL END) FROM faculty_data fd) AS faculty_with_data,
+            
+            -- Best Department KPI
+            c.collegename AS best_department_name
+        FROM department_avg da
+        JOIN college c ON da.college_id = c.college_id
+    """, (current_term_id,))
+    
+    kpi_results = cursor.fetchone()
+    
+    # Map results (handle case where no results are returned, typically if the table is empty)
+    if kpi_results:
+        kpis = {
+            "total_faculty": kpi_results[0],
+            "avg_rating": kpi_results[1],
+            "met_response_rate_count": kpi_results[2],
+            "faculty_with_data": kpi_results[3],
+            "best_department_name": kpi_results[4] if kpi_results[4] else "N/A"
+        }
+    else:
+         kpis = {
+            "total_faculty": 0,
+            "avg_rating": 0,
+            "met_response_rate_count": 0,
+            "faculty_with_data": 0,
+            "best_department_name": "N/A"
+        }
+    # --- END KPI CALCULATION ---
+    
+    # --- TABLE DATA RETRIEVAL ---
+    query = """
+        SELECT 
+            p.personnel_id, 
+            CONCAT(p.firstname, ' ', p.lastname) as name,
+            c.collegename,
+            pr.position,
+            
+            -- METRIC 1 (Response Rate): Student Response Count ONLY 
+            COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.total_responses ELSE 0 END), 0) AS student_responses_count,
+            
+            -- METRIC 2 (Status): Weighted Overall Score 
+            COALESCE(
+                SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
+                SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
+                SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
+            0) AS overall_score
+            
+        FROM personnel p
+        LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s
+        LEFT JOIN college c ON p.college_id = c.college_id
+        LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+        WHERE 1=1 AND p.role_id IN (20001, 20002)
+    """
+    params = [current_term_id]
+
+    # Dynamic filtering (remains the same)
+    if dept:
+        query += " AND c.collegename = %s"
+        params.append(dept)
+    if search:
+        query += " AND (LOWER(p.firstname) LIKE %s OR LOWER(p.lastname) LIKE %s)"
+        like = f"%{search.lower()}%"
+        params.extend([like, like])
+        
+    query += " GROUP BY p.personnel_id, name, c.collegename, pr.position ORDER BY overall_score DESC"
+
+    cursor.execute(query, tuple(params))
+    evaluations = cursor.fetchall()
+    cursor.close()
+    return_db_connection(conn)
+
+    # Shape results to JSON
+    evals = [{
+        "personnelid": row[0],
+        "name": row[1],
+        "department": row[2],
+        "position": row[3],
+        "studentresponses": row[4],
+        "avgscore": row[5]
+    } for row in evaluations]
+
+    # Combine table data and KPIs into the final JSON response
+    return jsonify(success=True, evaluations=evals, kpis=kpis)
+
+@app.route('/hr/fetch-evaluations', methods=['POST'])
+@require_auth([20003])
+def fetch_evaluations():
+    
+    # Define all data sources
+    sources = [
+        {'type': 'student', 'fetcher': get_students_score_records},
+        {'type': 'supervisor', 'fetcher': get_supervisors_score_records},
+        {'type': 'peer', 'fetcher': get_peers_score_records}
+    ]
+
+    total_updated = 0
+    conn = None 
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        print("--- [EVAL UPDATE] Starting evaluation fetch process ---")
+
+        for source in sources:
+            records = source['fetcher']()
+            print(f"🟢 [EVAL UPDATE] Processing {len(records)} records for {source['type']}.")
+
+            for row in records:
+                
+                # --- CRITICAL FIX: CONDITIONAL LOGIC FOR CLASS ID ---
+                # 1. Safely retrieve Class ID. Defaults to 0 if the key is missing from the dictionary.
+                class_id_raw = row.get('Class ID', 0)
+                
+                # 2. Convert to integer, handling cases where the value might be empty string or None
+                try:
+                    # int() converts string numbers or floats to int. If it's empty string/None, default to 0.
+                    class_id = int(class_id_raw) if class_id_raw else 0
+                except (ValueError, TypeError):
+                    # Catch cases like "N/A" or other unexpected values
+                    class_id = 0
+                
+                # Ensure Personnel and Semester IDs are present
+                if not row.get('Faculty Personnel ID') or not row.get('Semester_AY ID'):
+                    print(f"    - [Record] 🛑 SKIP: Missing Faculty ID or Semester ID in {source['type']} row.")
+                    continue
+                
+                # Database insertion logic
+                cursor.execute("""
+                    INSERT INTO faculty_evaluations (
+                        personnel_id, acadcalendar_id, class_id, evaluator_type, score, total_responses
+                    ) VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (personnel_id, acadcalendar_id, class_id, evaluator_type)
+                    DO UPDATE SET score=EXCLUDED.score, total_responses=EXCLUDED.total_responses, last_updated=CURRENT_TIMESTAMP
+                """, (
+                    row['Faculty Personnel ID'],
+                    row['Semester_AY ID'],
+                    class_id,                 # <-- Use the safely determined class_id (0 for non-class evals)
+                    source['type'], 
+                    row['Score'],
+                    row['Total Responses']
+                ))
+                total_updated += 1
+            
+        conn.commit()
+        cursor.close()
+        return_db_connection(conn)
+        print(f"✅ [EVAL UPDATE] Database COMMIT successful. Total records updated: {total_updated}")
+        return jsonify(message=f"Successfully imported and updated {total_updated} evaluation records from all sources.", success=True)
+
+    except Exception as e:
+        print(f"❌ [EVAL UPDATE] CRITICAL FAILURE during processing: {e}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+            try:
+                cursor.close()
+                return_db_connection(conn)
+            except:
+                pass
+        return jsonify(message=f"Critical error processing evaluations. Check logs for details. Error: {str(e)}"), 500
+
 
 @app.route('/hr_attendance')
 @require_auth([20003])

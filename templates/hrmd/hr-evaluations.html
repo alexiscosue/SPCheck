@@ -6,7 +6,6 @@
 
 {% block content %}
     <section class="grid" aria-live="polite">
-      <!-- KPIs -->
       <div class="kpis card" style="padding:16px">
         <div class="kpi card" style="gap:14px">
           <div class="icon eval"><i class='bx bx-check-shield'></i></div>
@@ -19,26 +18,25 @@
           <div class="icon fac"><i class='bx bx-user'></i></div>
           <div>
             <div class="title">Total Faculty</div>
-            <div class="value" id="kpi-fac">178</div>
+            <div class="value" id="kpiTotalFaculty">—</div>
           </div>
         </div>
         <div class="kpi card" style="gap:14px">
           <div class="icon promo"><i class='bx bx-user'></i></div>
           <div>
             <div class="title">Met Response Rate</div>
-            <div class="value" id="kpi-fac">5/25</div>
+            <div class="value" id="kpiMetRate">—</div>
           </div>
         </div>
         <div class="kpi card" style="gap:14px">
           <div class="icon att"><i class='bx bx-user'></i></div>
           <div>
             <div class="title">Best Dept.</div>
-            <div class="value" id="kpi-fac">CCS</div>
+            <div class="value" id="kpiBestDept">—</div>
           </div>
         </div>
       </div>
 
-      <!-- Controls -->
       <div style="grid-column:1 / -1; margin-top:8px;">
         <div class="controls">
           <div class="left">
@@ -56,6 +54,9 @@
             </div>
           </div>
           <div class="right">
+            <button class="btn primary" id="update-eval-btn" >
+              Update Evaluation Records
+            </button>
             <button class="btn primary" id="newCycleBtn">
               <i class='bx bx-refresh'></i>&nbsp; New Evaluation Cycle
             </button>
@@ -63,7 +64,6 @@
         </div>
       </div>
 
-      <!-- Table -->
       <div class="chart-large card" style="grid-column:1 / -1; padding:16px;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div style="font-weight:700">Evaluations</div>
@@ -95,7 +95,8 @@
                 <th>Actions</th>
               </tr>
             </thead>
-            <tbody id="evalBody"></tbody>
+            <tbody id="evalTableBody">
+              </tbody>
           </table>
           <div id="emptyState" class="table-empty" style="display:none;">No evaluations found — try clearing filters.</div>
         </div>
@@ -110,117 +111,129 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script>
-const evaluations = [
-  {faculty:'Prof. Santos', dept:'IT', position:'Faculty', response:82, rating:3.9},
-  {faculty:'Prof. Cruz', dept:'CS', position:'Faculty', response:70, rating:3.4},
-  {faculty:'Prof. Reyes', dept:'Business', position:'Dean', response:90, rating:2.5},
-  {faculty:'Prof. Lim', dept:'IS', position:'Faculty', response:60, rating:1.8},
-  {faculty:'Prof. Dela Vega', dept:'CS', position:'Faculty', response:77, rating:3.2},
-  {faculty:'Prof. Garcia', dept:'Education', position:'Faculty', response:88, rating:2.2},
-  {faculty:'Prof. Tan', dept:'Business', position:'Faculty', response:79, rating:3.7},
-  {faculty:'Prof. Lopez', dept:'IT', position:'Dean', response:55, rating:1.4},
-];
+window.CURRENT_TERM_ID = {{ acadcalendar_id }};
 
-function getStatusFromRating(r){ return r>=3?'above-average':r>=2?'average':'below-average'; }
-function statusLabel(code){ return code==='above-average'?'Above Average':code==='average'?'Average':'Below Average'; }
-function responseLabel(r){ return r>=75? `<span style="color:#166534;font-weight:600">Met</span>` : `<span style="color:#991b1b;font-weight:600">Not Met</span>`; }
+// This function fetches data via AJAX and renders the table using jQuery
+function loadEvaluations() {
+    var dept = $('#deptFilter').val() || '';
+    var status = $('#statusFilter').val() || '';
+    var search = $('#evalSearch').val() || '';
+    var term = window.CURRENT_TERM_ID || '';
 
-function renderTable(){
-  let rows = evaluations.filter(e=>{
-    const matchSearch=!state.search || e.faculty.toLowerCase().includes(state.search)||e.dept.toLowerCase().includes(state.search);
-    const matchDept=!state.dept || e.dept===state.dept;
-    const matchStatus=!state.status || getStatusFromRating(e.rating)===state.status;
-    return matchSearch && matchDept && matchStatus;
-  });
+    // Clear and show loading state if necessary (omitted for brevity)
+    var tbody = $('#evalTableBody');
+    tbody.html('<tr><td colspan="6" class="table-empty">Loading evaluations...</td></tr>');
+    $('#emptyState').hide();
 
-  if(state.sortBy){
-    rows.sort((a,b)=>{
-      let av=a[state.sortBy], bv=b[state.sortBy];
-      if(state.sortBy==='rating'){av=a.rating; bv=b.rating;}
-      if(state.sortBy==='response'){av=a.response; bv=b.response;}
-      return av<bv?(state.sortDir==='asc'?-1:1):av>bv?(state.sortDir==='asc'?1:-1):0;
+    $.get('/api/hr/evaluations', {
+        term: term,
+        dept: dept,
+        status: status,
+        search: search,
+    }, function(data) {
+        tbody.empty();
+        
+        // --- 1. UPDATE KPIS ---
+        if (data.kpis) {
+            const kpis = data.kpis;
+            const avgRating = parseFloat(kpis.avg_rating).toFixed(2);
+            const metRate = kpis.met_response_rate_count;
+            const totalFaculty = kpis.total_faculty;
+            
+            // Assuming 10 is the Met threshold. faculty_with_data provides total faculty that have *any* data.
+            const totalEvaluated = kpis.faculty_with_data; 
+            
+            // Display General KPIs
+            $('#kpiAvg').text(avgRating);
+            $('#kpiTotalFaculty').text(totalFaculty);
+            $('#kpiMetRate').text(`${metRate}/${totalEvaluated}`);
+            
+            // Display Best Department KPI
+            $('#kpiBestDept').text(kpis.best_department_name);
+        }
+        // --- END KPI UPDATE ---
+
+        if(data.success && data.evaluations.length > 0) {
+            
+            // Populate Department Filter Dropdown (must be done after fetch)
+            var deptFilter = $('#deptFilter');
+            var currentDeptVal = deptFilter.val();
+            deptFilter.empty().append('<option value="">All Departments</option>');
+            var uniqueDepts = [...new Set(data.evaluations.map(e => e.department))].sort();
+            uniqueDepts.forEach(function(d) {
+                deptFilter.append(`<option value="${d}">${d}</option>`);
+            });
+            deptFilter.val(currentDeptVal); // Retain selection
+
+            // Render Table Rows
+            data.evaluations.forEach(function(row) {
+                var rating = parseFloat(row.avgscore);
+                var statusClass = '';
+                var statusLabel = 'N/A';
+                
+                // Access the student response count
+                var studentResponses = row.studentresponses; 
+                
+                if (rating >= 3) { statusClass = 'above-average'; statusLabel = 'Above Average'; }
+                else if (rating >= 2) { statusClass = 'average'; statusLabel = 'Average'; }
+                else { statusClass = 'below-average'; statusLabel = 'Below Average'; }
+                
+                // Assuming "Met" threshold is 10 student responses
+                var metThreshold = 10; 
+                var responseStatusLabel = studentResponses >= metThreshold ? 
+                                          '<span style="color:#166534;font-weight:600">Met</span>' : 
+                                          '<span style="color:#991b1b;font-weight:600">Not Met</span>';
+
+                tbody.append(
+                  '<tr>' +
+                    `<td>${row.name}</td>` +
+                    `<td>${row.department}</td>` +
+                    `<td>${row.position || 'N/A'}</td>` +
+                    // Display the student response count and the Met/Not Met status
+                    `<td>${studentResponses} — ${responseStatusLabel}</td>` +
+                    `<td><span class="status ${statusClass}">${statusLabel} (${rating.toFixed(2)})</span></td>` +
+                    `<td><button class="btn secondary"><i class='bx bx-download'></i>&nbsp;PDF</button></td>` +
+                  '</tr>'
+                );
+            });
+            $('#evalTable').show();
+            $('#emptyState').hide();
+            
+        } else {
+            $('#evalTable').hide();
+            $('#emptyState').show();
+        }
+    }).fail(function() {
+        tbody.html('<tr><td colspan="6" class="table-empty" style="color:#991b1b;">Failed to load data from API.</td></tr>');
     });
-  } else { rows.sort((a,b)=>b.rating-a.rating); }
+}
 
-  const total=rows.length;
-  const pageSize=state.pageSize;
-  const pageCount=Math.max(1, Math.ceil(total/pageSize));
-  if(state.page>pageCount) state.page=pageCount;
-  const start=(state.page-1)*pageSize;
-  const pageRows=rows.slice(start,start+pageSize);
 
-  tbody.innerHTML='';
-  if(pageRows.length===0){ 
-    emptyState.style.display='block'; 
-    document.getElementById('evalTable').style.display='none'; 
-  } else {
-    emptyState.style.display='none'; 
-    document.getElementById('evalTable').style.display='table';
-    pageRows.forEach(e=>{
-      const status=getStatusFromRating(e.rating);
-      const tr=document.createElement('tr');
-      tr.innerHTML=`
-        <td>${e.faculty}</td>
-        <td>${e.dept}</td>
-        <td>${e.position}</td>
-        <td>${e.response}% — ${responseLabel(e.response)}</td>
-        <td><span class="status ${status}">${statusLabel(status)}</span></td>
-        <td><button class="btn secondary"><i class='bx bx-download'></i>&nbsp;PDF</button></td>
-      `;
-      tbody.appendChild(tr);
+// --- JQUERY INITIALIZATION AND EVENT ATTACHMENT ---
+$(document).ready(function() {
+    // 1. Attach button click handlers (Priority for button fix)
+    $('#update-eval-btn').click(function() {
+        alert("Attempting to update records. Check terminal for Google Sheets connection status...");
+        $.post('/hr/fetch-evaluations', {}, function(response) {
+            alert(response.message || "Evaluation records updated.");
+            loadEvaluations(); // Refresh evaluations table with new data
+        }).fail(function(xhr) {
+            alert("Failed to update evaluation records. See server logs.");
+        });
     });
-  }
-  pagerInfo.innerText=`Showing ${Math.min(total,start+1)}–${Math.min(total,start+pageRows.length)} of ${total}`;
-  updateKPIs();
-}
+    
+    // 2. Attach filter change handlers
+    $('#deptFilter, #statusFilter').change(loadEvaluations);
+    $('#evalSearch').on('input', loadEvaluations);
 
-const departments = [...new Set(evaluations.map(e=>e.dept))].sort();
-const tbody = document.getElementById('evalBody');
-const searchInput = document.getElementById('evalSearch');
-const deptFilter = document.getElementById('deptFilter');
-const statusFilter = document.getElementById('statusFilter');
-const prevPageBtn = document.getElementById('prevPage');
-const nextPageBtn = document.getElementById('nextPage');
-const pagerInfo = document.getElementById('pagerInfo');
-const emptyState = document.getElementById('emptyState');
-
-let state = {sortBy:null, sortDir:'desc', page:1, pageSize:10, search:'', dept:'', status:''};
-
-departments.forEach(d=>{
-  const opt = document.createElement('option'); opt.value=d; opt.innerText=d; deptFilter.appendChild(opt);
+    // 3. Initial data load
+    loadEvaluations();
+    
+    // NOTE: Sorting logic involving `renderTable()` and `updateSortIndicators()` 
+    // from the pure JS prototype code has been permanently removed as it caused 
+    // script errors and is redundant since `loadEvaluations()` handles rendering.
 });
-
-searchInput.addEventListener('input', ()=>{ state.search=searchInput.value.trim().toLowerCase(); state.page=1; renderTable(); });
-deptFilter.addEventListener('change', ()=>{ state.dept=deptFilter.value; state.page=1; renderTable(); });
-statusFilter.addEventListener('change', ()=>{ state.status=statusFilter.value; state.page=1; renderTable(); });
-prevPageBtn.addEventListener('click', ()=>{ if(state.page>1){state.page--; renderTable();} });
-nextPageBtn.addEventListener('click', ()=>{ state.page++; renderTable(); });
-
-document.querySelectorAll('.sortable').forEach(th=>{
-  th.addEventListener('click',()=>{
-    const field=th.dataset.sort;
-    if(state.sortBy===field){ state.sortDir=state.sortDir==='asc'?'desc':'asc'; } 
-    else { state.sortBy=field; state.sortDir='asc'; }
-    renderTable(); updateSortIndicators();
-  });
-});
-function updateSortIndicators(){
-  document.querySelectorAll('.sort-ind').forEach(el=>el.textContent='');
-  if(state.sortBy){
-    const el=document.getElementById('sort'+state.sortBy.charAt(0).toUpperCase()+state.sortBy.slice(1));
-    el.textContent=state.sortDir==='asc'?'▲':'▼';
-  }
-}
-
-function updateKPIs(){
-  const avg=(evaluations.reduce((sum,e)=>sum+e.rating,0)/evaluations.length).toFixed(2);
-  document.getElementById('kpiAvg').innerText=avg;
-  const top=evaluations.reduce((a,b)=>a.rating>b.rating?a:b);
-  document.getElementById('kpiTop').innerText=top.faculty;
-}
-
-renderTable();
-updateSortIndicators();
 </script>
 {% endblock %}
