@@ -400,7 +400,7 @@ $(document).ready(function() {
             loadEvaluations(); // Refresh table
             
             // Use an ephemeral feedback message (similar to a toast or quick flash)
-            const successHtml = `<i class='bx bx-check-shield'></i>&nbsp; Updated (${response.updated_count + 'r' || '0'})!`;
+            const successHtml = `<i class='bx bx-check-shield'></i>&nbsp; Updated (${response.updated_count || '0'})!`;
             button.html(successHtml);
             
             // Revert after a short delay
