@@ -338,7 +338,7 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
             // Populate Feedback
             if (report.qualitative_feedback && report.qualitative_feedback.length > 0) {
                 
-                // NEW FILTERING LOGIC: Filter out unwanted delimiters/placeholders
+                // Filtering Logic: Filter out unwanted delimiters/placeholders
                 const cleanFeedback = report.qualitative_feedback.filter(comment => {
                     // Filter out comments that are empty, only whitespace, or specifically the delimiter '---'
                     return comment.trim() !== '' && comment.trim() !== '---';
@@ -387,14 +387,38 @@ function downloadReport(personnelId) {
 
 // --- JQUERY INITIALIZATION AND EVENT ATTACHMENT ---
 $(document).ready(function() {
-    // 1. Attach button click handlers
+    // 1. Attach button click handlers (REPLACED ALERT WITH INLINE LOADING)
     $('#update-eval-btn').click(function() {
-        alert("Attempting to update records. Check terminal for Google Sheets connection status...");
+        const button = $(this);
+        const originalHtml = button.html();
+
+        // 1. Show Loading State
+        button.prop('disabled', true).html('<i class="bx bx-loader-alt bx-spin"></i>&nbsp; Updating...');
+        
         $.post('/hr/fetch-evaluations', {}, function(response) {
-            alert(response.message || "Evaluation records updated.");
-            loadEvaluations(); 
+            // 2. On Success
+            loadEvaluations(); // Refresh table
+            
+            // Use an ephemeral feedback message (similar to a toast or quick flash)
+            const successHtml = `<i class='bx bx-check-shield'></i>&nbsp; Updated (${response.updated_count + 'r' || '0'})!`;
+            button.html(successHtml);
+            
+            // Revert after a short delay
+            setTimeout(() => {
+                button.prop('disabled', false).html(originalHtml);
+            }, 3000);
+
         }).fail(function(xhr) {
-            alert("Failed to update evaluation records. See server logs.");
+            // 3. On Failure
+            const errorMessage = "Update Failed!";
+            const errorHtml = `<i class='bx bx-x-circle'></i>&nbsp; ${errorMessage}`;
+            button.html(errorHtml).css('background', '#dc2626'); // Use red for failure
+            
+            // Revert and reset style after a short delay
+            setTimeout(() => {
+                button.prop('disabled', false).html(originalHtml).css('background', ''); 
+                alert(xhr.responseJSON?.message || "Failed to update evaluation records. See server logs.");
+            }, 4000);
         });
     });
     

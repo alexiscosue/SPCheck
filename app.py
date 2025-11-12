@@ -4400,6 +4400,144 @@ def hr_evaluations():
     personnel_info = get_personnel_info(session['user_id'])
     return render_template('hrmd/hr-evaluations.html', acadcalendar_id=current_term_id, **personnel_info)
 
+@app.route('/api/hr/evaluation-dashboard-data')
+@require_auth([20003])
+def api_hr_evaluation_dashboard_data():
+    """
+    Fetches aggregated evaluation data for the HR dashboard KPIs and charts.
+    FIXED: Removed the invalid GROUP BY clause and simplified the final SELECT logic.
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # 1. Determine the current academic calendar ID
+        cursor.execute("""
+            SELECT acadcalendar_id
+            FROM acadcalendar 
+            WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+            ORDER BY semesterstart DESC LIMIT 1
+        """)
+        current_term_result = cursor.fetchone()
+        current_term_id = current_term_result[0] if current_term_result else '80001' # Fallback
+        
+        # 2. Fetch all necessary data using CTEs
+        # The main SELECT statement is restructured to pull aggregated data from the CTEs directly.
+        cursor.execute("""
+            WITH faculty_eval_scores AS (
+                SELECT 
+                    p.personnel_id,
+                    c.collegename,
+                    -- Weighted Overall Score (55/35/10)
+                    COALESCE(
+                        SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
+                        SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
+                        SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
+                    0) AS overall_score
+                FROM personnel p
+                LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s
+                LEFT JOIN college c ON p.college_id = c.college_id
+                WHERE p.role_id IN (20001, 20002)
+                GROUP BY p.personnel_id, c.collegename
+            ),
+            valid_eval_breakdown AS (
+                SELECT 
+                    overall_score,
+                    collegename,
+                    CASE 
+                        WHEN overall_score >= 3.0 THEN 'Above Average'
+                        WHEN overall_score >= 2.0 THEN 'Average'
+                        WHEN overall_score > 0 THEN 'Below Average'
+                        ELSE 'Not Rated'
+                    END AS rating_group
+                FROM faculty_eval_scores
+                WHERE overall_score > 0
+            ),
+            final_aggregates AS (
+                SELECT
+                    -- KPI: Average Evaluation Score
+                    COALESCE(AVG(overall_score), 0) AS avg_eval_score,
+                    
+                    -- Chart Data: Rating Breakdown
+                    (SELECT json_agg(json_build_object('rating_group', rating_group, 'count', rating_count))
+                     FROM (
+                        SELECT rating_group, COUNT(*) AS rating_count
+                        FROM valid_eval_breakdown
+                        GROUP BY rating_group
+                     ) AS breakdown_counts) AS rating_counts_json,
+                    
+                    -- Chart Data: Top Departments
+                    (SELECT json_agg(json_build_object('department', collegename, 'avg_score', dept_avg))
+                     FROM (
+                        SELECT collegename, AVG(overall_score) AS dept_avg
+                        FROM faculty_eval_scores
+                        WHERE overall_score > 0
+                        GROUP BY collegename
+                        ORDER BY dept_avg DESC
+                        LIMIT 5
+                     ) AS dept_averages) AS dept_scores_json
+                
+                FROM faculty_eval_scores
+            )
+            SELECT * FROM final_aggregates;
+        """, (current_term_id,))
+        
+        result = cursor.fetchone()
+        cursor.close()
+        return_db_connection(conn)
+        
+        if not result or result[0] is None:
+            return jsonify({
+                'success': True,
+                'kpi_avg_eval': 'N/A',
+                'rating_breakdown': [],
+                'top_departments': []
+            })
+            
+        avg_eval_score, rating_counts_json, dept_scores_json = result
+        
+        # --- Process Rating Breakdown for Doughnut Chart ---
+        rating_data = {
+            'Above Average': 0, 'Average': 0, 'Below Average': 0
+        }
+        if rating_counts_json:
+            for item in rating_counts_json:
+                if item and item['rating_group'] in rating_data:
+                    rating_data[item['rating_group']] = item['count']
+        
+        # --- Process Top Departments for Bar Chart ---
+        top_departments = []
+        if dept_scores_json:
+            # Structure for chart
+            seen_departments = set()
+            for item in dept_scores_json:
+                if item and item['department'] not in seen_departments:
+                    top_departments.append({
+                        'department': item['department'],
+                        'score': round(float(item['avg_score']), 2)
+                    })
+                    seen_departments.add(item['department'])
+        
+        # Sort the final list to ensure the top departments are always ordered by score
+        top_departments.sort(key=lambda x: x['score'], reverse=True)
+        
+        return jsonify({
+            'success': True,
+            'kpi_avg_eval': float(avg_eval_score),
+            'rating_breakdown': [
+                rating_data['Above Average'],
+                rating_data['Average'],
+                rating_data['Below Average']
+            ],
+            'top_departments': top_departments
+        })
+        
+    except Exception as e:
+        print(f"Error fetching evaluation dashboard data: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/hr/evaluations', methods=['GET'])
 @require_auth([20003])
 def api_hr_evaluations():
