@@ -28,16 +28,18 @@
 
       <div class="card chart-large">
         <div class="tabs">
-          <button class="tab-btn active" data-tab="feedback">Recent Feedback</button>
+          <button class="tab-btn active" data-tab="feedback">Student Feedback</button>
           <button class="tab-btn" data-tab="trends">Evaluation Trends</button>
         </div>
 
         <div id="feedback" class="tab-content active">
           <div class="table">
             <table aria-label="Recent feedback from all evaluators">
-              <thead><tr><th>Evaluator</th><th>Feedback</th></tr></thead>
+              <!-- <thead>
+                <tr><th>Feedback</th></tr>
+              </thead> -->
               <tbody id="feedback-body">
-                <tr><td colspan="2" style="text-align:center; padding:1.5rem; color:var(--muted);">Loading recent feedback...</td></tr>
+                <tr><td style="text-align:center; padding:1.5rem; color:var(--muted);">Loading student feedback...</td></tr>
               </tbody>
             </table>
           </div>
@@ -137,12 +139,11 @@
     const apiURL = '/api/faculty/evaluations-data';
     
     // Set loading states
-    document.getElementById('kpi-overall').textContent = '...';
-    document.getElementById('kpi-student').textContent = '...';
-    document.getElementById('kpi-peer').textContent = '...';
-    document.getElementById('kpi-supervisor').textContent = '...';
+    const kpiElements = ['kpi-overall', 'kpi-student', 'kpi-peer', 'kpi-supervisor'];
+    kpiElements.forEach(id => document.getElementById(id).textContent = '...');
     document.getElementById('comparison-wrapper').innerHTML = '<div style="text-align:center; color:var(--muted); padding:20px;">Loading comparison...</div>';
     document.getElementById('breakdown-error').style.display = 'none';
+    document.getElementById('feedback-body').innerHTML = '<tr><td style="text-align:center; padding:1.5rem; color:var(--muted);">Loading student feedback...</td></tr>';
 
     try {
       const response = await fetch(apiURL);
@@ -150,10 +151,13 @@
       
       if (!data.success) {
         console.error("API Error:", data.error);
-        throw new Error(data.error || "Failed to load evaluation data.");
+        kpiElements.forEach(id => document.getElementById(id).textContent = 'Error');
+        document.getElementById('comparison-wrapper').innerHTML = `<div style="text-align:center; color:#dc2626; padding:20px;">${data.error || "Failed to load comparison data."}</div>`;
+        document.getElementById('feedback-body').innerHTML = '<tr><td style="text-align:center; padding:1.5rem; color:#dc2626;">Error loading feedback.</td></tr>';
+        return;
       }
       
-      const { kpis, breakdown_chart, comparison } = data;
+      const { kpis, breakdown_chart, comparison, recent_feedback } = data;
       
       // 1. Update KPIs
       document.getElementById('kpi-overall').textContent = kpis.overall_average > 0 ? kpis.overall_average.toFixed(2) : 'N/A';
@@ -171,6 +175,9 @@
 
       // 3. Populate Comparison Block
       populateComparison(comparison);
+      
+      // 4. Populate Student Feedback (UPDATED)
+      populateFeedback(recent_feedback);
 
       // --- Placeholder: Load other tabs/tables ---
       // This uses mock data for now, but should be replaced by future API calls.
@@ -180,20 +187,37 @@
         <tr><td>Peer Prof. Smith</td><td>Observation (Q4)</td><td><span class="status completed">Completed</span></td><td><button class="btn-action"><i class='bx bx-show'></i></button></td></tr>
         <tr><td>HR Dept</td><td>Annual Review</td><td><span class="status pending">Pending</span></td><td><button class="btn-action"><i class='bx bx-edit'></i></button></td></tr>
       `;
-      document.getElementById('feedback-body').innerHTML = `
-        <tr><td><span class="feedback-tag">Student</span></td><td>Prof. explains topics clearly and relates them to real-world cases.</td></tr>
-        <tr><td><span class="feedback-tag">Supervisor</span></td><td>Meets institutional teaching standards.</td></tr>
-      `;
 
     } catch (error) {
       console.error("Failed to load evaluation data:", error);
-      // Set error states
-      document.getElementById('kpi-overall').textContent = 'Error';
-      document.getElementById('kpi-student').textContent = 'Error';
-      document.getElementById('kpi-peer').textContent = 'Error';
-      document.getElementById('kpi-supervisor').textContent = 'Error';
+      kpiElements.forEach(id => document.getElementById(id).textContent = 'Error');
       document.getElementById('comparison-wrapper').innerHTML = '<div style="text-align:center; color:#dc2626; padding:20px;">Failed to load comparison data.</div>';
+      document.getElementById('feedback-body').innerHTML = '<tr><td style="text-align:center; padding:1.5rem; color:#dc2626;">Failed to load feedback data.</td></tr>';
     }
+  }
+  
+  // UPDATED FUNCTION: Removed top 5 limit and evaluator column
+  function populateFeedback(feedbackList) {
+      const tbody = document.getElementById('feedback-body');
+      tbody.innerHTML = '';
+      
+      // Filter for ONLY student feedback
+      const studentFeedback = feedbackList.filter(f => f.evaluator.toLowerCase() === 'student');
+
+      if (studentFeedback.length === 0) {
+          tbody.innerHTML = '<tr><td style="text-align:center; padding:1.5rem; color:var(--muted);">No student feedback available for this period.</td></tr>';
+          return;
+      }
+      
+      // Display ALL available student feedback comments
+      studentFeedback.forEach(f => {
+          const tr = document.createElement('tr');
+          // Only one <td> now, containing the comment
+          tr.innerHTML = `
+              <td style="font-style: italic;">- ${f.comment}</td>
+          `;
+          tbody.appendChild(tr);
+      });
   }
 
   function populateComparison(comparison) {

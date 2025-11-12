@@ -3131,8 +3131,7 @@ def api_hr_faculty_schedule(personnel_id):
 def api_faculty_evaluations_data():
     """
     Fetches comprehensive evaluation data for the currently logged-in faculty member.
-    Includes KPIs, evaluator breakdown, and department/college comparison.
-    FIXED: Ensures all aggregates are calculated correctly and non-existent scores are handled as 0.
+    Includes KPIs, breakdown, comparison, and raw qualitative feedback.
     """
     try:
         user_id = session.get('user_id')
@@ -3162,7 +3161,8 @@ def api_faculty_evaluations_data():
                 SELECT
                     fe.evaluator_type,
                     fe.score AS single_score,
-                    fe.total_responses AS total_responses
+                    fe.total_responses AS total_responses,
+                    fe.qualitative_feedback -- NEW: Include feedback
                 FROM faculty_evaluations fe
                 WHERE fe.personnel_id = %s AND fe.acadcalendar_id = %s
             ),
@@ -3196,7 +3196,7 @@ def api_faculty_evaluations_data():
                 FROM personnel p
                 LEFT JOIN college c ON p.college_id = c.college_id
                 LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s
-                WHERE p.role_id IN (20001, 20002)
+                WHERE p.role_id IN (20001, 20002) AND fe.score IS NOT NULL
                 GROUP BY p.personnel_id, p.college_id, c.collegename
             )
             SELECT 
@@ -3212,7 +3212,16 @@ def api_faculty_evaluations_data():
                 (SELECT AVG(cb.overall_score) 
                  FROM comparison_base cb
                  WHERE cb.college_id = (SELECT college_id FROM personnel WHERE personnel_id = %s) AND cb.overall_score > 0
-                ) AS department_avg
+                ) AS department_avg,
+                
+                -- 3. Qualitative Feedback (Aggregate all non-null feedback)
+                json_agg(json_build_object(
+                    'type', evaluator_type, 
+                    'feedback', qualitative_feedback
+                )) FILTER (WHERE qualitative_feedback IS NOT NULL) AS all_feedback_json
+            
+            FROM faculty_scores
+            
         """, (personnel_id, current_term_id, current_term_id, personnel_id, personnel_id))
         
         result = cursor.fetchone()
@@ -3223,7 +3232,7 @@ def api_faculty_evaluations_data():
             return jsonify({'success': False, 'error': 'No personnel or active term found.'}), 404
         
         (overall_avg, student_score, peer_score, supervisor_score, 
-         faculty_college_name, college_wide_avg, department_avg) = result
+         faculty_college_name, college_wide_avg, department_avg, all_feedback_json) = result
 
         # Ensure scores are floats for JSON serialization
         overall_avg = float(overall_avg) if overall_avg is not None else 0
@@ -3235,6 +3244,23 @@ def api_faculty_evaluations_data():
         your_avg = overall_avg
         dept_avg = float(department_avg) if department_avg is not None else your_avg
         college_avg = float(college_wide_avg) if college_wide_avg is not None else your_avg
+
+        # --- Process Feedback (Server-side cleanup) ---
+        clean_feedback = []
+        if all_feedback_json:
+            for item in all_feedback_json:
+                eval_type = item['type']
+                feedback_str = item['feedback']
+                
+                if feedback_str and feedback_str.strip():
+                    # Split by newline, strip, and filter out '---' delimiter
+                    comments = [c.strip() for c in feedback_str.split('\n') if c.strip() and c.strip() != '---']
+                    
+                    for comment in comments:
+                        clean_feedback.append({
+                            'evaluator': eval_type.capitalize(),
+                            'comment': comment
+                        })
         
         # Calculate Breakdown data (for doughnut chart percentages)
         breakdown_labels = ['Students (55%)', 'Peers (10%)', 'Supervisors (35%)']
@@ -3258,7 +3284,8 @@ def api_faculty_evaluations_data():
                 'dept_avg': dept_avg,
                 'college_avg': college_avg,
                 'college_name': faculty_college_name
-            }
+            },
+            'recent_feedback': clean_feedback # NEW: Cleaned feedback list
         })
         
     except Exception as e:
