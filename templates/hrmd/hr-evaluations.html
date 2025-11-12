@@ -45,13 +45,21 @@
               <select id="deptFilter">
                 <option value="">All Departments</option>
               </select>
+              <select id="positionFilter">
+                <option value="">All Positions</option>
+              </select>
               <select id="statusFilter">
                 <option value="">All Status</option>
                 <option value="above-average">Above Average (3–4)</option>
                 <option value="average">Average (2–3)</option>
-                <option value="below-average">Below Average (&lt;2)</option>
+                <option value="below-average">Below Average (<2)</option>
               </select>
-            </div>
+              <select id="responseRateFilter">
+                <option value="">All Response Rates</option>
+                <option value="met">Met (>= 10)</option>
+                <option value="not-met">Not Met (< 10)</option>
+              </select>
+              </div>
           </div>
           <div class="right">
             <button class="btn primary" id="update-eval-btn" >
@@ -108,18 +116,65 @@
         </div>
       </div>
     </section>
+
+    <div id="evaluationModal" class="hr-modal-wrapper" style="display: none;">
+      <div class="hr-modal-content" style="max-width: 800px; padding: 0;">
+          <div class="emp-modal-header" style="border-radius: 12px 12px 0 0; background: linear-gradient(90deg, #7b1113, #a71d2a);">
+              <h2 id="modalTitle" style="color: white; font-size: 1.25rem;">Evaluation Report: Faculty Name</h2>
+              <span class="emp-close" onclick="closeModal()" style="color: white;">&times;</span>
+          </div>
+          <div class="emp-modal-body" style="padding: 24px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 style="margin: 0; font-size: 1.1rem; color: #333;">Summary for <span id="reportSemester">Semester 1, AY 2025-2026</span></h3>
+                <button class="btn primary" id="modalDownloadBtn" onclick="downloadReport(this.dataset.personnelId)">
+                    <i class='bx bx-download'></i>&nbsp; Download PDF
+                </button>
+              </div>
+
+              <div class="report-content" id="reportContent">
+                  <div class="card" style="margin-bottom: 20px;">
+                      <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 15px; color: var(--spc-maroon); font-weight: 700;">Overall Rating Breakdown</h4>
+                      <div style="display: flex; align-items: center; gap: 30px; flex-wrap: wrap;">
+                          <div class="progress-circle" id="overallRatingCircle" style="--percentage: 0;">
+                              <span id="overallRatingValue">0.00</span>
+                          </div>
+                          <div style="flex-grow: 1;">
+                              <div style="margin-bottom: 10px;">
+                                  <span style="font-weight: 600; font-size: 15px;">Final Status:</span>
+                                  <span class="status above-average" id="finalStatusBadge" style="margin-left: 8px;">N/A</span>
+                              </div>
+                              <table style="width: 100%; border-collapse: separate; border-spacing: 0 5px;">
+                                  <tbody id="ratingBreakdownBody">
+                                      </tbody>
+                              </table>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div class="card" style="margin-bottom: 20px;">
+                      <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 15px; color: var(--spc-maroon); font-weight: 700;">Student Feedback (Total Responses: <span id="studentResponsesCount">0</span>)</h4>
+                      <ul id="feedbackList" style="list-style: none; padding: 0;">
+                          </ul>
+                      <div id="noFeedback" style="text-align: center; color: var(--muted); padding: 20px; border: 1px dashed #eee;">No qualitative feedback available.</div>
+                  </div>
+              </div>
+          </div>
+      </div>
+    </div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script>
 window.CURRENT_TERM_ID = {{ acadcalendar_id }};
+const MODAL = document.getElementById('evaluationModal');
 
-// This function fetches data via AJAX and renders the table using jQuery
 function loadEvaluations() {
     var dept = $('#deptFilter').val() || '';
     var status = $('#statusFilter').val() || '';
     var search = $('#evalSearch').val() || '';
+    var position = $('#positionFilter').val() || ''; 
+    var responseRate = $('#responseRateFilter').val() || ''; 
     var term = window.CURRENT_TERM_ID || '';
 
     // Clear and show loading state if necessary (omitted for brevity)
@@ -130,8 +185,10 @@ function loadEvaluations() {
     $.get('/api/hr/evaluations', {
         term: term,
         dept: dept,
-        status: status,
+        status: status, 
         search: search,
+        position: position, 
+        response_rate: responseRate, 
     }, function(data) {
         tbody.empty();
         
@@ -141,46 +198,57 @@ function loadEvaluations() {
             const avgRating = parseFloat(kpis.avg_rating).toFixed(2);
             const metRate = kpis.met_response_rate_count;
             const totalFaculty = kpis.total_faculty;
-            
-            // Assuming 10 is the Met threshold. faculty_with_data provides total faculty that have *any* data.
             const totalEvaluated = kpis.faculty_with_data; 
             
-            // Display General KPIs
             $('#kpiAvg').text(avgRating);
             $('#kpiTotalFaculty').text(totalFaculty);
             $('#kpiMetRate').text(`${metRate}/${totalEvaluated}`);
-            
-            // Display Best Department KPI
             $('#kpiBestDept').text(kpis.best_department_name);
         }
         // --- END KPI UPDATE ---
-
-        if(data.success && data.evaluations.length > 0) {
-            
-            // Populate Department Filter Dropdown (must be done after fetch)
-            var deptFilter = $('#deptFilter');
-            var currentDeptVal = deptFilter.val();
-            deptFilter.empty().append('<option value="">All Departments</option>');
-            var uniqueDepts = [...new Set(data.evaluations.map(e => e.department))].sort();
-            uniqueDepts.forEach(function(d) {
-                deptFilter.append(`<option value="${d}">${d}</option>`);
+        
+        // --- 2. POPULATE DROPDOWNS ---
+        
+        // Populate Department Filter Dropdown 
+        var deptFilter = $('#deptFilter');
+        var currentDeptVal = deptFilter.val();
+        deptFilter.empty().append('<option value="">All Departments</option>');
+        var uniqueDepts = [...new Set(data.evaluations.map(e => e.department))].sort();
+        uniqueDepts.forEach(function(d) {
+            deptFilter.append(`<option value="${d}">${d}</option>`);
+        });
+        deptFilter.val(currentDeptVal); 
+        
+        // Populate Position Filter Dropdown 
+        var positionFilter = $('#positionFilter');
+        var currentPositionVal = positionFilter.val();
+        positionFilter.empty().append('<option value="">All Positions</option>');
+        if (data.unique_positions) {
+            data.unique_positions.forEach(function(p) {
+                positionFilter.append(`<option value="${p}">${p}</option>`);
             });
-            deptFilter.val(currentDeptVal); // Retain selection
+        }
+        positionFilter.val(currentPositionVal); 
 
-            // Render Table Rows
+        // --- 3. RENDER TABLE ROWS ---
+        if(data.success && data.evaluations.length > 0) {
             data.evaluations.forEach(function(row) {
                 var rating = parseFloat(row.avgscore);
                 var statusClass = '';
                 var statusLabel = 'N/A';
                 
-                // Access the student response count
+                // Determine Status based on rating
+                if (rating >= 3) { 
+                    statusClass = 'above-average'; statusLabel = 'Above Average'; 
+                } else if (rating >= 2) { 
+                    statusClass = 'average'; statusLabel = 'Average'; 
+                } else if (rating > 0) { 
+                    statusClass = 'below-average'; statusLabel = 'Below Average'; 
+                } else {
+                    statusClass = 'pending'; statusLabel = 'Not Rated'; 
+                }
+                
                 var studentResponses = row.studentresponses; 
-                
-                if (rating >= 3) { statusClass = 'above-average'; statusLabel = 'Above Average'; }
-                else if (rating >= 2) { statusClass = 'average'; statusLabel = 'Average'; }
-                else { statusClass = 'below-average'; statusLabel = 'Below Average'; }
-                
-                // Assuming "Met" threshold is 10 student responses
                 var metThreshold = 10; 
                 var responseStatusLabel = studentResponses >= metThreshold ? 
                                           '<span style="color:#166534;font-weight:600">Met</span>' : 
@@ -191,15 +259,24 @@ function loadEvaluations() {
                     `<td>${row.name}</td>` +
                     `<td>${row.department}</td>` +
                     `<td>${row.position || 'N/A'}</td>` +
-                    // Display the student response count and the Met/Not Met status
                     `<td>${studentResponses} — ${responseStatusLabel}</td>` +
                     `<td><span class="status ${statusClass}">${statusLabel} (${rating.toFixed(2)})</span></td>` +
-                    `<td><button class="btn secondary"><i class='bx bx-download'></i>&nbsp;PDF</button></td>` +
+                    // UPDATED: Actions column with View and Download
+                    `<td>
+                        <button class="btn action" onclick="openModal(${row.personnelid}, '${row.name}', ${rating.toFixed(2)}, ${studentResponses})"><i class='bx bx-show-alt'></i>&nbsp;View</button>
+                        <button class="btn secondary" onclick="downloadReport(${row.personnelid})"><i class='bx bx-download'></i></button>
+                    </td>` +
                   '</tr>'
                 );
             });
-            $('#evalTable').show();
-            $('#emptyState').hide();
+            
+            if(tbody.children().length === 0) {
+                $('#evalTable').hide();
+                $('#emptyState').show();
+            } else {
+                $('#evalTable').show();
+                $('#emptyState').hide();
+            }
             
         } else {
             $('#evalTable').hide();
@@ -210,30 +287,152 @@ function loadEvaluations() {
     });
 }
 
+function getStatusInfo(rating) {
+    if (rating >= 3) { 
+        return { class: 'above-average completed', label: 'Above Average' };
+    } else if (rating >= 2) { 
+        return { class: 'average pending', label: 'Average' };
+    } else if (rating > 0) { 
+        return { class: 'below-average rejected', label: 'Below Average' };
+    } else {
+        return { class: 'pending', label: 'Not Rated' };
+    }
+}
+
+function openModal(personnelId, facultyName, overallRating, studentResponses) {
+    $('#modalTitle').text(`Evaluation Report: ${facultyName}`);
+    // Cap percentage at 100%
+    const circlePercentage = Math.min((overallRating / 5) * 100, 100); 
+    $('#overallRatingCircle').css('--percentage', `${circlePercentage}`);
+    $('#overallRatingValue').text(overallRating.toFixed(2));
+    $('#modalDownloadBtn').data('personnel-id', personnelId);
+    $('#studentResponsesCount').text(studentResponses);
+    
+    const statusInfo = getStatusInfo(overallRating);
+    $('#finalStatusBadge').text(statusInfo.label).removeClass().addClass(`status ${statusInfo.class}`);
+    
+    $('#ratingBreakdownBody').empty().append('<tr><td colspan="2" style="text-align:center;">Loading details...</td></tr>');
+    $('#feedbackList').empty();
+    $('#noFeedback').show();
+    MODAL.style.display = 'flex';
+
+    // Fetch detailed report data
+    $.get(`/api/hr/faculty-evaluation-report/${personnelId}?term_id=${window.CURRENT_TERM_ID}`, function(data) {
+        $('#ratingBreakdownBody').empty();
+        $('#feedbackList').empty();
+        
+        if (data.success && data.report) {
+            const report = data.report;
+            
+            // Populate Breakdown Table
+            report.rating_breakdown.forEach(item => {
+                const weight = item.weight * 100;
+                $('#ratingBreakdownBody').append(`
+                    <tr>
+                        <td style="font-weight: 500; padding: 5px 0;">${item.type} (${weight.toFixed(0)}%)</td>
+                        <td style="text-align: right; font-weight: 700; color: var(--spc-maroon); padding: 5px 0;">${item.score.toFixed(2)}</td>
+                    </tr>
+                `);
+            });
+            
+            // Populate Feedback
+            if (report.qualitative_feedback && report.qualitative_feedback.length > 0) {
+                
+                // NEW FILTERING LOGIC: Filter out unwanted delimiters/placeholders
+                const cleanFeedback = report.qualitative_feedback.filter(comment => {
+                    // Filter out comments that are empty, only whitespace, or specifically the delimiter '---'
+                    return comment.trim() !== '' && comment.trim() !== '---';
+                });
+
+                if (cleanFeedback.length > 0) {
+                    cleanFeedback.forEach(function(comment) {
+                        $('#feedbackList').append(`
+                            <li style="margin-bottom: 12px; padding: 10px; border-left: 3px solid var(--spc-gold); background: #fcfcfd; border-radius: 4px;">
+                                <i class='bx bxs-quote-alt-left' style="font-size: 1.1rem; color: var(--spc-gold); margin-right: 5px;"></i>
+                                <span style="font-style: italic; color: #333;">${comment}</span>
+                            </li>
+                        `);
+                    });
+                    $('#noFeedback').hide();
+                } else {
+                    // If all comments were filtered out (e.g., they were all '---'), show empty state
+                    $('#noFeedback').show().text('No qualitative feedback available.');
+                }
+            } else {
+                $('#noFeedback').show().text('No qualitative feedback available.');
+            }
+            
+            // Update modal title elements again with fresh data
+            $('#reportSemester').text(report.semester_display);
+        } else {
+            $('#ratingBreakdownBody').html('<tr><td colspan="2" style="text-align:center; color:#ef4444;">Failed to load report details.</td></tr>');
+            $('#noFeedback').show().text('Error loading qualitative feedback.');
+        }
+    }).fail(function() {
+        $('#ratingBreakdownBody').html('<tr><td colspan="2" style="text-align:center; color:#ef4444;">API Error: Could not fetch report details.</td></tr>');
+        $('#noFeedback').show().text('API Error: Could not fetch qualitative feedback.');
+    });
+}
+
+function closeModal() {
+    MODAL.style.display = 'none';
+}
+
+function downloadReport(personnelId) {
+    const termId = window.CURRENT_TERM_ID;
+    const url = `/api/hr/faculty-evaluation-report-pdf/${personnelId}?term_id=${termId}`;
+    alert(`Initiating download for Personnel ID ${personnelId}, Term ID ${termId}. (Note: This currently hits a stub endpoint.)`);
+    window.open(url, '_blank');
+}
 
 // --- JQUERY INITIALIZATION AND EVENT ATTACHMENT ---
 $(document).ready(function() {
-    // 1. Attach button click handlers (Priority for button fix)
+    // 1. Attach button click handlers
     $('#update-eval-btn').click(function() {
         alert("Attempting to update records. Check terminal for Google Sheets connection status...");
         $.post('/hr/fetch-evaluations', {}, function(response) {
             alert(response.message || "Evaluation records updated.");
-            loadEvaluations(); // Refresh evaluations table with new data
+            loadEvaluations(); 
         }).fail(function(xhr) {
             alert("Failed to update evaluation records. See server logs.");
         });
     });
     
     // 2. Attach filter change handlers
-    $('#deptFilter, #statusFilter').change(loadEvaluations);
+    $('#deptFilter, #statusFilter, #positionFilter, #responseRateFilter').change(loadEvaluations); 
     $('#evalSearch').on('input', loadEvaluations);
-
-    // 3. Initial data load
-    loadEvaluations();
     
-    // NOTE: Sorting logic involving `renderTable()` and `updateSortIndicators()` 
-    // from the pure JS prototype code has been permanently removed as it caused 
-    // script errors and is redundant since `loadEvaluations()` handles rendering.
+    // 3. New Cycle Button Handler (New Feature Implementation)
+    $('#newCycleBtn').click(function() {
+        if (!confirm('Are you sure you want to initiate a new evaluation cycle? This should only be done at the start of a new semester.')) {
+            return;
+        }
+
+        const button = $(this);
+        button.prop('disabled', true).html('<i class="bx bx-loader-alt bx-spin"></i>&nbsp; Initiating...');
+
+        $.post('/api/hr/new-evaluation-cycle', { current_term_id: window.CURRENT_TERM_ID }, function(response) {
+            alert(response.message);
+            if (response.success) {
+                loadEvaluations(); 
+                button.html('<i class="bx bx-refresh"></i>&nbsp; New Evaluation Cycle');
+            }
+        }).fail(function(xhr) {
+            alert("Failed to initiate new cycle: " + (xhr.responseJSON?.error || 'Server error'));
+        }).always(function() {
+            button.prop('disabled', false).html('<i class="bx bx-refresh"></i>&nbsp; New Evaluation Cycle');
+        });
+    });
+    
+    // Close modal on outside click
+    MODAL.addEventListener('click', function(event) {
+        if (event.target === MODAL) {
+            closeModal();
+        }
+    });
+
+    // 4. Initial data load
+    loadEvaluations();
 });
 </script>
 {% endblock %}
