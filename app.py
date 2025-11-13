@@ -7079,6 +7079,49 @@ def api_promotion_eligibility():
         print(f"Error checking promotion eligibility: {e}")
         return jsonify({'success': False, 'error': str(e)})
 
+@app.route('/api/promotion/list')
+@require_auth([20003, 20004, 20005])
+def get_promotion_list():
+    status_filter = request.args.get('status', None)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        if status_filter:
+            cursor.execute("""
+                SELECT application_id, faculty_id, current_status, requested_rank, date_submitted
+                FROM promotion_application
+                WHERE LOWER(current_status::text) = LOWER(%s)
+                ORDER BY date_submitted DESC
+            """, (status_filter,))
+        else:
+            cursor.execute("""
+                SELECT application_id, faculty_id, current_status, requested_rank, date_submitted
+                FROM promotion_application
+                ORDER BY date_submitted DESC
+            """)
+
+        rows = cursor.fetchall()
+        cursor.close()
+        return_db_connection(conn)
+
+        data = [
+            {
+                'application_id': row[0],
+                'faculty_id': row[1],
+                'current_status': row[2],
+                'requested_rank': row[3],
+                'date_submitted': row[4].strftime('%Y-%m-%d') if row[4] else None
+            }
+            for row in rows
+        ]
+
+        return jsonify({'success': True, 'data': data})
+
+    except Exception as e:
+        print(f'Error fetching promotion list: {str(e)}')
+        return jsonify({'success': False, 'error': 'Failed to fetch promotion list'}), 500
 
 
 if __name__ == "__main__":

@@ -37,7 +37,7 @@
           <div class="icon promo"><i class='bx bx-award'></i></div>
           <div>
             <div class="title">Promotion Requests</div>
-            <div class="value" id="kpi-promo">3</div>
+            <div class="value" id="kpi-promo">Loading...</div>
           </div>
         </div>
       </div>
@@ -228,6 +228,15 @@
         document.getElementById('scoreChart').parentElement.innerHTML = '<div style="text-align:center; color:var(--muted); padding:30px;">Error loading evaluation data</div>';
         document.getElementById('topDeptChart').parentElement.innerHTML = '<div style="text-align:center; color:var(--muted); padding:30px;">Error loading evaluation data</td></tr>';
       }
+
+      const promoRequestsResponse = await fetch('/api/promotion/list?status=hrmd');
+      const promoRequestsData = await promoRequestsResponse.json();
+      if (promoRequestsData.success) {
+        document.getElementById('kpi-promo').textContent = promoRequestsData.data.length || 0;
+      } else {
+        document.getElementById('kpi-promo').textContent = 'Error';
+      }
+
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
