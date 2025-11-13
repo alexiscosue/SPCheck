@@ -41,7 +41,7 @@
         <div class="controls">
           <div class="left">
             <div class="search-filter">
-              <input type="text" id="evalSearch" placeholder="Search faculty or dept...">
+              <input type="text" id="evalSearch" placeholder="Search faculty...">
               <select id="deptFilter">
                 <option value="">All Departments</option>
               </select>
@@ -49,7 +49,7 @@
                 <option value="">All Positions</option>
               </select>
               <select id="statusFilter">
-                <option value="">All Status</option>
+                <option value="">Rating</option>
                 <option value="above-average">Above Average (3–4)</option>
                 <option value="average">Average (2–3)</option>
                 <option value="below-average">Below Average (<2)</option>
@@ -99,7 +99,7 @@
                 <th><span class="sortable" data-sort="dept">Department <span class="sort-ind" id="sortDept"></span></span></th>
                 <th><span class="sortable" data-sort="position">Position <span class="sort-ind" id="sortPosition"></span></span></th>
                 <th><span class="sortable" data-sort="response">Response Rate <span class="sort-ind" id="sortResponse"></span></span></th>
-                <th><span class="sortable" data-sort="rating">Status <span class="sort-ind" id="sortRating"></span></span></th>
+                <th><span class="sortable" data-sort="rating">Rating <span class="sort-ind" id="sortRating"></span></span></th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -168,6 +168,7 @@
 <script>
 window.CURRENT_TERM_ID = {{ acadcalendar_id }};
 const MODAL = document.getElementById('evaluationModal');
+let ALL_COLLEGES = []; // Variable to store the full list of departments/colleges fetched initially
 
 function loadEvaluations() {
     var dept = $('#deptFilter').val() || '';
@@ -209,14 +210,18 @@ function loadEvaluations() {
         
         // --- 2. POPULATE DROPDOWNS ---
         
-        // Populate Department Filter Dropdown 
+        // Populate Department Filter Dropdown - USE CACHED LIST (FIXED BUG)
         var deptFilter = $('#deptFilter');
         var currentDeptVal = deptFilter.val();
-        deptFilter.empty().append('<option value="">All Departments</option>');
-        var uniqueDepts = [...new Set(data.evaluations.map(e => e.department))].sort();
-        uniqueDepts.forEach(function(d) {
-            deptFilter.append(`<option value="${d}">${d}</option>`);
-        });
+        
+        // Only rebuild the dropdown if the cached list is available, otherwise rely on initial load
+        if (ALL_COLLEGES.length > 0) {
+            deptFilter.empty().append('<option value="">All Departments</option>');
+            ALL_COLLEGES.forEach(function(d) {
+                deptFilter.append(`<option value="${d}">${d}</option>`);
+            });
+        }
+        // Restore the currently selected value
         deptFilter.val(currentDeptVal); 
         
         // Populate Position Filter Dropdown 
@@ -286,6 +291,34 @@ function loadEvaluations() {
         tbody.html('<tr><td colspan="6" class="table-empty" style="color:#991b1b;">Failed to load data from API.</td></tr>');
     });
 }
+
+// === NEW FUNCTION TO FETCH ALL COLLEGES ===
+function fetchAllCollegesAndInitialize() {
+    $.get('/api/hr/colleges-list', function(data) {
+        if (data.success && data.colleges) {
+            // Store the full list globally
+            ALL_COLLEGES = data.colleges.map(c => c.collegename).sort();
+            
+            // Populate the dropdown with the complete list immediately
+            const deptFilter = $('#deptFilter');
+            deptFilter.empty().append('<option value="">All Departments</option>');
+            ALL_COLLEGES.forEach(function(d) {
+                deptFilter.append(`<option value="${d}">${d}</option>`);
+            });
+            
+            // Now, load the evaluations for the first time
+            loadEvaluations();
+        } else {
+            console.error('Failed to load college list. Proceeding with evaluation load.');
+            loadEvaluations(); // Proceed even if colleges fail to load
+        }
+    }).fail(function() {
+        console.error('API Error: Could not fetch colleges list. Proceeding with evaluation load.');
+        loadEvaluations();
+    });
+}
+// === END NEW FUNCTION ===
+
 
 function getStatusInfo(rating) {
     if (rating >= 3) { 
@@ -381,7 +414,6 @@ function closeModal() {
 function downloadReport(personnelId) {
     const termId = window.CURRENT_TERM_ID;
     const url = `/api/hr/faculty-evaluation-report-pdf/${personnelId}?term_id=${termId}`;
-    alert(`Initiating download for Personnel ID ${personnelId}, Term ID ${termId}. (Note: This currently hits a stub endpoint.)`);
     window.open(url, '_blank');
 }
 
@@ -400,7 +432,7 @@ $(document).ready(function() {
             loadEvaluations(); // Refresh table
             
             // Use an ephemeral feedback message (similar to a toast or quick flash)
-            const successHtml = `<i class='bx bx-check-shield'></i>&nbsp; Updated (${response.updated_count + 'r' || '0'})!`;
+            const successHtml = `<i class='bx bx-check-shield'></i>&nbsp; Updated (${response.updated_count || '0'})!`;
             button.html(successHtml);
             
             // Revert after a short delay
@@ -455,8 +487,8 @@ $(document).ready(function() {
         }
     });
 
-    // 4. Initial data load
-    loadEvaluations();
+    // 4. Initial data load - Call the function that fetches ALL colleges first.
+    fetchAllCollegesAndInitialize();
 });
 </script>
 {% endblock %}

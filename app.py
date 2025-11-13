@@ -19,6 +19,10 @@ import base64
 from PIL import Image
 import gspread
 from google.oauth2.service_account import Credentials
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch, mm
+from reportlab.lib import colors
 
 
 load_dotenv()
@@ -422,6 +426,17 @@ def get_peers_score_records():
         return []
 
 
+# Helper function for ReportLab (place this outside any route/function)
+def getStatusLabel(rating):
+    if rating >= 3:
+        return 'Above Average'
+    elif rating >= 2:
+        return 'Average'
+    elif rating > 0:
+        return 'Below Average'
+    else:
+        return 'Not Rated'
+
 
 # ========== CACHED DATA ==========
 _cache = {}
@@ -637,7 +652,7 @@ def api_faculty_attendance():
         
         attendance_logs = []
         class_attendance = []
-        status_counts = {'present': 0, 'late': 0, 'absent': 0}
+        status_counts = {'present': 0, 'late': 0, 'absent': 0, 'excused': 0}
         
         philippines_tz = pytz.timezone('Asia/Manila')
         current_date = datetime.now(philippines_tz).date()
@@ -724,6 +739,8 @@ def api_faculty_attendance():
                         status_counts['late'] += 1
                     elif status_lower == 'absent':
                         status_counts['absent'] += 1
+                    elif status_lower == 'excused':
+                        status_counts['excused'] += 1
                     
                     check_date += timedelta(days=7)
         
@@ -1187,7 +1204,7 @@ def api_faculty_attendance_by_semester(semester_id):
         
         attendance_logs = []
         class_attendance = []
-        status_counts = {'present': 0, 'late': 0, 'absent': 0}
+        status_counts = {'present': 0, 'late': 0, 'absent': 0, 'excused': 0}
         
         for record in attendance_records:
             class_id = record['class_id']
@@ -1246,6 +1263,8 @@ def api_faculty_attendance_by_semester(semester_id):
                 status_counts['late'] += 1
             elif status_lower == 'absent':
                 status_counts['absent'] += 1
+            elif status_lower == 'excused':
+                status_counts['excused'] += 1
         
         total_recorded = len(attendance_logs)
         attendance_percent = round((status_counts['present'] + status_counts['late']) / total_recorded * 100, 1) if total_recorded > 0 else 0
@@ -1279,6 +1298,117 @@ def api_faculty_attendance_by_semester(semester_id):
         print(f"Error fetching attendance data for semester {semester_id}: {e}")
         import traceback
         traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/hr/excuse-absence-bulk', methods=['POST'])
+@require_auth([20003])  
+def api_excuse_absence_bulk():
+    """Bulk excuse all absences for a faculty on a specific date - ONLY UPDATE EXISTING RECORDS"""
+    try:
+        data = request.get_json()
+        personnel_id = data.get('personnel_id')
+        date_str = data.get('date')
+        reason = data.get('reason', '').strip()
+        
+        if not personnel_id or not date_str:
+            return {'success': False, 'error': 'Faculty and date are required'}
+        
+        if not reason:
+            return {'success': False, 'error': 'Reason is required'}
+        
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return {'success': False, 'error': 'Invalid date format. Use YYYY-MM-DD'}
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT firstname, lastname FROM personnel WHERE personnel_id = %s", (personnel_id,))
+        faculty_info = cursor.fetchone()
+        if not faculty_info:
+            cursor.close()
+            return_db_connection(conn)
+            return {'success': False, 'error': 'Faculty not found'}
+        
+        faculty_name = f"{faculty_info[0]} {faculty_info[1]}"
+        
+        cursor.execute("""
+            SELECT COUNT(*), 
+                   COALESCE(string_agg(attendancestatus, ', '), 'None') as existing_statuses
+            FROM attendance 
+            WHERE personnel_id = %s 
+            AND DATE(timein AT TIME ZONE 'Asia/Manila') = %s
+        """, (personnel_id, target_date))
+        
+        before_result = cursor.fetchone()
+        before_count = before_result[0] if before_result else 0
+        before_statuses = before_result[1] if before_result else 'None'
+        
+        if before_count == 0:
+            cursor.close()
+            return_db_connection(conn)
+            return {'success': False, 'error': f'No attendance records found for {faculty_name} on {target_date}. Only existing records can be excused.'}
+        
+        cursor.execute("""
+            SELECT attendance_id, class_id, attendancestatus
+            FROM attendance 
+            WHERE personnel_id = %s 
+            AND DATE(timein AT TIME ZONE 'Asia/Manila') = %s
+        """, (personnel_id, target_date))
+        
+        existing_records = cursor.fetchall()
+        updated_count = 0
+        
+        for record in existing_records:
+            attendance_id, class_id, current_status = record
+            
+            if current_status in ['Absent', 'Present', 'Late']:
+                cursor.execute("""
+                    UPDATE attendance 
+                    SET attendancestatus = 'Excused'
+                    WHERE attendance_id = %s
+                """, (attendance_id,))
+                updated_count += 1
+        
+        conn.commit()
+        
+        hr_user_id = session['user_id']
+        hr_personnel_info = get_personnel_info(hr_user_id)
+        hr_personnel_id = hr_personnel_info.get('personnel_id')
+        
+        before_value = f"Records: {before_count}, Statuses: {before_statuses}"
+        after_value = f"Updated to Excused: {updated_count}"
+        
+        log_audit_action(
+            hr_personnel_id,
+            "Bulk absence excuse",
+            f"HR excused attendance for {faculty_name} on {target_date}\nReason: {reason}",
+            before_value=before_value,
+            after_value=after_value
+        )
+        
+        cursor.close()
+        return_db_connection(conn)
+        
+        if updated_count == 0:
+            return {
+                'success': False, 
+                'error': f'No records to excuse for {faculty_name} on {target_date}. Only Absent, Present, or Late records can be excused.'
+            }
+        
+        return {
+            'success': True, 
+            'message': f'Successfully excused {updated_count} classes for {faculty_name} on {target_date}',
+            'updated': updated_count
+        }
+        
+    except Exception as e:
+        print(f"Error in bulk excuse: {e}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/faculty/teaching-schedule/<int:semester_id>')
@@ -1643,6 +1773,107 @@ def api_faculty_dashboard():
         
     except Exception as e:
         print(f"Error fetching dashboard data: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/hr/today-classes-attendance')
+@require_auth([20003])
+def api_hr_today_classes_attendance():
+    """Get today's attendance statistics based on CLASSES scheduled today"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        philippines_tz = pytz.timezone('Asia/Manila')
+        today = datetime.now(philippines_tz).date()
+        today_str = today.strftime('%Y-%m-%d')
+        current_day = today.strftime('%A')  
+        
+        cursor.execute("""
+            WITH current_calendar AS (
+                SELECT acadcalendar_id 
+                FROM acadcalendar 
+                WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                ORDER BY semesterstart DESC
+                LIMIT 1
+            ),
+            classes_today AS (
+                SELECT 
+                    sch.class_id,
+                    sch.personnel_id
+                FROM schedule sch
+                CROSS JOIN current_calendar cc
+                WHERE sch.acadcalendar_id = cc.acadcalendar_id
+                AND (
+                    (sch.classday_1 = %s AND sch.starttime_1 IS NOT NULL) OR
+                    (sch.classday_2 = %s AND sch.starttime_2 IS NOT NULL)
+                )
+            )
+            SELECT COUNT(*) 
+            FROM classes_today
+        """, (current_day, current_day))
+        
+        total_classes_today = cursor.fetchone()[0] or 0
+        
+        if total_classes_today == 0:
+            cursor.close()
+            return_db_connection(conn)
+            return {
+                'success': True,
+                'attendance_percentage': 0,
+                'present_classes': 0,
+                'total_classes_today': 0,
+                'today_date': today_str,
+                'note': 'No classes scheduled today'
+            }
+        
+        cursor.execute("""
+            WITH current_calendar AS (
+                SELECT acadcalendar_id 
+                FROM acadcalendar 
+                WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                ORDER BY semesterstart DESC
+                LIMIT 1
+            ),
+            classes_today AS (
+                SELECT 
+                    sch.class_id,
+                    sch.personnel_id
+                FROM schedule sch
+                CROSS JOIN current_calendar cc
+                WHERE sch.acadcalendar_id = cc.acadcalendar_id
+                AND (
+                    (sch.classday_1 = %s AND sch.starttime_1 IS NOT NULL) OR
+                    (sch.classday_2 = %s AND sch.starttime_2 IS NOT NULL)
+                )
+            )
+            SELECT COUNT(DISTINCT a.class_id)
+            FROM attendance a
+            JOIN classes_today ct ON a.class_id = ct.class_id
+            WHERE DATE(a.timein AT TIME ZONE 'Asia/Manila') = %s
+            AND a.attendancestatus IN ('Present', 'Late', 'Excused')
+            -- Removed the timein filter to include excused classes that don't have actual time-in
+        """, (current_day, current_day, today))
+        
+        present_classes = cursor.fetchone()[0] or 0
+        
+        cursor.close()
+        return_db_connection(conn)
+        
+        attendance_percentage = round((present_classes / total_classes_today) * 100) if total_classes_today > 0 else 0
+        
+        return {
+            'success': True,
+            'attendance_percentage': attendance_percentage,
+            'present_classes': present_classes,
+            'total_classes_today': total_classes_today,
+            'today_date': today_str,
+            'note': f'Classes scheduled on {current_day}'
+        }
+        
+    except Exception as e:
+        print(f"Error fetching today's classes attendance stats: {e}")
         import traceback
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
@@ -2382,8 +2613,8 @@ def api_hr_faculty_attendance():
         return_db_connection(conn)
         
         attendance_logs = []
-        status_counts = {'present': 0, 'late': 0, 'absent': 0}
-        today_counts = {'present': 0, 'late': 0, 'absent': 0}
+        status_counts = {'present': 0, 'late': 0, 'absent': 0, 'excused': 0}
+        today_counts = {'present': 0, 'late': 0, 'absent': 0, 'excused': 0}
         
         seen_records = set()
         
@@ -2443,11 +2674,11 @@ def api_hr_faculty_attendance():
                 if date_str == today.strftime('%Y-%m-%d') and status_lower in today_counts:
                     today_counts[status_lower] += 1
                 
-                print(f"✅ Database record: {faculty_name} - {date_str} - {class_name}")
+                # print(f"✅ Database record: {faculty_name} - {date_str} - {class_name}")
             else:
                 print(f"🚨 DUPLICATE SKIPPED: {record_key}")
         
-        print(f"📊 Database records: {len(attendance_records)}, Displayed: {len(attendance_logs)}")
+        # print(f"📊 Database records: {len(attendance_records)}, Displayed: {len(attendance_logs)}")
         
         kpis = {
             'total_faculty': total_faculty or 0,
@@ -2472,7 +2703,7 @@ def api_hr_faculty_attendance():
 @app.route('/api/hr/update-attendance-time', methods=['POST'])
 @require_auth([20003])
 def api_update_attendance_time():
-    """Update time in/out for attendance records with improved audit logging"""
+    """Update time in/out for attendance records with exact RFID validation rules"""
     try:
         data = request.get_json()
         updates = data.get('updates', [])
@@ -2570,7 +2801,6 @@ def api_update_attendance_time():
                             print(f"     schedule: {classday_1} {starttime_1}-{endtime_1} / {classday_2} {starttime_2}-{endtime_2}")
                             print(f"     matches {day_of_week}: Day1={day1_matches}, Day2={day2_matches}")
                             
-                            # RULE 1: Exact day match 
                             if day1_matches or day2_matches:
                                 if day1_matches:
                                     scheduled_day = classday_1
@@ -2590,7 +2820,6 @@ def api_update_attendance_time():
                                 print(f"   ✅ Found PERFECT match on {day_type}: {attendance_id}")
                                 break
                         
-                        # RULE 2: If no exact day match found, use the first record
                         if not exact_match_found and attendance_results:
                             target_record = attendance_results[0]
                             print(f"   ⚠️ Using first record as fallback: {target_record[0]}")
@@ -2602,7 +2831,21 @@ def api_update_attendance_time():
                             
                             print(f"   🎯 Updating record: ID={attendance_id}")
                             print(f"   Schedule: {classday_1} {starttime_1}-{endtime_1} / {classday_2} {starttime_2}-{endtime_2}")
-                            print(f"   Current - Timein: {current_timein}, Timeout: {current_timeout}, Status: {current_status}")
+                            
+                            if day1_matches:
+                                class_start = starttime_1
+                                class_end = endtime_1
+                                validation_day = classday_1
+                            elif day2_matches:
+                                class_start = starttime_2
+                                class_end = endtime_2
+                                validation_day = classday_2
+                            else:
+                                class_start = starttime_1 or starttime_2
+                                class_end = endtime_1 or endtime_2
+                                validation_day = classday_1 or classday_2
+                            
+                            print(f"   Using schedule for validation: {validation_day} {class_start}-{class_end}")
                             
                             changes_made = []
                             updates_applied = False
@@ -2614,7 +2857,6 @@ def api_update_attendance_time():
                             if 'time_in' in update:
                                 updates_applied = True
                                 if time_in == '':  
-                                    # DELETE TIME-IN: Set timein to midnight of the same date (retain date)
                                     midnight_time = f"{date} 00:00:00"
                                     cursor.execute("""
                                         UPDATE attendance 
@@ -2624,7 +2866,6 @@ def api_update_attendance_time():
                                     changes_made.append("deleted time-in")
                                     print(f"   ✅ Deleted time-in (set to midnight)")
                                 else:  
-                                    # SET/UPDATE TIME-IN: Convert to 24-hour format with AM/PM handling
                                     time_in_24hr = convert_to_24hour(time_in)
                                     new_timein = f"{date} {time_in_24hr}"
                                     cursor.execute("""
@@ -2636,14 +2877,7 @@ def api_update_attendance_time():
                                     print(f"   ✅ Set time-in to {time_in_24hr}")
                             
                             if 'time_out' in update:
-                                # RULE: Timeout can only be added if there's a valid timein
-                                current_timein_check = current_timein
-                                if 'time_in' in update and time_in != '':
-                                    time_in_24hr = convert_to_24hour(time_in)
-                                    current_timein_check = datetime.strptime(f"{date} {time_in_24hr}", "%Y-%m-%d %H:%M:%S")
-                                
                                 if time_out == '':  
-                                    # DELETE TIME-OUT: Set to NULL (completely remove)
                                     cursor.execute("""
                                         UPDATE attendance 
                                         SET timeout = NULL
@@ -2653,9 +2887,12 @@ def api_update_attendance_time():
                                     print(f"   ✅ Deleted time-out")
                                     updates_applied = True
                                 else:  
-                                    # RULE: Can only add timeout if there's a valid timein
+                                    current_timein_check = current_timein
+                                    if 'time_in' in update and time_in != '':
+                                        time_in_24hr = convert_to_24hour(time_in)
+                                        current_timein_check = datetime.strptime(f"{date} {time_in_24hr}", "%Y-%m-%d %H:%M:%S")
+                                    
                                     if current_timein_check and current_timein_check.strftime('%H:%M:%S') != '00:00:00':
-                                        # SET/UPDATE TIME-OUT: Convert to 24-hour format with AM/PM handling
                                         time_out_24hr = convert_to_24hour(time_out)
                                         new_timeout = f"{date} {time_out_24hr}"
                                         cursor.execute("""
@@ -2670,7 +2907,6 @@ def api_update_attendance_time():
                                         print(f"   ⚠️ Cannot add timeout - no valid timein exists")
                                         updates_applied = False
                             
-                            new_status = current_status
                             if updates_applied:
                                 cursor.execute("""
                                     SELECT timein, timeout FROM attendance WHERE attendance_id = %s
@@ -2679,87 +2915,143 @@ def api_update_attendance_time():
                                 
                                 if updated_times:
                                     updated_timein, updated_timeout = updated_times
+                                    new_status = None
                                     
-                                    if updated_timein is None:
-                                        new_status = 'Absent'
-                                    elif updated_timein is not None:
-                                        if updated_timein and updated_timein.strftime('%H:%M:%S') == '00:00:00':
-                                            new_status = 'Absent'
-                                        elif updated_timeout is None:
-                                            new_status = 'Present'
+                                    if class_start and class_end and validation_day == day_of_week:
+                                        print(f"   🔍 Validating against class schedule: {class_start}-{class_end}")
+                                        
+                                        if updated_timein and updated_timein.strftime('%H:%M:%S') != '00:00:00':
+                                            if isinstance(class_start, str):
+                                                class_start_time = datetime.strptime(class_start[:8], '%H:%M:%S').time()
+                                            else:
+                                                class_start_time = class_start
+                                            
+                                            if isinstance(class_end, str):
+                                                class_end_time = datetime.strptime(class_end[:8], '%H:%M:%S').time()
+                                            else:
+                                                class_end_time = class_end
+                                            
+                                            class_start_dt = datetime.combine(date_obj, class_start_time)
+                                            class_end_dt = datetime.combine(date_obj, class_end_time)
+                                            
+                                            timein_dt = updated_timein.astimezone(pytz.timezone('Asia/Manila')).replace(tzinfo=None)
+                                            
+                                            # EXACT RFID VALIDATION RULES
+                                            timein_window_start = (class_start_dt - timedelta(minutes=15)).time()
+                                            timein_window_end = (class_end_dt - timedelta(minutes=15)).time()
+                                            present_threshold_dt = class_start_dt + timedelta(minutes=15)
+                                            timeout_window_start = (class_end_dt - timedelta(minutes=15)).time()
+                                            timeout_window_end = (class_end_dt + timedelta(minutes=15)).time()
+                                            
+                                            print(f"   📊 Time Windows:")
+                                            print(f"     Time-in window: {timein_window_start} to {timein_window_end}")
+                                            print(f"     Present threshold: {present_threshold_dt.time()}")
+                                            print(f"     Time-out window: {timeout_window_start} to {timeout_window_end}")
+                                            print(f"     Actual time-in: {timein_dt.time()}")
+                                            
+                                            # RULE 1: Check if time-in is within valid time-in window
+                                            if timein_window_start <= timein_dt.time() <= timein_window_end:
+                                                # RULE 5 & 6: Determine Present vs Late
+                                                if timein_dt <= present_threshold_dt:
+                                                    new_status = "Present"
+                                                    print(f"   ✅ Time-in within window: RECORDED AS PRESENT")
+                                                else:
+                                                    new_status = "Late" 
+                                                    print(f"   ✅ Time-in within window: RECORDED AS LATE")
+                                            else:
+                                                # Time-in outside window - check if it's in timeout window (RULE 8)
+                                                if timeout_window_start <= timein_dt.time() <= timeout_window_end:
+                                                    new_status = "Late"
+                                                    print(f"   ✅ Time-in in timeout window: RECORDED AS LATE")
+                                                else:
+                                                    # Time-in completely outside all windows
+                                                    new_status = "Absent"
+                                                    print(f"   ❌ Time-in outside all windows: RECORDED AS ABSENT")
+                                                    
                                         else:
-                                            new_status = 'Present'
+                                            # No time-in = Absent (RULE 9 & 10)
+                                            new_status = "Absent"
+                                            print(f"   ❌ No time-in: RECORDED AS ABSENT")
                                     
-                                    if new_status != current_status:
+                                    else:
+                                        print(f"   ⚠️ No schedule validation possible, using basic logic")
+                                        if not updated_timein or updated_timein.strftime('%H:%M:%S') == '00:00:00':
+                                            new_status = "Absent"
+                                        elif updated_timein and not updated_timeout:
+                                            new_status = "Present"
+                                        elif updated_timein and updated_timeout:
+                                            new_status = "Present"
+                                    
+                                    if new_status:
                                         cursor.execute("""
                                             UPDATE attendance 
                                             SET attendancestatus = %s
                                             WHERE attendance_id = %s
                                         """, (new_status, attendance_id))
                                         print(f"   ✅ Updated status: {current_status} → {new_status}")
-                                
-                                updated_count += 1
-                                
-                                schedule_info = ""
-                                if day1_matches and classday_1 and starttime_1 and endtime_1:
-                                    start1_str = str(starttime_1)[:8] if starttime_1 else 'N/A'
-                                    end1_str = str(endtime_1)[:8] if endtime_1 else 'N/A'
-                                    schedule_info = f"{classday_1} {start1_str} - {end1_str}"
-                                elif day2_matches and classday_2 and starttime_2 and endtime_2:
-                                    start2_str = str(starttime_2)[:8] if starttime_2 else 'N/A'
-                                    end2_str = str(endtime_2)[:8] if endtime_2 else 'N/A'
-                                    schedule_info = f"{classday_2} {start2_str} - {end2_str}"
-                                else:
-                                    schedule_parts = []
-                                    if classday_1 and starttime_1 and endtime_1:
+                                    
+                                    updated_count += 1
+                                    
+                                    schedule_info = ""
+                                    if day1_matches and classday_1 and starttime_1 and endtime_1:
                                         start1_str = str(starttime_1)[:8] if starttime_1 else 'N/A'
                                         end1_str = str(endtime_1)[:8] if endtime_1 else 'N/A'
-                                        schedule_parts.append(f"{classday_1} {start1_str}-{end1_str}")
-                                    if classday_2 and starttime_2 and endtime_2:
+                                        schedule_info = f"{classday_1} {start1_str} - {end1_str}"
+                                    elif day2_matches and classday_2 and starttime_2 and endtime_2:
                                         start2_str = str(starttime_2)[:8] if starttime_2 else 'N/A'
                                         end2_str = str(endtime_2)[:8] if endtime_2 else 'N/A'
-                                        schedule_parts.append(f"{classday_2} {start2_str}-{end2_str}")
-                                    schedule_info = " / ".join(schedule_parts) if schedule_parts else "N/A"
-
-                                before_timein_str = "None"
-                                if original_timein and original_timein.strftime('%H:%M:%S') != '00:00:00':
-                                    before_timein_str = original_timein.strftime('%H:%M:%S')
-
-                                before_timeout_str = "None"
-                                if original_timeout and original_timeout.strftime('%H:%M:%S') != '00:00:00':
-                                    before_timeout_str = original_timeout.strftime('%H:%M:%S')
-
-                                after_timein_str = "None"
-                                if 'time_in' in update:
-                                    if time_in == '':
-                                        after_timein_str = "None"
+                                        schedule_info = f"{classday_2} {start2_str} - {end2_str}"
                                     else:
-                                        time_in_24hr = convert_to_24hour(time_in)
-                                        after_timein_str = time_in_24hr if time_in_24hr else "None"
-                                else:
-                                    after_timein_str = before_timein_str
+                                        schedule_parts = []
+                                        if classday_1 and starttime_1 and endtime_1:
+                                            start1_str = str(starttime_1)[:8] if starttime_1 else 'N/A'
+                                            end1_str = str(endtime_1)[:8] if endtime_1 else 'N/A'
+                                            schedule_parts.append(f"{classday_1} {start1_str}-{end1_str}")
+                                        if classday_2 and starttime_2 and endtime_2:
+                                            start2_str = str(starttime_2)[:8] if starttime_2 else 'N/A'
+                                            end2_str = str(endtime_2)[:8] if endtime_2 else 'N/A'
+                                            schedule_parts.append(f"{classday_2} {start2_str}-{end2_str}")
+                                        schedule_info = " / ".join(schedule_parts) if schedule_parts else "N/A"
 
-                                after_timeout_str = "None"
-                                if 'time_out' in update:
-                                    if time_out == '':
-                                        after_timeout_str = "None"
+                                    before_timein_str = "None"
+                                    if original_timein and original_timein.strftime('%H:%M:%S') != '00:00:00':
+                                        before_timein_str = original_timein.strftime('%H:%M:%S')
+
+                                    before_timeout_str = "None"
+                                    if original_timeout and original_timeout.strftime('%H:%M:%S') != '00:00:00':
+                                        before_timeout_str = original_timeout.strftime('%H:%M:%S')
+
+                                    after_timein_str = "None"
+                                    if 'time_in' in update:
+                                        if time_in == '':
+                                            after_timein_str = "None"
+                                        else:
+                                            time_in_24hr = convert_to_24hour(time_in)
+                                            after_timein_str = time_in_24hr if time_in_24hr else "None"
                                     else:
-                                        time_out_24hr = convert_to_24hour(time_out)
-                                        after_timeout_str = time_out_24hr if time_out_24hr else "None"
-                                else:
-                                    after_timeout_str = before_timeout_str
+                                        after_timein_str = before_timein_str
 
-                                class_name_clean = class_name.replace('\n', ' ').replace('\r', ' ').strip()
-                                audit_details = f"HR updated attendance for {name}\nClass: {class_name_clean}\nDate: {date}\nSchedule: {schedule_info}\nSection: {class_section}\nClassroom: {classroom}"
+                                    after_timeout_str = "None"
+                                    if 'time_out' in update:
+                                        if time_out == '':
+                                            after_timeout_str = "None"
+                                        else:
+                                            time_out_24hr = convert_to_24hour(time_out)
+                                            after_timeout_str = time_out_24hr if time_out_24hr else "None"
+                                    else:
+                                        after_timeout_str = before_timeout_str
 
-                                log_audit_action(
-                                    hr_personnel_id,
-                                    "Attendance time updated",
-                                    audit_details,
-                                    before_value=f"Time-in: {before_timein_str}, Time-out: {before_timeout_str}, Status: {original_status}",
-                                    after_value=f"Time-in: {after_timein_str}, Time-out: {after_timeout_str}, Status: {new_status}"
-                                )
-                                
+                                    class_name_clean = class_name.replace('\n', ' ').replace('\r', ' ').strip()
+                                    audit_details = f"HR updated attendance for {name}\nClass: {class_name_clean}\nDate: {date}\nSchedule: {schedule_info}\nSection: {class_section}\nClassroom: {classroom}"
+
+                                    log_audit_action(
+                                        hr_personnel_id,
+                                        "Attendance time updated",
+                                        audit_details,
+                                        before_value=f"Time-in: {before_timein_str}, Time-out: {before_timeout_str}, Status: {original_status}",
+                                        after_value=f"Time-in: {after_timein_str}, Time-out: {after_timeout_str}, Status: {new_status}"
+                                    )
+                                    
                                 print(f"   ✅ Successfully updated attendance_id: {attendance_id}")
                     else:
                         print(f"   ❌ No matching attendance record found!")
@@ -3125,6 +3417,174 @@ def api_hr_faculty_schedule(personnel_id):
         import traceback
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
+
+@app.route('/api/faculty/evaluations-data')
+@require_auth([20001, 20002])
+def api_faculty_evaluations_data():
+    """
+    Fetches comprehensive evaluation data for the currently logged-in faculty member.
+    Includes KPIs, breakdown, comparison, and raw qualitative feedback.
+    """
+    try:
+        user_id = session.get('user_id')
+        personnel_info = get_personnel_info(user_id)
+        personnel_id = personnel_info.get('personnel_id')
+        
+        if not personnel_id:
+            return jsonify({'success': False, 'error': 'Personnel record not found'}), 404
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # 1. Determine the current academic calendar ID (or the latest completed one)
+        cursor.execute("""
+            SELECT acadcalendar_id
+            FROM acadcalendar 
+            WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+            ORDER BY semesterstart DESC LIMIT 1
+        """)
+        current_term_result = cursor.fetchone()
+        current_term_id = current_term_result[0] if current_term_result else '80001' # Fallback
+        
+        # 2. Fetch all personal scores and comparison data in one block
+        cursor.execute("""
+            WITH faculty_scores AS (
+                -- Personal scores (Simple average per type for KPI & Weighted total)
+                SELECT
+                    fe.evaluator_type,
+                    fe.score AS single_score,
+                    fe.total_responses AS total_responses,
+                    fe.qualitative_feedback -- NEW: Include feedback
+                FROM faculty_evaluations fe
+                WHERE fe.personnel_id = %s AND fe.acadcalendar_id = %s
+            ),
+            
+            personal_aggregates AS (
+                -- Calculate all required KPIs/Breakdown from the scores above
+                SELECT
+                    COALESCE(
+                        SUM(CASE WHEN evaluator_type = 'student' THEN single_score * 0.55 ELSE 0 END) +
+                        SUM(CASE WHEN evaluator_type = 'supervisor' THEN single_score * 0.35 ELSE 0 END) +
+                        SUM(CASE WHEN evaluator_type = 'peer' THEN single_score * 0.10 ELSE 0 END),
+                    0) AS overall_average,
+                    
+                    COALESCE(SUM(CASE WHEN evaluator_type = 'student' THEN single_score END) / COUNT(CASE WHEN evaluator_type = 'student' THEN 1 END), 0) AS student_score,
+                    COALESCE(SUM(CASE WHEN evaluator_type = 'peer' THEN single_score END) / COUNT(CASE WHEN evaluator_type = 'peer' THEN 1 END), 0) AS peer_score,
+                    COALESCE(SUM(CASE WHEN evaluator_type = 'supervisor' THEN single_score END) / COUNT(CASE WHEN evaluator_type = 'supervisor' THEN 1 END), 0) AS supervisor_score
+                FROM faculty_scores
+            ),
+            
+            comparison_base AS (
+                -- All faculty weighted scores (for comparison)
+                SELECT 
+                    p.personnel_id,
+                    p.college_id,
+                    c.collegename,
+                    COALESCE(
+                        SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
+                        SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
+                        SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
+                    0) AS overall_score
+                FROM personnel p
+                LEFT JOIN college c ON p.college_id = c.college_id
+                LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s
+                WHERE p.role_id IN (20001, 20002) AND fe.score IS NOT NULL
+                GROUP BY p.personnel_id, p.college_id, c.collegename
+            )
+            SELECT 
+                -- 1. Individual Scores (KPIs)
+                (SELECT overall_average FROM personal_aggregates),
+                (SELECT student_score FROM personal_aggregates),
+                (SELECT peer_score FROM personal_aggregates),
+                (SELECT supervisor_score FROM personal_aggregates),
+                
+                -- 2. Comparison Data
+                (SELECT collegename FROM personnel p JOIN college c ON p.college_id = c.college_id WHERE p.personnel_id = %s) AS faculty_college_name,
+                (SELECT AVG(overall_score) FROM comparison_base WHERE overall_score > 0) AS college_wide_avg,
+                (SELECT AVG(cb.overall_score) 
+                 FROM comparison_base cb
+                 WHERE cb.college_id = (SELECT college_id FROM personnel WHERE personnel_id = %s) AND cb.overall_score > 0
+                ) AS department_avg,
+                
+                -- 3. Qualitative Feedback (Aggregate all non-null feedback)
+                json_agg(json_build_object(
+                    'type', evaluator_type, 
+                    'feedback', qualitative_feedback
+                )) FILTER (WHERE qualitative_feedback IS NOT NULL) AS all_feedback_json
+            
+            FROM faculty_scores
+            
+        """, (personnel_id, current_term_id, current_term_id, personnel_id, personnel_id))
+        
+        result = cursor.fetchone()
+        cursor.close()
+        return_db_connection(conn)
+
+        if not result:
+            return jsonify({'success': False, 'error': 'No personnel or active term found.'}), 404
+        
+        (overall_avg, student_score, peer_score, supervisor_score, 
+         faculty_college_name, college_wide_avg, department_avg, all_feedback_json) = result
+
+        # Ensure scores are floats for JSON serialization
+        overall_avg = float(overall_avg) if overall_avg is not None else 0
+        student_score = float(student_score) if student_score is not None else 0
+        peer_score = float(peer_score) if peer_score is not None else 0
+        supervisor_score = float(supervisor_score) if supervisor_score is not None else 0
+        
+        # Prepare comparison scores
+        your_avg = overall_avg
+        dept_avg = float(department_avg) if department_avg is not None else your_avg
+        college_avg = float(college_wide_avg) if college_wide_avg is not None else your_avg
+
+        # --- Process Feedback (Server-side cleanup) ---
+        clean_feedback = []
+        if all_feedback_json:
+            for item in all_feedback_json:
+                eval_type = item['type']
+                feedback_str = item['feedback']
+                
+                if feedback_str and feedback_str.strip():
+                    # Split by newline, strip, and filter out '---' delimiter
+                    comments = [c.strip() for c in feedback_str.split('\n') if c.strip() and c.strip() != '---']
+                    
+                    for comment in comments:
+                        clean_feedback.append({
+                            'evaluator': eval_type.capitalize(),
+                            'comment': comment
+                        })
+        
+        # Calculate Breakdown data (for doughnut chart percentages)
+        breakdown_labels = ['Students (55%)', 'Peers (10%)', 'Supervisors (35%)']
+        breakdown_data = [55, 10, 35] # Fixed weights, sum to 100
+        
+        return jsonify({
+            'success': True,
+            'current_term_id': current_term_id,
+            'kpis': {
+                'overall_average': overall_avg,
+                'student_score': student_score,
+                'peer_score': peer_score,
+                'supervisor_score': supervisor_score,
+            },
+            'breakdown_chart': {
+                'labels': breakdown_labels,
+                'data': breakdown_data 
+            },
+            'comparison': {
+                'your_avg': your_avg,
+                'dept_avg': dept_avg,
+                'college_avg': college_avg,
+                'college_name': faculty_college_name
+            },
+            'recent_feedback': clean_feedback # NEW: Cleaned feedback list
+        })
+        
+    except Exception as e:
+        print(f"Error fetching faculty evaluation data: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/hr/employees-list')
 @require_auth([20003])
@@ -4827,24 +5287,185 @@ def api_hr_faculty_evaluation_report(personnel_id):
 @app.route('/api/hr/faculty-evaluation-report-pdf/<int:personnel_id>')
 @require_auth([20003])
 def api_hr_faculty_evaluation_report_pdf(personnel_id):
-    """
-    API endpoint for downloading/exporting a PDF evaluation report. 
-    This is a stub until PDF generation library integration (e.g., ReportLab, WeasyPrint) is done.
-    """
     term_id = request.args.get('term_id')
+
+    # 1. FETCH DATA (Reusing your existing API logic)
+    # We need to call the API function directly to get its data
+    report_response = api_hr_faculty_evaluation_report(personnel_id)
+    if report_response.status_code != 200:
+        return report_response # Return JSON error from data fetch
     
-    # 1. Fetch data to include in the PDF (re-using the logic from the view endpoint)
-    # This step would typically prepare the data for the PDF generator.
+    # Safely load JSON response data
+    from flask import json
+    report_data = json.loads(report_response.data.decode('utf-8'))['report']
+
+    # 2. SETUP DOCUMENT
+    buffer = BytesIO()
     
-    # 2. Simulate PDF content (or actually generate the PDF here)
-    # For now, we return a simple dummy PDF response to test the download button.
+    # Use SimpleDocTemplate for Platypus Flowables (handles pagination automatically)
+    doc = SimpleDocTemplate(
+        buffer, 
+        pagesize=(8.5 * inch, 11 * inch), # Letter size
+        topMargin=0.75 * inch, 
+        leftMargin=0.75 * inch, 
+        rightMargin=0.75 * inch, 
+        bottomMargin=0.5 * inch
+    )
     
-    dummy_pdf_content = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /MediaBox [0 0 612 792] /Contents 4 0 R /Parent 2 0 R /Resources << /ProcSet [/PDF /Text] /Font << /F1 5 0 R >> >> >>\nendobj\n4 0 obj\n<< /Length 57 >>\nstream\nBT\n/F1 24 Tf\n100 700 Td\n(Evaluation Report Stub for ID: " + str(personnel_id).encode() + b") Tj\nET\nendstream\nendobj\n5 0 obj\n<< /Type /Font /Subtype /Type1 /Name /F1 /BaseFont /Helvetica /Encoding /MacRomanEncoding >>\nendobj\nxref\n0 6\n0000000000 65535 f\n0000000009 00000 n\n0000000056 00000 n\n0000000111 00000 n\n0000000242 00000 n\n0000000305 00000 n\ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n349\n%%EOF"
+    styles = getSampleStyleSheet()
+    story = []
+
+    # 3. ADD HEADER & METADATA
     
-    response = make_response(dummy_pdf_content)
+    # Title Style
+    title_style = ParagraphStyle(
+        'Title', 
+        parent=styles['h1'], 
+        fontSize=16, 
+        textColor=colors.HexColor('#7b1113'),
+        spaceAfter=12
+    )
+
+    faculty_name = report_data.get('faculty_name', 'Faculty Report')
+    semester = report_data.get('semester_display', 'N/A')
+    overall_rating = report_data.get('overall_rating', 0.0)
+
+    story.append(Paragraph("Saint Peter's College - Faculty Evaluation Report", title_style))
+    story.append(Paragraph(f"<b>Faculty:</b> {faculty_name}", styles['Normal']))
+    story.append(Paragraph(f"<b>Department:</b> {report_data.get('college', 'N/A')}", styles['Normal']))
+    story.append(Paragraph(f"<b>Semester:</b> {semester}", styles['Normal']))
+    story.append(Spacer(1, 0.2 * inch))
+
+    # 4. OVERALL RATING TABLE
+    
+    # Data for the Overall Summary
+    overall_data = [
+        ['Overall Weighted Score:', f'{overall_rating:.2f}'],
+        ['Final Status:', f'{overall_rating:.2f} ({getStatusLabel(overall_rating)})'],
+        ['Generated Date:', datetime.now().strftime('%Y-%m-%d %H:%M')]
+    ]
+
+    table_style = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F2F2F2')),
+        ('LINEBELOW', (0, 0), (-1, -1), 0.5, colors.HexColor('#E0E0E0')),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+    ])
+    
+    summary_table = Table(overall_data, colWidths=[2.5 * inch, 2.5 * inch])
+    summary_table.setStyle(table_style)
+    story.append(Paragraph("<b>Evaluation Summary</b>", styles['h3']))
+    story.append(summary_table)
+    story.append(Spacer(1, 0.3 * inch))
+
+    # 5. RATING BREAKDOWN TABLE
+    
+    # Header for breakdown
+    breakdown_header = [
+        Paragraph("<b>Evaluator</b>", styles['Normal']), 
+        Paragraph("<b>Weight</b>", styles['Normal']), 
+        Paragraph("<b>Score</b>", styles['Normal']), 
+        Paragraph("<b>Responses</b>", styles['Normal'])
+    ]
+    breakdown_data = [breakdown_header]
+
+    for item in report_data.get('rating_breakdown', []):
+        weight_percent = f"{item.get('weight', 0) * 100:.0f}%"
+        breakdown_data.append([
+            item.get('type').capitalize(),
+            weight_percent,
+            f"{item.get('score', 0.0):.2f}",
+            item.get('total_responses', 0)
+        ])
+
+    breakdown_table = Table(breakdown_data, colWidths=[2.2 * inch, 1 * inch, 1 * inch, 1 * inch])
+    breakdown_table.setStyle(TableStyle([
+        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E0E0E0')),
+    ]))
+    
+    story.append(Paragraph("<b>Rating Breakdown</b>", styles['h3']))
+    story.append(breakdown_table)
+    story.append(Spacer(1, 0.3 * inch))
+
+    # 6. QUALITATIVE FEEDBACK
+    
+    story.append(Paragraph("<b>Qualitative Feedback</b>", styles['h3']))
+    
+    bullet_style = ParagraphStyle(
+        'BulletPoint', 
+        parent=styles['BodyText'], 
+        firstLineIndent=-0.25 * inch,  
+        leftIndent=0.5 * inch,         
+        bulletIndent=0.25 * inch,      
+        spaceBefore=3, 
+        spaceAfter=3,
+        fontSize=10,
+    )
+    
+    bullet_text = "\u2022" 
+
+    raw_feedback_list = report_data.get('qualitative_feedback')
+    clean_comments_for_pdf = []
+
+    if raw_feedback_list:
+        for comment in raw_feedback_list:
+            
+            parts = []
+            for sub_part in comment.split('---'):
+                parts.extend(sub_part.split('—'))
+            
+            for part in parts:
+                clean_comment = part.strip()
+                
+                if clean_comment:
+                    clean_comments_for_pdf.append(clean_comment)
+
+    if clean_comments_for_pdf:
+        for final_comment in clean_comments_for_pdf:
+            story.append(Paragraph(
+                final_comment, 
+                bullet_style, 
+                bulletText=bullet_text
+            ))
+    else:
+        story.append(Paragraph("No qualitative feedback available.", styles['Italic']))
+
+    # 7. BUILD PDF
+    doc.build(story)
+
+    # 8. SEND RESPONSE (Cleaned up to prevent double headers)
+    buffer.seek(0)
+    
+    # 8a. Create the response object.
+    response = make_response(buffer.getvalue())
+    
+    # 8b. Set the Content-Type header once.
     response.headers['Content-Type'] = 'application/pdf'
-    response.headers['Content-Disposition'] = f'attachment; filename=Evaluation_Report_P{personnel_id}_T{term_id}.pdf'
+    
+    # 8c. Set the Content-Disposition header once, ensuring it is the only one.
+    # We use .set() or direct assignment to prevent duplicates.
+    filename = f'Evaluation_Report_{faculty_name.replace(" ", "_")}_T{term_id}.pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    
     return response
+
+# Helper function to determine the status label (place this outside the route, near getStatusInfo in JS)
+def getStatusLabel(rating):
+    if rating >= 3:
+        return 'Above Average'
+    elif rating >= 2:
+        return 'Average'
+    elif rating > 0:
+        return 'Below Average'
+    else:
+        return 'Not Rated'
 
 # --- NEW FEATURE: New Evaluation Cycle API STUB ---
 @app.route('/api/hr/new-evaluation-cycle', methods=['POST'])

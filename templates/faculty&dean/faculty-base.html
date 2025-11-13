@@ -87,9 +87,23 @@
   <script>
     const sidebar = document.getElementById('sidebar');
     const btnToggle = document.getElementById('btnToggle');
-    btnToggle.addEventListener('click', () => sidebar.classList.toggle('collapsed'));
-
+    
+    // Load sidebar state from localStorage on page load
     document.addEventListener('DOMContentLoaded', function() {
+      // Disable transitions temporarily
+      sidebar.style.transition = 'none';
+      
+      const savedSidebarState = localStorage.getItem('sidebarCollapsed');
+      
+      if (savedSidebarState === 'true') {
+        sidebar.classList.add('collapsed');
+      }
+      
+      // Re-enable transitions after a brief delay
+      setTimeout(() => {
+        sidebar.style.transition = '';
+      }, 10);
+
       fetch('/api/faculty/current-personnel')
         .then(response => response.json())
         .then(data => {
@@ -109,6 +123,13 @@
           }
         })
         .catch(error => console.error('Error fetching personnel ID:', error));
+    });
+
+    // Save sidebar state to localStorage when toggled
+    btnToggle.addEventListener('click', function() {
+      sidebar.classList.toggle('collapsed');
+      const isCollapsed = sidebar.classList.contains('collapsed');
+      localStorage.setItem('sidebarCollapsed', isCollapsed.toString());
     });
   </script>
 

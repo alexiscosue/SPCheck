@@ -9,3 +9,6 @@ gspread
 pyserial==3.5
 schedule
 Pillow==10.4.0
+gspread>=5.0.0
+google-auth>=2.0.0
+reportlab

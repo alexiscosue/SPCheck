@@ -164,11 +164,46 @@
       </div>
     </div>
 
-    <!-- Right: Status Breakdown (Smaller) -->
+    <!-- Right: Status Breakdown + Excuse Container -->
     <div class="hr-attendance-sidebar">
       <div class="chart-card card">
         <div class="card-header"><i class='bx bx-pie-chart-alt'></i>Status Breakdown</div>
         <canvas id="statusBreakdown" height="200"></canvas>
+      </div>
+      
+      <!-- New Excuse Absence Container -->
+      <div class="chart-card card">
+        <div class="card-header"><i class='bx bx-calendar-x'></i>Excuse Absence</div>
+        <div class="excused-container">
+          <div class="excused-form-group">
+            <label for="facultySelect" class="excused-label">Select Faculty:</label>
+            <select id="facultySelect" class="excused-select">
+              <option value="">Loading faculty...</option>
+            </select>
+          </div>
+          
+          <div class="excused-form-group">
+            <label for="excuseDate" class="excused-label">Select Date:</label>
+            <input type="date" id="excuseDate" class="excused-input">
+          </div>
+          
+          <div class="excused-form-group">
+            <label for="reasonSelect" class="excused-label">Reason: <span style="color: #ef4444;">*</span></label>
+            <select id="reasonSelect" class="excused-select" required>
+              <option value="">Select reason...</option>
+              <option value="Official Business">Official Business</option>
+              <option value="Sick Leave">Sick Leave</option>
+              <option value="Emergency">Emergency</option>
+              <option value="Professional Development">Professional Development</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          
+          <button id="excuseBtn" class="excused-btn" disabled>
+            <i class='bx bx-check-shield'></i>
+            Approve Excuse
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -197,6 +232,134 @@
 {% block extra_scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 <script>
+  // Faculty list for excuse dropdown
+  let facultyForExcuse = [];
+
+  // Fetch faculty list for excuse dropdown
+  async function fetchFacultyForExcuse() {
+    try {
+        const response = await fetch('/api/hr/faculty-list');
+        const data = await response.json();
+        
+        if (data.success) {
+            facultyForExcuse = data.faculty_list.filter(faculty => 
+                faculty.role_id === 20001 || faculty.role_id === 20002
+            );
+            
+            const facultySelect = document.getElementById('facultySelect');
+            facultySelect.innerHTML = '<option value="">Select Faculty</option>';
+            
+            facultyForExcuse.forEach(faculty => {
+                const option = document.createElement('option');
+                option.value = faculty.personnel_id;
+                option.textContent = faculty.name;
+                facultySelect.appendChild(option);
+            });
+        } else {
+            console.error('Failed to fetch faculty list for excuse:', data.error);
+        }
+    } catch (error) {
+        console.error('Error fetching faculty for excuse:', error);
+    }
+  }
+
+  // Set default date to today
+  document.getElementById('excuseDate').valueAsDate = new Date();
+
+  // Enable/disable excuse button based on form validity
+  function updateExcuseButtonState() {
+    const facultySelect = document.getElementById('facultySelect');
+    const excuseDate = document.getElementById('excuseDate');
+    const reasonSelect = document.getElementById('reasonSelect');
+    const excuseBtn = document.getElementById('excuseBtn');
+    
+    const isFormValid = facultySelect.value && excuseDate.value && reasonSelect.value;
+    excuseBtn.disabled = !isFormValid;
+  }
+
+  // Event listeners for form changes
+  document.getElementById('facultySelect').addEventListener('change', updateExcuseButtonState);
+  document.getElementById('excuseDate').addEventListener('change', updateExcuseButtonState);
+  document.getElementById('reasonSelect').addEventListener('change', updateExcuseButtonState);
+
+  // Reset form function
+  function resetExcuseForm() {
+    document.getElementById('facultySelect').value = '';
+    document.getElementById('excuseDate').valueAsDate = new Date();
+    document.getElementById('reasonSelect').value = '';
+    updateExcuseButtonState();
+  }
+
+  // Handle excuse submission
+  document.getElementById('excuseBtn').addEventListener('click', async function() {
+    const facultySelect = document.getElementById('facultySelect');
+    const excuseDate = document.getElementById('excuseDate');
+    const reasonSelect = document.getElementById('reasonSelect');
+    const excuseBtn = document.getElementById('excuseBtn');
+    
+    const personnelId = facultySelect.value;
+    const date = excuseDate.value;
+    const reason = reasonSelect.value;
+    
+    // Final validation
+    if (!personnelId || !date || !reason) {
+        showNotification('Please select faculty, date, and reason', 'error');
+        return;
+    }
+    
+    // Get faculty name for confirmation
+    const faculty = facultyForExcuse.find(f => f.personnel_id == personnelId);
+    const facultyName = faculty ? faculty.name : 'Selected Faculty';
+    
+    // Enhanced confirmation with reason
+    const confirmationMessage = `Are you sure you want to excuse all classes for ${facultyName} on ${date}?\n\nReason: ${reason}`;
+    
+    if (!confirm(confirmationMessage)) {
+        return;
+    }
+    
+    excuseBtn.disabled = true;
+    excuseBtn.innerHTML = '<i class="bx bx-loader-circle bx-spin"></i> Processing...';
+    
+    try {
+        const response = await fetch('/api/hr/excuse-absence-bulk', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                personnel_id: personnelId,
+                date: date,
+                reason: reason
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showNotification(result.message, 'success');
+            
+            // Refresh attendance data to show the excused status
+            await fetchFacultyAttendance();
+            
+            // Reset form immediately after success
+            resetExcuseForm();
+            
+        } else {
+            showNotification('Failed to excuse absence: ' + result.error, 'error');
+        }
+        
+    } catch (error) {
+        console.error('Error excusing absence:', error);
+        showNotification('Error excusing absence: ' + error.message, 'error');
+    } finally {
+        excuseBtn.disabled = false;
+        excuseBtn.innerHTML = '<i class="bx bx-check-shield"></i> Approve Excuse';
+    }
+  });
+
+  // Initialize faculty list for excuse dropdown
+  fetchFacultyForExcuse();
+
+
   let isEditingTime = false;
   let timeEditData = new Map();
 
@@ -557,25 +720,6 @@
         return searchMatch && filterMatch;
     });
     
-    /*
-    console.log(`📊 Rendering ${filteredLogs.length} filtered records`);
-
-    // DEBUG: Check for duplicates
-    const seen = new Set();
-    const duplicates = [];
-    filteredLogs.forEach(log => {
-        const key = `${log.name}_${log.date}_${log.class_name}_${log.class_section}`;
-        if (seen.has(key)) {
-            duplicates.push(key);
-        }
-        seen.add(key);
-    });
-    
-    if (duplicates.length > 0) {
-        console.warn('🚨 DUPLICATES FOUND:', duplicates);
-    }
-    */
-    
     const totalRecords = filteredLogs.length;
     const totalPages = Math.ceil(totalRecords / recordsPerPage);
     const startIndex = (currentPage - 1) * recordsPerPage;
@@ -593,8 +737,8 @@
             const logKey = `${log.name}_${log.date}_${log.class_name}`;
             const className = log.class_name || 'N/A';
             
-            //console.log(`📝 Record ${index}: ${log.name} - ${log.date} - ${log.class_name}`);
-            //console.log(`   Time-in: "${log.time_in}", Time-out: "${log.time_out}"`);
+            // FIX: Handle excused records properly
+            const isExcusedRecord = log.status.toLowerCase() === 'excused';
             
             if (isEditingTime) {
                 const currentTimeIn = timeEditData.has(logKey) ? timeEditData.get(logKey).timeIn : (log.time_in !== '—' ? log.time_in : '');
@@ -622,8 +766,9 @@
                     <td><span class="status ${log.status.toLowerCase()}">${log.status}</span></td>
                 `;
             } else {
-                const timeIn12Hour = convertTo12Hour(log.time_in);
-                const timeOut12Hour = convertTo12Hour(log.time_out);
+                // FIX: For excused records, show "--" instead of the fake time
+                const timeIn12Hour = isExcusedRecord ? '—' : convertTo12Hour(log.time_in);
+                const timeOut12Hour = isExcusedRecord ? '—' : convertTo12Hour(log.time_out);
                 
                 tr.innerHTML = `
                     <td>${log.name}</td>

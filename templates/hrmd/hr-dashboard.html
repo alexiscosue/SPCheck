@@ -11,7 +11,9 @@
           <div class="icon att"><i class='bx bx-check-shield' style="font-size:20px"></i></div>
           <div>
             <div class="title">Attendance (Today)</div>
-            <div class="value" id="kpi-att">92%</div>
+            <div class="value" id="kpi-att">Loading...</div>
+            <div class="subtitle" id="kpi-att-subtitle"></div>
+            <!-- Removed the note about classes scheduled today -->
           </div>
         </div>
 
@@ -41,14 +43,6 @@
       </div>
 
       <div class="chart-large">
-        <div class="chart-card card">
-          <div style="display:flex;align-items:center;justify-content:space-between">
-            <div style="font-weight:700">Attendance Trends</div>
-            <div style="font-size:13px;color:var(--muted)">Last 7 days</div>
-          </div>
-          <canvas id="attendanceChart" height="170"></canvas>
-        </div>
-
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
             <div style="font-weight:700">Recent Attendance Logs</div>
@@ -86,7 +80,7 @@
 
         <div class="card chart-card">
           <div style="display:flex;justify-content:space-between;align-items:center">
-            <div style="font-weight:700">Top Departments by Average Score</div>
+            <div style="font-weight:700">Top 5 Departments by Average Score</div>
             <div style="font-size:13px;color:var(--muted)">This semester</div>
           </div>
           <div class="chart-wrapper">
@@ -131,39 +125,6 @@
     });
   }
 
-  // === Attendance Chart Initialization (Using static/mock data for now) ===
-  function initializeAttendanceChart() {
-      const attendanceCtx = document.getElementById('attendanceChart').getContext('2d');
-      new Chart(attendanceCtx, {
-          type: 'line',
-          data: {
-              labels: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
-              datasets: [{
-                  label: 'Attendance %',
-                  data: [88, 90, 92, 91, 94, 89, 92],
-                  borderColor: '#7b1113',
-                  backgroundColor: 'rgba(123,17,19,0.12)',
-                  tension: 0.35,
-                  pointRadius:4,
-                  pointBackgroundColor:'#fff'
-              }]
-          },
-          options: {
-              responsive:true,
-              maintainAspectRatio:true,
-              scales:{
-                  y:{
-                      beginAtZero:false,
-                      min:60,
-                      max:100,
-                      ticks:{ stepSize:10 }
-                  }
-              },
-              plugins:{ legend:{ display:false } }
-          }
-      });
-  }
-
   // === Evaluation Score Chart Initialization ===
   function initializeScoreChart(data) {
     const scoreCtx = document.getElementById('scoreChart').getContext('2d');
@@ -189,7 +150,32 @@
 
   async function fetchDashboardData() {
     try {
-      // 1. Fetch data concurrently
+      // Fetch today's attendance stats based on CLASSES
+      const todayStatsResponse = await fetch('/api/hr/today-classes-attendance');
+      const todayStatsData = await todayStatsResponse.json();
+      
+      if (todayStatsData.success) {
+        document.getElementById('kpi-att').textContent = `${todayStatsData.attendance_percentage}%`;
+        document.getElementById('kpi-att-subtitle').textContent = 
+          `${todayStatsData.present_classes}/${todayStatsData.total_classes_today} classes attended`;
+        
+        // Removed the note update since we're not showing it anymore
+      } else {
+        // Fallback to faculty-based stats if class-based endpoint fails
+        const fallbackResponse = await fetch('/api/hr/today-attendance-stats');
+        const fallbackData = await fallbackResponse.json();
+        
+        if (fallbackData.success) {
+          document.getElementById('kpi-att').textContent = `${fallbackData.attendance_percentage}%`;
+          document.getElementById('kpi-att-subtitle').textContent = 
+            `${fallbackData.present_count}/${fallbackData.total_faculty} faculty present`;
+        } else {
+          document.getElementById('kpi-att').textContent = 'Error';
+          document.getElementById('kpi-att-subtitle').textContent = 'Data unavailable';
+        }
+      }
+
+      // 2. Fetch other data concurrently
       const [facultyResponse, attendanceResponse, evaluationResponse] = await Promise.all([
           fetch('/api/hr/faculty-list'),
           fetch('/api/hr/faculty-attendance'),
@@ -202,7 +188,6 @@
       
       // --- Update Faculty KPI ---
       if (facultyData.success) {
-        // Includes faculty and dean (20001, 20002)
         document.getElementById('kpi-fac').textContent = facultyData.faculty_list.length || 0;
       } else {
         document.getElementById('kpi-fac').textContent = 'Error';
@@ -241,19 +226,20 @@
       } else {
         document.getElementById('kpi-eval').textContent = 'Error';
         document.getElementById('scoreChart').parentElement.innerHTML = '<div style="text-align:center; color:var(--muted); padding:30px;">Error loading evaluation data</div>';
-        document.getElementById('topDeptChart').parentElement.innerHTML = '<div style="text-align:center; color:var(--muted); padding:30px;">Error loading evaluation data</div>';
+        document.getElementById('topDeptChart').parentElement.innerHTML = '<div style="text-align:center; color:var(--muted); padding:30px;">Error loading evaluation data</td></tr>';
       }
-
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
+      document.getElementById('kpi-att').textContent = 'Error';
+      document.getElementById('kpi-att-subtitle').textContent = 'Connection failed';
       document.getElementById('kpi-fac').textContent = 'Error';
       document.getElementById('kpi-eval').textContent = 'Error';
       document.getElementById('recentLogs').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#6b7280">Error loading data</td></tr>';
     }
   }
   
-  // --- Helper Function (Keep original logic) ---
+  // --- Helper Function ---
 
   function updateRecentLogs(logs) {
     const tbody = document.getElementById('recentLogs');
@@ -296,15 +282,14 @@
 
   // --- DOM Ready ---
   document.addEventListener('DOMContentLoaded', function() {
-    // Initial static KPI values are restored here if fetch fails quickly
-    document.getElementById('kpi-att').textContent = '92%';
-    document.getElementById('kpi-promo').textContent = '3';
-    
     // Initialize chart that uses static data first
-    initializeAttendanceChart();
+    // initializeAttendanceChart();
     
     // Fetch dynamic data
     fetchDashboardData();
+    
+    // Refresh data every 5 minutes
+    setInterval(fetchDashboardData, 300000);
   });
 </script>
 {% endblock %}
