@@ -17,6 +17,8 @@ from flask import make_response
 from io import BytesIO
 import base64
 from PIL import Image
+import gspread
+from google.oauth2.service_account import Credentials
 
 
 load_dotenv()
@@ -318,6 +320,108 @@ def get_db_connection():
 
 def return_db_connection(conn):
     db_pool.return_connection(conn)
+
+
+
+# ========== Google Sheets ==========
+def get_students_score_records():
+    SERVICE_ACCOUNT_FILE = 'spcheck-ingest-key.json'
+    SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+    
+    try:
+        print("🟡 [SHEETS] Attempting to authorize Google Sheets API...")
+        creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+        gc = gspread.authorize(creds)
+        print("✅ [SHEETS] Authorization successful.")
+        
+        url = 'https://docs.google.com/spreadsheets/d/1uWiA1_c5fVqYf1dNwAZgtA5xAaUrgMAHH3BtABIZh-Y/edit'
+        SHEET_NAME = 'Students Score'
+        
+        sh = gc.open_by_url(url)
+        print(f"✅ [SHEETS] Opened spreadsheet: {sh.title}")
+        
+        worksheet = sh.worksheet(SHEET_NAME)
+        print(f"✅ [SHEETS] Accessed worksheet: {SHEET_NAME}")
+        
+        records = worksheet.get_all_records()
+        print(f"✅ [SHEETS] Successfully fetched {len(records)} records.")
+        return records
+    except FileNotFoundError:
+        print(f"❌ [SHEETS] ERROR: Service account file '{SERVICE_ACCOUNT_FILE}' not found.")
+        raise
+    except gspread.exceptions.SpreadsheetNotFound:
+        print(f"❌ [SHEETS] ERROR: Spreadsheet URL not found or unauthorized.")
+        raise
+    except gspread.exceptions.WorksheetNotFound:
+        print(f"❌ [SHEETS] ERROR: Worksheet '{SHEET_NAME}' not found.")
+        raise
+    except Exception as e:
+        print(f"❌ [SHEETS] Unhandled error during Sheets fetching: {e}")
+        raise
+
+def get_supervisors_score_records():
+    """Fetch all score records from the 'Supervisor Score' tab of the Google Sheet."""
+    SERVICE_ACCOUNT_FILE = 'spcheck-ingest-key.json'
+    SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+    SHEET_NAME = 'Supervisors Score'  
+    
+    try:
+        print(f"🟡 [SHEETS] Attempting to fetch records from: {SHEET_NAME}")
+        creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+        gc = gspread.authorize(creds)
+        
+        url = 'https://docs.google.com/spreadsheets/d/1uWiA1_c5fVqYf1dNwAZgtA5xAaUrgMAHH3BtABIZh-Y/edit'
+        sh = gc.open_by_url(url)
+        
+        worksheet = sh.worksheet(SHEET_NAME)
+        records = worksheet.get_all_records()
+        print(f"✅ [SHEETS] Successfully fetched {len(records)} records from {SHEET_NAME}.")
+        return records
+    except FileNotFoundError:
+        print(f"❌ [SHEETS] ERROR: Service account file '{SERVICE_ACCOUNT_FILE}' not found for {SHEET_NAME}.")
+        raise
+    except gspread.exceptions.SpreadsheetNotFound:
+        print(f"❌ [SHEETS] ERROR: Spreadsheet URL not found or unauthorized for {SHEET_NAME}.")
+        return []
+    except gspread.exceptions.WorksheetNotFound:
+        print(f"❌ [SHEETS] ERROR: Worksheet '{SHEET_NAME}' not found. Returning empty list.")
+        return []
+    except Exception as e:
+        print(f"❌ [SHEETS] Unhandled error fetching {SHEET_NAME} data: {e}")
+        return []
+
+def get_peers_score_records():
+    """Fetch all score records from the 'Peer Score' tab of the Google Sheet."""
+    SERVICE_ACCOUNT_FILE = 'spcheck-ingest-key.json'
+    SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+    SHEET_NAME = 'Peers Score'  
+    
+    try:
+        print(f"🟡 [SHEETS] Attempting to fetch records from: {SHEET_NAME}")
+        creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+        gc = gspread.authorize(creds)
+        
+        url = 'https://docs.google.com/spreadsheets/d/1uWiA1_c5fVqYf1dNwAZgtA5xAaUrgMAHH3BtABIZh-Y/edit'
+        sh = gc.open_by_url(url)
+        
+        worksheet = sh.worksheet(SHEET_NAME)
+        records = worksheet.get_all_records()
+        print(f"✅ [SHEETS] Successfully fetched {len(records)} records from {SHEET_NAME}.")
+        return records
+    except FileNotFoundError:
+        print(f"❌ [SHEETS] ERROR: Service account file '{SERVICE_ACCOUNT_FILE}' not found for {SHEET_NAME}.")
+        raise
+    except gspread.exceptions.SpreadsheetNotFound:
+        print(f"❌ [SHEETS] ERROR: Spreadsheet URL not found or unauthorized for {SHEET_NAME}.")
+        return []
+    except gspread.exceptions.WorksheetNotFound:
+        print(f"❌ [SHEETS] ERROR: Worksheet '{SHEET_NAME}' not found. Returning empty list.")
+        return []
+    except Exception as e:
+        print(f"❌ [SHEETS] Unhandled error fetching {SHEET_NAME} data: {e}")
+        return []
+
+
 
 # ========== CACHED DATA ==========
 _cache = {}
@@ -3187,6 +3291,174 @@ def api_hr_faculty_schedule(personnel_id):
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
 
+@app.route('/api/faculty/evaluations-data')
+@require_auth([20001, 20002])
+def api_faculty_evaluations_data():
+    """
+    Fetches comprehensive evaluation data for the currently logged-in faculty member.
+    Includes KPIs, breakdown, comparison, and raw qualitative feedback.
+    """
+    try:
+        user_id = session.get('user_id')
+        personnel_info = get_personnel_info(user_id)
+        personnel_id = personnel_info.get('personnel_id')
+        
+        if not personnel_id:
+            return jsonify({'success': False, 'error': 'Personnel record not found'}), 404
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # 1. Determine the current academic calendar ID (or the latest completed one)
+        cursor.execute("""
+            SELECT acadcalendar_id
+            FROM acadcalendar 
+            WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+            ORDER BY semesterstart DESC LIMIT 1
+        """)
+        current_term_result = cursor.fetchone()
+        current_term_id = current_term_result[0] if current_term_result else '80001' # Fallback
+        
+        # 2. Fetch all personal scores and comparison data in one block
+        cursor.execute("""
+            WITH faculty_scores AS (
+                -- Personal scores (Simple average per type for KPI & Weighted total)
+                SELECT
+                    fe.evaluator_type,
+                    fe.score AS single_score,
+                    fe.total_responses AS total_responses,
+                    fe.qualitative_feedback -- NEW: Include feedback
+                FROM faculty_evaluations fe
+                WHERE fe.personnel_id = %s AND fe.acadcalendar_id = %s
+            ),
+            
+            personal_aggregates AS (
+                -- Calculate all required KPIs/Breakdown from the scores above
+                SELECT
+                    COALESCE(
+                        SUM(CASE WHEN evaluator_type = 'student' THEN single_score * 0.55 ELSE 0 END) +
+                        SUM(CASE WHEN evaluator_type = 'supervisor' THEN single_score * 0.35 ELSE 0 END) +
+                        SUM(CASE WHEN evaluator_type = 'peer' THEN single_score * 0.10 ELSE 0 END),
+                    0) AS overall_average,
+                    
+                    COALESCE(SUM(CASE WHEN evaluator_type = 'student' THEN single_score END) / COUNT(CASE WHEN evaluator_type = 'student' THEN 1 END), 0) AS student_score,
+                    COALESCE(SUM(CASE WHEN evaluator_type = 'peer' THEN single_score END) / COUNT(CASE WHEN evaluator_type = 'peer' THEN 1 END), 0) AS peer_score,
+                    COALESCE(SUM(CASE WHEN evaluator_type = 'supervisor' THEN single_score END) / COUNT(CASE WHEN evaluator_type = 'supervisor' THEN 1 END), 0) AS supervisor_score
+                FROM faculty_scores
+            ),
+            
+            comparison_base AS (
+                -- All faculty weighted scores (for comparison)
+                SELECT 
+                    p.personnel_id,
+                    p.college_id,
+                    c.collegename,
+                    COALESCE(
+                        SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
+                        SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
+                        SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
+                    0) AS overall_score
+                FROM personnel p
+                LEFT JOIN college c ON p.college_id = c.college_id
+                LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s
+                WHERE p.role_id IN (20001, 20002) AND fe.score IS NOT NULL
+                GROUP BY p.personnel_id, p.college_id, c.collegename
+            )
+            SELECT 
+                -- 1. Individual Scores (KPIs)
+                (SELECT overall_average FROM personal_aggregates),
+                (SELECT student_score FROM personal_aggregates),
+                (SELECT peer_score FROM personal_aggregates),
+                (SELECT supervisor_score FROM personal_aggregates),
+                
+                -- 2. Comparison Data
+                (SELECT collegename FROM personnel p JOIN college c ON p.college_id = c.college_id WHERE p.personnel_id = %s) AS faculty_college_name,
+                (SELECT AVG(overall_score) FROM comparison_base WHERE overall_score > 0) AS college_wide_avg,
+                (SELECT AVG(cb.overall_score) 
+                 FROM comparison_base cb
+                 WHERE cb.college_id = (SELECT college_id FROM personnel WHERE personnel_id = %s) AND cb.overall_score > 0
+                ) AS department_avg,
+                
+                -- 3. Qualitative Feedback (Aggregate all non-null feedback)
+                json_agg(json_build_object(
+                    'type', evaluator_type, 
+                    'feedback', qualitative_feedback
+                )) FILTER (WHERE qualitative_feedback IS NOT NULL) AS all_feedback_json
+            
+            FROM faculty_scores
+            
+        """, (personnel_id, current_term_id, current_term_id, personnel_id, personnel_id))
+        
+        result = cursor.fetchone()
+        cursor.close()
+        return_db_connection(conn)
+
+        if not result:
+            return jsonify({'success': False, 'error': 'No personnel or active term found.'}), 404
+        
+        (overall_avg, student_score, peer_score, supervisor_score, 
+         faculty_college_name, college_wide_avg, department_avg, all_feedback_json) = result
+
+        # Ensure scores are floats for JSON serialization
+        overall_avg = float(overall_avg) if overall_avg is not None else 0
+        student_score = float(student_score) if student_score is not None else 0
+        peer_score = float(peer_score) if peer_score is not None else 0
+        supervisor_score = float(supervisor_score) if supervisor_score is not None else 0
+        
+        # Prepare comparison scores
+        your_avg = overall_avg
+        dept_avg = float(department_avg) if department_avg is not None else your_avg
+        college_avg = float(college_wide_avg) if college_wide_avg is not None else your_avg
+
+        # --- Process Feedback (Server-side cleanup) ---
+        clean_feedback = []
+        if all_feedback_json:
+            for item in all_feedback_json:
+                eval_type = item['type']
+                feedback_str = item['feedback']
+                
+                if feedback_str and feedback_str.strip():
+                    # Split by newline, strip, and filter out '---' delimiter
+                    comments = [c.strip() for c in feedback_str.split('\n') if c.strip() and c.strip() != '---']
+                    
+                    for comment in comments:
+                        clean_feedback.append({
+                            'evaluator': eval_type.capitalize(),
+                            'comment': comment
+                        })
+        
+        # Calculate Breakdown data (for doughnut chart percentages)
+        breakdown_labels = ['Students (55%)', 'Peers (10%)', 'Supervisors (35%)']
+        breakdown_data = [55, 10, 35] # Fixed weights, sum to 100
+        
+        return jsonify({
+            'success': True,
+            'current_term_id': current_term_id,
+            'kpis': {
+                'overall_average': overall_avg,
+                'student_score': student_score,
+                'peer_score': peer_score,
+                'supervisor_score': supervisor_score,
+            },
+            'breakdown_chart': {
+                'labels': breakdown_labels,
+                'data': breakdown_data 
+            },
+            'comparison': {
+                'your_avg': your_avg,
+                'dept_avg': dept_avg,
+                'college_avg': college_avg,
+                'college_name': faculty_college_name
+            },
+            'recent_feedback': clean_feedback # NEW: Cleaned feedback list
+        })
+        
+    except Exception as e:
+        print(f"Error fetching faculty evaluation data: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/hr/employees-list')
 @require_auth([20003])
 def api_hr_employees_list():
@@ -4155,11 +4427,20 @@ def faculty_promotion():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Get faculty ID, hire date, AND current rank from profile table
+    # ✅ Get faculty info for base template (name, college, profile image)
     cursor.execute("""
-        SELECT p.personnel_id, p.hiredate, pr.position 
+        SELECT 
+            p.personnel_id, 
+            p.hiredate, 
+            pr.position,
+            p.firstname,
+            p.lastname,
+            p.honorifics,
+            c.collegename,
+            pr.profilepic
         FROM personnel p
         LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+        LEFT JOIN college c ON p.college_id = c.college_id
         WHERE p.user_id = %s
     """, (user_id,))
     
@@ -4170,7 +4451,19 @@ def faculty_promotion():
         return_db_connection(conn)
         return "Faculty record not found", 400
     
-    faculty_id, hire_date, current_rank = result
+    faculty_id, hire_date, current_rank, firstname, lastname, honorifics, college, profilepic = result
+    
+    # ✅ Build faculty name for base template
+    if honorifics:
+        faculty_name = f"{firstname} {lastname}, {honorifics}"
+    else:
+        faculty_name = f"{firstname} {lastname}"
+    
+    # ✅ Convert profile pic to base64
+    profile_image_base64 = ''
+    if profilepic:
+        import base64
+        profile_image_base64 = f"data:image/jpeg;base64,{base64.b64encode(bytes(profilepic)).decode('utf-8')}"
     
     # Define rank hierarchy
     rank_hierarchy = [
@@ -4197,6 +4490,7 @@ def faculty_promotion():
     regularization_status = "No hire date"
     regularization_message = "Contact HRMD to update your hire date."
     tenure_type = "Unknown"
+    can_apply_for_promotion = False
     
     if hire_date:
         # Calculate years and months
@@ -4219,6 +4513,7 @@ def faculty_promotion():
             regularization_status = f"Probationary (Year {years_employed + 1} of 3)"
             months_remaining = probation_months - total_months_employed
             regularization_message = f"ℹ️ {months_remaining} months until eligible for Regular status."
+            can_apply_for_promotion = False
             
         elif 3 <= years_employed < 7:
             # Regular (3-7 years)
@@ -4230,6 +4525,7 @@ def faculty_promotion():
             regularization_status = f"Regular Employee (Year {years_past_probation + 1} of 4)"
             years_to_tenure = 7 - years_employed
             regularization_message = f"✅ You are a Regular employee. {years_to_tenure} year{'s' if years_to_tenure != 1 else ''} until eligible for Tenured status."
+            can_apply_for_promotion = True
             
         else:
             # Tenured (7+ years)
@@ -4237,6 +4533,7 @@ def faculty_promotion():
             regularization_percentage = 100
             regularization_status = "Tenured Employee"
             regularization_message = "✅ You have achieved Tenured status."
+            can_apply_for_promotion = True
     
     # === CHECK FOR ACTIVE REGULARIZATION APPLICATION ===
     cursor.execute("""
@@ -4342,6 +4639,12 @@ def faculty_promotion():
     
     # Build template data
     template_data = {
+        # ✅ Base template variables
+        'faculty_name': faculty_name,
+        'college': college or 'College of Computer Studies',
+        'profile_image_base64': profile_image_base64,
+        
+        # Promotion-specific data
         'regularization_percentage': regularization_percentage,
         'regularization_status': regularization_status,
         'regularization_message': regularization_message,
@@ -4353,6 +4656,7 @@ def faculty_promotion():
         'current_rank': current_rank,
         'available_ranks': available_ranks,
         'application_history': application_history,
+        'can_apply_for_promotion': can_apply_for_promotion,
         'application_id': None,
         'current_status': None,
         'date_submitted': None,
@@ -4386,6 +4690,8 @@ def faculty_promotion():
         })
     
     return render_template('faculty&dean/faculty-promotion.html', **template_data)
+
+
 
 
 @app.route('/faculty_profile')
@@ -4423,8 +4729,573 @@ def hr_employees_return():
 @app.route('/hr_evaluations')
 @require_auth([20003])
 def hr_evaluations():
+    current_term_id = 80001
     personnel_info = get_personnel_info(session['user_id'])
-    return render_template('hrmd/hr-evaluations.html', **personnel_info)
+    return render_template('hrmd/hr-evaluations.html', acadcalendar_id=current_term_id, **personnel_info)
+
+@app.route('/api/hr/evaluation-dashboard-data')
+@require_auth([20003])
+def api_hr_evaluation_dashboard_data():
+    """
+    Fetches aggregated evaluation data for the HR dashboard KPIs and charts.
+    FIXED: Removed the invalid GROUP BY clause and simplified the final SELECT logic.
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # 1. Determine the current academic calendar ID
+        cursor.execute("""
+            SELECT acadcalendar_id
+            FROM acadcalendar 
+            WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+            ORDER BY semesterstart DESC LIMIT 1
+        """)
+        current_term_result = cursor.fetchone()
+        current_term_id = current_term_result[0] if current_term_result else '80001' # Fallback
+        
+        # 2. Fetch all necessary data using CTEs
+        # The main SELECT statement is restructured to pull aggregated data from the CTEs directly.
+        cursor.execute("""
+            WITH faculty_eval_scores AS (
+                SELECT 
+                    p.personnel_id,
+                    c.collegename,
+                    -- Weighted Overall Score (55/35/10)
+                    COALESCE(
+                        SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
+                        SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
+                        SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
+                    0) AS overall_score
+                FROM personnel p
+                LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s
+                LEFT JOIN college c ON p.college_id = c.college_id
+                WHERE p.role_id IN (20001, 20002)
+                GROUP BY p.personnel_id, c.collegename
+            ),
+            valid_eval_breakdown AS (
+                SELECT 
+                    overall_score,
+                    collegename,
+                    CASE 
+                        WHEN overall_score >= 3.0 THEN 'Above Average'
+                        WHEN overall_score >= 2.0 THEN 'Average'
+                        WHEN overall_score > 0 THEN 'Below Average'
+                        ELSE 'Not Rated'
+                    END AS rating_group
+                FROM faculty_eval_scores
+                WHERE overall_score > 0
+            ),
+            final_aggregates AS (
+                SELECT
+                    -- KPI: Average Evaluation Score
+                    COALESCE(AVG(overall_score), 0) AS avg_eval_score,
+                    
+                    -- Chart Data: Rating Breakdown
+                    (SELECT json_agg(json_build_object('rating_group', rating_group, 'count', rating_count))
+                     FROM (
+                        SELECT rating_group, COUNT(*) AS rating_count
+                        FROM valid_eval_breakdown
+                        GROUP BY rating_group
+                     ) AS breakdown_counts) AS rating_counts_json,
+                    
+                    -- Chart Data: Top Departments
+                    (SELECT json_agg(json_build_object('department', collegename, 'avg_score', dept_avg))
+                     FROM (
+                        SELECT collegename, AVG(overall_score) AS dept_avg
+                        FROM faculty_eval_scores
+                        WHERE overall_score > 0
+                        GROUP BY collegename
+                        ORDER BY dept_avg DESC
+                        LIMIT 5
+                     ) AS dept_averages) AS dept_scores_json
+                
+                FROM faculty_eval_scores
+            )
+            SELECT * FROM final_aggregates;
+        """, (current_term_id,))
+        
+        result = cursor.fetchone()
+        cursor.close()
+        return_db_connection(conn)
+        
+        if not result or result[0] is None:
+            return jsonify({
+                'success': True,
+                'kpi_avg_eval': 'N/A',
+                'rating_breakdown': [],
+                'top_departments': []
+            })
+            
+        avg_eval_score, rating_counts_json, dept_scores_json = result
+        
+        # --- Process Rating Breakdown for Doughnut Chart ---
+        rating_data = {
+            'Above Average': 0, 'Average': 0, 'Below Average': 0
+        }
+        if rating_counts_json:
+            for item in rating_counts_json:
+                if item and item['rating_group'] in rating_data:
+                    rating_data[item['rating_group']] = item['count']
+        
+        # --- Process Top Departments for Bar Chart ---
+        top_departments = []
+        if dept_scores_json:
+            # Structure for chart
+            seen_departments = set()
+            for item in dept_scores_json:
+                if item and item['department'] not in seen_departments:
+                    top_departments.append({
+                        'department': item['department'],
+                        'score': round(float(item['avg_score']), 2)
+                    })
+                    seen_departments.add(item['department'])
+        
+        # Sort the final list to ensure the top departments are always ordered by score
+        top_departments.sort(key=lambda x: x['score'], reverse=True)
+        
+        return jsonify({
+            'success': True,
+            'kpi_avg_eval': float(avg_eval_score),
+            'rating_breakdown': [
+                rating_data['Above Average'],
+                rating_data['Average'],
+                rating_data['Below Average']
+            ],
+            'top_departments': top_departments
+        })
+        
+    except Exception as e:
+        print(f"Error fetching evaluation dashboard data: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/hr/evaluations', methods=['GET'])
+@require_auth([20003])
+def api_hr_evaluations():
+    term = request.args.get('term')
+    dept = request.args.get('dept', '')
+    status = request.args.get('status', '') 
+    search = request.args.get('search', '')
+    position_filter = request.args.get('position', '') 
+    response_rate_filter = request.args.get('response_rate', '') 
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Define the term ID for use in all queries
+    current_term_id = term if term else '80001'
+
+    # --- KPI 1, 2, 3, & 4 Calculation (Combined Query) ---
+    cursor.execute("""
+        WITH faculty_data AS (
+            SELECT 
+                p.personnel_id,
+                p.college_id,
+                -- Weighted Overall Score
+                COALESCE(
+                    SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
+                    SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
+                    SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
+                0) AS overall_score,
+                -- Student Response Count
+                COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.total_responses ELSE 0 END), 0) AS student_responses_count
+            FROM personnel p
+            LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s
+            WHERE p.role_id IN (20001, 20002)
+            GROUP BY p.personnel_id, p.college_id
+        ),
+        department_avg AS (
+            SELECT 
+                fd.college_id,
+                AVG(fd.overall_score) AS dept_avg_score
+            FROM faculty_data fd
+            WHERE fd.overall_score > 0 -- Only consider departments with non-zero evaluation scores
+            GROUP BY fd.college_id
+            ORDER BY dept_avg_score DESC
+            LIMIT 1
+        )
+        SELECT 
+            -- General KPIs
+            (SELECT COUNT(fd.personnel_id) FROM faculty_data fd) AS total_faculty,
+            (SELECT COALESCE(AVG(fd.overall_score), 0) FROM faculty_data fd) AS average_rating,
+            (SELECT SUM(CASE WHEN fd.student_responses_count >= 10 THEN 1 ELSE 0 END) FROM faculty_data fd) AS met_response_rate_count,
+            (SELECT COUNT(CASE WHEN fd.student_responses_count > 0 THEN 1 ELSE NULL END) FROM faculty_data fd) AS faculty_with_data,
+            
+            -- Best Department KPI
+            c.collegename AS best_department_name
+        FROM department_avg da
+        JOIN college c ON da.college_id = c.college_id
+    """, (current_term_id,))
+    
+    kpi_results = cursor.fetchone()
+    
+    # Map results (handle case where no results are returned, typically if the table is empty)
+    if kpi_results:
+        kpis = {
+            "total_faculty": kpi_results[0],
+            "avg_rating": kpi_results[1],
+            "met_response_rate_count": kpi_results[2],
+            "faculty_with_data": kpi_results[3],
+            "best_department_name": kpi_results[4] if kpi_results[4] else "N/A"
+        }
+    else:
+         kpis = {
+            "total_faculty": 0,
+            "avg_rating": 0,
+            "met_response_rate_count": 0,
+            "faculty_with_data": 0,
+            "best_department_name": "N/A"
+        }
+    # --- END KPI CALCULATION ---
+    
+    # --- TABLE DATA RETRIEVAL (Modified) ---
+    query = """
+        SELECT 
+            p.personnel_id, 
+            CONCAT(p.firstname, ' ', p.lastname) as name,
+            c.collegename,
+            pr.position,
+            
+            -- METRIC 1 (Response Rate): Student Response Count ONLY 
+            COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.total_responses ELSE 0 END), 0) AS student_responses_count,
+            
+            -- METRIC 2 (Status): Weighted Overall Score 
+            COALESCE(
+                SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
+                SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
+                SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
+            0) AS overall_score,
+            
+            -- Store position for separate filtering/list
+            pr.position AS faculty_position
+            
+        FROM personnel p
+        LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s
+        LEFT JOIN college c ON p.college_id = c.college_id
+        LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+        WHERE 1=1 AND p.role_id IN (20001, 20002)
+    """
+    params = [current_term_id]
+
+    # Dynamic filtering 
+    if dept:
+        query += " AND c.collegename = %s"
+        params.append(dept)
+    if search:
+        query += " AND (LOWER(p.firstname) LIKE %s OR LOWER(p.lastname) LIKE %s)"
+        like = f"%{search.lower()}%"
+        params.extend([like, like])
+        
+    # NEW: Position Filter
+    if position_filter:
+        query += " AND pr.position = %s"
+        params.append(position_filter)
+        
+    query += " GROUP BY p.personnel_id, name, c.collegename, pr.position"
+    
+    # --- Status Filtering (Applied to the aggregated data) ---
+    if status or response_rate_filter: 
+        query += " HAVING 1=1" 
+    
+    # Apply Rating Status Filter
+    if status:
+        if status == 'above-average':
+            query += " AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) >= 3.0"
+        elif status == 'average':
+            query += " AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) >= 2.0 AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) < 3.0"
+        elif status == 'below-average':
+            query += " AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) > 0.0 AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) < 2.0"
+            
+    # NEW: Response Rate Filter
+    if response_rate_filter == 'met':
+        query += " AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.total_responses ELSE 0 END), 0) >= 10"
+    elif response_rate_filter == 'not-met':
+        query += " AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.total_responses ELSE 0 END), 0) < 10"
+            
+    query += " ORDER BY overall_score DESC"
+    
+    cursor.execute(query, tuple(params))
+    evaluations = cursor.fetchall()
+    
+    # Get all unique positions for the frontend filter dropdown
+    cursor.execute("""
+        SELECT DISTINCT pr.position
+        FROM personnel p
+        JOIN profile pr ON p.personnel_id = pr.personnel_id
+        WHERE p.role_id IN (20001, 20002) AND pr.position IS NOT NULL
+        ORDER BY pr.position
+    """)
+    unique_positions = [row[0] for row in cursor.fetchall() if row[0] and row[0].strip() != '']
+    
+    cursor.close()
+    return_db_connection(conn)
+
+    # Shape results to JSON
+    evals = [{
+        "personnelid": row[0],
+        "name": row[1],
+        "department": row[2],
+        "position": row[3],
+        "studentresponses": row[4],
+        "avgscore": row[5]
+    } for row in evaluations]
+
+    # Combine table data and KPIs into the final JSON response
+    return jsonify(
+        success=True, 
+        evaluations=evals, 
+        kpis=kpis,
+        unique_positions=unique_positions
+    )
+
+
+@app.route('/api/hr/faculty-evaluation-report/<int:personnel_id>')
+@require_auth([20003])
+def api_hr_faculty_evaluation_report(personnel_id):
+    """
+    API endpoint to fetch a detailed faculty evaluation report for modal viewing.
+    Uses calculated weights from the existing logic (55/35/10).
+    Resolves TypeError by casting database scores to float.
+    """
+    term_id = request.args.get('term_id')
+    if not term_id:
+        return jsonify({'success': False, 'error': 'Missing term ID'}), 400
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # 1. Fetch Faculty Name, College, and Semester Info
+        cursor.execute("""
+            SELECT 
+                p.firstname, p.lastname, p.honorifics, c.collegename,
+                ac.semester, ac.acadyear
+            FROM personnel p
+            LEFT JOIN college c ON p.college_id = c.college_id
+            JOIN acadcalendar ac ON ac.acadcalendar_id = %s
+            WHERE p.personnel_id = %s
+        """, (term_id, personnel_id))
+        
+        info_row = cursor.fetchone()
+        
+        if not info_row:
+            cursor.close()
+            return_db_connection(conn)
+            return jsonify({'success': False, 'error': 'Faculty or Semester not found'}), 404
+        
+        firstname, lastname, honorifics, collegename, semester_name, acadyear = info_row
+        faculty_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+        semester_display = f"{semester_name}, AY {acadyear}"
+
+        # 2. Fetch all evaluation scores AND qualitative feedback
+        cursor.execute("""
+            SELECT 
+                evaluator_type, 
+                score, 
+                total_responses,
+                qualitative_feedback  -- NEW: Select feedback column
+            FROM faculty_evaluations 
+            WHERE personnel_id = %s AND acadcalendar_id = %s
+        """, (personnel_id, term_id))
+        
+        evaluation_rows = cursor.fetchall()
+        
+        # 3. Aggregate data, calculate overall score, and collect feedback
+        total_score = 0
+        rating_breakdown = []
+        qualitative_feedback = [] # Initialize empty list for actual feedback
+        
+        # Fixed weights based on business logic: Student(55%), Supervisor(35%), Peer(10%)
+        weights = {'student': 0.55, 'supervisor': 0.35, 'peer': 0.10}
+
+        for eval_type, score, total_responses, feedback in evaluation_rows:
+            weight = weights.get(eval_type, 0)
+            
+            # Fix: Convert score (Decimal) to float before multiplication
+            score_float = float(score) if score is not None else 0.0
+            weighted_score = score_float * weight
+            total_score += weighted_score
+            
+            rating_breakdown.append({
+                'type': eval_type.capitalize(),
+                'score': score_float,
+                'weight': weight,
+                'total_responses': total_responses
+            })
+            
+            # --- NEW: Process Feedback ---
+            if feedback and feedback.strip():
+                # Split multiple comments if stored with a delimiter (e.g., newline)
+                # Assuming feedback might contain multiple comments separated by newlines
+                comments = [c.strip() for c in feedback.split('\n') if c.strip()]
+                qualitative_feedback.extend(comments)
+            # --- END NEW: Process Feedback ---
+
+
+        cursor.close()
+        return_db_connection(conn)
+
+        return jsonify({
+            'success': True,
+            'report': {
+                'faculty_name': faculty_name,
+                'college': collegename,
+                'semester_display': semester_display,
+                'overall_rating': total_score,
+                'rating_breakdown': rating_breakdown,
+                'qualitative_feedback': qualitative_feedback # <-- Use actual data
+            }
+        })
+
+    except Exception as e:
+        print(f"Error fetching evaluation report: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/hr/faculty-evaluation-report-pdf/<int:personnel_id>')
+@require_auth([20003])
+def api_hr_faculty_evaluation_report_pdf(personnel_id):
+    """
+    API endpoint for downloading/exporting a PDF evaluation report. 
+    This is a stub until PDF generation library integration (e.g., ReportLab, WeasyPrint) is done.
+    """
+    term_id = request.args.get('term_id')
+    
+    # 1. Fetch data to include in the PDF (re-using the logic from the view endpoint)
+    # This step would typically prepare the data for the PDF generator.
+    
+    # 2. Simulate PDF content (or actually generate the PDF here)
+    # For now, we return a simple dummy PDF response to test the download button.
+    
+    dummy_pdf_content = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /MediaBox [0 0 612 792] /Contents 4 0 R /Parent 2 0 R /Resources << /ProcSet [/PDF /Text] /Font << /F1 5 0 R >> >> >>\nendobj\n4 0 obj\n<< /Length 57 >>\nstream\nBT\n/F1 24 Tf\n100 700 Td\n(Evaluation Report Stub for ID: " + str(personnel_id).encode() + b") Tj\nET\nendstream\nendobj\n5 0 obj\n<< /Type /Font /Subtype /Type1 /Name /F1 /BaseFont /Helvetica /Encoding /MacRomanEncoding >>\nendobj\nxref\n0 6\n0000000000 65535 f\n0000000009 00000 n\n0000000056 00000 n\n0000000111 00000 n\n0000000242 00000 n\n0000000305 00000 n\ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n349\n%%EOF"
+    
+    response = make_response(dummy_pdf_content)
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename=Evaluation_Report_P{personnel_id}_T{term_id}.pdf'
+    return response
+
+# --- NEW FEATURE: New Evaluation Cycle API STUB ---
+@app.route('/api/hr/new-evaluation-cycle', methods=['POST'])
+@require_auth([20003])
+def api_hr_new_evaluation_cycle():
+    """HR initiates a new evaluation cycle for the current academic calendar."""
+    try:
+        data = request.get_json()
+        current_term_id = data.get('current_term_id')
+        
+        # 1. Simulate finding the next term (e.g., current is 80001, next is 80002)
+        next_term_id = int(current_term_id) + 1
+        
+        # 2. Get HR Personnel ID for audit logging
+        hr_info = get_personnel_info(session['user_id'])
+        hr_personnel_id = hr_info.get('personnel_id')
+        
+        # 3. Log the action
+        log_audit_action(
+            hr_personnel_id,
+            "New Evaluation Cycle Initiated",
+            "HR initiated a new evaluation cycle",
+            before_value=f"Old Term ID: {current_term_id}",
+            after_value=f"New Term ID (Simulated): {next_term_id}\nDatabase update required for new term."
+        )
+        
+        # 4. Return success message
+        return jsonify({
+            'success': True,
+            'message': f'New Evaluation Cycle (Term {next_term_id} - Simulated) initiated. Next step is to update acadcalendar and faculty_evaluations tables to reflect the new term.',
+            'new_term_id': next_term_id 
+        })
+        
+    except Exception as e:
+        print(f"Error initiating new evaluation cycle: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/hr/fetch-evaluations', methods=['POST'])
+@require_auth([20003])
+def fetch_evaluations():
+    
+    # Define all data sources
+    sources = [
+        {'type': 'student', 'fetcher': get_students_score_records},
+        {'type': 'supervisor', 'fetcher': get_supervisors_score_records},
+        {'type': 'peer', 'fetcher': get_peers_score_records}
+    ]
+
+    total_updated = 0
+    conn = None 
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        print("--- [EVAL UPDATE] Starting evaluation fetch process ---")
+
+        for source in sources:
+            records = source['fetcher']()
+            print(f"🟢 [EVAL UPDATE] Processing {len(records)} records for {source['type']}.")
+
+            for row in records:
+                
+                # 1. Safely retrieve Class ID. Defaults to 0 if the key is missing from the dictionary.
+                class_id_raw = row.get('Class ID', 0)
+                try:
+                    class_id = int(class_id_raw) if class_id_raw else 0
+                except (ValueError, TypeError):
+                    class_id = 0
+                
+                # 2. Extract Qualitative Feedback (NEW)
+                qualitative_feedback = row.get('Qualitative Feedback') # Expecting this column from Sheets
+                if qualitative_feedback == '':
+                    qualitative_feedback = None # Ensure empty strings are stored as NULL
+
+                # Ensure Personnel and Semester IDs are present
+                if not row.get('Faculty Personnel ID') or not row.get('Semester_AY ID'):
+                    print(f"    - [Record] 🛑 SKIP: Missing Faculty ID or Semester ID in {source['type']} row.")
+                    continue
+                
+                # Database insertion logic
+                cursor.execute("""
+                    INSERT INTO faculty_evaluations (
+                        personnel_id, acadcalendar_id, class_id, evaluator_type, score, total_responses, qualitative_feedback
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (personnel_id, acadcalendar_id, class_id, evaluator_type)
+                    DO UPDATE SET 
+                        score=EXCLUDED.score, 
+                        total_responses=EXCLUDED.total_responses, 
+                        qualitative_feedback=EXCLUDED.qualitative_feedback, -- NEW: Update feedback
+                        last_updated=CURRENT_TIMESTAMP
+                """, (
+                    row['Faculty Personnel ID'],
+                    row['Semester_AY ID'],
+                    class_id,                 
+                    source['type'], 
+                    row['Score'],
+                    row['Total Responses'],
+                    qualitative_feedback      # <-- Use the new feedback field
+                ))
+                total_updated += 1
+            
+        conn.commit()
+        cursor.close()
+        return_db_connection(conn)
+        print(f"✅ [EVAL UPDATE] Database COMMIT successful. Total records updated: {total_updated}")
+        return jsonify(message=f"Successfully imported and updated {total_updated} evaluation records from all sources.", success=True)
+
+    except Exception as e:
+        print(f"❌ [EVAL UPDATE] CRITICAL FAILURE during processing: {e}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+            try:
+                cursor.close()
+                return_db_connection(conn)
+            except:
+                pass
+        return jsonify(message=f"Critical error processing evaluations. Check logs for details. Error: {str(e)}"), 500
+
 
 @app.route('/hr_attendance')
 @require_auth([20003])
@@ -4493,7 +5364,6 @@ def hr_promotions():
             })
         
         # === FETCH ELIGIBLE FACULTY + ACTIVE REGULARIZATIONS ===
-        # First get eligible faculty (not yet in process)
         cursor.execute("""
             SELECT 
                 p.personnel_id,
@@ -4521,7 +5391,6 @@ def hr_promotions():
             
             UNION ALL
             
-            -- Also get active regularization applications
             SELECT 
                 p.personnel_id,
                 p.firstname,
@@ -4599,7 +5468,10 @@ def hr_promotions():
                 'has_application': bool(reg_status)
             })
         
-        return render_template('hrmd/hr-promotions.html', 
+        return render_template('hrmd/hr-promotions.html',
+                             hr_name=personnel_info.get('hr_name', 'HR Admin'),
+                             college=personnel_info.get('college', 'HRMD'),
+                             profile_image_base64=personnel_info.get('profile_image_base64', ''),
                              personnelinfo=personnel_info,
                              promotions=promotions_list,
                              regularizations=regularizations_list)
@@ -4608,11 +5480,16 @@ def hr_promotions():
         print(f"Error in hr_promotions route: {e}")
         import traceback
         traceback.print_exc()
-        return render_template('hrmd/hr-promotions.html', 
-                             personnelinfo=get_personnel_info(session['user_id']),
+        
+        personnel_info = get_personnel_info(session['user_id'])
+        
+        return render_template('hrmd/hr-promotions.html',
+                             hr_name=personnel_info.get('hr_name', 'HR Admin'),
+                             college=personnel_info.get('college', 'HRMD'),
+                             profile_image_base64=personnel_info.get('profile_image_base64', ''),
+                             personnelinfo=personnel_info,
                              promotions=[],
                              regularizations=[])
-
 
 
 @app.route('/hr_profile')
@@ -4632,7 +5509,7 @@ def hr_settings():
     return render_template('hrmd/hr-settings.html', **personnel_info)
 
 @app.route('/vp_promotions')
-@require_auth([20004, 20005])  # VPAA and President
+@require_auth([20004, 20005])
 def vp_promotions():
     """VP/President Promotions Dashboard with promotions and regularizations"""
     try:
@@ -4692,7 +5569,7 @@ def vp_promotions():
                 'submitteddate': date_submitted.strftime('%Y-%m-%d') if date_submitted else 'N/A'
             })
         
-        # === FETCH ACTIVE REGULARIZATIONS (only those in progress for VP/Pres review) ===
+        # === FETCH ACTIVE REGULARIZATIONS ===
         cursor.execute("""
             SELECT 
                 p.personnel_id,
@@ -4768,7 +5645,10 @@ def vp_promotions():
                 'has_application': True
             })
         
-        return render_template('vp&pres/vp-promotion.html', 
+        return render_template('vp&pres/vp-promotion.html',
+                             vp_name=personnel_info.get('vp_name', 'VP Admin'),
+                             college=personnel_info.get('college', 'Office of the VP'),
+                             profile_image_base64=personnel_info.get('profile_image_base64', ''),
                              personnelinfo=personnel_info,
                              promotions=promotions_list,
                              regularizations=regularizations_list,
@@ -4778,11 +5658,19 @@ def vp_promotions():
         print(f"Error in vp_promotions route: {e}")
         import traceback
         traceback.print_exc()
-        return render_template('vp&pres/vp-promotion.html', 
-                             personnelinfo=get_personnel_info(session['user_id']),
+        
+        personnel_info = get_personnel_info(session['user_id'])
+        
+        return render_template('vp&pres/vp-promotion.html',
+                             vp_name=personnel_info.get('vp_name', 'VP Admin'),
+                             college=personnel_info.get('college', 'Office of the VP'),
+                             profile_image_base64=personnel_info.get('profile_image_base64', ''),
+                             personnelinfo=personnel_info,
                              promotions=[],
                              regularizations=[],
                              user_role=session.get('user_role'))
+
+
 
 
 # === REGULARIZATION API ROUTES FOR VP/PRESIDENT ===
@@ -5865,6 +6753,78 @@ def approve_regularization():
         if conn:
             conn.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/faculty/promotion/eligibility')
+@require_auth([20001, 20002])
+def api_promotion_eligibility():
+    """Check if faculty is eligible for promotion"""
+    try:
+        user_id = session.get('user_id')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get faculty hire date
+        cursor.execute("""
+            SELECT personnel_id, hiredate 
+            FROM personnel 
+            WHERE user_id = %s
+        """, (user_id,))
+        
+        result = cursor.fetchone()
+        if not result:
+            cursor.close()
+            return_db_connection(conn)
+            return jsonify({'success': False, 'error': 'Faculty not found'})
+        
+        personnel_id, hire_date = result
+        
+        # Calculate years employed
+        from datetime import date
+        today = date.today()
+        years_employed = 0
+        can_apply = False
+        tenure_type = "Unknown"
+        
+        if hire_date:
+            years_employed = today.year - hire_date.year
+            months_employed = today.month - hire_date.month
+            
+            if months_employed < 0:
+                years_employed -= 1
+            
+            # Determine eligibility
+            if years_employed >= 3:
+                can_apply = True
+                tenure_type = "Regular" if years_employed < 7 else "Tenured"
+            else:
+                can_apply = False
+                tenure_type = "Probationary"
+        
+        # Check for active promotion application
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM promotion_application 
+            WHERE faculty_id = %s AND final_decision IS NULL
+        """, (personnel_id,))
+        
+        has_active = cursor.fetchone()[0] > 0
+        
+        cursor.close()
+        return_db_connection(conn)
+        
+        return jsonify({
+            'success': True,
+            'can_apply': can_apply,
+            'tenure_type': tenure_type,
+            'years_employed': years_employed,
+            'has_active_application': has_active
+        })
+        
+    except Exception as e:
+        print(f"Error checking promotion eligibility: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
 
 
 if __name__ == "__main__":

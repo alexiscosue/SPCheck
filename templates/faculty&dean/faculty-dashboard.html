@@ -29,7 +29,7 @@
       <div class="icon promo"><i class='bx bx-award'></i></div>
       <div>
         <div class="title">Promotion Status</div>
-        <div class="value">Eligible</div>
+        <div class="value" id="promotionStatus">Loading... <i class='bx bx-loader-alt bx-spin'></i></div>
       </div>
     </div>
 
@@ -59,29 +59,6 @@
   </div>
 
   <div class="chart-side">
-    <!-- Resources / Announcements - Commented out for future use -->
-    <!--
-    <div class="card resources">
-      <div class="card-header">
-        <span>Resources & Announcements</span>
-      </div>
-      <div class="card-body">
-        <div class="resource-item">
-          <a href="#" class="resource-link">Faculty Handbook 2025 Update</a>
-          <span class="date">Sep 10</span>
-        </div>
-        <div class="resource-item">
-          <a href="#" class="resource-link">Webinar: "Digital Tools for Teaching"</a>
-          <span class="date">Sep 20, 3 PM</span>
-        </div>
-        <div class="resource-item">
-          <a href="#" class="resource-link">Submit Syllabus for Fall Semester</a>
-          <span class="date">Sep 18</span>
-        </div>
-      </div>
-    </div>
-    -->
-
     <!-- Class Schedule -->
     <div class="card schedule">
       <div class="card-header">
@@ -123,6 +100,7 @@
   function updateDashboardDisplay() {
     if (!dashboardData) return;
     
+    // Attendance Rate
     const attendanceRateElement = document.getElementById('attendanceRate');
     const attendanceRate = dashboardData.attendance_rate.percentage;
     const trend = attendanceRate >= 95 ? 'up-arrow-alt' : attendanceRate >= 85 ? 'right-arrow-alt' : 'down-arrow-alt';
@@ -130,10 +108,50 @@
     
     attendanceRateElement.innerHTML = `${attendanceRate}% <i class='bx bx-${trend}' style="color:${trendColor}"></i>`;
 
+    // Teaching Load
     const teachingLoadElement = document.getElementById('teachingLoad');
     teachingLoadElement.textContent = `${dashboardData.teaching_load}.0 Units`;
     
+    // Promotion Status - Dynamic based on eligibility
+    updatePromotionStatus();
+    
     updateClassSchedule();
+  }
+
+  function updatePromotionStatus() {
+    const promotionStatusElement = document.getElementById('promotionStatus');
+    
+    // Fetch promotion eligibility data
+    fetch('/api/faculty/promotion/eligibility')
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          const { can_apply, tenure_type, years_employed, has_active_application } = data;
+          
+          let statusHTML = '';
+          let statusColor = '';
+          
+          if (has_active_application) {
+            // Active application in progress
+            statusHTML = 'In Progress <i class="bx bx-time-five" style="color:#f59e0b"></i>';
+          } else if (can_apply) {
+            // Eligible to apply
+            statusHTML = 'Eligible <i class="bx bx-check-circle" style="color:#16a34a"></i>';
+          } else {
+            // Not eligible yet (Probationary)
+            const yearsRemaining = Math.max(0, 3 - years_employed);
+            statusHTML = `${yearsRemaining} Year/s to Eligibility <i class="bx bx-lock-alt" style="color:#6b7280"></i>`;
+          }
+          
+          promotionStatusElement.innerHTML = statusHTML;
+        } else {
+          promotionStatusElement.innerHTML = 'Unknown <i class="bx bx-error-circle" style="color:#ef4444"></i>';
+        }
+      })
+      .catch(error => {
+        console.error('Error fetching promotion eligibility:', error);
+        promotionStatusElement.innerHTML = 'Error <i class="bx bx-error-circle" style="color:#ef4444"></i>';
+      });
   }
 
   function updateClassSchedule() {
@@ -224,6 +242,7 @@
   function showErrorState() {
     document.getElementById('attendanceRate').innerHTML = 'Error <i class="bx bx-error-circle" style="color:#ef4444"></i>';
     document.getElementById('teachingLoad').textContent = 'Error loading';
+    document.getElementById('promotionStatus').innerHTML = 'Error <i class="bx bx-error-circle" style="color:#ef4444"></i>';
     document.getElementById('classScheduleBody').innerHTML = '<div style="text-align: center; padding: 1rem; color: #ef4444;">Error loading schedule</div>';
   }
 

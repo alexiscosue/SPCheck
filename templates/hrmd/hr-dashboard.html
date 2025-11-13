@@ -2,12 +2,10 @@
 
 {% block title %}Admin Dashboard{% endblock %}
 
-{% block page_title %}Welcome back, {{ faculty_name | default('Ms. Ayson') }}{% endblock %}
+{% block page_title %}Welcome back, {{ hr_name | default('HR Admin') }}{% endblock %}
 
 {% block content %}
-    <!-- grid -->
     <section class="grid" aria-live="polite">
-      <!-- KPI Cards -->
       <div class="kpis card" style="padding:16px">
         <div class="kpi card" style="gap:14px">
           <div class="icon att"><i class='bx bx-check-shield' style="font-size:20px"></i></div>
@@ -32,7 +30,7 @@
           <div class="icon eval"><i class='bx bx-check-circle'></i></div>
           <div>
             <div class="title">Avg Evaluation</div>
-            <div class="value" id="kpi-eval">4.5</div>
+            <div class="value" id="kpi-eval">Loading...</div>
           </div>
         </div>
 
@@ -45,9 +43,7 @@
         </div>
       </div>
 
-      <!-- Charts -->
       <div class="chart-large">
-        <!-- 
         <div class="chart-card card">
           <div style="display:flex;align-items:center;justify-content:space-between">
             <div style="font-weight:700">Attendance Trends</div>
@@ -55,7 +51,6 @@
           </div>
           <canvas id="attendanceChart" height="170"></canvas>
         </div>
-        -->
 
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -86,7 +81,7 @@
       <div class="chart-side">
         <div class="chart-card card">
           <div style="display:flex;justify-content:space-between;align-items:center">
-            <div style="font-weight:700">Average Evaluation Score</div>
+            <div style="font-weight:700">Evaluation Status Breakdown</div>
             <div style="font-size:13px;color:var(--muted)">This semester</div>
           </div>
           <canvas id="scoreChart" height="130"></canvas>
@@ -107,9 +102,97 @@
 
 {% block extra_scripts %}
 <script>
+  // --- Chart Initialization Functions ---
+
+  // === Top Departments Chart Initialization ===
+  function initializeTopDeptChart(labels, data) {
+    const topDeptCtx = document.getElementById('topDeptChart').getContext('2d');
+    new Chart(topDeptCtx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Average Score',
+                data: data,
+                backgroundColor: '#7b1113'
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    min: 0,
+                    max: 5,
+                    ticks: { stepSize: 1 }
+                },
+                y: { beginAtZero: true }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+  }
+
+  // === Attendance Chart Initialization (Using static/mock data for now) ===
+  function initializeAttendanceChart() {
+      const attendanceCtx = document.getElementById('attendanceChart').getContext('2d');
+      new Chart(attendanceCtx, {
+          type: 'line',
+          data: {
+              labels: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+              datasets: [{
+                  label: 'Attendance %',
+                  data: [88, 90, 92, 91, 94, 89, 92],
+                  borderColor: '#7b1113',
+                  backgroundColor: 'rgba(123,17,19,0.12)',
+                  tension: 0.35,
+                  pointRadius:4,
+                  pointBackgroundColor:'#fff'
+              }]
+          },
+          options: {
+              responsive:true,
+              maintainAspectRatio:true,
+              scales:{
+                  y:{
+                      beginAtZero:false,
+                      min:60,
+                      max:100,
+                      ticks:{ stepSize:10 }
+                  }
+              },
+              plugins:{ legend:{ display:false } }
+          }
+      });
+  }
+
+  // === Evaluation Score Chart Initialization ===
+  function initializeScoreChart(data) {
+    const scoreCtx = document.getElementById('scoreChart').getContext('2d');
+    new Chart(scoreCtx, {
+        type: 'doughnut',
+        data: {
+            labels:['Above Average','Average','Below Average'],
+            datasets:[{
+                data: data,
+                backgroundColor:['#16a34a','#f59e0b','#dc2626'],
+                hoverOffset:6
+            }]
+        },
+        options:{
+            responsive:true,
+            maintainAspectRatio:true,
+            plugins:{ legend:{ position:'bottom' } }
+        }
+    });
+  }
+  
+  // --- Main Fetch Function ---
+
   async function fetchDashboardData() {
     try {
-      // Fetch today's attendance stats
+      // Fetch today's attendance stats FIRST (your implementation)
       const todayStatsResponse = await fetch('/api/hr/today-attendance-stats');
       const todayStatsData = await todayStatsResponse.json();
       
@@ -126,33 +209,72 @@
         }
       }
 
-      // Fetch faculty list for total count
-      const facultyResponse = await fetch('/api/hr/faculty-list');
-      const facultyData = await facultyResponse.json();
+      // 2. Fetch other data concurrently (incoming version's implementation)
+      const [facultyResponse, attendanceResponse, evaluationResponse] = await Promise.all([
+          fetch('/api/hr/faculty-list'),
+          fetch('/api/hr/faculty-attendance'),
+          fetch('/api/hr/evaluation-dashboard-data') 
+      ]);
       
+      const facultyData = await facultyResponse.json();
+      const attendanceData = await attendanceResponse.json();
+      const evaluationData = await evaluationResponse.json(); 
+      
+      // --- Update Faculty KPI ---
       if (facultyData.success) {
+        // Includes faculty and dean (20001, 20002)
         document.getElementById('kpi-fac').textContent = facultyData.faculty_list.length || 0;
       } else {
         document.getElementById('kpi-fac').textContent = 'Error';
       }
 
-      // Fetch recent attendance logs
-      const attendanceResponse = await fetch('/api/hr/faculty-attendance');
-      const attendanceData = await attendanceResponse.json();
-      
+      // --- Update Attendance Logs ---
       if (attendanceData.success) {
         updateRecentLogs(attendanceData.attendance_logs || []);
       } else {
         document.getElementById('recentLogs').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#6b7280">Error loading attendance data</td></tr>';
       }
+
+      // --- Update Evaluation KPIs and Charts ---
+      if (evaluationData.success) {
+        // KPI: Average Evaluation Score
+        const avgEval = evaluationData.kpi_avg_eval;
+        document.getElementById('kpi-eval').textContent = avgEval === 'N/A' ? 'N/A' : parseFloat(avgEval).toFixed(2);
+
+        // Doughnut Chart: Rating Breakdown
+        const totalRatings = evaluationData.rating_breakdown.reduce((a, b) => a + b, 0);
+        if (totalRatings > 0) {
+            initializeScoreChart(evaluationData.rating_breakdown);
+        } else {
+             document.getElementById('scoreChart').parentElement.innerHTML = '<div style="text-align:center; color:var(--muted); padding:30px;">No evaluation data available</div>';
+        }
+
+        // Bar Chart: Top Departments
+        if (evaluationData.top_departments && evaluationData.top_departments.length > 0) {
+            const labels = evaluationData.top_departments.map(d => d.department);
+            const data = evaluationData.top_departments.map(d => d.score);
+            initializeTopDeptChart(labels, data);
+        } else {
+            document.getElementById('topDeptChart').parentElement.innerHTML = '<div style="text-align:center; color:var(--muted); padding:30px;">No departmental scores available</div>';
+        }
+
+      } else {
+        document.getElementById('kpi-eval').textContent = 'Error';
+        document.getElementById('scoreChart').parentElement.innerHTML = '<div style="text-align:center; color:var(--muted); padding:30px;">Error loading evaluation data</div>';
+        document.getElementById('topDeptChart').parentElement.innerHTML = '<div style="text-align:center; color:var(--muted); padding:30px;">Error loading evaluation data</div>';
+      }
+
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       document.getElementById('kpi-att').textContent = 'Error';
       document.getElementById('kpi-att-subtitle').textContent = 'Connection failed';
       document.getElementById('kpi-fac').textContent = 'Error';
+      document.getElementById('kpi-eval').textContent = 'Error';
       document.getElementById('recentLogs').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#6b7280">Error loading data</td></tr>';
     }
   }
+  
+  // --- Helper Function (Keep original logic) ---
 
   function updateRecentLogs(logs) {
     const tbody = document.getElementById('recentLogs');
@@ -193,94 +315,16 @@
     });
   }
 
+  // --- DOM Ready ---
   document.addEventListener('DOMContentLoaded', function() {
+    // Initialize chart that uses static data first
+    initializeAttendanceChart();
+    
+    // Fetch dynamic data
     fetchDashboardData();
     
     // Refresh data every 5 minutes
     setInterval(fetchDashboardData, 300000);
   });
-
-  // === Top Departments Chart ===
-  const topDeptCtx = document.getElementById('topDeptChart').getContext('2d');
-  const topDeptChart = new Chart(topDeptCtx, {
-    type: 'bar',
-    data: {
-      labels: ['IT', 'Business', 'Education', 'CS', 'Engineering'],
-      datasets: [{
-        label: 'Average Score',
-        data: [4.3, 4.2, 4.1, 3.9, 3.8],
-        backgroundColor: '#7b1113'
-      }]
-    },
-    options: {
-      indexAxis: 'y',
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        x: {
-          min: 0,
-          max: 5,
-          ticks: { stepSize: 1 }
-        },
-        y: { beginAtZero: true }
-      },
-      plugins: { legend: { display: false } }
-    }
-  });
-
-  /* === Attendance Chart ===
-  const attendanceCtx = document.getElementById('attendanceChart').getContext('2d');
-  const attendanceChart = new Chart(attendanceCtx, {
-    type: 'line',
-    data: {
-      labels: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
-      datasets: [{
-        label: 'Attendance %',
-        data: [88, 90, 92, 91, 94, 89, 92],
-        borderColor: '#7b1113',
-        backgroundColor: 'rgba(123,17,19,0.12)',
-        tension: 0.35,
-        pointRadius:4,
-        pointBackgroundColor:'#fff'
-      }]
-    },
-    options: {
-      responsive:true,
-      maintainAspectRatio:true,
-      scales:{
-        y:{
-          beginAtZero:false,
-          min:60,
-          max:100,
-          ticks:{ stepSize:10 }
-        }
-      },
-      plugins:{ legend:{ display:false } }
-    }
-  });
-  */
-
-  // === Evaluation Score Chart ===
-  const scoreCtx = document.getElementById('scoreChart').getContext('2d');
-  const scoreChart = new Chart(scoreCtx, {
-    type: 'doughnut',
-    data: {
-      labels:['Above average','average','below average'],
-      datasets:[{
-        data:[45, 35, 20],
-        backgroundColor:['#16a34a','#f59e0b','#dc2626'],
-        hoverOffset:6
-      }]
-    },
-    options:{
-      responsive:true,
-      maintainAspectRatio:true,
-      plugins:{ legend:{ position:'bottom' } }
-    }
-  });
-
-  // === Keep static KPI values for now ===
-  document.getElementById('kpi-eval').textContent = '4.5';
-  document.getElementById('kpi-promo').textContent = '3';
 </script>
 {% endblock %}

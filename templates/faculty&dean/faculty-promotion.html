@@ -1,8 +1,8 @@
 {% extends "faculty&dean/faculty-base.html" %}
 
-{% block title %}My Application{% endblock %}
+{% block title %}Regularization / Promotion{% endblock %}
 
-{% block page_title %}My Application{% endblock %}
+{% block page_title %}Regularization / Promotion{% endblock %}
 
 {% block content %}
 <section class="grid">
@@ -68,46 +68,7 @@
         <span>Tenure Regularization Status</span>
       </div>
       
-      {% if regularization_status_data %}
-      <!-- Faculty has an active regularization process -->
-      <div style="margin-top:16px;">
-        <div style="background:#f0f9ff; border-left:4px solid #3b82f6; border-radius:8px; padding:16px; margin-bottom:16px;">
-          <p style="margin:0 0 8px 0; font-size:14px; color:#1e40af; font-weight:600;">
-            <i class='bx bx-info-circle'></i> Regularization Initiated by HR
-          </p>
-          <p style="margin:0; font-size:13px; color:#1e3a8a; line-height:1.6;">
-            Your regularization to <strong>{{ regularization_status_data.requested_tenure }}</strong> status is currently being processed.
-          </p>
-        </div>
-        
-        <!-- Regularization Progress Stepper -->
-        <div class="stepper" style="margin-top:16px;">
-          <div class="step {% if regularization_status_data.hrmd_date %}done{% else %}active{% endif %}">
-            <div class="circle">1</div>
-            HR Endorsement
-            <small>{{ regularization_status_data.hrmd_date.strftime("%Y-%m-%d") if regularization_status_data.hrmd_date else 'Pending' }}</small>
-          </div>
-          <div class="step {% if regularization_status_data.vpa_date %}done{% elif regularization_status_data.current_status == 'vpa' %}active{% endif %}">
-            <div class="circle">2</div>
-            VP Admin Review
-            <small>{{ regularization_status_data.vpa_date.strftime("%Y-%m-%d") if regularization_status_data.vpa_date else 'Not yet' }}</small>
-          </div>
-          <div class="step {% if regularization_status_data.pres_date %}done{% elif regularization_status_data.current_status == 'pres' %}active{% endif %}">
-            <div class="circle">3</div>
-            President Approval
-            <small>{{ regularization_status_data.pres_date.strftime("%Y-%m-%d") if regularization_status_data.pres_date else 'Not yet' }}</small>
-          </div>
-        </div>
-        
-        <div style="margin-top:16px; padding:12px; background:#fef3c7; border-left:4px solid #f59e0b; border-radius:6px;">
-          <p style="margin:0; font-size:13px; color:#92400e;">
-            <strong>Current Stage:</strong> {{ regularization_status_data.current_status|title }}
-          </p>
-        </div>
-      </div>
-      
-      {% else %}
-      <!-- No active regularization process -->
+      <!-- Always show progress circle and current status -->
       <div style="margin-top:16px;">
         <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
           <div class="progress-circle" data-percentage="{{ regularization_percentage }}">
@@ -138,6 +99,42 @@
           </div>
         </div>
         
+        {% if regularization_status_data %}
+        <!-- Faculty has an active regularization process -->
+        <div style="background:#f0f9ff; border-left:4px solid #3b82f6; border-radius:8px; padding:16px; margin-bottom:16px;">
+          <p style="margin:0 0 8px 0; font-size:14px; color:#1e40af; font-weight:600;">
+            <i class='bx bx-info-circle'></i> Regularization Initiated by HR
+          </p>
+          <p style="margin:0; font-size:13px; color:#1e3a8a; line-height:1.6;">
+            Your regularization to <strong>{{ regularization_status_data.requested_tenure }}</strong> status is currently being processed.
+          </p>
+        </div>
+        
+        <!-- Regularization Progress Stepper -->
+        <div class="stepper" style="margin-top:16px;">
+          <div class="step {% if regularization_status_data.hrmd_date %}done{% else %}active{% endif %}">
+            <div class="circle">1</div>
+            HR Endorsement
+            <small>{{ regularization_status_data.hrmd_date.strftime("%Y-%m-%d") if regularization_status_data.hrmd_date else 'Pending' }}</small>
+          </div>
+          <div class="step {% if regularization_status_data.vpa_date %}done{% elif regularization_status_data.current_status == 'vpa' %}active{% endif %}">
+            <div class="circle">2</div>
+            VP Admin Review
+            <small>{{ regularization_status_data.vpa_date.strftime("%Y-%m-%d") if regularization_status_data.vpa_date else 'Not yet' }}</small>
+          </div>
+          <div class="step {% if regularization_status_data.pres_date %}done{% elif regularization_status_data.current_status == 'pres' %}active{% endif %}">
+            <div class="circle">3</div>
+            President Approval
+            <small>{{ regularization_status_data.pres_date.strftime("%Y-%m-%d") if regularization_status_data.pres_date else 'Not yet' }}</small>
+          </div>
+        </div>
+        
+        <div style="margin-top:16px; padding:12px; background:#fef3c7; border-left:4px solid #f59e0b; border-radius:6px;">
+
+        </div>
+        
+        {% else %}
+        <!-- No active regularization process yet -->
         <div style="padding:12px; background:#fffbeb; border-left:4px solid #fbbf24; border-radius:6px;">
           <p style="margin:0; font-size:13px; color:#92400e;">
             <i class='bx bx-info-circle'></i> <strong>Note:</strong> Regularization is initiated by HR once you meet the eligibility criteria (3+ years of service with required degree). No application is needed from your end.
@@ -147,15 +144,43 @@
         <p style="font-size:13px;color:var(--muted);margin-top:12px">
           {{ regularization_message }}
         </p>
+        {% endif %}
       </div>
-      {% endif %}
     </div>
+
 
     <!-- Promotion Application -->
     <div class="card-promotion" style="padding:20px;">
       
-      {% if available_ranks and available_ranks|length > 0 %}
-      <!-- User CAN apply for promotion -->
+      {% if not can_apply_for_promotion %}
+      <!-- USER CANNOT APPLY - NOT YET REGULAR -->
+      <div style="text-align:center; padding:40px 20px;">
+        <div style="background:#fef2f2; border:2px solid #fca5a5; border-radius:12px; padding:30px; margin-bottom:20px;">
+          <i class='bx bx-lock-alt' style="font-size:64px; color:#dc2626; display:block; margin-bottom:15px;"></i>
+          <h3 style="margin:0 0 10px 0; color:#991b1b; font-size:20px;">Regularization Required</h3>
+          <p style="margin:0; color:#7f1d1d; font-size:15px; line-height:1.6;">
+            You must complete regularization (minimum <strong>3 years of service</strong>) before applying for promotion.
+          </p>
+        </div>
+        
+        <div style="padding:16px; background:#fffbeb; border-left:4px solid #fbbf24; border-radius:6px; text-align:left;">
+          <p style="margin:0 0 8px 0; font-size:13px; color:#92400e; font-weight:600;">
+            <i class='bx bx-info-circle'></i> Why can't I apply for promotion yet?
+          </p>
+          <p style="margin:0; font-size:13px; color:#78350f; line-height:1.5;">
+            According to SPC policy, faculty members must achieve <strong>Regular</strong> status (3+ years) before they can apply for rank promotion. You currently have <strong>{{ years_employed }} year{{ 's' if years_employed != 1 else '' }}</strong> of service.
+          </p>
+        </div>
+        
+        <div style="margin-top:20px; padding:16px; background:#f0f9ff; border-left:4px solid #3b82f6; border-radius:6px; text-align:left;">
+          <p style="margin:0; font-size:13px; color:#1e40af; line-height:1.6;">
+            <strong>Next Steps:</strong> Once you reach 3 years of service, HRMD will initiate your regularization process. After achieving Regular status, you'll be eligible to apply for academic rank promotions.
+          </p>
+        </div>
+      </div>
+      
+      {% elif available_ranks and available_ranks|length > 0 %}
+      <!-- USER CAN APPLY FOR PROMOTION -->
       <form id="promotion-doc-upload-form" enctype="multipart/form-data" method="POST" action="/faculty/promotion/upload">
 
         <!-- Current Rank Display -->
@@ -243,7 +268,7 @@
       </form>
 
       {% else %}
-      <!-- User has reached HIGHEST RANK -->
+      <!-- USER HAS REACHED HIGHEST RANK -->
       <div style="text-align:center; padding:40px 20px;">
         <div style="background:#f0fdf4; border:2px solid #86efac; border-radius:12px; padding:30px; margin-bottom:20px;">
           <i class='bx bx-trophy' style="font-size:64px; color:#22c55e; display:block; margin-bottom:15px;"></i>
@@ -265,6 +290,7 @@
       {% endif %}
 
     </div>
+
 
   </div>
 
