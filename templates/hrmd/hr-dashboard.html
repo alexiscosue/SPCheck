@@ -13,7 +13,10 @@
           <div class="icon att"><i class='bx bx-check-shield' style="font-size:20px"></i></div>
           <div>
             <div class="title">Attendance (Today)</div>
-            <div class="value" id="kpi-att">92%</div>
+            <div class="value" id="kpi-att">Loading...</div>
+            <div class="subtitle" id="kpi-att-subtitle"></div>
+            <!-- Add this small note -->
+            <div class="note" id="kpi-att-note" style="font-size:11px;color:var(--muted);margin-top:2px"></div>
           </div>
         </div>
 
@@ -44,6 +47,7 @@
 
       <!-- Charts -->
       <div class="chart-large">
+        <!-- 
         <div class="chart-card card">
           <div style="display:flex;align-items:center;justify-content:space-between">
             <div style="font-weight:700">Attendance Trends</div>
@@ -51,6 +55,7 @@
           </div>
           <canvas id="attendanceChart" height="170"></canvas>
         </div>
+        -->
 
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -104,6 +109,24 @@
 <script>
   async function fetchDashboardData() {
     try {
+      // Fetch today's attendance stats
+      const todayStatsResponse = await fetch('/api/hr/today-attendance-stats');
+      const todayStatsData = await todayStatsResponse.json();
+      
+      if (todayStatsData.success) {
+        document.getElementById('kpi-att').textContent = `${todayStatsData.attendance_percentage}%`;
+        document.getElementById('kpi-att-subtitle').textContent = 
+          `${todayStatsData.present_count}/${todayStatsData.total_faculty} present`;
+        
+        // Add note about faculty with classes today
+        if (todayStatsData.note) {
+          document.getElementById('kpi-att-note').textContent = todayStatsData.note;
+        } else {
+          document.getElementById('kpi-att-note').textContent = 'Faculty with classes today';
+        }
+      }
+
+      // Fetch faculty list for total count
       const facultyResponse = await fetch('/api/hr/faculty-list');
       const facultyData = await facultyResponse.json();
       
@@ -113,6 +136,7 @@
         document.getElementById('kpi-fac').textContent = 'Error';
       }
 
+      // Fetch recent attendance logs
       const attendanceResponse = await fetch('/api/hr/faculty-attendance');
       const attendanceData = await attendanceResponse.json();
       
@@ -123,6 +147,8 @@
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
+      document.getElementById('kpi-att').textContent = 'Error';
+      document.getElementById('kpi-att-subtitle').textContent = 'Connection failed';
       document.getElementById('kpi-fac').textContent = 'Error';
       document.getElementById('recentLogs').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#6b7280">Error loading data</td></tr>';
     }
@@ -169,6 +195,9 @@
 
   document.addEventListener('DOMContentLoaded', function() {
     fetchDashboardData();
+    
+    // Refresh data every 5 minutes
+    setInterval(fetchDashboardData, 300000);
   });
 
   // === Top Departments Chart ===
@@ -199,7 +228,7 @@
     }
   });
 
-  // === Attendance Chart ===
+  /* === Attendance Chart ===
   const attendanceCtx = document.getElementById('attendanceChart').getContext('2d');
   const attendanceChart = new Chart(attendanceCtx, {
     type: 'line',
@@ -229,6 +258,7 @@
       plugins:{ legend:{ display:false } }
     }
   });
+  */
 
   // === Evaluation Score Chart ===
   const scoreCtx = document.getElementById('scoreChart').getContext('2d');
@@ -249,8 +279,7 @@
     }
   });
 
-  // === Keep static KPI values ===
-  document.getElementById('kpi-att').textContent = '92%';
+  // === Keep static KPI values for now ===
   document.getElementById('kpi-eval').textContent = '4.5';
   document.getElementById('kpi-promo').textContent = '3';
 </script>

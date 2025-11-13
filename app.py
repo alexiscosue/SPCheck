@@ -1543,6 +1543,110 @@ def api_faculty_dashboard():
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
 
+@app.route('/api/hr/today-attendance-stats')
+@require_auth([20003])
+def api_hr_today_attendance_stats():
+    """Get today's attendance statistics for faculty with classes TODAY"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        philippines_tz = pytz.timezone('Asia/Manila')
+        today = datetime.now(philippines_tz).date()
+        today_str = today.strftime('%Y-%m-%d')
+        current_day = today.strftime('%A')  # Get day name (Monday, Tuesday, etc.)
+        
+        # Count faculty who have classes TODAY (based on their schedule)
+        cursor.execute("""
+            WITH current_calendar AS (
+                SELECT acadcalendar_id 
+                FROM acadcalendar 
+                WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                ORDER BY semesterstart DESC
+                LIMIT 1
+            ),
+            faculty_with_classes_today AS (
+                SELECT DISTINCT p.personnel_id
+                FROM personnel p
+                JOIN schedule sch ON p.personnel_id = sch.personnel_id
+                CROSS JOIN current_calendar cc
+                WHERE p.role_id IN (20001, 20002)
+                AND sch.acadcalendar_id = cc.acadcalendar_id
+                AND (
+                    (sch.classday_1 = %s AND sch.starttime_1 IS NOT NULL) OR
+                    (sch.classday_2 = %s AND sch.starttime_2 IS NOT NULL)
+                )
+            )
+            SELECT COUNT(*) 
+            FROM faculty_with_classes_today
+        """, (current_day, current_day))
+        
+        total_faculty_today = cursor.fetchone()[0] or 0
+        
+        if total_faculty_today == 0:
+            cursor.close()
+            return_db_connection(conn)
+            return {
+                'success': True,
+                'attendance_percentage': 0,
+                'present_count': 0,
+                'total_faculty': 0,
+                'today_date': today_str,
+                'note': 'No faculty have classes today'
+            }
+        
+        # Count faculty who are present TODAY (with actual time-in, not absent records)
+        cursor.execute("""
+            WITH current_calendar AS (
+                SELECT acadcalendar_id 
+                FROM acadcalendar 
+                WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                ORDER BY semesterstart DESC
+                LIMIT 1
+            ),
+            faculty_with_classes_today AS (
+                SELECT DISTINCT p.personnel_id
+                FROM personnel p
+                JOIN schedule sch ON p.personnel_id = sch.personnel_id
+                CROSS JOIN current_calendar cc
+                WHERE p.role_id IN (20001, 20002)
+                AND sch.acadcalendar_id = cc.acadcalendar_id
+                AND (
+                    (sch.classday_1 = %s AND sch.starttime_1 IS NOT NULL) OR
+                    (sch.classday_2 = %s AND sch.starttime_2 IS NOT NULL)
+                )
+            )
+            SELECT COUNT(DISTINCT a.personnel_id)
+            FROM attendance a
+            JOIN faculty_with_classes_today f ON a.personnel_id = f.personnel_id
+            WHERE DATE(a.timein AT TIME ZONE 'Asia/Manila') = %s
+            AND a.attendancestatus IN ('Present', 'Late')
+            AND a.timein IS NOT NULL
+            AND a.timein::time != '00:00:00'  -- Exclude absent records (midnight timein)
+        """, (current_day, current_day, today))
+        
+        present_count = cursor.fetchone()[0] or 0
+        
+        cursor.close()
+        return_db_connection(conn)
+        
+        attendance_percentage = round((present_count / total_faculty_today) * 100) if total_faculty_today > 0 else 0
+        
+        return {
+            'success': True,
+            'attendance_percentage': attendance_percentage,
+            'present_count': present_count,
+            'total_faculty': total_faculty_today,
+            'today_date': today_str,
+            'note': f'Faculty with classes on {current_day}'
+        }
+        
+    except Exception as e:
+        print(f"Error fetching today's attendance stats: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
 @app.route('/api/auditlogs')
 @require_auth([20003])  
 def api_audit_logs():
@@ -2368,7 +2472,7 @@ def api_hr_faculty_attendance():
 @app.route('/api/hr/update-attendance-time', methods=['POST'])
 @require_auth([20003])
 def api_update_attendance_time():
-    """Update time in/out for attendance records with improved audit logging"""
+    """Update time in/out for attendance records with exact RFID validation rules"""
     try:
         data = request.get_json()
         updates = data.get('updates', [])
@@ -2466,7 +2570,6 @@ def api_update_attendance_time():
                             print(f"     schedule: {classday_1} {starttime_1}-{endtime_1} / {classday_2} {starttime_2}-{endtime_2}")
                             print(f"     matches {day_of_week}: Day1={day1_matches}, Day2={day2_matches}")
                             
-                            # RULE 1: Exact day match 
                             if day1_matches or day2_matches:
                                 if day1_matches:
                                     scheduled_day = classday_1
@@ -2486,7 +2589,6 @@ def api_update_attendance_time():
                                 print(f"   ✅ Found PERFECT match on {day_type}: {attendance_id}")
                                 break
                         
-                        # RULE 2: If no exact day match found, use the first record
                         if not exact_match_found and attendance_results:
                             target_record = attendance_results[0]
                             print(f"   ⚠️ Using first record as fallback: {target_record[0]}")
@@ -2498,7 +2600,21 @@ def api_update_attendance_time():
                             
                             print(f"   🎯 Updating record: ID={attendance_id}")
                             print(f"   Schedule: {classday_1} {starttime_1}-{endtime_1} / {classday_2} {starttime_2}-{endtime_2}")
-                            print(f"   Current - Timein: {current_timein}, Timeout: {current_timeout}, Status: {current_status}")
+                            
+                            if day1_matches:
+                                class_start = starttime_1
+                                class_end = endtime_1
+                                validation_day = classday_1
+                            elif day2_matches:
+                                class_start = starttime_2
+                                class_end = endtime_2
+                                validation_day = classday_2
+                            else:
+                                class_start = starttime_1 or starttime_2
+                                class_end = endtime_1 or endtime_2
+                                validation_day = classday_1 or classday_2
+                            
+                            print(f"   Using schedule for validation: {validation_day} {class_start}-{class_end}")
                             
                             changes_made = []
                             updates_applied = False
@@ -2510,7 +2626,6 @@ def api_update_attendance_time():
                             if 'time_in' in update:
                                 updates_applied = True
                                 if time_in == '':  
-                                    # DELETE TIME-IN: Set timein to midnight of the same date (retain date)
                                     midnight_time = f"{date} 00:00:00"
                                     cursor.execute("""
                                         UPDATE attendance 
@@ -2520,7 +2635,6 @@ def api_update_attendance_time():
                                     changes_made.append("deleted time-in")
                                     print(f"   ✅ Deleted time-in (set to midnight)")
                                 else:  
-                                    # SET/UPDATE TIME-IN: Convert to 24-hour format with AM/PM handling
                                     time_in_24hr = convert_to_24hour(time_in)
                                     new_timein = f"{date} {time_in_24hr}"
                                     cursor.execute("""
@@ -2532,14 +2646,7 @@ def api_update_attendance_time():
                                     print(f"   ✅ Set time-in to {time_in_24hr}")
                             
                             if 'time_out' in update:
-                                # RULE: Timeout can only be added if there's a valid timein
-                                current_timein_check = current_timein
-                                if 'time_in' in update and time_in != '':
-                                    time_in_24hr = convert_to_24hour(time_in)
-                                    current_timein_check = datetime.strptime(f"{date} {time_in_24hr}", "%Y-%m-%d %H:%M:%S")
-                                
                                 if time_out == '':  
-                                    # DELETE TIME-OUT: Set to NULL (completely remove)
                                     cursor.execute("""
                                         UPDATE attendance 
                                         SET timeout = NULL
@@ -2549,9 +2656,12 @@ def api_update_attendance_time():
                                     print(f"   ✅ Deleted time-out")
                                     updates_applied = True
                                 else:  
-                                    # RULE: Can only add timeout if there's a valid timein
+                                    current_timein_check = current_timein
+                                    if 'time_in' in update and time_in != '':
+                                        time_in_24hr = convert_to_24hour(time_in)
+                                        current_timein_check = datetime.strptime(f"{date} {time_in_24hr}", "%Y-%m-%d %H:%M:%S")
+                                    
                                     if current_timein_check and current_timein_check.strftime('%H:%M:%S') != '00:00:00':
-                                        # SET/UPDATE TIME-OUT: Convert to 24-hour format with AM/PM handling
                                         time_out_24hr = convert_to_24hour(time_out)
                                         new_timeout = f"{date} {time_out_24hr}"
                                         cursor.execute("""
@@ -2566,7 +2676,6 @@ def api_update_attendance_time():
                                         print(f"   ⚠️ Cannot add timeout - no valid timein exists")
                                         updates_applied = False
                             
-                            new_status = current_status
                             if updates_applied:
                                 cursor.execute("""
                                     SELECT timein, timeout FROM attendance WHERE attendance_id = %s
@@ -2575,87 +2684,143 @@ def api_update_attendance_time():
                                 
                                 if updated_times:
                                     updated_timein, updated_timeout = updated_times
+                                    new_status = None
                                     
-                                    if updated_timein is None:
-                                        new_status = 'Absent'
-                                    elif updated_timein is not None:
-                                        if updated_timein and updated_timein.strftime('%H:%M:%S') == '00:00:00':
-                                            new_status = 'Absent'
-                                        elif updated_timeout is None:
-                                            new_status = 'Present'
+                                    if class_start and class_end and validation_day == day_of_week:
+                                        print(f"   🔍 Validating against class schedule: {class_start}-{class_end}")
+                                        
+                                        if updated_timein and updated_timein.strftime('%H:%M:%S') != '00:00:00':
+                                            if isinstance(class_start, str):
+                                                class_start_time = datetime.strptime(class_start[:8], '%H:%M:%S').time()
+                                            else:
+                                                class_start_time = class_start
+                                            
+                                            if isinstance(class_end, str):
+                                                class_end_time = datetime.strptime(class_end[:8], '%H:%M:%S').time()
+                                            else:
+                                                class_end_time = class_end
+                                            
+                                            class_start_dt = datetime.combine(date_obj, class_start_time)
+                                            class_end_dt = datetime.combine(date_obj, class_end_time)
+                                            
+                                            timein_dt = updated_timein.astimezone(pytz.timezone('Asia/Manila')).replace(tzinfo=None)
+                                            
+                                            # EXACT RFID VALIDATION RULES
+                                            timein_window_start = (class_start_dt - timedelta(minutes=15)).time()
+                                            timein_window_end = (class_end_dt - timedelta(minutes=15)).time()
+                                            present_threshold_dt = class_start_dt + timedelta(minutes=15)
+                                            timeout_window_start = (class_end_dt - timedelta(minutes=15)).time()
+                                            timeout_window_end = (class_end_dt + timedelta(minutes=15)).time()
+                                            
+                                            print(f"   📊 Time Windows:")
+                                            print(f"     Time-in window: {timein_window_start} to {timein_window_end}")
+                                            print(f"     Present threshold: {present_threshold_dt.time()}")
+                                            print(f"     Time-out window: {timeout_window_start} to {timeout_window_end}")
+                                            print(f"     Actual time-in: {timein_dt.time()}")
+                                            
+                                            # RULE 1: Check if time-in is within valid time-in window
+                                            if timein_window_start <= timein_dt.time() <= timein_window_end:
+                                                # RULE 5 & 6: Determine Present vs Late
+                                                if timein_dt <= present_threshold_dt:
+                                                    new_status = "Present"
+                                                    print(f"   ✅ Time-in within window: RECORDED AS PRESENT")
+                                                else:
+                                                    new_status = "Late" 
+                                                    print(f"   ✅ Time-in within window: RECORDED AS LATE")
+                                            else:
+                                                # Time-in outside window - check if it's in timeout window (RULE 8)
+                                                if timeout_window_start <= timein_dt.time() <= timeout_window_end:
+                                                    new_status = "Late"
+                                                    print(f"   ✅ Time-in in timeout window: RECORDED AS LATE")
+                                                else:
+                                                    # Time-in completely outside all windows
+                                                    new_status = "Absent"
+                                                    print(f"   ❌ Time-in outside all windows: RECORDED AS ABSENT")
+                                                    
                                         else:
-                                            new_status = 'Present'
+                                            # No time-in = Absent (RULE 9 & 10)
+                                            new_status = "Absent"
+                                            print(f"   ❌ No time-in: RECORDED AS ABSENT")
                                     
-                                    if new_status != current_status:
+                                    else:
+                                        print(f"   ⚠️ No schedule validation possible, using basic logic")
+                                        if not updated_timein or updated_timein.strftime('%H:%M:%S') == '00:00:00':
+                                            new_status = "Absent"
+                                        elif updated_timein and not updated_timeout:
+                                            new_status = "Present"
+                                        elif updated_timein and updated_timeout:
+                                            new_status = "Present"
+                                    
+                                    if new_status:
                                         cursor.execute("""
                                             UPDATE attendance 
                                             SET attendancestatus = %s
                                             WHERE attendance_id = %s
                                         """, (new_status, attendance_id))
                                         print(f"   ✅ Updated status: {current_status} → {new_status}")
-                                
-                                updated_count += 1
-                                
-                                schedule_info = ""
-                                if day1_matches and classday_1 and starttime_1 and endtime_1:
-                                    start1_str = str(starttime_1)[:8] if starttime_1 else 'N/A'
-                                    end1_str = str(endtime_1)[:8] if endtime_1 else 'N/A'
-                                    schedule_info = f"{classday_1} {start1_str} - {end1_str}"
-                                elif day2_matches and classday_2 and starttime_2 and endtime_2:
-                                    start2_str = str(starttime_2)[:8] if starttime_2 else 'N/A'
-                                    end2_str = str(endtime_2)[:8] if endtime_2 else 'N/A'
-                                    schedule_info = f"{classday_2} {start2_str} - {end2_str}"
-                                else:
-                                    schedule_parts = []
-                                    if classday_1 and starttime_1 and endtime_1:
+                                    
+                                    updated_count += 1
+                                    
+                                    schedule_info = ""
+                                    if day1_matches and classday_1 and starttime_1 and endtime_1:
                                         start1_str = str(starttime_1)[:8] if starttime_1 else 'N/A'
                                         end1_str = str(endtime_1)[:8] if endtime_1 else 'N/A'
-                                        schedule_parts.append(f"{classday_1} {start1_str}-{end1_str}")
-                                    if classday_2 and starttime_2 and endtime_2:
+                                        schedule_info = f"{classday_1} {start1_str} - {end1_str}"
+                                    elif day2_matches and classday_2 and starttime_2 and endtime_2:
                                         start2_str = str(starttime_2)[:8] if starttime_2 else 'N/A'
                                         end2_str = str(endtime_2)[:8] if endtime_2 else 'N/A'
-                                        schedule_parts.append(f"{classday_2} {start2_str}-{end2_str}")
-                                    schedule_info = " / ".join(schedule_parts) if schedule_parts else "N/A"
-
-                                before_timein_str = "None"
-                                if original_timein and original_timein.strftime('%H:%M:%S') != '00:00:00':
-                                    before_timein_str = original_timein.strftime('%H:%M:%S')
-
-                                before_timeout_str = "None"
-                                if original_timeout and original_timeout.strftime('%H:%M:%S') != '00:00:00':
-                                    before_timeout_str = original_timeout.strftime('%H:%M:%S')
-
-                                after_timein_str = "None"
-                                if 'time_in' in update:
-                                    if time_in == '':
-                                        after_timein_str = "None"
+                                        schedule_info = f"{classday_2} {start2_str} - {end2_str}"
                                     else:
-                                        time_in_24hr = convert_to_24hour(time_in)
-                                        after_timein_str = time_in_24hr if time_in_24hr else "None"
-                                else:
-                                    after_timein_str = before_timein_str
+                                        schedule_parts = []
+                                        if classday_1 and starttime_1 and endtime_1:
+                                            start1_str = str(starttime_1)[:8] if starttime_1 else 'N/A'
+                                            end1_str = str(endtime_1)[:8] if endtime_1 else 'N/A'
+                                            schedule_parts.append(f"{classday_1} {start1_str}-{end1_str}")
+                                        if classday_2 and starttime_2 and endtime_2:
+                                            start2_str = str(starttime_2)[:8] if starttime_2 else 'N/A'
+                                            end2_str = str(endtime_2)[:8] if endtime_2 else 'N/A'
+                                            schedule_parts.append(f"{classday_2} {start2_str}-{end2_str}")
+                                        schedule_info = " / ".join(schedule_parts) if schedule_parts else "N/A"
 
-                                after_timeout_str = "None"
-                                if 'time_out' in update:
-                                    if time_out == '':
-                                        after_timeout_str = "None"
+                                    before_timein_str = "None"
+                                    if original_timein and original_timein.strftime('%H:%M:%S') != '00:00:00':
+                                        before_timein_str = original_timein.strftime('%H:%M:%S')
+
+                                    before_timeout_str = "None"
+                                    if original_timeout and original_timeout.strftime('%H:%M:%S') != '00:00:00':
+                                        before_timeout_str = original_timeout.strftime('%H:%M:%S')
+
+                                    after_timein_str = "None"
+                                    if 'time_in' in update:
+                                        if time_in == '':
+                                            after_timein_str = "None"
+                                        else:
+                                            time_in_24hr = convert_to_24hour(time_in)
+                                            after_timein_str = time_in_24hr if time_in_24hr else "None"
                                     else:
-                                        time_out_24hr = convert_to_24hour(time_out)
-                                        after_timeout_str = time_out_24hr if time_out_24hr else "None"
-                                else:
-                                    after_timeout_str = before_timeout_str
+                                        after_timein_str = before_timein_str
 
-                                class_name_clean = class_name.replace('\n', ' ').replace('\r', ' ').strip()
-                                audit_details = f"HR updated attendance for {name}\nClass: {class_name_clean}\nDate: {date}\nSchedule: {schedule_info}\nSection: {class_section}\nClassroom: {classroom}"
+                                    after_timeout_str = "None"
+                                    if 'time_out' in update:
+                                        if time_out == '':
+                                            after_timeout_str = "None"
+                                        else:
+                                            time_out_24hr = convert_to_24hour(time_out)
+                                            after_timeout_str = time_out_24hr if time_out_24hr else "None"
+                                    else:
+                                        after_timeout_str = before_timeout_str
 
-                                log_audit_action(
-                                    hr_personnel_id,
-                                    "Attendance time updated",
-                                    audit_details,
-                                    before_value=f"Time-in: {before_timein_str}, Time-out: {before_timeout_str}, Status: {original_status}",
-                                    after_value=f"Time-in: {after_timein_str}, Time-out: {after_timeout_str}, Status: {new_status}"
-                                )
-                                
+                                    class_name_clean = class_name.replace('\n', ' ').replace('\r', ' ').strip()
+                                    audit_details = f"HR updated attendance for {name}\nClass: {class_name_clean}\nDate: {date}\nSchedule: {schedule_info}\nSection: {class_section}\nClassroom: {classroom}"
+
+                                    log_audit_action(
+                                        hr_personnel_id,
+                                        "Attendance time updated",
+                                        audit_details,
+                                        before_value=f"Time-in: {before_timein_str}, Time-out: {before_timeout_str}, Status: {original_status}",
+                                        after_value=f"Time-in: {after_timein_str}, Time-out: {after_timeout_str}, Status: {new_status}"
+                                    )
+                                    
                                 print(f"   ✅ Successfully updated attendance_id: {attendance_id}")
                     else:
                         print(f"   ❌ No matching attendance record found!")
