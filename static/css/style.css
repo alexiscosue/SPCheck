@@ -1783,6 +1783,16 @@ gap: 12px;
   resize: none;
 }
 
+.hr-modal-wrapper .hr-modal-content #vpNotes {
+  width: 100%;
+  min-height: 80px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  font-family: inherit;
+  resize: none;
+}
+
 /* Buttons */
 .hr-modal-wrapper .hr-modal-content .btn {
   padding: 10px 16px;
@@ -3973,4 +3983,143 @@ table:has(#rfidLogsBody) thead th:nth-child(4) {
 
 .password-toggle:hover i {
   color: #374151;
+}
+
+/* Review Timeline Styles */
+.review-timeline {
+  position: relative;
+  padding-left: 30px;
+  margin-top: 15px;
+}
+
+.review-timeline::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--spc-maroon-dark);
+}
+
+.review-note-card {
+  position: relative;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  transition: all 0.3s ease;
+}
+
+.review-note-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  transform: translateX(3px);
+}
+
+.review-note-card::before {
+  content: '';
+  position: absolute;
+  left: -27px;
+  top: 20px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 0 2px #e5e7eb;
+}
+
+/* Different colors for each stage */
+.review-note-card.hrmd::before {
+  background: #f59e0b; /* Orange for HRMD */
+}
+
+.review-note-card.vpa::before {
+  background: #3b82f6; /* Blue for VPAA */
+}
+
+.review-note-card.pres::before {
+  background: #8b5cf6; /* Purple for President */
+}
+
+.review-note-card.rejected::before {
+  background: #ef4444; /* Red for Rejection */
+  box-shadow: 0 0 0 2px #fee2e2;
+}
+
+.review-note-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.review-note-role {
+  font-weight: 600;
+  font-size: 14px;
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.review-note-role i {
+  font-size: 16px;
+}
+
+.review-note-role.hrmd {
+  color: #f59e0b;
+}
+
+.review-note-role.vpa {
+  color: #3b82f6;
+}
+
+.review-note-role.pres {
+  color: #8b5cf6;
+}
+
+.review-note-role.rejected {
+  color: #ef4444;
+}
+
+.review-note-date {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.review-note-content {
+  font-size: 14px;
+  color: #4b5563;
+  line-height: 1.6;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border-radius: 6px;
+  border-left: 3px solid #e5e7eb;
+}
+
+.review-note-card.hrmd .review-note-content {
+  border-left-color: #f59e0b;
+}
+
+.review-note-card.vpa .review-note-content {
+  border-left-color: #3b82f6;
+}
+
+.review-note-card.pres .review-note-content {
+  border-left-color: #8b5cf6;
+}
+
+.review-note-card.rejected .review-note-content {
+  background: #fef2f2;
+  border-left-color: #ef4444;
+}
+
+/* Empty state */
+.no-notes-message {
+  text-align: center;
+  padding: 30px;
+  color: #9ca3af;
+  font-size: 14px;
 }
