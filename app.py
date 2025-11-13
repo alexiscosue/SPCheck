@@ -4261,7 +4261,7 @@ def faculty_promotion():
     cursor.execute("""
         SELECT date_submitted, current_status, final_decision,
                hrmd_approval_date, vpa_approval_date, pres_approval_date,
-               requested_rank
+               requested_rank, rejection_reason
         FROM promotion_application 
         WHERE faculty_id = %s 
         ORDER BY date_submitted DESC
@@ -4282,6 +4282,7 @@ def faculty_promotion():
         vpa_date = h[4]
         pres_date = h[5]
         requested_pos = h[6]
+        rejection_reason = h[7]
         
         if decision == 1:
             decision_text = 'Approved'
@@ -4301,7 +4302,8 @@ def faculty_promotion():
             'hrmd_approval_date': hrmd_date,
             'vpa_approval_date': vpa_date,
             'pres_approval_date': pres_date,
-            'requested_position': requested_pos
+            'requested_position': requested_pos,
+            'rejection_reason': rejection_reason
         })
     
     # Build template data
@@ -5342,13 +5344,17 @@ def vp_promotions():
 
 # === REGULARIZATION API ROUTES FOR VP/PRESIDENT ===
 
-@app.route('/api/regularization/forward-to-president', methods=['POST'])
-@require_auth([20004])  # VPAA only
-def forward_regularization_to_president():
-    """VPAA forwards regularization to President"""
+@app.route('/api/promotion/forward-to-president', methods=['POST'])
+@require_auth([20004])  # Only VPAA
+def forward_to_president():
+    """VPAA forwards promotion to President"""
     try:
         data = request.get_json()
-        regularization_id = data.get('regularization_id')
+        application_id = data.get('application_id')
+        vpa_remarks = data.get('vpa_remarks', '').strip()
+        
+        if not application_id:
+            return jsonify(success=False, error='Application ID is required'), 400
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -5356,16 +5362,18 @@ def forward_regularization_to_president():
         philippines_tz = pytz.timezone('Asia/Manila')
         current_time = datetime.now(philippines_tz)
         
-        cursor.execute("""
-            UPDATE regularization_application 
-            SET current_status = %s,
-                vpa_recommendation_date = %s
-            WHERE regularization_id = %s
-        """, ('pres', current_time, regularization_id))
+        cursor.execute(
+            """UPDATE promotion_application 
+               SET current_status = %s, 
+                   vpa_approval_date = %s,
+                   vpa_remarks = %s
+               WHERE application_id = %s""",
+            ('pres', current_time, vpa_remarks if vpa_remarks else None, application_id)
+        )
         
         conn.commit()
         
-        # Log audit
+        # Audit log
         user_id = session.get('user_id')
         personnel_info = get_personnel_info(user_id)
         vp_personnel_id = personnel_info.get('personnel_id')
@@ -5373,8 +5381,8 @@ def forward_regularization_to_president():
         if vp_personnel_id:
             log_audit_action(
                 vp_personnel_id,
-                'Regularization forwarded',
-                f'VPAA forwarded regularization ID {regularization_id} to President',
+                'Promotion forwarded',
+                f'VPAA forwarded promotion application ID {application_id} to President',
                 before_value='Status: VPAA Review',
                 after_value='Status: President Review'
             )
@@ -5382,19 +5390,15 @@ def forward_regularization_to_president():
         cursor.close()
         return_db_connection(conn)
         
-        return jsonify({
-            'success': True, 
-            'message': 'Regularization forwarded to President successfully'
-        })
-    
+        return jsonify(success=True, message='Application forwarded to President successfully')
+        
     except Exception as e:
-        print(f"Error forwarding regularization: {e}")
+        print(f"Error forwarding to President: {str(e)}")
         import traceback
         traceback.print_exc()
         if conn:
             conn.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
+        return jsonify(success=False, error=str(e)), 500
 
 @app.route('/api/regularization/approve-by-president', methods=['POST'])
 @require_auth([20004, 20005])  # President only
@@ -5769,7 +5773,7 @@ def delete_submission():
 
 
 @app.route('/api/promotion/details/<int:application_id>')
-@require_auth([20003, 20004])
+@require_auth([20003, 20004, 20005])
 def get_promotion_details(application_id):
     """Get detailed promotion information - COMPLETE VERSION"""
     try:
@@ -5785,14 +5789,19 @@ def get_promotion_details(application_id):
                 p.honorifics,
                 p.phone,
                 c.collegename,
-                pr.position as current_rank,
+                pr.position as currentrank,
                 pa.current_status,
                 pa.date_submitted,
                 u.email,
                 pa.cover_letter_filename,
                 pa.resume_filename,
                 pa.cover_letter,
-                pa.resume
+                pa.resume,
+                pa.requested_rank,
+                pa.hrmd_remarks,
+                pa.vpa_remarks,
+                pa.pres_remarks,
+                pa.rejection_reason
             FROM promotion_application pa
             JOIN personnel p ON pa.faculty_id = p.personnel_id
             LEFT JOIN college c ON p.college_id = c.college_id
@@ -5801,51 +5810,61 @@ def get_promotion_details(application_id):
             WHERE pa.application_id = %s
         """, (application_id,))
         
-        result = cursor.fetchone()
+        row = cursor.fetchone()
+        
+        if not row:
+            cursor.close()
+            return_db_connection(conn)
+            return jsonify(success=False, error='Application not found'), 404
+        
+        (app_id, faculty_id, firstname, lastname, honorifics, phone, college, 
+         currentrank, status, submitted, email, cover_filename, resume_filename, 
+         cover_data, resume_data, requested_rank, hrmd_remarks, vpa_remarks, 
+         pres_remarks, rejection_reason) = row
+        
+        fullname = f"{honorifics} {firstname} {lastname}" if honorifics else f"{firstname} {lastname}"
+        
+        # Get profile image
+        profile_image_base64 = None
+        cursor.execute("SELECT profilepic FROM profile WHERE personnel_id = %s", (faculty_id,))
+        pic_row = cursor.fetchone()
+        if pic_row and pic_row[0]:
+            profile_image_base64 = f"data:image/jpeg;base64,{base64.b64encode(bytes(pic_row[0])).decode('utf-8')}"
+        
         cursor.close()
         return_db_connection(conn)
         
-        if result:
-            (appid, facultyid, firstname, lastname, honorifics, phone, 
-             collegename, currentrank, currentstatus, datesubmitted, 
-             email, coverletterfilename, resumefilename, cover_letter_blob, resume_blob) = result
-            
-            fullname = f"{honorifics} {firstname} {lastname}" if honorifics else f"{firstname} {lastname}"
-            
-            # Check if BLOBs exist
-            has_cover_letter = cover_letter_blob is not None and len(cover_letter_blob) > 0
-            has_resume = resume_blob is not None and len(resume_blob) > 0
-            
-            data = {
-                'applicationid': appid,
-                'facultyid': facultyid,
+        return jsonify(
+            success=True,
+            data={
+                'application_id': app_id,
+                'faculty_id': faculty_id,
                 'name': fullname,
-                'email': email or 'N/A',
                 'phone': phone or 'N/A',
-                'department': collegename or 'N/A',
+                'department': college or 'N/A',
                 'currentrank': currentrank or 'Instructor',
-                'requestedrank': 'Associate Professor',
-                'status': currentstatus,
-                'datesubmitted': datesubmitted.strftime('%Y-%m-%d') if datesubmitted else 'N/A',
-                'has_resume': has_resume,
-                'has_cover_letter': has_cover_letter,
-                'resume_filename': resumefilename or 'resume.pdf',
-                'cover_letter_filename': coverletterfilename or 'cover_letter.pdf',
-                'profileimage': None
+                'requestedrank': requested_rank or 'Not Specified',
+                'status': status.replace('_', ' ').title() if status else 'Pending',
+                'submitteddate': submitted.strftime('%Y-%m-%d') if submitted else 'N/A',
+                'email': email or 'N/A',
+                'profileimage': profile_image_base64,
+                'has_cover_letter': cover_data is not None,
+                'has_resume': resume_data is not None,
+                'cover_letter_filename': cover_filename,
+                'resume_filename': resume_filename,
+                'hrmd_remarks': hrmd_remarks,
+                'vpa_remarks': vpa_remarks,
+                'pres_remarks': pres_remarks,
+                'rejection_reason': rejection_reason
             }
-            
-            print(f"=== Document Check for Application {appid} ===")
-            print(f"Cover Letter: {has_cover_letter}, Resume: {has_resume}")
-            
-            return jsonify({'success': True, 'data': data})
-        else:
-            return jsonify({'success': False, 'error': 'Application not found'}), 404
-            
+        )
+        
     except Exception as e:
         print(f"Error fetching promotion details: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify(success=False, error=str(e)), 500
+
 
 
 
@@ -5958,58 +5977,81 @@ def get_promotion_document(application_id, doc_type):
         return {'error': str(e)}, 500
 
 @app.route('/api/promotion/forward-to-vpaa', methods=['POST'])
+@require_auth([20003])
 def forward_to_vpaa():
+    """HR forwards promotion application to VPAA"""
     try:
         data = request.get_json()
         application_id = data.get('application_id')
+        hrmd_remarks = data.get('hrmd_remarks', '').strip()
+        
+        if not application_id:
+            return jsonify(success=False, error='Application ID is required'), 400
         
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Check your actual column names in the database
-        update_query = """
-            UPDATE promotion_application 
-            SET current_status = %s::status_enum,
-                hrmd_approval_date = %s
-            WHERE application_id = %s
-        """
+        philippines_tz = pytz.timezone('Asia/Manila')
+        current_time = datetime.now(philippines_tz)
         
-        cursor.execute(update_query, (
-            'vpa',
-            datetime.now(),
-            application_id
-        ))
+        # Update status to VPA and save HRMD remarks
+        cursor.execute(
+            """UPDATE promotion_application 
+               SET current_status = %s, 
+                   hrmd_approval_date = %s,
+                   hrmd_remarks = %s
+               WHERE application_id = %s""",
+            ('vpa', current_time, hrmd_remarks if hrmd_remarks else None, application_id)
+        )
         
         conn.commit()
-        cursor.close()
         
-        return jsonify({'success': True, 'message': 'Application forwarded to VPAA'})
+        # Audit log
+        user_id = session.get('user_id')
+        personnel_info = get_personnel_info(user_id)
+        hr_personnel_id = personnel_info.get('personnel_id')
+        
+        if hr_personnel_id:
+            log_audit_action(
+                hr_personnel_id,
+                'Promotion forwarded',
+                f'HR forwarded promotion application ID {application_id} to VPAA',
+                before_value='Status: HRMD Review',
+                after_value='Status: VPAA Review'
+            )
+        
+        cursor.close()
+        return_db_connection(conn)
+        
+        return jsonify(success=True, message='Application forwarded to VPAA successfully')
         
     except Exception as e:
         print(f"Error forwarding to VPAA: {str(e)}")
-        conn.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        return jsonify(success=False, error=str(e)), 500
 
 
-# Add these routes to your Python file (paste.txt)
-
-@app.route('/api/promotion/forward-to-president', methods=['POST'])
-@require_auth([20004])  # Only VPAA (role 20004) can forward to President
-def forward_to_president():
-    """Forward promotion application from VPAA to President"""
+@app.route('/api/promotion/approve', methods=['POST'])
+@require_auth([20004])  # Only President
+def approve_promotion():
+    """Final approval of promotion application by President"""
     try:
         data = request.get_json()
         application_id = data.get('application_id')
+        pres_remarks = data.get('pres_remarks', '').strip()
         
         if not application_id:
-            return jsonify({'success': False, 'error': 'Application ID is required'}), 400
+            return jsonify(success=False, error='Application ID is required'), 400
         
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Check current status
+        # Get application details
         cursor.execute(
-            "SELECT current_status FROM promotion_application WHERE application_id = %s",
+            "SELECT faculty_id, requested_rank FROM promotion_application WHERE application_id = %s",
             (application_id,)
         )
         result = cursor.fetchone()
@@ -6017,109 +6059,33 @@ def forward_to_president():
         if not result:
             cursor.close()
             return_db_connection(conn)
-            return jsonify({'success': False, 'error': 'Application not found'}), 404
+            return jsonify(success=False, error='Application not found'), 404
         
-        current_status = result[0]
+        faculty_id, requested_rank = result
         
-        if current_status.lower() != 'vpa':
-            cursor.close()
-            return_db_connection(conn)
-            return jsonify({'success': False, 'error': 'Application is not at VPAA stage'}), 400
-        
-        # Update status to President review
         philippines_tz = pytz.timezone('Asia/Manila')
         current_time = datetime.now(philippines_tz)
         
+        # Update promotion application to approved
         cursor.execute(
             """UPDATE promotion_application 
-               SET current_status = %s, vpa_approval_date = %s 
+               SET current_status = %s, 
+                   pres_approval_date = %s, 
+                   final_decision = %s,
+                   pres_remarks = %s
                WHERE application_id = %s""",
-            ('pres', current_time, application_id)
+            ('approved', current_time, 1, pres_remarks if pres_remarks else None, application_id)
+        )
+        
+        # Update faculty rank in profile table
+        cursor.execute(
+            "UPDATE profile SET position = %s WHERE personnel_id = %s",
+            (requested_rank, faculty_id)
         )
         
         conn.commit()
-        cursor.close()
-        return_db_connection(conn)
         
-        return jsonify({
-            'success': True, 
-            'message': 'Application forwarded to President successfully'
-        })
-        
-    except Exception as e:
-        print(f"Error forwarding to President: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        if conn:
-            conn.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/promotion/approve', methods=['POST'])
-@require_auth([20004])  # Only President can give final approval
-def approve_promotion():
-    """Final approval of promotion application by President - Updates faculty rank"""
-    try:
-        data = request.get_json()
-        application_id = data.get('application_id')
-        
-        if not application_id:
-            return jsonify({'success': False, 'error': 'Application ID is required'}), 400
-        
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Get application details
-        cursor.execute("""
-            SELECT current_status, faculty_id, requested_rank
-            FROM promotion_application 
-            WHERE application_id = %s
-        """, (application_id,))
-        
-        result = cursor.fetchone()
-        
-        if not result:
-            cursor.close()
-            return_db_connection(conn)
-            return jsonify({'success': False, 'error': 'Application not found'}), 404
-        
-        current_status, faculty_id, requested_rank = result
-        
-        if current_status.lower() != 'pres':
-            cursor.close()
-            return_db_connection(conn)
-            return jsonify({'success': False, 'error': 'Application is not at President stage'}), 400
-        
-        philippines_tz = pytz.timezone('Asia/Manila')
-        current_time = datetime.now(philippines_tz)
-        
-        # 1. Update promotion application to approved
-        cursor.execute("""
-            UPDATE promotion_application 
-            SET current_status = %s,
-                pres_approval_date = %s,
-                final_decision = %s
-            WHERE application_id = %s
-        """, ('approved', current_time, 1, application_id))
-        
-        # 2. **UPDATE FACULTY RANK IN PROFILE TABLE**
-        cursor.execute("""
-            UPDATE profile 
-            SET position = %s
-            WHERE personnel_id = %s
-        """, (requested_rank, faculty_id))
-        
-        # Check if profile was updated
-        if cursor.rowcount == 0:
-            # If no profile exists, create one
-            cursor.execute("""
-                INSERT INTO profile (personnel_id, position)
-                VALUES (%s, %s)
-            """, (faculty_id, requested_rank))
-        
-        conn.commit()
-        
-        # Log audit action
+        # Audit log
         user_id = session.get('user_id')
         personnel_info = get_personnel_info(user_id)
         personnel_id = personnel_info.get('personnel_id')
@@ -6129,70 +6095,70 @@ def approve_promotion():
                 personnel_id,
                 'Promotion approved',
                 f'President approved promotion to {requested_rank} for application ID {application_id}',
-                before_value=f'Status: {current_status}',
-                after_value=f'Status: Approved, Rank updated to {requested_rank}'
+                before_value='Status: President Review',
+                after_value=f'Status: Approved (Rank updated to {requested_rank})'
             )
         
         cursor.close()
         return_db_connection(conn)
         
-        return jsonify({
-            'success': True, 
-            'message': f'Promotion approved! Faculty rank updated to {requested_rank}'
-        })
-    
+        return jsonify(success=True, message=f'Promotion approved! Faculty rank updated to {requested_rank}')
+        
     except Exception as e:
-        print(f'Error approving promotion: {str(e)}')
+        print(f"Error approving promotion: {str(e)}")
         import traceback
         traceback.print_exc()
         if conn:
             conn.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify(success=False, error=str(e)), 500
 
 
 
 @app.route('/api/promotion/reject', methods=['POST'])
-@require_auth([20003, 20004])  # HR, VPAA, and President can reject
+@require_auth([20003, 20004, 20005])  # HR, VPAA, and President can reject
 def reject_promotion():
     """Reject promotion application - Does NOT update faculty rank"""
     try:
         data = request.get_json()
         application_id = data.get('application_id')
-        remarks = data.get('remarks', '')
+        rejection_reason = data.get('rejection_reason', '').strip()
         
         if not application_id:
-            return jsonify({'success': False, 'error': 'Application ID is required'}), 400
+            return jsonify(success=False, error='Application ID is required'), 400
+        
+        if not rejection_reason:
+            return jsonify(success=False, error='Rejection reason is required'), 400
         
         conn = get_db_connection()
         cursor = conn.cursor()
         
         # Get current status
-        cursor.execute("""
-            SELECT current_status, faculty_id 
-            FROM promotion_application 
-            WHERE application_id = %s
-        """, (application_id,))
-        
+        cursor.execute(
+            "SELECT current_status FROM promotion_application WHERE application_id = %s",
+            (application_id,)
+        )
         result = cursor.fetchone()
         
         if not result:
             cursor.close()
             return_db_connection(conn)
-            return jsonify({'success': False, 'error': 'Application not found'}), 404
+            return jsonify(success=False, error='Application not found'), 404
         
-        current_status, faculty_id = result
+        current_status = result[0]
         
-        # Update status to rejected (NO rank update)
-        cursor.execute("""
-            UPDATE promotion_application 
-            SET current_status = %s,
-                final_decision = %s
-            WHERE application_id = %s
-        """, ('rejected', 0, application_id))
+        # Update status to rejected with rejection reason
+        cursor.execute(
+            """UPDATE promotion_application 
+               SET current_status = %s, 
+                   final_decision = %s,
+                   rejection_reason = %s
+               WHERE application_id = %s""",
+            ('rejected', 0, rejection_reason, application_id)
+        )
         
         conn.commit()
         
-        # Log audit action
+        # Audit log
         user_id = session.get('user_id')
         personnel_info = get_personnel_info(user_id)
         personnel_id = personnel_info.get('personnel_id')
@@ -6203,22 +6169,22 @@ def reject_promotion():
                 'Promotion rejected',
                 f'Rejected promotion application ID {application_id}',
                 before_value=f'Status: {current_status}',
-                after_value='Status: Rejected',
-                evidence=remarks
+                after_value=f'Status: Rejected (Reason: {rejection_reason})'
             )
         
         cursor.close()
         return_db_connection(conn)
         
-        return jsonify({'success': True, 'message': 'Promotion application rejected'})
-    
+        return jsonify(success=True, message='Promotion application rejected')
+        
     except Exception as e:
-        print(f'Error rejecting promotion: {str(e)}')
+        print(f"Error rejecting promotion: {str(e)}")
         import traceback
         traceback.print_exc()
         if conn:
             conn.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify(success=False, error=str(e)), 500
+
 
 @app.route('/api/regularization/eligible-faculty')
 @require_auth([20003])

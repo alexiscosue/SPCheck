@@ -356,15 +356,19 @@
                 </td>
                 <td>
                   <button class="btn-view-history" 
-                          data-date="{{ app.date_submitted.strftime('%B %d, %Y') if app.date_submitted else 'N/A' }}"
-                          data-status="{{ app.current_status }}"
-                          data-decision="{{ app.final_decision }}"
-                          data-remarks="{{ app.remarks or 'No remarks' }}"
-                          data-hrmd-date="{{ app.hrmd_approval_date.strftime('%B %d, %Y') if app.hrmd_approval_date else 'Not yet approved' }}"
-                          data-vpa-date="{{ app.vpa_approval_date.strftime('%B %d, %Y') if app.vpa_approval_date else 'Not yet approved' }}"
-                          data-pres-date="{{ app.pres_approval_date.strftime('%B %d, %Y') if app.pres_approval_date else 'Not yet approved' }}"
-                          data-requested-pos="{{ app.requested_position or 'Not specified' }}"
-                          style="padding:6px 12px; background:#7b1113; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:12px; font-weight:500;">
+                    data-date="{{ app.date_submitted.strftime('%B %d, %Y') if app.date_submitted else 'N/A' }}"
+                    data-status="{{ app.current_status }}"
+                    data-decision="{{ app.final_decision }}"
+                    {% if 'rejected' in app.final_decision|lower %}
+                      data-remarks="{{ app.rejection_reason or '' }}"
+                    {% else %}
+                      data-remarks="{{ app.remarks or 'No remarks' }}"
+                    {% endif %}
+                    data-hrmd-date="{{ app.hrmd_approval_date.strftime('%B %d, %Y') if app.hrmd_approval_date else 'Not yet approved' }}"
+                    data-vpa-date="{{ app.vpa_approval_date.strftime('%B %d, %Y') if app.vpa_approval_date else 'Not yet approved' }}"
+                    data-pres-date="{{ app.pres_approval_date.strftime('%B %d, %Y') if app.pres_approval_date else 'Not yet approved' }}"
+                    data-requested-pos="{{ app.requested_position or 'Not specified' }}"
+                    style="padding:6px 12px; background:#7b1113; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:12px; font-weight:500;">
                     <i class='bx bx-show'></i> View
                   </button>
                 </td>
@@ -724,47 +728,56 @@ document.addEventListener('DOMContentLoaded', function() {
   const closeBtn = document.getElementById('closeHistoryModal');
   
   // View buttons
-  document.querySelectorAll('.btn-view-history').forEach(btn => {
-    btn.addEventListener('click', function() {
-      const date = this.getAttribute('data-date');
-      const status = this.getAttribute('data-status');
-      const decision = this.getAttribute('data-decision');
-      const remarks = this.getAttribute('data-remarks');
-      const hrmdDate = this.getAttribute('data-hrmd-date');
-      const vpaDate = this.getAttribute('data-vpa-date');
-      const presDate = this.getAttribute('data-pres-date');
-      const requestedPos = this.getAttribute('data-requested-pos');
-      
-      // Populate modal
-      document.getElementById('modalDate').textContent = date;
-      document.getElementById('modalCurrentStatus').textContent = status || 'Pending';
-      document.getElementById('modalStatus').textContent = status || 'Pending';
-      document.getElementById('modalRemarks').textContent = remarks;
-      document.getElementById('modalRequestedPos').textContent = requestedPos;
-      document.getElementById('modalHrmdDate').textContent = hrmdDate;
-      document.getElementById('modalVpaDate').textContent = vpaDate;
-      document.getElementById('modalPresDate').textContent = presDate;
-      
-      // Update decision badge
-      const badge = document.getElementById('modalDecisionBadge');
-      if (decision && decision.toLowerCase() === 'approved') {
-        badge.textContent = '✓ Approved';
-        badge.style.background = '#d1fae5';
-        badge.style.color = '#065f46';
-      } else if (decision && decision.toLowerCase() === 'rejected') {
-        badge.textContent = '✗ Rejected';
-        badge.style.background = '#fee2e2';
-        badge.style.color = '#991b1b';
-      } else {
-        badge.textContent = '⏳ Pending';
-        badge.style.background = '#fef3c7';
-        badge.style.color = '#92400e';
-      }
-      
-      // Show modal
-      historyModal.style.display = 'flex';
-    });
+document.querySelectorAll('.btn-view-history').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const date = this.getAttribute('data-date');
+    const status = this.getAttribute('data-status');
+    const decision = this.getAttribute('data-decision');
+    const remarks = this.getAttribute('data-remarks');
+    const rejectionReason = this.getAttribute('data-rejection-reason');
+    const hrmdDate = this.getAttribute('data-hrmd-date');
+    const vpaDate = this.getAttribute('data-vpa-date');
+    const presDate = this.getAttribute('data-pres-date');
+    const requestedPos = this.getAttribute('data-requested-pos');
+
+    // Populate modal
+    document.getElementById('modalDate').textContent = date;
+    document.getElementById('modalCurrentStatus').textContent = status || 'Pending';
+    document.getElementById('modalStatus').textContent = status || 'Pending';
+    const modalRemarksEl = document.getElementById('modalRemarks');
+    console.log('Rejection Reason:', rejectionReason);
+    console.log('Remarks:', remarks);
+    if (rejectionReason && rejectionReason.trim() !== '') {
+      modalRemarksEl.textContent = rejectionReason;
+    } else {
+      modalRemarksEl.textContent = remarks;
+    }
+    document.getElementById('modalRequestedPos').textContent = requestedPos;
+    document.getElementById('modalHrmdDate').textContent = hrmdDate;
+    document.getElementById('modalVpaDate').textContent = vpaDate;
+    document.getElementById('modalPresDate').textContent = presDate;
+
+    // Update decision badge
+    const badge = document.getElementById('modalDecisionBadge');
+    if (decision && decision.toLowerCase() === 'approved') {
+      badge.textContent = '✓ Approved';
+      badge.style.background = '#d1fae5';
+      badge.style.color = '#065f46';
+    } else if (decision && decision.toLowerCase() === 'rejected') {
+      badge.textContent = '✗ Rejected';
+      badge.style.background = '#fee2e2';
+      badge.style.color = '#991b1b';
+    } else {
+      badge.textContent = '⏳ Pending';
+      badge.style.background = '#fef3c7';
+      badge.style.color = '#92400e';
+    }
+    
+    // Show modal
+    historyModal.style.display = 'flex';
   });
+});
+
   
   // Close modal
   if (closeBtn) {

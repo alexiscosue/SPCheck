@@ -122,7 +122,7 @@
                 {% elif 'approved' in promo.status|lower %}
                 <span class="status ok">Approved</span>
                 {% elif 'rejected' in promo.status|lower %}
-                <span class="status rejected">Rejected</span>
+                <span class="status nu">Rejected</span>
                 {% else %}
                 <span class="status pending">{{ promo.status|title }}</span>
                 {% endif %}
@@ -200,7 +200,7 @@
     <div class="hr-banner"></div>
 
     <div class="hr-profile-header">
-      <img src="" alt="Faculty" class="hr-profile-img" id="modalProfileImage" style="width:80px;height:80px;border-radius:8px;object-fit:cover;background:#f0f0f0;">
+      <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Faculty" class="hr-profile-img" id="modalProfileImage" style="width:80px;height:80px;border-radius:8px;object-fit:cover;background:#f0f0f0;">
       <div class="hr-profile-info">
         <h2 id="modalFacultyName">Loading...</h2>
         <p id="modalFacultyPosition">Loading...</p>
@@ -230,7 +230,17 @@
         <iframe id="pdfFrame" style="width:100%;height:500px;border:1px solid #ddd;border-radius:8px;"></iframe>
       </div>
 
-      <textarea id="hrNotes" placeholder="Add notes (optional)"></textarea>
+      {% if status == 'vpa' %}
+      <textarea id="hrNotes" placeholder="Add notes (optional - will be visible to next reviewer/all approvers)"></textarea>
+      {% endif %}
+      <!-- Add this RIGHT AFTER the pdfViewer div and BEFORE the textarea -->
+      <div id="previousNotes" style="margin-top:25px;display:none;">
+        <h3 style="color:#333;font-size:16px;font-weight:600;margin-bottom:15px;border-bottom:2px solid #f0f0f0;padding-bottom:10px;">
+          <i class='bx bx-time-five' style="vertical-align:middle;margin-right:5px;"></i>Review History
+        </h3>
+        <div id="notesContainer" class="review-timeline"></div>
+      </div>
+
     </div>
 
     <div class="hr-modal-footer">
@@ -435,11 +445,86 @@ function loadPromotionDetails(applicationId) {
         document.getElementById('modalFacultyPhone').textContent = data.phone;
         document.getElementById('modalSubmissionStatus').textContent = data.status;
         
+        // Profile image loading (default first, then fetch)
         const profileImg = document.getElementById('modalProfileImage');
-        if (data.profileimage) {
-          profileImg.src = data.profileimage;
+        profileImg.src = "/static/img/logo.png";
+        profileImg.style.display = 'block';
+        profileImg.style.backgroundColor = '#f0f0f0';
+        profileImg.alt = 'Faculty Profile';
+        
+        fetch(`/api/profile/image-base64/${data.faculty_id}`)
+          .then(resp => resp.json())
+          .then(imageData => {
+            if (imageData.success && imageData.image) {
+              profileImg.src = imageData.image;
+            }
+          })
+          .catch(() => {
+            profileImg.src = "/static/img/logo.png";
+          });
+        
+        // Display existing notes in timeline format
+        const notesContainer = document.getElementById('notesContainer');
+        const previousNotesSection = document.getElementById('previousNotes');
+        let notesHTML = '';
+        
+        if (data.hrmd_remarks) {
+          notesHTML += `
+            <div class="review-note-card hrmd">
+              <div class="review-note-header">
+                <span class="review-note-role hrmd">
+                  <i class='bx bx-user-check'></i>HRMD Review
+                </span>
+              </div>
+              <div class="review-note-content">${data.hrmd_remarks}</div>
+            </div>
+          `;
+        }
+        
+        if (data.vpa_remarks) {
+          notesHTML += `
+            <div class="review-note-card vpa">
+              <div class="review-note-header">
+                <span class="review-note-role vpa">
+                  <i class='bx bx-shield-quarter'></i>VPAA Review
+                </span>
+              </div>
+              <div class="review-note-content">${data.vpa_remarks}</div>
+            </div>
+          `;
+        }
+        
+        if (data.pres_remarks) {
+          notesHTML += `
+            <div class="review-note-card pres">
+              <div class="review-note-header">
+                <span class="review-note-role pres">
+                  <i class='bx bx-crown'></i>President Review
+                </span>
+              </div>
+              <div class="review-note-content">${data.pres_remarks}</div>
+            </div>
+          `;
+        }
+        
+        if (data.rejection_reason) {
+          notesHTML += `
+            <div class="review-note-card rejected">
+              <div class="review-note-header">
+                <span class="review-note-role rejected">
+                  <i class='bx bx-x-circle'></i>Rejection Notice
+                </span>
+              </div>
+              <div class="review-note-content"><strong>Reason:</strong> ${data.rejection_reason}</div>
+            </div>
+          `;
+        }
+        
+        if (notesHTML) {
+          notesContainer.innerHTML = notesHTML;
+          previousNotesSection.style.display = 'block';
         } else {
-          profileImg.style.backgroundColor = '#e0e0e0';
+          previousNotesSection.style.display = 'none';
         }
         
         const rejectBtn = document.getElementById('rejectBtn');
@@ -460,7 +545,6 @@ function loadPromotionDetails(applicationId) {
         
         setupDocumentLinks(applicationId, data);
         
-        // Hide loading and show modal
         showModalLoading(false);
         reviewModal.style.display = 'flex';
       } else {
@@ -510,11 +594,14 @@ function viewDocument(applicationId, docType, filename) {
   pdfViewer.style.display = 'block';
 }
 
+// UPDATE closeModal event
 closeModal.addEventListener('click', () => {
   reviewModal.style.display = 'none';
   pdfViewer.style.display = 'none';
   pdfFrame.src = '';
+  document.getElementById('hrNotes').value = ''; // Clear notes
 });
+
 
 // VIEW PROFILE BUTTON
 document.getElementById('viewProfileBtn').addEventListener('click', () => {
@@ -529,23 +616,31 @@ document.getElementById('viewProfileBtn').addEventListener('click', () => {
 });
 
 // REJECT
+// REJECT (UPDATED)
 document.getElementById('rejectBtn').addEventListener('click', () => {
   if (!currentApplicationId) return alert('No application selected');
   
-  if (!confirm('Reject this application?')) return;
+  const rejectionReason = prompt('Please enter rejection reason:');
+  
+  if (!rejectionReason || rejectionReason.trim() === '') {
+    alert('Rejection reason is required');
+    return;
+  }
+  
+  if (!confirm('Are you sure you want to reject this application?')) return;
   
   fetch('/api/promotion/reject', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
       application_id: currentApplicationId,
-      remarks: document.getElementById('hrNotes').value || ''
+      rejection_reason: rejectionReason.trim()
     })
   })
   .then(response => response.json())
   .then(result => {
     if (result.success) {
-      alert(result.message || 'Application rejected');
+      alert('Application rejected');
       location.reload();
     } else {
       alert('Error: ' + result.error);
@@ -557,15 +652,23 @@ document.getElementById('rejectBtn').addEventListener('click', () => {
   });
 });
 
+
 // FORWARD/APPROVE
+// FORWARD/APPROVE (UPDATED)
 document.getElementById('forwardApproveBtn').addEventListener('click', () => {
   if (!currentApplicationId) return alert('No application selected');
   
+  const vpNotes = document.getElementById('hrNotes').value.trim();
+  
   let endpoint = '';
+  let bodyData = { application_id: currentApplicationId };
+  
   if (currentStatus.toLowerCase() === 'vpa') {
     endpoint = '/api/promotion/forward-to-president';
+    bodyData.vpa_remarks = vpNotes;
   } else if (currentStatus.toLowerCase() === 'pres') {
     endpoint = '/api/promotion/approve';
+    bodyData.pres_remarks = vpNotes;
   } else {
     return alert('Invalid status for this action');
   }
@@ -575,7 +678,7 @@ document.getElementById('forwardApproveBtn').addEventListener('click', () => {
   fetch(endpoint, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ application_id: currentApplicationId })
+    body: JSON.stringify(bodyData)
   })
   .then(response => response.json())
   .then(result => {
@@ -591,6 +694,7 @@ document.getElementById('forwardApproveBtn').addEventListener('click', () => {
     alert('Failed to complete action');
   });
 });
+
 
 // REGULARIZATION REVIEW
 document.querySelectorAll('.review-regularization-btn').forEach(btn => {
