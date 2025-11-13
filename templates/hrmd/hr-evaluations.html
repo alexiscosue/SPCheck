@@ -414,7 +414,6 @@ function closeModal() {
 function downloadReport(personnelId) {
     const termId = window.CURRENT_TERM_ID;
     const url = `/api/hr/faculty-evaluation-report-pdf/${personnelId}?term_id=${termId}`;
-    alert(`Initiating download for Personnel ID ${personnelId}, Term ID ${termId}. (Note: This currently hits a stub endpoint.)`);
     window.open(url, '_blank');
 }
 

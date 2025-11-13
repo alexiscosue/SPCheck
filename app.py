@@ -19,6 +19,10 @@ import base64
 from PIL import Image
 import gspread
 from google.oauth2.service_account import Credentials
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch, mm
+from reportlab.lib import colors
 
 
 load_dotenv()
@@ -421,6 +425,17 @@ def get_peers_score_records():
         print(f"❌ [SHEETS] Unhandled error fetching {SHEET_NAME} data: {e}")
         return []
 
+
+# Helper function for ReportLab (place this outside any route/function)
+def getStatusLabel(rating):
+    if rating >= 3:
+        return 'Above Average'
+    elif rating >= 2:
+        return 'Average'
+    elif rating > 0:
+        return 'Below Average'
+    else:
+        return 'Not Rated'
 
 
 # ========== CACHED DATA ==========
@@ -5270,24 +5285,185 @@ def api_hr_faculty_evaluation_report(personnel_id):
 @app.route('/api/hr/faculty-evaluation-report-pdf/<int:personnel_id>')
 @require_auth([20003])
 def api_hr_faculty_evaluation_report_pdf(personnel_id):
-    """
-    API endpoint for downloading/exporting a PDF evaluation report. 
-    This is a stub until PDF generation library integration (e.g., ReportLab, WeasyPrint) is done.
-    """
     term_id = request.args.get('term_id')
+
+    # 1. FETCH DATA (Reusing your existing API logic)
+    # We need to call the API function directly to get its data
+    report_response = api_hr_faculty_evaluation_report(personnel_id)
+    if report_response.status_code != 200:
+        return report_response # Return JSON error from data fetch
     
-    # 1. Fetch data to include in the PDF (re-using the logic from the view endpoint)
-    # This step would typically prepare the data for the PDF generator.
+    # Safely load JSON response data
+    from flask import json
+    report_data = json.loads(report_response.data.decode('utf-8'))['report']
+
+    # 2. SETUP DOCUMENT
+    buffer = BytesIO()
     
-    # 2. Simulate PDF content (or actually generate the PDF here)
-    # For now, we return a simple dummy PDF response to test the download button.
+    # Use SimpleDocTemplate for Platypus Flowables (handles pagination automatically)
+    doc = SimpleDocTemplate(
+        buffer, 
+        pagesize=(8.5 * inch, 11 * inch), # Letter size
+        topMargin=0.75 * inch, 
+        leftMargin=0.75 * inch, 
+        rightMargin=0.75 * inch, 
+        bottomMargin=0.5 * inch
+    )
     
-    dummy_pdf_content = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /MediaBox [0 0 612 792] /Contents 4 0 R /Parent 2 0 R /Resources << /ProcSet [/PDF /Text] /Font << /F1 5 0 R >> >> >>\nendobj\n4 0 obj\n<< /Length 57 >>\nstream\nBT\n/F1 24 Tf\n100 700 Td\n(Evaluation Report Stub for ID: " + str(personnel_id).encode() + b") Tj\nET\nendstream\nendobj\n5 0 obj\n<< /Type /Font /Subtype /Type1 /Name /F1 /BaseFont /Helvetica /Encoding /MacRomanEncoding >>\nendobj\nxref\n0 6\n0000000000 65535 f\n0000000009 00000 n\n0000000056 00000 n\n0000000111 00000 n\n0000000242 00000 n\n0000000305 00000 n\ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n349\n%%EOF"
+    styles = getSampleStyleSheet()
+    story = []
+
+    # 3. ADD HEADER & METADATA
     
-    response = make_response(dummy_pdf_content)
+    # Title Style
+    title_style = ParagraphStyle(
+        'Title', 
+        parent=styles['h1'], 
+        fontSize=16, 
+        textColor=colors.HexColor('#7b1113'),
+        spaceAfter=12
+    )
+
+    faculty_name = report_data.get('faculty_name', 'Faculty Report')
+    semester = report_data.get('semester_display', 'N/A')
+    overall_rating = report_data.get('overall_rating', 0.0)
+
+    story.append(Paragraph("Saint Peter's College - Faculty Evaluation Report", title_style))
+    story.append(Paragraph(f"<b>Faculty:</b> {faculty_name}", styles['Normal']))
+    story.append(Paragraph(f"<b>Department:</b> {report_data.get('college', 'N/A')}", styles['Normal']))
+    story.append(Paragraph(f"<b>Semester:</b> {semester}", styles['Normal']))
+    story.append(Spacer(1, 0.2 * inch))
+
+    # 4. OVERALL RATING TABLE
+    
+    # Data for the Overall Summary
+    overall_data = [
+        ['Overall Weighted Score:', f'{overall_rating:.2f}'],
+        ['Final Status:', f'{overall_rating:.2f} ({getStatusLabel(overall_rating)})'],
+        ['Generated Date:', datetime.now().strftime('%Y-%m-%d %H:%M')]
+    ]
+
+    table_style = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F2F2F2')),
+        ('LINEBELOW', (0, 0), (-1, -1), 0.5, colors.HexColor('#E0E0E0')),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+    ])
+    
+    summary_table = Table(overall_data, colWidths=[2.5 * inch, 2.5 * inch])
+    summary_table.setStyle(table_style)
+    story.append(Paragraph("<b>Evaluation Summary</b>", styles['h3']))
+    story.append(summary_table)
+    story.append(Spacer(1, 0.3 * inch))
+
+    # 5. RATING BREAKDOWN TABLE
+    
+    # Header for breakdown
+    breakdown_header = [
+        Paragraph("<b>Evaluator</b>", styles['Normal']), 
+        Paragraph("<b>Weight</b>", styles['Normal']), 
+        Paragraph("<b>Score</b>", styles['Normal']), 
+        Paragraph("<b>Responses</b>", styles['Normal'])
+    ]
+    breakdown_data = [breakdown_header]
+
+    for item in report_data.get('rating_breakdown', []):
+        weight_percent = f"{item.get('weight', 0) * 100:.0f}%"
+        breakdown_data.append([
+            item.get('type').capitalize(),
+            weight_percent,
+            f"{item.get('score', 0.0):.2f}",
+            item.get('total_responses', 0)
+        ])
+
+    breakdown_table = Table(breakdown_data, colWidths=[2.2 * inch, 1 * inch, 1 * inch, 1 * inch])
+    breakdown_table.setStyle(TableStyle([
+        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E0E0E0')),
+    ]))
+    
+    story.append(Paragraph("<b>Rating Breakdown</b>", styles['h3']))
+    story.append(breakdown_table)
+    story.append(Spacer(1, 0.3 * inch))
+
+    # 6. QUALITATIVE FEEDBACK
+    
+    story.append(Paragraph("<b>Qualitative Feedback</b>", styles['h3']))
+    
+    bullet_style = ParagraphStyle(
+        'BulletPoint', 
+        parent=styles['BodyText'], 
+        firstLineIndent=-0.25 * inch,  
+        leftIndent=0.5 * inch,         
+        bulletIndent=0.25 * inch,      
+        spaceBefore=3, 
+        spaceAfter=3,
+        fontSize=10,
+    )
+    
+    bullet_text = "\u2022" 
+
+    raw_feedback_list = report_data.get('qualitative_feedback')
+    clean_comments_for_pdf = []
+
+    if raw_feedback_list:
+        for comment in raw_feedback_list:
+            
+            parts = []
+            for sub_part in comment.split('---'):
+                parts.extend(sub_part.split('—'))
+            
+            for part in parts:
+                clean_comment = part.strip()
+                
+                if clean_comment:
+                    clean_comments_for_pdf.append(clean_comment)
+
+    if clean_comments_for_pdf:
+        for final_comment in clean_comments_for_pdf:
+            story.append(Paragraph(
+                final_comment, 
+                bullet_style, 
+                bulletText=bullet_text
+            ))
+    else:
+        story.append(Paragraph("No qualitative feedback available.", styles['Italic']))
+
+    # 7. BUILD PDF
+    doc.build(story)
+
+    # 8. SEND RESPONSE (Cleaned up to prevent double headers)
+    buffer.seek(0)
+    
+    # 8a. Create the response object.
+    response = make_response(buffer.getvalue())
+    
+    # 8b. Set the Content-Type header once.
     response.headers['Content-Type'] = 'application/pdf'
-    response.headers['Content-Disposition'] = f'attachment; filename=Evaluation_Report_P{personnel_id}_T{term_id}.pdf'
+    
+    # 8c. Set the Content-Disposition header once, ensuring it is the only one.
+    # We use .set() or direct assignment to prevent duplicates.
+    filename = f'Evaluation_Report_{faculty_name.replace(" ", "_")}_T{term_id}.pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    
     return response
+
+# Helper function to determine the status label (place this outside the route, near getStatusInfo in JS)
+def getStatusLabel(rating):
+    if rating >= 3:
+        return 'Above Average'
+    elif rating >= 2:
+        return 'Average'
+    elif rating > 0:
+        return 'Below Average'
+    else:
+        return 'Not Rated'
 
 # --- NEW FEATURE: New Evaluation Cycle API STUB ---
 @app.route('/api/hr/new-evaluation-cycle', methods=['POST'])
