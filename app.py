@@ -637,7 +637,7 @@ def api_faculty_attendance():
         
         attendance_logs = []
         class_attendance = []
-        status_counts = {'present': 0, 'late': 0, 'absent': 0}
+        status_counts = {'present': 0, 'late': 0, 'absent': 0, 'excused': 0}
         
         philippines_tz = pytz.timezone('Asia/Manila')
         current_date = datetime.now(philippines_tz).date()
@@ -724,6 +724,8 @@ def api_faculty_attendance():
                         status_counts['late'] += 1
                     elif status_lower == 'absent':
                         status_counts['absent'] += 1
+                    elif status_lower == 'excused':
+                        status_counts['excused'] += 1
                     
                     check_date += timedelta(days=7)
         
@@ -1187,7 +1189,7 @@ def api_faculty_attendance_by_semester(semester_id):
         
         attendance_logs = []
         class_attendance = []
-        status_counts = {'present': 0, 'late': 0, 'absent': 0}
+        status_counts = {'present': 0, 'late': 0, 'absent': 0, 'excused': 0}
         
         for record in attendance_records:
             class_id = record['class_id']
@@ -1246,6 +1248,8 @@ def api_faculty_attendance_by_semester(semester_id):
                 status_counts['late'] += 1
             elif status_lower == 'absent':
                 status_counts['absent'] += 1
+            elif status_lower == 'excused':
+                status_counts['excused'] += 1
         
         total_recorded = len(attendance_logs)
         attendance_percent = round((status_counts['present'] + status_counts['late']) / total_recorded * 100, 1) if total_recorded > 0 else 0
@@ -1279,6 +1283,117 @@ def api_faculty_attendance_by_semester(semester_id):
         print(f"Error fetching attendance data for semester {semester_id}: {e}")
         import traceback
         traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/hr/excuse-absence-bulk', methods=['POST'])
+@require_auth([20003])  
+def api_excuse_absence_bulk():
+    """Bulk excuse all absences for a faculty on a specific date - ONLY UPDATE EXISTING RECORDS"""
+    try:
+        data = request.get_json()
+        personnel_id = data.get('personnel_id')
+        date_str = data.get('date')
+        reason = data.get('reason', '').strip()
+        
+        if not personnel_id or not date_str:
+            return {'success': False, 'error': 'Faculty and date are required'}
+        
+        if not reason:
+            return {'success': False, 'error': 'Reason is required'}
+        
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return {'success': False, 'error': 'Invalid date format. Use YYYY-MM-DD'}
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT firstname, lastname FROM personnel WHERE personnel_id = %s", (personnel_id,))
+        faculty_info = cursor.fetchone()
+        if not faculty_info:
+            cursor.close()
+            return_db_connection(conn)
+            return {'success': False, 'error': 'Faculty not found'}
+        
+        faculty_name = f"{faculty_info[0]} {faculty_info[1]}"
+        
+        cursor.execute("""
+            SELECT COUNT(*), 
+                   COALESCE(string_agg(attendancestatus, ', '), 'None') as existing_statuses
+            FROM attendance 
+            WHERE personnel_id = %s 
+            AND DATE(timein AT TIME ZONE 'Asia/Manila') = %s
+        """, (personnel_id, target_date))
+        
+        before_result = cursor.fetchone()
+        before_count = before_result[0] if before_result else 0
+        before_statuses = before_result[1] if before_result else 'None'
+        
+        if before_count == 0:
+            cursor.close()
+            return_db_connection(conn)
+            return {'success': False, 'error': f'No attendance records found for {faculty_name} on {target_date}. Only existing records can be excused.'}
+        
+        cursor.execute("""
+            SELECT attendance_id, class_id, attendancestatus
+            FROM attendance 
+            WHERE personnel_id = %s 
+            AND DATE(timein AT TIME ZONE 'Asia/Manila') = %s
+        """, (personnel_id, target_date))
+        
+        existing_records = cursor.fetchall()
+        updated_count = 0
+        
+        for record in existing_records:
+            attendance_id, class_id, current_status = record
+            
+            if current_status in ['Absent', 'Present', 'Late']:
+                cursor.execute("""
+                    UPDATE attendance 
+                    SET attendancestatus = 'Excused'
+                    WHERE attendance_id = %s
+                """, (attendance_id,))
+                updated_count += 1
+        
+        conn.commit()
+        
+        hr_user_id = session['user_id']
+        hr_personnel_info = get_personnel_info(hr_user_id)
+        hr_personnel_id = hr_personnel_info.get('personnel_id')
+        
+        before_value = f"Records: {before_count}, Statuses: {before_statuses}"
+        after_value = f"Updated to Excused: {updated_count}"
+        
+        log_audit_action(
+            hr_personnel_id,
+            "Bulk absence excuse",
+            f"HR excused attendance for {faculty_name} on {target_date}\nReason: {reason}",
+            before_value=before_value,
+            after_value=after_value
+        )
+        
+        cursor.close()
+        return_db_connection(conn)
+        
+        if updated_count == 0:
+            return {
+                'success': False, 
+                'error': f'No records to excuse for {faculty_name} on {target_date}. Only Absent, Present, or Late records can be excused.'
+            }
+        
+        return {
+            'success': True, 
+            'message': f'Successfully excused {updated_count} classes for {faculty_name} on {target_date}',
+            'updated': updated_count
+        }
+        
+    except Exception as e:
+        print(f"Error in bulk excuse: {e}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/faculty/teaching-schedule/<int:semester_id>')
@@ -1647,10 +1762,10 @@ def api_faculty_dashboard():
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
 
-@app.route('/api/hr/today-attendance-stats')
+@app.route('/api/hr/today-classes-attendance')
 @require_auth([20003])
-def api_hr_today_attendance_stats():
-    """Get today's attendance statistics for faculty with classes TODAY"""
+def api_hr_today_classes_attendance():
+    """Get today's attendance statistics based on CLASSES scheduled today"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -1658,9 +1773,8 @@ def api_hr_today_attendance_stats():
         philippines_tz = pytz.timezone('Asia/Manila')
         today = datetime.now(philippines_tz).date()
         today_str = today.strftime('%Y-%m-%d')
-        current_day = today.strftime('%A')  # Get day name (Monday, Tuesday, etc.)
+        current_day = today.strftime('%A')  
         
-        # Count faculty who have classes TODAY (based on their schedule)
         cursor.execute("""
             WITH current_calendar AS (
                 SELECT acadcalendar_id 
@@ -1669,37 +1783,36 @@ def api_hr_today_attendance_stats():
                 ORDER BY semesterstart DESC
                 LIMIT 1
             ),
-            faculty_with_classes_today AS (
-                SELECT DISTINCT p.personnel_id
-                FROM personnel p
-                JOIN schedule sch ON p.personnel_id = sch.personnel_id
+            classes_today AS (
+                SELECT 
+                    sch.class_id,
+                    sch.personnel_id
+                FROM schedule sch
                 CROSS JOIN current_calendar cc
-                WHERE p.role_id IN (20001, 20002)
-                AND sch.acadcalendar_id = cc.acadcalendar_id
+                WHERE sch.acadcalendar_id = cc.acadcalendar_id
                 AND (
                     (sch.classday_1 = %s AND sch.starttime_1 IS NOT NULL) OR
                     (sch.classday_2 = %s AND sch.starttime_2 IS NOT NULL)
                 )
             )
             SELECT COUNT(*) 
-            FROM faculty_with_classes_today
+            FROM classes_today
         """, (current_day, current_day))
         
-        total_faculty_today = cursor.fetchone()[0] or 0
+        total_classes_today = cursor.fetchone()[0] or 0
         
-        if total_faculty_today == 0:
+        if total_classes_today == 0:
             cursor.close()
             return_db_connection(conn)
             return {
                 'success': True,
                 'attendance_percentage': 0,
-                'present_count': 0,
-                'total_faculty': 0,
+                'present_classes': 0,
+                'total_classes_today': 0,
                 'today_date': today_str,
-                'note': 'No faculty have classes today'
+                'note': 'No classes scheduled today'
             }
         
-        # Count faculty who are present TODAY (with actual time-in, not absent records)
         cursor.execute("""
             WITH current_calendar AS (
                 SELECT acadcalendar_id 
@@ -1708,45 +1821,44 @@ def api_hr_today_attendance_stats():
                 ORDER BY semesterstart DESC
                 LIMIT 1
             ),
-            faculty_with_classes_today AS (
-                SELECT DISTINCT p.personnel_id
-                FROM personnel p
-                JOIN schedule sch ON p.personnel_id = sch.personnel_id
+            classes_today AS (
+                SELECT 
+                    sch.class_id,
+                    sch.personnel_id
+                FROM schedule sch
                 CROSS JOIN current_calendar cc
-                WHERE p.role_id IN (20001, 20002)
-                AND sch.acadcalendar_id = cc.acadcalendar_id
+                WHERE sch.acadcalendar_id = cc.acadcalendar_id
                 AND (
                     (sch.classday_1 = %s AND sch.starttime_1 IS NOT NULL) OR
                     (sch.classday_2 = %s AND sch.starttime_2 IS NOT NULL)
                 )
             )
-            SELECT COUNT(DISTINCT a.personnel_id)
+            SELECT COUNT(DISTINCT a.class_id)
             FROM attendance a
-            JOIN faculty_with_classes_today f ON a.personnel_id = f.personnel_id
+            JOIN classes_today ct ON a.class_id = ct.class_id
             WHERE DATE(a.timein AT TIME ZONE 'Asia/Manila') = %s
-            AND a.attendancestatus IN ('Present', 'Late')
-            AND a.timein IS NOT NULL
-            AND a.timein::time != '00:00:00'  -- Exclude absent records (midnight timein)
+            AND a.attendancestatus IN ('Present', 'Late', 'Excused')
+            -- Removed the timein filter to include excused classes that don't have actual time-in
         """, (current_day, current_day, today))
         
-        present_count = cursor.fetchone()[0] or 0
+        present_classes = cursor.fetchone()[0] or 0
         
         cursor.close()
         return_db_connection(conn)
         
-        attendance_percentage = round((present_count / total_faculty_today) * 100) if total_faculty_today > 0 else 0
+        attendance_percentage = round((present_classes / total_classes_today) * 100) if total_classes_today > 0 else 0
         
         return {
             'success': True,
             'attendance_percentage': attendance_percentage,
-            'present_count': present_count,
-            'total_faculty': total_faculty_today,
+            'present_classes': present_classes,
+            'total_classes_today': total_classes_today,
             'today_date': today_str,
-            'note': f'Faculty with classes on {current_day}'
+            'note': f'Classes scheduled on {current_day}'
         }
         
     except Exception as e:
-        print(f"Error fetching today's attendance stats: {e}")
+        print(f"Error fetching today's classes attendance stats: {e}")
         import traceback
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
@@ -2486,8 +2598,8 @@ def api_hr_faculty_attendance():
         return_db_connection(conn)
         
         attendance_logs = []
-        status_counts = {'present': 0, 'late': 0, 'absent': 0}
-        today_counts = {'present': 0, 'late': 0, 'absent': 0}
+        status_counts = {'present': 0, 'late': 0, 'absent': 0, 'excused': 0}
+        today_counts = {'present': 0, 'late': 0, 'absent': 0, 'excused': 0}
         
         seen_records = set()
         
@@ -2547,11 +2659,11 @@ def api_hr_faculty_attendance():
                 if date_str == today.strftime('%Y-%m-%d') and status_lower in today_counts:
                     today_counts[status_lower] += 1
                 
-                print(f"✅ Database record: {faculty_name} - {date_str} - {class_name}")
+                # print(f"✅ Database record: {faculty_name} - {date_str} - {class_name}")
             else:
                 print(f"🚨 DUPLICATE SKIPPED: {record_key}")
         
-        print(f"📊 Database records: {len(attendance_records)}, Displayed: {len(attendance_logs)}")
+        # print(f"📊 Database records: {len(attendance_records)}, Displayed: {len(attendance_logs)}")
         
         kpis = {
             'total_faculty': total_faculty or 0,
