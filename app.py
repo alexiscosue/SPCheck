@@ -1899,7 +1899,6 @@ def api_audit_logs():
             FROM auditlogs al
             LEFT JOIN personnel p ON al.personnel_id = p.personnel_id
             ORDER BY al.created_at DESC
-            LIMIT 100
         """)
         
         logs = cursor.fetchall()
@@ -4394,7 +4393,7 @@ def api_hr_delete_schedule():
         
         log_audit_action(
             hr_personnel_id,
-            "Schedule and attendance deleted",
+            "Schedule deleted",
             f"HR deleted schedule and {attendance_count} attendance records for {faculty_name}\nClass: {schedule_info}",
             before_value=f"Schedule existed for class ID: {class_id} with {attendance_count} attendance records",
             after_value="Schedule and all associated attendance records deleted"
