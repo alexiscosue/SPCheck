@@ -78,8 +78,7 @@
       <div class="chart-large card" style="grid-column:1 / -1; padding:16px;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div style="font-weight:700">Evaluations</div>
-          <!-- <div style="font-size:13px;color:var(--muted)">Click headers to sort</div> -->
-        </div>
+          </div>
 
         <div class="card" style="padding:16px; margin-bottom:16px;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
@@ -418,7 +417,8 @@ function loadEvaluations() {
     });
 }
 
-// === NEW SEMESTER FETCHING LOGIC ===
+// REMOVED old fetchAllCollegesAndInitialize function
+
 function fetchSemestersAndPopulate() {
     const semesterFilter = $('#semesterFilter');
     semesterFilter.empty().append('<option value="">Loading Semesters...</option>');
@@ -428,15 +428,11 @@ function fetchSemestersAndPopulate() {
             semesterFilter.empty();
             let currentTermSet = false;
 
-            // Optional "All Semesters" or "Select Semester" option
-            // Since we want the *current* to be selected by default, we just populate the list.
-
             data.semesters.forEach(function(sem) {
                 const isCurrent = sem.is_current;
                 const selectedAttr = (isCurrent && !currentTermSet) ? 'selected' : '';
                 const display = `${sem.text}`;
 
-                // --- CRITICAL: Attaching Start and End Dates as Data Attributes ---
                 semesterFilter.append(
                     `<option 
                         value="${sem.id}" 
@@ -447,7 +443,6 @@ function fetchSemestersAndPopulate() {
                         ${display}
                     </option>`
                 );
-                // ------------------------------------------------------------------
 
                 if (isCurrent && !currentTermSet) {
                     window.CURRENT_TERM_ID = sem.id;
@@ -455,18 +450,33 @@ function fetchSemestersAndPopulate() {
                 }
             });
 
-            // After populating semesters, proceed to fetch college and initial evaluations
-            fetchAllCollegesAndInitialize();
+            // --- INTEGRATED COLLEGE FETCH ---
+            $.get('/api/hr/colleges-list', function(collegeData) {
+                if (collegeData.success && collegeData.colleges) {
+                    ALL_COLLEGES = collegeData.colleges.map(c => c.collegename).sort();
+                    const deptFilter = $('#deptFilter');
+                    deptFilter.empty().append('<option value="">All Departments</option>');
+                    ALL_COLLEGES.forEach(function(d) {
+                        deptFilter.append(`<option value="${d}">${d}</option>`);
+                    });
+                }
+                // FINAL STEP: Load evaluations only after semesters and colleges are fetched
+                loadEvaluations(); 
+            }).fail(function() {
+                console.error('Failed to fetch college list. Proceeding with loadEvaluations.');
+                loadEvaluations(); // Proceed even if colleges fail
+            });
+            // --- END INTEGRATED COLLEGE FETCH ---
+
         } else {
             semesterFilter.empty().append('<option value="">Error Loading Terms</option>');
-            fetchAllCollegesAndInitialize(); // Still try to load data with default term ID
+            loadEvaluations(); // Fallback load with default term ID
         }
     }).fail(function() {
         semesterFilter.empty().append('<option value="">API Error</option>');
-        fetchAllCollegesAndInitialize();
+        loadEvaluations(); // Final failure fallback
     });
 }
-// === END NEW SEMESTER FETCHING LOGIC ===
 
 
 function getStatusInfo(rating) {
@@ -482,8 +492,78 @@ function getStatusInfo(rating) {
 }
 
 function openModal(personnelId, facultyName, overallRating, studentResponses) {
-    // Logic for opening modal remains unchanged
-    // ...
+    $('#modalTitle').text(`Evaluation Report: ${facultyName}`);
+    // Cap percentage at 100%
+    const circlePercentage = Math.min((overallRating / 5) * 100, 100); 
+    $('#overallRatingCircle').css('--percentage', `${circlePercentage}`);
+    $('#overallRatingValue').text(overallRating.toFixed(2));
+    $('#modalDownloadBtn').data('personnel-id', personnelId);
+    $('#studentResponsesCount').text(studentResponses);
+    
+    const statusInfo = getStatusInfo(overallRating);
+    $('#finalStatusBadge').text(statusInfo.label).removeClass().addClass(`status ${statusInfo.class}`);
+    
+    $('#ratingBreakdownBody').empty().append('<tr><td colspan="2" style="text-align:center;">Loading details...</td></tr>');
+    $('#feedbackList').empty();
+    $('#noFeedback').show();
+    MODAL.style.display = 'flex';
+
+    // Fetch detailed report data
+    $.get(`/api/hr/faculty-evaluation-report/${personnelId}?term_id=${window.CURRENT_TERM_ID}`, function(data) {
+        $('#ratingBreakdownBody').empty();
+        $('#feedbackList').empty();
+        
+        if (data.success && data.report) {
+            const report = data.report;
+            
+            // Populate Breakdown Table
+            report.rating_breakdown.forEach(item => {
+                const weight = item.weight * 100;
+                $('#ratingBreakdownBody').append(`
+                    <tr>
+                        <td style="font-weight: 500; padding: 5px 0;">${item.type} (${weight.toFixed(0)}%)</td>
+                        <td style="text-align: right; font-weight: 700; color: var(--spc-maroon); padding: 5px 0;">${item.score.toFixed(2)}</td>
+                    </tr>
+                `);
+            });
+            
+            // Populate Feedback
+            if (report.qualitative_feedback && report.qualitative_feedback.length > 0) {
+                
+                // Filtering Logic: Filter out unwanted delimiters/placeholders
+                const cleanFeedback = report.qualitative_feedback.filter(comment => {
+                    // Filter out comments that are empty, only whitespace, or specifically the delimiter '---'
+                    return comment.trim() !== '' && comment.trim() !== '---';
+                });
+
+                if (cleanFeedback.length > 0) {
+                    cleanFeedback.forEach(function(comment) {
+                        $('#feedbackList').append(`
+                            <li style="margin-bottom: 12px; padding: 10px; border-left: 3px solid var(--spc-gold); background: #fcfcfd; border-radius: 4px;">
+                                <i class='bx bxs-quote-alt-left' style="font-size: 1.1rem; color: var(--spc-gold); margin-right: 5px;"></i>
+                                <span style="font-style: italic; color: #333;">${comment}</span>
+                            </li>
+                        `);
+                    });
+                    $('#noFeedback').hide();
+                } else {
+                    // If all comments were filtered out (e.g., they were all '---'), show empty state
+                    $('#noFeedback').show().text('No qualitative feedback available.');
+                }
+            } else {
+                $('#noFeedback').show().text('No qualitative feedback available.');
+            }
+            
+            // Update modal title elements again with fresh data
+            $('#reportSemester').text(report.semester_display);
+        } else {
+            $('#ratingBreakdownBody').html('<tr><td colspan="2" style="text-align:center; color:#ef4444;">Failed to load report details.</td></tr>');
+            $('#noFeedback').show().text('Error loading qualitative feedback.');
+        }
+    }).fail(function() {
+        $('#ratingBreakdownBody').html('<tr><td colspan="2" style="text-align:center; color:#ef4444;">API Error: Could not fetch report details.</td></tr>');
+        $('#noFeedback').show().text('API Error: Could not fetch qualitative feedback.');
+    });
 }
 
 function closeModal() {
@@ -496,7 +576,7 @@ function downloadReport(personnelId) {
     window.open(url, '_blank');
 }
 
-// === NEW CYCLE MODAL FUNCTIONS (Unchanged) ===
+// === NEW CYCLE MODAL FUNCTIONS ===
 function openNewCycleModal() {
     $('#newCycleModalTitle').text('Initiate New Evaluation Term');
     $('#newCycleForm')[0].reset();
@@ -507,13 +587,13 @@ function openNewCycleModal() {
 function closeNewCycleModal() {
     $('#newCycleModal').css('display', 'none');
 }
+// === END NEW CYCLE MODAL FUNCTIONS ===
 
 
 // --- JQUERY INITIALIZATION AND EVENT ATTACHMENT ---
 $(document).ready(function() {
     // 1. Attach button click handlers (Update Records)
     $('#update-eval-btn').click(function() {
-        // ... (existing update logic) ...
         const button = $(this);
         const originalHtml = button.html();
 
@@ -545,15 +625,13 @@ $(document).ready(function() {
                 alert(xhr.responseJSON?.message || "Failed to update evaluation records. See server logs.");
             }, 4000);
         });
-        // ... (end existing update logic) ...
     });
     
     // 2. Attach filter change handlers
-    // NEW: Semester filter now triggers data load
     $('#semesterFilter, #deptFilter, #statusFilter, #positionFilter, #responseRateFilter').change(loadEvaluations); 
     $('#evalSearch').on('input', loadEvaluations);
     
-    // 3. New Cycle Button Handler
+    // 3. New Cycle Button Handler (OPENS THE MODAL)
     $('#newCycleBtn').click(function() {
         openNewCycleModal();
     });
