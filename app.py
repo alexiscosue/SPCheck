@@ -3787,6 +3787,65 @@ def api_hr_add_employee():
             return_db_connection(conn)
         return {'success': False, 'error': str(e)}
 
+@app.route('/api/hr/delete-employee', methods=['POST'])
+@require_auth([20003])
+def api_hr_delete_employee():
+    """Delete employee and all related data except audit logs and RFID logs"""
+    try:
+        data = request.get_json()
+        personnel_id = data.get('personnel_id')
+        employee_name = data.get('employee_name', 'Unknown Employee')
+        
+        if not personnel_id:
+            return {'success': False, 'error': 'Personnel ID is required'}
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT user_id FROM personnel WHERE personnel_id = %s", (personnel_id,))
+        user_result = cursor.fetchone()
+        
+        if not user_result:
+            cursor.close()
+            return_db_connection(conn)
+            return {'success': False, 'error': 'Employee not found'}
+        
+        user_id = user_result[0]
+        cursor.execute("BEGIN")
+        cursor.execute("DELETE FROM profile WHERE personnel_id = %s", (personnel_id,))
+        cursor.execute("DELETE FROM schedule WHERE personnel_id = %s", (personnel_id,))
+        cursor.execute("DELETE FROM personnel WHERE personnel_id = %s", (personnel_id,))
+        cursor.execute("DELETE FROM users WHERE user_id = %s", (user_id,))
+        conn.commit()
+        hr_user_id = session['user_id']
+        hr_personnel_info = get_personnel_info(hr_user_id)
+        hr_personnel_id = hr_personnel_info.get('personnel_id')
+        
+        log_audit_action(
+            hr_personnel_id,
+            "Employee deleted",
+            f"HR deleted employee: {employee_name} (Personnel ID: {personnel_id})",
+            before_value=f"Employee existed in system",
+            after_value="Employee records deleted from users, personnel, profile, and schedule tables"
+        )
+        
+        cursor.close()
+        return_db_connection(conn)
+        
+        return {
+            'success': True, 
+            'message': f'Employee {employee_name} deleted successfully'
+        }
+        
+    except Exception as e:
+        print(f"Error deleting employee: {e}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+            cursor.close()
+            return_db_connection(conn)
+        return {'success': False, 'error': str(e)}
+
 @app.route('/api/hr/subjects-list')
 @require_auth([20003])
 def api_hr_subjects_list():
@@ -4179,6 +4238,194 @@ def api_hr_add_schedule():
             conn.rollback()
             cursor.close()
             return_db_connection(conn)
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/hr/delete-schedule/classes/<int:personnel_id>')  # CHANGED
+@require_auth([20003])
+def api_hr_delete_schedule_classes(personnel_id):  # RENAMED
+    """Get all schedule classes for a faculty member for deletion dropdown"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                s.class_id,
+                s.classday_1,
+                s.starttime_1,
+                s.endtime_1,
+                s.classday_2,
+                s.starttime_2,
+                s.endtime_2,
+                sub.subjectcode,
+                s.classsection,
+                s.classroom
+            FROM schedule s
+            JOIN subjects sub ON s.subject_id = sub.subject_id
+            WHERE s.personnel_id = %s
+            ORDER BY sub.subjectcode, s.classsection
+        """, (personnel_id,))
+        
+        schedules = cursor.fetchall()
+        cursor.close()
+        return_db_connection(conn)
+        
+        schedule_list = []
+        for schedule in schedules:
+            (class_id, classday_1, starttime_1, endtime_1, classday_2, 
+             starttime_2, endtime_2, subjectcode, classsection, classroom) = schedule
+            
+            def format_time_display(time_val):
+                if not time_val:
+                    return None
+                if isinstance(time_val, str):
+                    time_str = time_val[:5]
+                elif hasattr(time_val, 'strftime'):
+                    time_str = time_val.strftime('%H:%M')
+                else:
+                    time_str = str(time_val)[:5]
+                
+                try:
+                    hours, minutes = map(int, time_str.split(':'))
+                    period = 'AM' if hours < 12 else 'PM'
+                    display_hour = hours if hours <= 12 else hours - 12
+                    display_hour = 12 if display_hour == 0 else display_hour
+                    return f"{display_hour}:{minutes:02d} {period}"
+                except:
+                    return time_str
+            
+            day1_display = f"{classday_1} {format_time_display(starttime_1)}-{format_time_display(endtime_1)}" if classday_1 else None
+            day2_display = f"{classday_2} {format_time_display(starttime_2)}-{format_time_display(endtime_2)}" if classday_2 else None
+            
+            schedule_label = f"{subjectcode}, Section: {classsection}"
+            if day1_display and day2_display:
+                schedule_label += f", {day1_display} & {day2_display}"
+            elif day1_display:
+                schedule_label += f", {day1_display}"
+            elif day2_display:
+                schedule_label += f", {day2_display}"
+            
+            schedule_label += f", Room: {classroom}" if classroom else ""
+            
+            schedule_list.append({
+                'class_id': class_id,
+                'display_label': schedule_label,
+                'subject_code': subjectcode,
+                'section': classsection,
+                'day1': day1_display,
+                'day2': day2_display,
+                'classroom': classroom
+            })
+        
+        return {
+            'success': True,
+            'schedules': schedule_list
+        }
+        
+    except Exception as e:
+        print(f"Error fetching faculty schedule classes: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/hr/delete-schedule', methods=['POST'])
+@require_auth([20003])
+def api_hr_delete_schedule():
+    """Delete schedule and all associated attendance records"""
+    try:
+        data = request.get_json()
+        class_id = data.get('class_id')
+        
+        if not class_id:
+            return {'success': False, 'error': 'Class ID is required'}
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                s.class_id,
+                sub.subjectcode,
+                sub.subjectname,
+                s.classsection,
+                s.classday_1,
+                s.starttime_1,
+                s.endtime_1,
+                s.classday_2,
+                s.starttime_2,
+                s.endtime_2,
+                p.firstname,
+                p.lastname,
+                p.honorifics
+            FROM schedule s
+            JOIN subjects sub ON s.subject_id = sub.subject_id
+            JOIN personnel p ON s.personnel_id = p.personnel_id
+            WHERE s.class_id = %s
+        """, (class_id,))
+        
+        schedule_result = cursor.fetchone()
+        
+        if not schedule_result:
+            cursor.close()
+            return_db_connection(conn)
+            return {'success': False, 'error': 'Schedule not found'}
+        
+        (class_id, subjectcode, subjectname, classsection, classday_1, starttime_1, endtime_1,
+         classday_2, starttime_2, endtime_2, firstname, lastname, honorifics) = schedule_result
+        
+        faculty_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+        
+        cursor.execute("SELECT COUNT(*) FROM attendance WHERE class_id = %s", (class_id,))
+        attendance_count = cursor.fetchone()[0]
+        cursor.execute("BEGIN")
+        cursor.execute("DELETE FROM attendance WHERE class_id = %s", (class_id,))
+        cursor.execute("DELETE FROM schedule WHERE class_id = %s", (class_id,))
+        conn.commit()
+        
+        hr_user_id = session['user_id']
+        hr_personnel_info = get_personnel_info(hr_user_id)
+        hr_personnel_id = hr_personnel_info.get('personnel_id')
+        
+        schedule_info = f"{subjectcode} - {subjectname} | Section {classsection}"
+        if classday_1:
+            schedule_info += f" | {classday_1} {starttime_1}-{endtime_1}"
+        if classday_2:
+            schedule_info += f" & {classday_2} {starttime_2}-{endtime_2}"
+        
+        log_audit_action(
+            hr_personnel_id,
+            "Schedule and attendance deleted",
+            f"HR deleted schedule and {attendance_count} attendance records for {faculty_name}\nClass: {schedule_info}",
+            before_value=f"Schedule existed for class ID: {class_id} with {attendance_count} attendance records",
+            after_value="Schedule and all associated attendance records deleted"
+        )
+        
+        cursor.close()
+        return_db_connection(conn)
+        
+        message = f'Schedule and {attendance_count} attendance records deleted successfully'
+        
+        return {
+            'success': True, 
+            'message': message,
+            'attendance_records_deleted': attendance_count
+        }
+        
+    except Exception as e:
+        print(f"Error deleting schedule: {e}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+            cursor.close()
+            return_db_connection(conn)
+        
+        if 'violates foreign key constraint' in str(e):
+            return {
+                'success': False, 
+                'error': f'Cannot delete schedule due to database constraints. Please contact administrator. Error: {str(e)}'
+            }
+        
         return {'success': False, 'error': str(e)}
 
 @app.route('/hr_employee_profile/<int:personnel_id>')
