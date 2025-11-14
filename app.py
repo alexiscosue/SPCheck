@@ -426,7 +426,7 @@ def get_peers_score_records():
         return []
 
 
-# Helper function for ReportLab (place this outside any route/function)
+# Helper function for ReportLab 
 def getStatusLabel(rating):
     if rating >= 3:
         return 'Above Average'
@@ -436,6 +436,54 @@ def getStatusLabel(rating):
         return 'Below Average'
     else:
         return 'Not Rated'
+    
+    
+def get_current_acadcalendar_info(acadcalendar_id):
+    """Fetches semester name, year, and end date for display."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT semester, acadyear, semesterend
+            FROM acadcalendar
+            WHERE acadcalendar_id = %s
+        """, (acadcalendar_id,))
+        
+        result = cursor.fetchone()
+        cursor.close()
+        return_db_connection(conn)
+        
+        if result:
+            semester, acadyear, semesterend = result
+            
+            # 1. Clean the semester name (ensure "Semester" is included)
+            if 'semester' not in semester.lower():
+                semester_display = f"{semester} Semester"
+            else:
+                semester_display = semester
+            
+            # 2. Clean the academic year (remove leading 'AY' if present)
+            acadyear_clean = acadyear.upper().lstrip('AY').strip()
+            
+            return {
+                'semester_name': semester_display,
+                'acad_year': acadyear_clean,
+                'deadline': semesterend.strftime('%b %d, %Y'), # e.g., Dec 20, 2025
+                # 3. Construct the final display string: "📅 First Semester — AY 2025-2026"
+                'display': f"📅 {semester_display} — AY {acadyear_clean}"
+            }
+        
+    except Exception as e:
+        print(f"Error fetching acad calendar info: {e}")
+        
+    return {
+        'semester_name': 'N/A',
+        'acad_year': 'N/A',
+        'deadline': 'N/A',
+        'display': '📅 N/A — AY N/A'
+    }
+
 
 
 # ========== CACHED DATA ==========
@@ -3933,6 +3981,221 @@ def api_hr_subjects_by_faculty(personnel_id):
         import traceback
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
+    
+
+@app.route('/api/hr/acadcalendar')
+@require_auth([20003])
+def api_hr_get_acadcalendar():
+    """Get all academic calendar records."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                acadcalendar_id, 
+                semester, 
+                acadyear, 
+                semesterstart, 
+                semesterend,
+                CASE WHEN CURRENT_DATE BETWEEN semesterstart AND semesterend THEN TRUE ELSE FALSE END as is_current
+            FROM acadcalendar 
+            ORDER BY acadyear DESC, semesterstart DESC
+        """)
+        
+        records = cursor.fetchall()
+        cursor.close()
+        return_db_connection(conn)
+        
+        calendar_list = []
+        for rec in records:
+            (id, semester, year, start, end, is_current) = rec
+            
+            # Format semester display
+            semester_display = f"{semester}, AY {year}"
+            
+            calendar_list.append({
+                'id': id,
+                'semester': semester,
+                'year': year,
+                'start_date': start.strftime('%Y-%m-%d'),
+                'end_date': end.strftime('%Y-%m-%d'),
+                'is_current': is_current,
+                'display': semester_display
+            })
+        
+        return {'success': True, 'calendar_records': calendar_list}
+        
+    except Exception as e:
+        print(f"Error fetching acad calendar records: {e}")
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/hr/acadcalendar', methods=['POST'])
+@require_auth([20003])
+def api_hr_add_acadcalendar():
+    """Add a new academic calendar record."""
+    try:
+        data = request.get_json()
+        semester = data.get('semester')
+        acadyear = data.get('acadyear')
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
+        
+        if not all([semester, acadyear, start_date, end_date]):
+            return {'success': False, 'error': 'All fields are required.'}
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT COALESCE(MAX(acadcalendar_id), 80000) FROM acadcalendar")
+        new_id = cursor.fetchone()[0] + 1
+        
+        cursor.execute("""
+            INSERT INTO acadcalendar (acadcalendar_id, semester, acadyear, semesterstart, semesterend)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (new_id, semester, acadyear, start_date, end_date))
+        
+        conn.commit()
+        cursor.close()
+        return_db_connection(conn)
+
+        # Log the action
+        hr_personnel_info = get_personnel_info(session['user_id'])
+        log_audit_action(
+            hr_personnel_info.get('personnel_id'),
+            "Academic Calendar Added",
+            f"Added new term: {semester}, AY {acadyear} ({start_date} to {end_date})",
+            after_value=f"New ID: {new_id}"
+        )
+        
+        # Clear semester cache for faculty dropdowns
+        with _cache_lock:
+            _cache.pop("all_semesters", None)
+
+        return {'success': True, 'message': 'Academic calendar record added successfully.', 'new_id': new_id}
+        
+    except Exception as e:
+        print(f"Error adding acad calendar record: {e}")
+        if conn:
+            conn.rollback()
+            cursor.close()
+            return_db_connection(conn)
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/hr/acadcalendar/<int:id>', methods=['PUT'])
+@require_auth([20003])
+def api_hr_update_acadcalendar(id):
+    """Update an existing academic calendar record."""
+    try:
+        data = request.get_json()
+        semester = data.get('semester')
+        acadyear = data.get('acadyear')
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
+
+        if not all([semester, acadyear, start_date, end_date]):
+            return {'success': False, 'error': 'All fields are required.'}
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Fetch current data for logging
+        cursor.execute("""
+            SELECT semester, acadyear, semesterstart, semesterend
+            FROM acadcalendar WHERE acadcalendar_id = %s
+        """, (id,))
+        current_data = cursor.fetchone()
+        
+        if not current_data:
+            cursor.close()
+            return_db_connection(conn)
+            return {'success': False, 'error': 'Record not found.'}
+        
+        current_semester, current_year, current_start, current_end = current_data
+
+        cursor.execute("""
+            UPDATE acadcalendar 
+            SET semester = %s, acadyear = %s, semesterstart = %s, semesterend = %s
+            WHERE acadcalendar_id = %s
+        """, (semester, acadyear, start_date, end_date, id))
+        
+        conn.commit()
+        cursor.close()
+        return_db_connection(conn)
+
+        # Log the action
+        hr_personnel_info = get_personnel_info(session['user_id'])
+        log_audit_action(
+            hr_personnel_info.get('personnel_id'),
+            "Academic Calendar Updated",
+            f"Updated term ID {id}: {current_semester}, AY {current_year} to {semester}, AY {acadyear}",
+            before_value=f"Start: {current_start}, End: {current_end}",
+            after_value=f"Start: {start_date}, End: {end_date}"
+        )
+        
+        # Clear semester cache for faculty dropdowns
+        with _cache_lock:
+            _cache.pop("all_semesters", None)
+
+        return {'success': True, 'message': 'Academic calendar record updated successfully.'}
+        
+    except Exception as e:
+        print(f"Error updating acad calendar record: {e}")
+        if conn:
+            conn.rollback()
+            cursor.close()
+            return_db_connection(conn)
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/hr/acadcalendar/<int:id>', methods=['DELETE'])
+@require_auth([20003])
+def api_hr_delete_acadcalendar(id):
+    """Delete an academic calendar record."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # ⚠️ Check for dependencies before deleting
+        cursor.execute("SELECT COUNT(*) FROM schedule WHERE acadcalendar_id = %s", (id,))
+        if cursor.fetchone()[0] > 0:
+            cursor.close()
+            return_db_connection(conn)
+            return {'success': False, 'error': 'Cannot delete. Schedule records are linked to this term.'}
+
+        cursor.execute("SELECT semester, acadyear FROM acadcalendar WHERE acadcalendar_id = %s", (id,))
+        term_info = cursor.fetchone()
+
+        cursor.execute("DELETE FROM acadcalendar WHERE acadcalendar_id = %s", (id,))
+        deleted_count = cursor.rowcount
+        
+        conn.commit()
+        cursor.close()
+        return_db_connection(conn)
+
+        if deleted_count > 0:
+            hr_personnel_info = get_personnel_info(session['user_id'])
+            log_audit_action(
+                hr_personnel_info.get('personnel_id'),
+                "Academic Calendar Deleted",
+                f"Deleted term ID {id}: {term_info[0]}, AY {term_info[1]}"
+            )
+            
+            # Clear semester cache for faculty dropdowns
+            with _cache_lock:
+                _cache.pop("all_semesters", None)
+
+            return {'success': True, 'message': 'Academic calendar record deleted successfully.'}
+        else:
+            return {'success': False, 'error': 'Record not found.'}
+        
+    except Exception as e:
+        print(f"Error deleting acad calendar record: {e}")
+        if conn:
+            conn.rollback()
+            cursor.close()
+            return_db_connection(conn)
+        return {'success': False, 'error': str(e)}
+
 
 def check_internal_schedule_conflicts(schedule_data):
     """Check for conflicts within the same schedule (Day 1 vs Day 2)"""
@@ -5246,6 +5509,8 @@ def api_hr_evaluation_dashboard_data():
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# Replace the existing api_hr_evaluations function in app.py with this code
+
 @app.route('/api/hr/evaluations', methods=['GET'])
 @require_auth([20003])
 def api_hr_evaluations():
@@ -5261,6 +5526,9 @@ def api_hr_evaluations():
 
     # Define the term ID for use in all queries
     current_term_id = term if term else '80001'
+    
+    # NEW: Fetch academic calendar display information
+    acadcalendar_info = get_current_acadcalendar_info(current_term_id)
 
     # --- KPI 1, 2, 3, & 4 Calculation (Combined Query) ---
     cursor.execute("""
@@ -5422,7 +5690,8 @@ def api_hr_evaluations():
         success=True, 
         evaluations=evals, 
         kpis=kpis,
-        unique_positions=unique_positions
+        unique_positions=unique_positions,
+        acadcalendar_info=acadcalendar_info # NEW: Dynamic term info
     )
 
 
