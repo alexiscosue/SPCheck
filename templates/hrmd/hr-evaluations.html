@@ -101,11 +101,19 @@
           <table id="evalTable" aria-label="Evaluations table">
             <thead>
               <tr>
-                <th><span class="sortable" data-sort="faculty">Faculty <span class="sort-ind" id="sortFaculty"></span></span></th>
+                <!-- <th><span class="sortable" data-sort="faculty">Faculty <span class="sort-ind" id="sortFaculty"></span></span></th>
                 <th><span class="sortable" data-sort="dept">Department <span class="sort-ind" id="sortDept"></span></span></th>
                 <th><span class="sortable" data-sort="position">Position <span class="sort-ind" id="sortPosition"></span></span></th>
-                <th><span class="sortable" data-sort="response">Response Rate <span class="sort-ind" id="sortResponse"></span></span></th>
-                <th><span class="sortable" data-sort="rating">Rating <span class="sort-ind" id="sortRating"></span></span></th>
+                <th><span class="sortable" data-sort="response">Response Rate <span class="sort-ind" id="sortResponse"></span></span></th> -->
+                <th>Faculty</th>
+                <th>Department</th>
+                <th>Position</th>
+                <th>Student Response Rate</th>
+                <th>Student</th>
+                <th>Supervisor</th>
+                <th>Peer</th>
+                <th>Overall Score</th>
+                <!-- <th><span class="sortable" data-sort="rating">Overall <span class="sort-ind" id="sortRating"></span></span></th> -->
                 <th>Actions</th>
               </tr>
             </thead>
@@ -272,11 +280,11 @@
 {% block extra_scripts %}
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script>
-window.CURRENT_TERM_ID = {{ acadcalendar_id }}; // Retained as initial fallback
+window.CURRENT_TERM_ID = {{ acadcalendar_id }}; 
 const MODAL = document.getElementById('evaluationModal');
 let ALL_COLLEGES = []; 
 
-let EVALUATIONS_DATA = []; // Store raw data array for pagination
+let EVALUATIONS_DATA = []; 
 const PAGE_SIZE = 10;
 let CURRENT_PAGE = 1;
 
@@ -300,6 +308,14 @@ function renderTablePage(pageNumber) {
         $('#nextPage').prop('disabled', true);
         return;
     }
+
+    // Format score utility function
+    const formatScore = (score) => {
+        const num = parseFloat(score);
+        // Only return score if it's > 0, otherwise return dash
+        return (num > 0) ? num.toFixed(2) : '—';
+    };
+
 
     // --- RENDER ROWS ---
     paginatedData.forEach(function(row) {
@@ -327,13 +343,29 @@ function renderTablePage(pageNumber) {
         // NEW: Check if rating is zero or less to disable download
         const disableDownload = (rating <= 0 || isNaN(rating)) ? 'disabled' : '';
 
+        // NEW: Formatted individual scores
+        const studentScore = formatScore(row.student_score);
+        const supervisorScore = formatScore(row.supervisor_score);
+        const peerScore = formatScore(row.peer_score);
+
+        // NEW: Overall Score Display (Score - Average, Left Justified)
+        const overallDisplay = (rating > 0) ? 
+            `${rating.toFixed(2)} — <span class="status ${statusClass}" style="padding: 2px 6px;">${statusLabel}</span>` : 
+            `<span class="status pending">${statusLabel}</span>`;
+
+
         tbody.append(
           '<tr>' +
             `<td>${row.name}</td>` +
             `<td>${row.department}</td>` +
             `<td>${row.position || 'N/A'}</td>` +
             `<td>${studentResponses} — ${responseStatusLabel}</td>` +
-            `<td><span class="status ${statusClass}">${statusLabel} (${rating.toFixed(2)})</span></td>` +
+            // NEW RATING CELLS (Center Aligned)
+            `<td style="text-align: center;">${studentScore}</td>` + 
+            `<td style="text-align: center;">${supervisorScore}</td>` + 
+            `<td style="text-align: center;">${peerScore}</td>` + 
+            // MODIFIED OVERALL RATING CELL (Left Aligned)
+            `<td style="text-align: left;"><span class="status ${statusClass}" style="padding: 4px 8px;">${rating.toFixed(2)} - ${statusLabel}</span></td>` +
             `<td>
                 <button class="btn action" onclick="openModal(${row.personnelid}, '${row.name}', ${rating.toFixed(2)}, ${studentResponses})"><i class='bx bx-show-alt'></i>&nbsp;View</button>
                 <button class="btn secondary" onclick="downloadReport(${row.personnelid})" ${disableDownload}><i class='bx bx-download'></i></button>
@@ -358,9 +390,8 @@ function renderTablePage(pageNumber) {
 }
 
 
-// --- NEW DELETE FUNCTION ---
+// --- DELETE MODAL FUNCTIONS ---
 function deleteAcademicTerm(termId, termName) {
-    // Basic safety check for current term status (prevent accidental deletion of ongoing/archived)
     if (termId == $('#semesterFilter').val() && !$('#cycleStatus').text().includes('Not Started')) {
         alert("Cannot delete the current active term that is In Progress or Finished. Only terms with status 'Not Started' can be deleted.");
         return;
@@ -386,7 +417,6 @@ function confirmDelete() {
     const button = $('#confirmDeleteBtn');
     button.prop('disabled', true).html("<i class='bx bx-loader-alt bx-spin'></i>&nbsp; Deleting...");
 
-    // Call the dedicated DELETE API endpoint
     $.ajax({
         url: `/api/hr/acadcalendar/${termId}`,
         type: 'DELETE',
@@ -394,8 +424,8 @@ function confirmDelete() {
             if (response.success) {
                 alert(`Successfully deleted term: ${termName}. The list will now refresh.`);
                 closeDeleteModal();
-                $('#semesterFilter').val(''); // Clear selection
-                fetchSemestersAndPopulate(); // Refresh the list and current view
+                $('#semesterFilter').val(''); 
+                fetchSemestersAndPopulate(); 
             } else {
                 alert(`Deletion failed. Reason: ${response.error}`);
                 button.prop('disabled', false).html("<i class='bx bx-trash'></i>&nbsp; Delete Permanently");
@@ -411,7 +441,6 @@ function confirmDelete() {
 
 
 function loadEvaluations() {
-    // Determine which term ID to use: selected filter or the global current ID
     const selectedTerm = $('#semesterFilter').val();
     const termIdToUse = selectedTerm || window.CURRENT_TERM_ID; 
 
@@ -421,16 +450,15 @@ function loadEvaluations() {
     var position = $('#positionFilter').val() || ''; 
     var responseRate = $('#responseRateFilter').val() || ''; 
 
-    // Clear table and show loading state
     $('#evalTableBody').html('<tr><td colspan="6" class="table-empty">Loading evaluations...</td></tr>');
     $('#emptyState').hide();
     $('#termDisplay').html('📅 Loading...');
     $('#durationDates').text('Loading...');
-    $('#cycleStatusContainer').html('<strong>🔔 Status:</strong> <span id="cycleStatus">Loading...</span>'); // Reset status container
+    $('#cycleStatusContainer').html('<strong>🔔 Status:</strong> <span id="cycleStatus">Loading...</span>'); 
 
 
     $.get('/api/hr/evaluations', {
-        term: termIdToUse, // Use the selected/current term ID
+        term: termIdToUse, 
         dept: dept,
         status: status, 
         search: search,
@@ -458,10 +486,10 @@ function loadEvaluations() {
             $('#termDisplay').html(info.display);
             
             const selectedOption = $('#semesterFilter option:selected');
-            const startDateString = selectedOption.data('start'); // YYYY-MM-DD
-            const endDateString = selectedOption.data('end');   // YYYY-MM-DD
+            const startDateString = selectedOption.data('start');
+            const endDateString = selectedOption.data('end');
 
-            let durationText = info.deadline; // Fallback to just deadline
+            let durationText = info.deadline; 
 
             // 1. Calculate Duration (Start Date - End Date)
             if (startDateString && endDateString) {
@@ -479,7 +507,7 @@ function loadEvaluations() {
             // 2. Calculate Dynamic Status and Delete Permission
             let statusText = "N/A";
             let statusColor = "#6b7280"; 
-            let canDelete = false; // Flag to enable/disable button
+            let canDelete = false; 
 
             if (startDateString && endDateString) {
                 const termStartDate = new Date(startDateString);
@@ -492,15 +520,15 @@ function loadEvaluations() {
 
                 if (today < termStartDate) {
                     statusText = "Not Started";
-                    statusColor = "#3b82f6"; // Blue/Info
+                    statusColor = "#3b82f6"; 
                     canDelete = true;
                 } else if (today >= termStartDate && today <= termEndDate) {
                     statusText = "In Progress";
-                    statusColor = "#f59e0b"; // Amber/Warn
+                    statusColor = "#f59e0b"; 
                     canDelete = false;
                 } else {
                     statusText = "Finished";
-                    statusColor = "#166534"; // Green/Success
+                    statusColor = "#166534"; 
                     canDelete = false;
                 }
             } else {
@@ -550,19 +578,17 @@ function loadEvaluations() {
 
         // --- 4. STORE DATA & RENDER FIRST PAGE ---
         if(data.success && data.evaluations.length > 0) {
-            EVALUATIONS_DATA = data.evaluations; // Store the full filtered dataset
-            CURRENT_PAGE = 1; // Reset to first page
+            EVALUATIONS_DATA = data.evaluations; 
+            CURRENT_PAGE = 1; 
             renderTablePage(CURRENT_PAGE);
         } else {
             EVALUATIONS_DATA = [];
-            renderTablePage(1); // Renders empty state
+            renderTablePage(1); 
         }
     }).fail(function() {
         $('#evalTableBody').html('<tr><td colspan="6" class="table-empty" style="color:#991b1b;">Failed to load data from API.</td></tr>');
     });
 }
-
-// REMOVED old fetchAllCollegesAndInitialize function
 
 function fetchSemestersAndPopulate() {
     const semesterFilter = $('#semesterFilter');
@@ -595,7 +621,6 @@ function fetchSemestersAndPopulate() {
                 }
             });
 
-            // --- INTEGRATED COLLEGE FETCH ---
             $.get('/api/hr/colleges-list', function(collegeData) {
                 if (collegeData.success && collegeData.colleges) {
                     ALL_COLLEGES = collegeData.colleges.map(c => c.collegename).sort();
@@ -605,21 +630,19 @@ function fetchSemestersAndPopulate() {
                         deptFilter.append(`<option value="${d}">${d}</option>`);
                     });
                 }
-                // FINAL STEP: Load evaluations only after semesters and colleges are fetched
                 loadEvaluations(); 
             }).fail(function() {
                 console.error('Failed to fetch college list. Proceeding with loadEvaluations.');
-                loadEvaluations(); // Proceed even if colleges fail
+                loadEvaluations(); 
             });
-            // --- END INTEGRATED COLLEGE FETCH ---
 
         } else {
             semesterFilter.empty().append('<option value="">Error Loading Terms</option>');
-            loadEvaluations(); // Fallback load with default term ID
+            loadEvaluations(); 
         }
     }).fail(function() {
         semesterFilter.empty().append('<option value="">API Error</option>');
-        loadEvaluations(); // Final failure fallback
+        loadEvaluations(); 
     });
 }
 
@@ -638,7 +661,6 @@ function getStatusInfo(rating) {
 
 function openModal(personnelId, facultyName, overallRating, studentResponses) {
     $('#modalTitle').text(`Evaluation Report: ${facultyName}`);
-    // Cap percentage at 100%
     const circlePercentage = Math.min((overallRating / 5) * 100, 100); 
     $('#overallRatingCircle').css('--percentage', `${circlePercentage}`);
     $('#overallRatingValue').text(overallRating.toFixed(2));
@@ -653,7 +675,6 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
     $('#noFeedback').show();
     MODAL.style.display = 'flex';
 
-    // Fetch detailed report data
     $.get(`/api/hr/faculty-evaluation-report/${personnelId}?term_id=${window.CURRENT_TERM_ID}`, function(data) {
         $('#ratingBreakdownBody').empty();
         $('#feedbackList').empty();
@@ -661,7 +682,6 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
         if (data.success && data.report) {
             const report = data.report;
             
-            // Populate Breakdown Table
             report.rating_breakdown.forEach(item => {
                 const weight = item.weight * 100;
                 $('#ratingBreakdownBody').append(`
@@ -672,12 +692,9 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
                 `);
             });
             
-            // Populate Feedback
             if (report.qualitative_feedback && report.qualitative_feedback.length > 0) {
                 
-                // Filtering Logic: Filter out unwanted delimiters/placeholders
                 const cleanFeedback = report.qualitative_feedback.filter(comment => {
-                    // Filter out comments that are empty, only whitespace, or specifically the delimiter '---'
                     return comment.trim() !== '' && comment.trim() !== '---';
                 });
 
@@ -692,14 +709,12 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
                     });
                     $('#noFeedback').hide();
                 } else {
-                    // If all comments were filtered out (e.g., they were all '---'), show empty state
                     $('#noFeedback').show().text('No qualitative feedback available.');
                 }
             } else {
                 $('#noFeedback').show().text('No qualitative feedback available.');
             }
             
-            // Update modal title elements again with fresh data
             $('#reportSemester').text(report.semester_display);
         } else {
             $('#ratingBreakdownBody').html('<tr><td colspan="2" style="text-align:center; color:#ef4444;">Failed to load report details.</td></tr>');
@@ -716,7 +731,7 @@ function closeModal() {
 }
 
 function downloadReport(personnelId) {
-    const termId = $('#semesterFilter').val() || window.CURRENT_TERM_ID; // Use selected term ID
+    const termId = $('#semesterFilter').val() || window.CURRENT_TERM_ID; 
     const url = `/api/hr/faculty-evaluation-report-pdf/${personnelId}?term_id=${termId}`;
     window.open(url, '_blank');
 }
@@ -724,13 +739,11 @@ function downloadReport(personnelId) {
 function openLinkModal(personnelId, facultyName) {
     const currentTermId = $('#semesterFilter').val() || window.CURRENT_TERM_ID;
     
-    // Clear previous state
     $('#linkForm')[0].reset();
     $('#linkResultBox').hide();
     $('#linkModalTitle').text(`Generate Link for Faculty: ${facultyName}`);
     $('#linkFacultyName').text(facultyName);
     
-    // Set hidden fields
     $('#linkPersonnelId').val(personnelId);
     $('#linkAcadCalendarId').val(currentTermId);
 
@@ -741,7 +754,7 @@ function closeLinkModal() {
     $('#linkModal').css('display', 'none');
 }
 
-// === NEW CYCLE MODAL FUNCTIONS ===
+
 function openNewCycleModal() {
     $('#newCycleModalTitle').text('Initiate New Evaluation Term');
     $('#newCycleForm')[0].reset();
@@ -752,7 +765,6 @@ function openNewCycleModal() {
 function closeNewCycleModal() {
     $('#newCycleModal').css('display', 'none');
 }
-// === END NEW CYCLE MODAL FUNCTIONS ===
 
 
 // --- JQUERY INITIALIZATION AND EVENT ATTACHMENT ---
@@ -762,29 +774,22 @@ $(document).ready(function() {
         const button = $(this);
         const originalHtml = button.html();
 
-        // 1. Show Loading State
         button.prop('disabled', true).html('<i class="bx bx-loader-alt bx-spin"></i>&nbsp; Updating...');
         
         $.post('/hr/fetch-evaluations', {}, function(response) {
-            // 2. On Success
-            loadEvaluations(); // Refresh table
-            
-            // Use an ephemeral feedback message (similar to a toast or quick flash)
+            loadEvaluations(); 
             const successHtml = `<i class='bx bx-check-shield'></i>&nbsp; Updated (${response.updated_count || '0'})!`;
             button.html(successHtml);
             
-            // Revert after a short delay
             setTimeout(() => {
                 button.prop('disabled', false).html(originalHtml);
             }, 3000);
 
         }).fail(function(xhr) {
-            // 3. On Failure
             const errorMessage = "Update Failed!";
             const errorHtml = `<i class='bx bx-x-circle'></i>&nbsp; ${errorMessage}`;
-            button.html(errorHtml).css('background', '#dc2626'); // Use red for failure
+            button.html(errorHtml).css('background', '#dc2626'); 
             
-            // Revert and reset style after a short delay
             setTimeout(() => {
                 button.prop('disabled', false).html(originalHtml).css('background', ''); 
                 alert(xhr.responseJSON?.message || "Failed to update evaluation records. See server logs.");
@@ -829,7 +834,7 @@ $(document).ready(function() {
                     messageBox.text(`Success! New term created (ID: ${response.new_id}). Refreshing data...`).css('color', '#16a34a');
                     
                     window.CURRENT_TERM_ID = response.new_id; 
-                    fetchSemestersAndPopulate(); // Rerun to update the dropdown list
+                    fetchSemestersAndPopulate(); 
                     
                     setTimeout(() => {
                         closeNewCycleModal();
@@ -899,7 +904,6 @@ $(document).ready(function() {
 
         btn.prop('disabled', true).html("<i class='bx bx-loader-alt bx-spin'></i>&nbsp; Generating...");
         
-        // This AJAX call targets the new API endpoint you will create in app.py
         $.ajax({
             url: '/api/hr/generate-evaluation-link',
             type: 'POST',

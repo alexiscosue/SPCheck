@@ -6086,6 +6086,10 @@ def api_hr_evaluations():
                 SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
                 SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
             0) AS overall_score,
+            -- NEW: Individual Scores
+            COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score END), 0) AS student_score,
+            COALESCE(SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END), 0) AS supervisor_score,
+            COALESCE(SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score END), 0) AS peer_score,
             
             -- Store position for separate filtering/list
             pr.position AS faculty_position
@@ -6152,13 +6156,17 @@ def api_hr_evaluations():
     return_db_connection(conn)
 
     # Shape results to JSON
+    # IMPORTANT: Ensure the column indices match the SQL SELECT statement (9 total columns before position)
     evals = [{
         "personnelid": row[0],
         "name": row[1],
         "department": row[2],
         "position": row[3],
         "studentresponses": row[4],
-        "avgscore": row[5]
+        "avgscore": row[5],
+        "student_score": row[6],     # NEW
+        "supervisor_score": row[7],  # NEW
+        "peer_score": row[8],        # NEW
     } for row in evaluations]
 
     # Combine table data and KPIs into the final JSON response
@@ -6167,7 +6175,7 @@ def api_hr_evaluations():
         evaluations=evals, 
         kpis=kpis,
         unique_positions=unique_positions,
-        acadcalendar_info=acadcalendar_info # NEW: Dynamic term info
+        acadcalendar_info=acadcalendar_info # Dynamic term info
     )
 
 
