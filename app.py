@@ -5223,7 +5223,7 @@ def hr_employee_profile(personnel_id):
             
             session['viewing_personnel_id'] = personnel_id
             
-            return render_template('hrmd/hr-profile.html', **employee_info)
+            return render_template('faculty&dean/faculty-profile.html', **employee_info)
         else:
             return "Employee not found", 404
             
@@ -5529,7 +5529,7 @@ def faculty_evaluations():
     faculty_info = get_faculty_info(session['user_id'])
     return render_template('faculty&dean/faculty-evaluations.html', **faculty_info)
 
-# EDITED BY CARDS
+# EDITED BY CARDS - FIXED VERSION
 @app.route('/faculty_promotion')
 @require_auth([20001, 20002])
 def faculty_promotion():
@@ -5540,7 +5540,7 @@ def faculty_promotion():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # ✅ Get faculty info for base template (name, college, profile image)
+    # Get faculty info and current academic term
     cursor.execute("""
         SELECT 
             p.personnel_id, 
@@ -5550,7 +5550,12 @@ def faculty_promotion():
             p.lastname,
             p.honorifics,
             c.collegename,
-            pr.profilepic
+            pr.profilepic,
+            (SELECT acadcalendar_id 
+            FROM acadcalendar 
+            WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend 
+            ORDER BY semesterstart DESC 
+            LIMIT 1)
         FROM personnel p
         LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
         LEFT JOIN college c ON p.college_id = c.college_id
@@ -5564,19 +5569,134 @@ def faculty_promotion():
         return_db_connection(conn)
         return "Faculty record not found", 400
     
-    faculty_id, hire_date, current_rank, firstname, lastname, honorifics, college, profilepic = result
+    (faculty_id, hire_date, current_rank, firstname, lastname, 
+     honorifics, college, profilepic, current_term_id) = result
     
-    # ✅ Build faculty name for base template
-    if honorifics:
-        faculty_name = f"{firstname} {lastname}, {honorifics}"
-    else:
-        faculty_name = f"{firstname} {lastname}"
+    # DEBUG: Print values
+    print(f"DEBUG: Faculty ID = {faculty_id}")
+    print(f"DEBUG: Current Term ID = {current_term_id}")
     
-    # ✅ Convert profile pic to base64
+    # Build faculty name
+    faculty_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+    
+    # Convert profile pic to base64
     profile_image_base64 = ''
     if profilepic:
         import base64
         profile_image_base64 = f"data:image/jpeg;base64,{base64.b64encode(bytes(profilepic)).decode('utf-8')}"
+    
+    # --- CHECK ELIGIBILITY CONDITIONS ---
+    lock_reasons = []
+    
+    # 1. Get attendance rate (minimum 80%) - FIXED QUERY
+    cursor.execute("""
+        SELECT 
+            COALESCE(AVG(ar.attendancerate), 0) AS avg_attendance_rate,
+            COUNT(*) as record_count
+        FROM attendancereport ar
+        WHERE ar.personnel_id = %s 
+          AND ar.acadcalendar_id = %s
+    """, (faculty_id, current_term_id))
+    
+    attendance_result = cursor.fetchone()
+    avg_attendance_rate = float(attendance_result[0]) if attendance_result and attendance_result[0] else 0.0
+    attendance_record_count = attendance_result[1] if attendance_result else 0
+    
+
+    print(f"DEBUG: Attendance Rate = {avg_attendance_rate}, Records = {attendance_record_count}, facullty id = {faculty_id}, term id = {current_term_id}")
+    
+    # 2. Get weighted evaluation score (minimum 3.0) - FIXED CALCULATION
+    cursor.execute("""
+        SELECT 
+            SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score ELSE 0 END) as student_total,
+            COUNT(CASE WHEN fe.evaluator_type = 'student' THEN 1 END) as student_count,
+            SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score ELSE 0 END) as supervisor_total,
+            COUNT(CASE WHEN fe.evaluator_type = 'supervisor' THEN 1 END) as supervisor_count
+        FROM faculty_evaluations fe
+        WHERE fe.personnel_id = %s 
+          AND fe.acadcalendar_id = %s
+    """, (faculty_id, current_term_id))
+    
+    eval_result = cursor.fetchone()
+    
+    weighted_eval_score = 0.0
+    if eval_result:
+        student_total = float(eval_result[0] or 0)
+        student_count = int(eval_result[1] or 0)
+        supervisor_total = float(eval_result[2] or 0)
+        supervisor_count = int(eval_result[3] or 0)
+        
+        # Calculate weighted average
+        student_avg = (student_total / student_count) if student_count > 0 else 0
+        supervisor_avg = (supervisor_total / supervisor_count) if supervisor_count > 0 else 0
+        
+        # Apply weights: 55% student, 35% supervisor (90% total, adjust if needed)
+        weighted_eval_score = (student_avg * 0.55) + (supervisor_avg * 0.35)
+        
+        print(f"DEBUG: Student Avg = {student_avg}, Supervisor Avg = {supervisor_avg}")
+        print(f"DEBUG: Weighted Eval Score = {weighted_eval_score}")
+    
+    # 3. Calculate years of service (minimum 3 years)
+    from datetime import date
+    today = date.today()
+    years_employed = 0
+    
+    if hire_date:
+        years_employed = today.year - hire_date.year
+        if (today.month < hire_date.month) or (today.month == hire_date.month and today.day < hire_date.day):
+            years_employed -= 1
+    
+    print(f"DEBUG: Years Employed = {years_employed}")
+    
+# --- ELIGIBILITY CHECKS ---
+    is_tenure_ok = years_employed >= 3
+    if not is_tenure_ok:
+        lock_reasons.append(f"Tenure: Requires minimum 3 years of service (Current: {years_employed} years).")
+
+    is_attendance_ok = avg_attendance_rate >= 80.0
+    if not is_attendance_ok:
+        lock_reasons.append(f"Attendance Rate: Must be 80.0% or higher (Current: {avg_attendance_rate:.1f}%).")
+
+    is_eval_ok = weighted_eval_score >= 3.0
+    if not is_eval_ok:
+        lock_reasons.append(f"Evaluation Score: Weighted average must be 3.00 or higher (Current: {weighted_eval_score:.2f}).")
+
+    # NEW: Check if 1 year has passed since last approved promotion
+    cursor.execute("""
+        SELECT pres_approval_date, requested_rank
+        FROM promotion_application
+        WHERE faculty_id = %s 
+        AND final_decision = 1
+        ORDER BY pres_approval_date DESC
+        LIMIT 1
+    """, (faculty_id,))
+
+    last_promotion = cursor.fetchone()
+    is_cooldown_ok = True
+    last_promotion_date = None
+    last_promoted_rank = None
+
+    if last_promotion:
+        last_promotion_date = last_promotion[0]
+        last_promoted_rank = last_promotion[1]
+        
+        if last_promotion_date:
+            from datetime import timedelta
+            days_since_promotion = (today - last_promotion_date.date()).days
+            years_since_promotion = days_since_promotion / 365.25
+            
+            print(f"DEBUG: Last promotion date = {last_promotion_date}, Days since = {days_since_promotion}, Years = {years_since_promotion:.2f}")
+            
+            if years_since_promotion < 1.0:
+                is_cooldown_ok = False
+                months_remaining = int((365.25 - days_since_promotion) / 30.44)
+                lock_reasons.append(f"Promotion Cooldown: Must wait 1 year after last promotion (Last promoted: {last_promotion_date.strftime('%B %d, %Y')}, {months_remaining} months remaining).")
+
+    # Final eligibility determination - NOW INCLUDING COOLDOWN
+    can_apply_for_promotion = is_tenure_ok and is_attendance_ok and is_eval_ok and is_cooldown_ok
+
+    print(f"DEBUG: Can Apply = {can_apply_for_promotion}")
+    print(f"DEBUG: Lock Reasons = {lock_reasons}")
     
     # Define rank hierarchy
     rank_hierarchy = [
@@ -5586,69 +5706,18 @@ def faculty_promotion():
         "Professor"
     ]
     
-    # Get available ranks (only higher ranks)
+    # Get available ranks
     available_ranks = []
     if current_rank in rank_hierarchy:
         current_index = rank_hierarchy.index(current_rank)
-        available_ranks = rank_hierarchy[current_index + 1:]
+            # Only allow the next rank (one step higher)
+        if current_index + 1 < len(rank_hierarchy):
+            available_ranks = [rank_hierarchy[current_index + 1]]
     else:
-        available_ranks = rank_hierarchy
+            # If current rank is not in hierarchy, allow only Instructor
+        available_ranks = [rank_hierarchy[0]]
     
-    # === REGULARIZATION CALCULATION FROM HIRE DATE ===
-    from datetime import date
-    today = date.today()
-    years_employed = 0
-    months_employed = 0
-    regularization_percentage = 0
-    regularization_status = "No hire date"
-    regularization_message = "Contact HRMD to update your hire date."
-    tenure_type = "Unknown"
-    can_apply_for_promotion = False
-    
-    if hire_date:
-        # Calculate years and months
-        years_employed = today.year - hire_date.year
-        months_employed = today.month - hire_date.month
-        
-        if months_employed < 0:
-            years_employed -= 1
-            months_employed += 12
-        
-        # Total months employed
-        total_months_employed = (years_employed * 12) + months_employed
-        
-        # Determine tenure type and calculate percentage based ONLY on hire date
-        if years_employed < 3:
-            # Probationary (0-3 years)
-            tenure_type = "Probationary"
-            probation_months = 36
-            regularization_percentage = min(round((total_months_employed / probation_months) * 100), 100)
-            regularization_status = f"Probationary (Year {years_employed + 1} of 3)"
-            months_remaining = probation_months - total_months_employed
-            regularization_message = f"ℹ️ {months_remaining} months until eligible for Regular status."
-            can_apply_for_promotion = False
-            
-        elif 3 <= years_employed < 7:
-            # Regular (3-7 years)
-            tenure_type = "Regular"
-            years_past_probation = years_employed - 3
-            months_past_probation = (years_past_probation * 12) + months_employed
-            regular_period_months = 48
-            regularization_percentage = min(round((months_past_probation / regular_period_months) * 100), 100)
-            regularization_status = f"Regular Employee (Year {years_past_probation + 1} of 4)"
-            years_to_tenure = 7 - years_employed
-            regularization_message = f"✅ You are a Regular employee. {years_to_tenure} year{'s' if years_to_tenure != 1 else ''} until eligible for Tenured status."
-            can_apply_for_promotion = True
-            
-        else:
-            # Tenured (7+ years)
-            tenure_type = "Tenured"
-            regularization_percentage = 100
-            regularization_status = "Tenured Employee"
-            regularization_message = "✅ You have achieved Tenured status."
-            can_apply_for_promotion = True
-    
-    # === CHECK FOR ACTIVE REGULARIZATION APPLICATION ===
+    # Get regularization status data
     cursor.execute("""
         SELECT 
             years_of_service,
@@ -5669,14 +5738,7 @@ def faculty_promotion():
     
     if reg_row:
         years_at_initiation = float(reg_row[0]) if reg_row[0] else years_employed
-        
-        # Calculate requested tenure based on years at initiation
-        if years_at_initiation >= 7:
-            requested_tenure = "Tenured"
-        elif years_at_initiation >= 3:
-            requested_tenure = "Regular"
-        else:
-            requested_tenure = "Regular"
+        requested_tenure = "Tenured" if years_at_initiation >= 7 else "Regular"
         
         regularization_status_data = {
             'requested_tenure': requested_tenure,
@@ -5688,7 +5750,7 @@ def faculty_promotion():
             'date_initiated': reg_row[6]
         }
     
-    # === CURRENT PROMOTION APPLICATION (ONLY ACTIVE) ===
+    # Get current active promotion application
     cursor.execute("""
         SELECT application_id, current_status, date_submitted, 
                hrmd_approval_date, vpa_approval_date, pres_approval_date, 
@@ -5703,7 +5765,7 @@ def faculty_promotion():
     
     row = cursor.fetchone()
     
-    # === APPLICATION HISTORY (ALL APPLICATIONS) ===
+    # Get application history
     cursor.execute("""
         SELECT date_submitted, current_status, final_decision,
                hrmd_approval_date, vpa_approval_date, pres_approval_date,
@@ -5721,21 +5783,15 @@ def faculty_promotion():
     # Build history list
     application_history = []
     for h in history_rows:
-        date_sub = h[0]
-        status = h[1]
-        decision = h[2]
-        hrmd_date = h[3]
-        vpa_date = h[4]
-        pres_date = h[5]
-        requested_pos = h[6]
-        rejection_reason = h[7]
+        (date_sub, status, decision, hrmd_date, vpa_date, pres_date, 
+         requested_pos, rejection_reason) = h
         
         if decision == 1:
             decision_text = 'Approved'
             remarks = 'Application approved'
         elif decision == 0:
             decision_text = 'Rejected'
-            remarks = 'Application rejected'
+            remarks = rejection_reason if rejection_reason else 'Application rejected'
         else:
             decision_text = 'Pending'
             remarks = 'Pending review'
@@ -5745,32 +5801,31 @@ def faculty_promotion():
             'current_status': status,
             'final_decision': decision_text,
             'remarks': remarks,
+            'rejection_reason': rejection_reason,
             'hrmd_approval_date': hrmd_date,
             'vpa_approval_date': vpa_date,
             'pres_approval_date': pres_date,
-            'requested_position': requested_pos,
-            'rejection_reason': rejection_reason
+            'requested_position': requested_pos
         })
     
     # Build template data
     template_data = {
-        # ✅ Base template variables
         'faculty_name': faculty_name,
         'college': college or 'College of Computer Studies',
         'profile_image_base64': profile_image_base64,
-        
-        # Promotion-specific data
-        'regularization_percentage': regularization_percentage,
-        'regularization_status': regularization_status,
-        'regularization_message': regularization_message,
-        'tenure_type': tenure_type,
+        'regularization_percentage': 100 if years_employed >= 7 else min(round((years_employed / 3) * 100), 100) if years_employed > 0 else 0,
+        'regularization_status': "Tenured Employee" if years_employed >= 7 else "Regular Employee" if years_employed >= 3 else "Probationary",
+        'tenure_type': "Tenured" if years_employed >= 7 else "Regular" if years_employed >= 3 else "Probationary",
         'years_employed': years_employed,
-        'months_employed': months_employed,
+        'months_employed': (today.year - hire_date.year) * 12 + (today.month - hire_date.month) if hire_date else 0,
         'hire_date': hire_date,
         'regularization_status_data': regularization_status_data,
         'current_rank': current_rank,
         'available_ranks': available_ranks,
         'application_history': application_history,
+        'avg_attendance_rate': f"{avg_attendance_rate:.1f}",
+        'weighted_eval_score': f"{weighted_eval_score:.2f}",
+        'lock_reasons': lock_reasons,
         'can_apply_for_promotion': can_apply_for_promotion,
         'application_id': None,
         'current_status': None,
@@ -5810,7 +5865,7 @@ def faculty_promotion():
 
 
 @app.route('/faculty_profile')
-@require_auth([20001, 20002])
+@require_auth([20001, 20002, 20003])
 def faculty_profile():
     faculty_info = get_faculty_info(session['user_id'])
     return render_template('faculty&dean/faculty-profile.html', **faculty_info)
