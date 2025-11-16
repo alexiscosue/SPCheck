@@ -360,6 +360,67 @@ class RFIDReader:
                         INSERT INTO attendance (attendance_id, personnel_id, class_id, attendancestatus, timein, timeout)
                         VALUES (%s, %s, %s, %s, %s, NULL)
                     """, (new_id, personnel_id, class_id, status, current_time))
+
+                    try:
+                        cursor.execute("SELECT acadcalendar_id FROM schedule WHERE class_id = %s", (class_id,))
+                        acadcal_result = cursor.fetchone()
+                        if acadcal_result:
+                            acadcalendar_id = acadcal_result[0]
+                            
+                            # Calculate stats
+                            cursor.execute("""
+                                SELECT 
+                                    COUNT(*) FILTER (WHERE attendancestatus = 'Present') as present,
+                                    COUNT(*) FILTER (WHERE attendancestatus = 'Late') as late,
+                                    COUNT(*) FILTER (WHERE attendancestatus = 'Excused') as excused,
+                                    COUNT(*) FILTER (WHERE attendancestatus = 'Absent') as absent,
+                                    COUNT(*) as total
+                                FROM attendance
+                                WHERE personnel_id = %s AND class_id = %s
+                            """, (personnel_id, class_id))
+                            
+                            stats = cursor.fetchone()
+                            if stats:
+                                present, late, excused, absent, total = stats
+                                
+                                if total > 0:
+                                    attendance_rate = ((present + excused + (late * 0.75)) / total) * 100
+                                else:
+                                    attendance_rate = 0.0
+                                
+                                # Check if report exists
+                                cursor.execute("""
+                                    SELECT attendancereport_id FROM attendancereport
+                                    WHERE personnel_id = %s AND class_id = %s AND acadcalendar_id = %s
+                                """, (personnel_id, class_id, acadcalendar_id))
+                                
+                                existing_report = cursor.fetchone()
+                                
+                                if existing_report:
+                                    cursor.execute("""
+                                        UPDATE attendancereport 
+                                        SET presentcount = %s, latecount = %s, excusedcount = %s,
+                                            absentcount = %s, totalclasses = %s, attendancerate = %s,
+                                            lastupdated = CURRENT_TIMESTAMP
+                                        WHERE attendancereport_id = %s
+                                    """, (present, late, excused, absent, total, attendance_rate, existing_report[0]))
+                                else:
+                                    cursor.execute("SELECT COALESCE(MAX(attendancereport_id), 130000) + 1 FROM attendancereport")
+                                    new_report_id = cursor.fetchone()[0]
+                                    
+                                    cursor.execute("""
+                                        INSERT INTO attendancereport (
+                                            attendancereport_id, personnel_id, class_id, acadcalendar_id,
+                                            presentcount, latecount, excusedcount, absentcount,
+                                            totalclasses, attendancerate, lastupdated
+                                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                                    """, (new_report_id, personnel_id, class_id, acadcalendar_id,
+                                          present, late, excused, absent, total, attendance_rate))
+                                
+                                print(f"📊 Updated attendance report: Rate={attendance_rate:.2f}%")
+                                
+                    except Exception as e:
+                        print(f"⚠️ Could not update attendance report: {e}")
                     
                     notification_data = {
                         'personnel_id': personnel_id,
@@ -511,6 +572,67 @@ class RFIDReader:
                         # Valid time-out - record it
                         cursor.execute("UPDATE attendance SET timeout = %s WHERE attendance_id = %s", 
                                     (current_time, attendance_id))
+                        
+                        try:
+                            cursor.execute("SELECT acadcalendar_id FROM schedule WHERE class_id = %s", (class_id,))
+                            acadcal_result = cursor.fetchone()
+                            if acadcal_result:
+                                acadcalendar_id = acadcal_result[0]
+                                
+                                # Calculate stats
+                                cursor.execute("""
+                                    SELECT 
+                                        COUNT(*) FILTER (WHERE attendancestatus = 'Present') as present,
+                                        COUNT(*) FILTER (WHERE attendancestatus = 'Late') as late,
+                                        COUNT(*) FILTER (WHERE attendancestatus = 'Excused') as excused,
+                                        COUNT(*) FILTER (WHERE attendancestatus = 'Absent') as absent,
+                                        COUNT(*) as total
+                                    FROM attendance
+                                    WHERE personnel_id = %s AND class_id = %s
+                                """, (personnel_id, class_id))
+                                
+                                stats = cursor.fetchone()
+                                if stats:
+                                    present, late, excused, absent, total = stats
+                                    
+                                    if total > 0:
+                                        attendance_rate = ((present + excused + (late * 0.75)) / total) * 100
+                                    else:
+                                        attendance_rate = 0.0
+                                    
+                                    # Check if report exists
+                                    cursor.execute("""
+                                        SELECT attendancereport_id FROM attendancereport
+                                        WHERE personnel_id = %s AND class_id = %s AND acadcalendar_id = %s
+                                    """, (personnel_id, class_id, acadcalendar_id))
+                                    
+                                    existing_report = cursor.fetchone()
+                                    
+                                    if existing_report:
+                                        cursor.execute("""
+                                            UPDATE attendancereport 
+                                            SET presentcount = %s, latecount = %s, excusedcount = %s,
+                                                absentcount = %s, totalclasses = %s, attendancerate = %s,
+                                                lastupdated = CURRENT_TIMESTAMP
+                                            WHERE attendancereport_id = %s
+                                        """, (present, late, excused, absent, total, attendance_rate, existing_report[0]))
+                                    else:
+                                        cursor.execute("SELECT COALESCE(MAX(attendancereport_id), 130000) + 1 FROM attendancereport")
+                                        new_report_id = cursor.fetchone()[0]
+                                        
+                                        cursor.execute("""
+                                            INSERT INTO attendancereport (
+                                                attendancereport_id, personnel_id, class_id, acadcalendar_id,
+                                                presentcount, latecount, excusedcount, absentcount,
+                                                totalclasses, attendancerate, lastupdated
+                                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                                        """, (new_report_id, personnel_id, class_id, acadcalendar_id,
+                                              present, late, excused, absent, total, attendance_rate))
+                                    
+                                    print(f"📊 Updated attendance report: Rate={attendance_rate:.2f}%")
+                                    
+                        except Exception as e:
+                            print(f"⚠️ Could not update attendance report: {e}")
                         
                         notification_data = {
                             'personnel_id': personnel_id,

@@ -32,7 +32,7 @@ app.secret_key = 'spc-faculty-system-2025-secret-key'
 
 # ========== SESSION CONFIGURATION ==========
 app.config['SESSION_PERMANENT'] = False
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=60)  # 1 hour max session
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=60)  
 
 @app.before_request
 def make_session_permanent():
@@ -70,6 +70,100 @@ def convert_to_24hour(time_str):
         hours = 0
     
     return f"{hours:02d}:{minutes:02d}:00"
+
+def update_attendance_report(personnel_id, class_id, acadcalendar_id, conn=None):
+    """
+    Calculate and update attendance report for a specific personnel/class/semester.
+    Called whenever attendance is recorded or modified.
+    """
+    should_close = False
+    if conn is None:
+        conn = get_db_connection()
+        should_close = True
+    
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                COUNT(*) FILTER (WHERE attendancestatus = 'Present') as present_count,
+                COUNT(*) FILTER (WHERE attendancestatus = 'Late') as late_count,
+                COUNT(*) FILTER (WHERE attendancestatus = 'Excused') as excused_count,
+                COUNT(*) FILTER (WHERE attendancestatus = 'Absent') as absent_count,
+                COUNT(*) as total_classes
+            FROM attendance
+            WHERE personnel_id = %s 
+            AND class_id = %s
+            AND class_id IN (
+                SELECT class_id FROM schedule WHERE acadcalendar_id = %s
+            )
+        """, (personnel_id, class_id, acadcalendar_id))
+        
+        stats = cursor.fetchone()
+        if not stats:
+            cursor.close()
+            if should_close:
+                return_db_connection(conn)
+            return
+        
+        present, late, excused, absent, total = stats
+        
+        # Calculate attendance rate: ((present + excused + (late * 0.75)) / total) * 100
+        if total > 0:
+            attendance_rate = ((present + excused + (late * 0.75)) / total) * 100
+        else:
+            attendance_rate = 0.0
+        
+        cursor.execute("""
+            SELECT attendancereport_id FROM attendancereport
+            WHERE personnel_id = %s AND class_id = %s AND acadcalendar_id = %s
+        """, (personnel_id, class_id, acadcalendar_id))
+        
+        existing = cursor.fetchone()
+        
+        philippines_tz = pytz.timezone('Asia/Manila')
+        current_time = datetime.now(philippines_tz)
+        
+        if existing:
+            cursor.execute("""
+                UPDATE attendancereport 
+                SET presentcount = %s,
+                    latecount = %s,
+                    excusedcount = %s,
+                    absentcount = %s,
+                    totalclasses = %s,
+                    attendancerate = %s,
+                    lastupdated = %s
+                WHERE attendancereport_id = %s
+            """, (present, late, excused, absent, total, attendance_rate, current_time, existing[0]))
+        else:
+            cursor.execute("SELECT COALESCE(MAX(attendancereport_id), 130000) + 1 FROM attendancereport")
+            new_id = cursor.fetchone()[0]
+            
+            cursor.execute("""
+                INSERT INTO attendancereport (
+                    attendancereport_id, personnel_id, class_id, acadcalendar_id,
+                    presentcount, latecount, excusedcount, absentcount, 
+                    totalclasses, attendancerate, lastupdated
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (new_id, personnel_id, class_id, acadcalendar_id, 
+                  present, late, excused, absent, total, attendance_rate, current_time))
+        
+        conn.commit()
+        cursor.close()
+        
+        if should_close:
+            return_db_connection(conn)
+        
+        print(f"✅ Updated attendance report: Personnel {personnel_id}, Class {class_id}, Rate: {attendance_rate:.2f}")
+        
+    except Exception as e:
+        print(f"❌ Error updating attendance report: {e}")
+        if conn:
+            conn.rollback()
+        if should_close and cursor:
+            cursor.close()
+            return_db_connection(conn)
 
 
 # ========== CONNECTION POOLING ==========
@@ -274,6 +368,68 @@ def check_and_record_absences():
                                 absences_recorded += 1
                                 
                                 print(f"ABSENCE RECORDED: {firstname} {lastname} - {subject_code} on {check_date}")
+
+                                try:
+                                    cursor.execute("""
+                                        SELECT acadcalendar_id FROM schedule WHERE class_id = %s
+                                    """, (class_id,))
+                                    acadcal_result = cursor.fetchone()
+                                    
+                                    if acadcal_result:
+                                        acadcalendar_id = acadcal_result[0]
+                                        
+                                        cursor.execute("""
+                                            SELECT 
+                                                COUNT(*) FILTER (WHERE attendancestatus = 'Present') as present,
+                                                COUNT(*) FILTER (WHERE attendancestatus = 'Late') as late,
+                                                COUNT(*) FILTER (WHERE attendancestatus = 'Excused') as excused,
+                                                COUNT(*) FILTER (WHERE attendancestatus = 'Absent') as absent,
+                                                COUNT(*) as total
+                                            FROM attendance
+                                            WHERE personnel_id = %s AND class_id = %s
+                                        """, (personnel_id, class_id))
+                                        
+                                        stats = cursor.fetchone()
+                                        if stats:
+                                            present, late, excused, absent, total = stats
+                                            
+                                            if total > 0:
+                                                attendance_rate = ((present + excused + (late * 0.75)) / total) * 100
+                                            else:
+                                                attendance_rate = 0.0
+
+                                            cursor.execute("""
+                                                SELECT attendancereport_id FROM attendancereport
+                                                WHERE personnel_id = %s AND class_id = %s AND acadcalendar_id = %s
+                                            """, (personnel_id, class_id, acadcalendar_id))
+                                            
+                                            existing_report = cursor.fetchone()
+                                            
+                                            if existing_report:
+                                                cursor.execute("""
+                                                    UPDATE attendancereport 
+                                                    SET presentcount = %s, latecount = %s, excusedcount = %s,
+                                                        absentcount = %s, totalclasses = %s, attendancerate = %s,
+                                                        lastupdated = CURRENT_TIMESTAMP
+                                                    WHERE attendancereport_id = %s
+                                                """, (present, late, excused, absent, total, attendance_rate, existing_report[0]))
+                                            else:
+                                                cursor.execute("SELECT COALESCE(MAX(attendancereport_id), 130000) + 1 FROM attendancereport")
+                                                new_report_id = cursor.fetchone()[0]
+                                                
+                                                cursor.execute("""
+                                                    INSERT INTO attendancereport (
+                                                        attendancereport_id, personnel_id, class_id, acadcalendar_id,
+                                                        presentcount, latecount, excusedcount, absentcount,
+                                                        totalclasses, attendancerate, lastupdated
+                                                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                                                """, (new_report_id, personnel_id, class_id, acadcalendar_id,
+                                                      present, late, excused, absent, total, attendance_rate))
+                                            
+                                            print(f"📊 Updated report after absence: Rate={attendance_rate:.2f}%")
+                                            
+                                except Exception as e:
+                                    print(f"⚠️ Could not update attendance report after absence: {e}")
                         
                         check_date += timedelta(days=7)
             
@@ -1420,6 +1576,21 @@ def api_excuse_absence_bulk():
                 updated_count += 1
         
         conn.commit()
+
+        try:
+            cursor.execute("""
+                SELECT DISTINCT sch.class_id, sch.acadcalendar_id 
+                FROM attendance a
+                JOIN schedule sch ON a.class_id = sch.class_id
+                WHERE a.personnel_id = %s 
+                AND DATE(a.timein AT TIME ZONE 'Asia/Manila') = %s
+            """, (personnel_id, target_date))
+            
+            affected_classes = cursor.fetchall()
+            for class_id, acadcal_id in affected_classes:
+                update_attendance_report(personnel_id, class_id, acadcal_id, conn)
+        except Exception as e:
+            print(f"Warning: Could not update attendance reports: {e}")
         
         hr_user_id = session['user_id']
         hr_personnel_info = get_personnel_info(hr_user_id)
@@ -1458,6 +1629,268 @@ def api_excuse_absence_bulk():
         if conn:
             conn.rollback()
         return {'success': False, 'error': str(e)}
+
+@app.route('/api/attendance-report/<int:personnel_id>/<int:class_id>')
+@require_auth([20001, 20002, 20003, 20004])
+def api_get_attendance_report(personnel_id, class_id):
+    """Get attendance report for specific personnel and class"""
+    try:
+        semester_id = request.args.get('semester_id')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get current semester if not specified
+        if not semester_id:
+            cursor.execute("""
+                SELECT acadcalendar_id FROM acadcalendar 
+                WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                ORDER BY semesterstart DESC LIMIT 1
+            """)
+            result = cursor.fetchone()
+            semester_id = result[0] if result else None
+        
+        if not semester_id:
+            cursor.close()
+            return_db_connection(conn)
+            return jsonify({'success': False, 'error': 'No active semester found'})
+        
+        # Get attendance report
+        cursor.execute("""
+            SELECT 
+                ar.presentcount,
+                ar.latecount,
+                ar.excusedcount,
+                ar.absentcount,
+                ar.totalclasses,
+                ar.attendancerate,
+                ar.lastupdated,
+                p.firstname,
+                p.lastname,
+                p.honorifics,
+                sub.subjectcode,
+                sub.subjectname,
+                sch.classsection,
+                ac.semester,
+                ac.acadyear
+            FROM attendancereport ar
+            JOIN personnel p ON ar.personnel_id = p.personnel_id
+            JOIN schedule sch ON ar.class_id = sch.class_id
+            JOIN subjects sub ON sch.subject_id = sub.subject_id
+            JOIN acadcalendar ac ON ar.acadcalendar_id = ac.acadcalendar_id
+            WHERE ar.personnel_id = %s 
+            AND ar.class_id = %s 
+            AND ar.acadcalendar_id = %s
+        """, (personnel_id, class_id, semester_id))
+        
+        result = cursor.fetchone()
+        cursor.close()
+        return_db_connection(conn)
+        
+        if not result:
+            return jsonify({
+                'success': False, 
+                'error': 'No attendance report found for this class'
+            })
+        
+        (present, late, excused, absent, total, rate, updated, 
+         firstname, lastname, honorifics, subjectcode, subjectname, 
+         section, semester, acadyear) = result
+        
+        faculty_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+        
+        return jsonify({
+            'success': True,
+            'report': {
+                'faculty_name': faculty_name,
+                'subject_code': subjectcode,
+                'subject_name': subjectname,
+                'section': section,
+                'semester': f"{semester}, {acadyear}",
+                'present_count': present,
+                'late_count': late,
+                'excused_count': excused,
+                'absent_count': absent,
+                'total_classes': total,
+                'attendance_rate': round(float(rate), 2),
+                'last_updated': updated.strftime('%Y-%m-%d %H:%M:%S') if updated else 'N/A'
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error fetching attendance report: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/attendance-reports/personnel/<int:personnel_id>')
+@require_auth([20001, 20002, 20003, 20004])
+def api_get_personnel_attendance_reports(personnel_id):
+    """Get all attendance reports for a personnel across all classes"""
+    try:
+        semester_id = request.args.get('semester_id')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        if not semester_id:
+            cursor.execute("""
+                SELECT acadcalendar_id FROM acadcalendar 
+                WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                ORDER BY semesterstart DESC LIMIT 1
+            """)
+            result = cursor.fetchone()
+            semester_id = result[0] if result else None
+        
+        if not semester_id:
+            cursor.close()
+            return_db_connection(conn)
+            return jsonify({'success': False, 'error': 'No active semester found'})
+        
+        cursor.execute("""
+            SELECT 
+                ar.class_id,
+                ar.presentcount,
+                ar.latecount,
+                ar.excusedcount,
+                ar.absentcount,
+                ar.totalclasses,
+                ar.attendancerate,
+                sub.subjectcode,
+                sub.subjectname,
+                sch.classsection,
+                sch.classroom
+            FROM attendancereport ar
+            JOIN schedule sch ON ar.class_id = sch.class_id
+            JOIN subjects sub ON sch.subject_id = sub.subject_id
+            WHERE ar.personnel_id = %s 
+            AND ar.acadcalendar_id = %s
+            ORDER BY sub.subjectcode
+        """, (personnel_id, semester_id))
+        
+        results = cursor.fetchall()
+        cursor.close()
+        return_db_connection(conn)
+        
+        reports = []
+        for row in results:
+            (class_id, present, late, excused, absent, total, rate,
+             subjectcode, subjectname, section, classroom) = row
+            
+            reports.append({
+                'class_id': class_id,
+                'subject_code': subjectcode,
+                'subject_name': subjectname,
+                'section': section,
+                'classroom': classroom,
+                'present_count': present,
+                'late_count': late,
+                'excused_count': excused,
+                'absent_count': absent,
+                'total_classes': total,
+                'attendance_rate': round(float(rate), 2)
+            })
+        
+        return jsonify({
+            'success': True,
+            'reports': reports
+        })
+        
+    except Exception as e:
+        print(f"Error fetching personnel attendance reports: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/hr/attendance-reports')
+@require_auth([20003])
+def api_get_all_attendance_reports():
+    """Get all attendance reports for HR dashboard"""
+    try:
+        semester_id = request.args.get('semester_id')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        if not semester_id:
+            cursor.execute("""
+                SELECT acadcalendar_id FROM acadcalendar 
+                WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                ORDER BY semesterstart DESC LIMIT 1
+            """)
+            result = cursor.fetchone()
+            semester_id = result[0] if result else None
+        
+        if not semester_id:
+            cursor.close()
+            return_db_connection(conn)
+            return jsonify({'success': False, 'error': 'No active semester found'})
+        
+        cursor.execute("""
+            SELECT 
+                ar.personnel_id,
+                ar.class_id,
+                ar.presentcount,
+                ar.latecount,
+                ar.excusedcount,
+                ar.absentcount,
+                ar.totalclasses,
+                ar.attendancerate,
+                p.firstname,
+                p.lastname,
+                p.honorifics,
+                sub.subjectcode,
+                sub.subjectname,
+                sch.classsection,
+                sch.classroom
+            FROM attendancereport ar
+            JOIN personnel p ON ar.personnel_id = p.personnel_id
+            JOIN schedule sch ON ar.class_id = sch.class_id
+            JOIN subjects sub ON sch.subject_id = sub.subject_id
+            WHERE ar.acadcalendar_id = %s
+            AND p.role_id IN (20001, 20002)
+            ORDER BY p.lastname, p.firstname, sub.subjectcode
+        """, (semester_id,))
+        
+        results = cursor.fetchall()
+        cursor.close()
+        return_db_connection(conn)
+        
+        reports = []
+        for row in results:
+            (personnel_id, class_id, present, late, excused, absent, total, rate,
+             firstname, lastname, honorifics, subjectcode, subjectname, section, classroom) = row
+            
+            faculty_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+            
+            reports.append({
+                'personnel_id': personnel_id,
+                'class_id': class_id,
+                'faculty_name': faculty_name,
+                'subject_code': subjectcode,
+                'subject_name': subjectname,
+                'section': section,
+                'classroom': classroom,
+                'present_count': present,
+                'late_count': late,
+                'excused_count': excused,
+                'absent_count': absent,
+                'total_classes': total,
+                'attendance_rate': round(float(rate), 2)
+            })
+        
+        return jsonify({
+            'success': True,
+            'reports': reports
+        })
+        
+    except Exception as e:
+        print(f"Error fetching all attendance reports: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/faculty/teaching-schedule/<int:semester_id>')
 @require_auth([20001, 20002, 20003])
@@ -2619,7 +3052,7 @@ def api_delete_document(doc_type, index):
         import traceback
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
-    
+
 @app.route('/api/hr/faculty-attendance')
 @require_auth([20003])
 def api_hr_faculty_attendance():
@@ -3098,6 +3531,14 @@ def api_update_attendance_time():
                                         before_value=f"Time-in: {before_timein_str}, Time-out: {before_timeout_str}, Status: {original_status}",
                                         after_value=f"Time-in: {after_timein_str}, Time-out: {after_timeout_str}, Status: {new_status}"
                                     )
+
+                                    try:
+                                        cursor.execute("SELECT acadcalendar_id FROM schedule WHERE class_id = %s", (class_id,))
+                                        acadcal_result = cursor.fetchone()
+                                        if acadcal_result:
+                                            update_attendance_report(personnel_id, class_id, acadcal_result[0], conn)
+                                    except Exception as e:
+                                        print(f"Warning: Could not update attendance report: {e}")
                                     
                                 print(f"   ✅ Successfully updated attendance_id: {attendance_id}")
                     else:
