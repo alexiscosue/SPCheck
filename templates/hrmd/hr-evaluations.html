@@ -182,7 +182,6 @@
                         <option value="">Select Semester</option>
                         <option value="First Semester">First Semester</option>
                         <option value="Second Semester">Second Semester</option>
-                        <option value="Summer Semester">Third Semester</option>
                     </select>
                     
                     <label for="new_acadyear">Academic Year (e.g., 2025-2026)</label>
@@ -225,6 +224,44 @@
                     </button>
                     <button class="btn primary" id="confirmDeleteBtn" onclick="confirmDelete()" style="flex: 1; background: #dc2626;">
                         <i class='bx bx-trash'></i>&nbsp; Delete Permanently
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="linkModal" class="hr-modal-wrapper" style="display: none;">
+        <div class="hr-modal-content" style="max-width: 500px;">
+            <div class="emp-modal-header" style="background: #3b82f6;">
+                <h2 id="linkModalTitle" style="color: white; font-size: 1.2rem;">Generate Link for Faculty: N/A</h2>
+                <span class="emp-close" onclick="closeLinkModal()" style="color: white;">&times;</span>
+            </div>
+            <div class="emp-modal-body">
+                <p style="margin-bottom: 20px;">
+                    Select the evaluator type to generate a pre-filled Google Form link for <strong id="linkFacultyName">N/A</strong>.
+                </p>
+                <form id="linkForm">
+                    <input type="hidden" id="linkPersonnelId">
+                    <input type="hidden" id="linkAcadCalendarId">
+
+                    <label for="evaluatorType">Evaluator Type</label>
+                    <select id="evaluatorType" required>
+                        <option value="">Select Evaluator</option>
+                        <option value="student">Student</option>
+                        <option value="supervisor">Supervisor</option>
+                        <option value="peer">Peer</option>
+                    </select>
+
+                    <button type="submit" class="btn primary" id="generateLinkBtn" style="width: 100%; margin-top: 15px; background: #3b82f6;">
+                        <i class='bx bx-link-alt'></i>&nbsp; Generate Link
+                    </button>
+                </form>
+
+                <div id="linkResultBox" class="card" style="margin-top: 20px; display:none; background: #f0fdf4; border: 1px solid #d1fae5;">
+                    <p style="font-weight: 600; color: #065f46; margin-bottom: 8px;">✅ Link Generated:</p>
+                    <textarea id="generatedLink" rows="3" readonly style="width: 100%; border: 1px solid #d1fae5; padding: 10px; resize: none; font-size: 13px; background: white;"></textarea>
+                    <button class="btn secondary" id="copyLinkBtn" style="margin-top: 10px;">
+                        <i class='bx bx-copy'></i>&nbsp; Copy to Clipboard
                     </button>
                 </div>
             </div>
@@ -300,6 +337,9 @@ function renderTablePage(pageNumber) {
             `<td>
                 <button class="btn action" onclick="openModal(${row.personnelid}, '${row.name}', ${rating.toFixed(2)}, ${studentResponses})"><i class='bx bx-show-alt'></i>&nbsp;View</button>
                 <button class="btn secondary" onclick="downloadReport(${row.personnelid})" ${disableDownload}><i class='bx bx-download'></i></button>
+                <button class="btn action" onclick="openLinkModal(${row.personnelid}, '${row.name}')" title="Generate Evaluation Link">
+                    <i class='bx bx-link-alt'></i>
+                </button>
             </td>` +
           '</tr>'
         );
@@ -681,6 +721,26 @@ function downloadReport(personnelId) {
     window.open(url, '_blank');
 }
 
+function openLinkModal(personnelId, facultyName) {
+    const currentTermId = $('#semesterFilter').val() || window.CURRENT_TERM_ID;
+    
+    // Clear previous state
+    $('#linkForm')[0].reset();
+    $('#linkResultBox').hide();
+    $('#linkModalTitle').text(`Generate Link for Faculty: ${facultyName}`);
+    $('#linkFacultyName').text(facultyName);
+    
+    // Set hidden fields
+    $('#linkPersonnelId').val(personnelId);
+    $('#linkAcadCalendarId').val(currentTermId);
+
+    $('#linkModal').css('display', 'flex');
+}
+
+function closeLinkModal() {
+    $('#linkModal').css('display', 'none');
+}
+
 // === NEW CYCLE MODAL FUNCTIONS ===
 function openNewCycleModal() {
     $('#newCycleModalTitle').text('Initiate New Evaluation Term');
@@ -819,8 +879,67 @@ $(document).ready(function() {
             closeDeleteModal();
         }
     });
+    
+    $('#linkModal').click(function(event) {
+        if (event.target === this) {
+            closeLinkModal();
+        }
+    });
+    
+    // 7. Link Generation Form Handler
+    $('#linkForm').submit(function(e) {
+        e.preventDefault();
+        
+        const btn = $('#generateLinkBtn');
+        const originalHtml = btn.html();
+        
+        const facultyId = $('#linkPersonnelId').val();
+        const termId = $('#linkAcadCalendarId').val();
+        const evaluatorType = $('#evaluatorType').val();
 
-    // 7. Initial data load (Starts with fetching semesters)
+        btn.prop('disabled', true).html("<i class='bx bx-loader-alt bx-spin'></i>&nbsp; Generating...");
+        
+        // This AJAX call targets the new API endpoint you will create in app.py
+        $.ajax({
+            url: '/api/hr/generate-evaluation-link',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                personnel_id: facultyId,
+                acadcalendar_id: termId,
+                evaluator_type: evaluatorType
+            }),
+            success: function(response) {
+                if (response.success && response.link) {
+                    $('#generatedLink').val(response.link);
+                    $('#linkResultBox').show();
+                } else {
+                    alert(`Error generating link: ${response.error}`);
+                    $('#linkResultBox').hide();
+                }
+                btn.prop('disabled', false).html(originalHtml);
+            },
+            error: function(xhr) {
+                alert(`API Error: ${xhr.responseJSON?.error || 'Server error generating link.'}`);
+                btn.prop('disabled', false).html(originalHtml);
+            }
+        });
+    });
+    
+    // 8. Copy Link Button Handler
+    $('#copyLinkBtn').click(function() {
+        const linkField = $('#generatedLink');
+        linkField.select();
+        document.execCommand('copy');
+        
+        const originalText = $(this).html();
+        $(this).html("<i class='bx bx-check'></i>&nbsp; Copied!");
+        setTimeout(() => {
+            $(this).html(originalText);
+        }, 1500);
+    });
+
+    // 9. Initial data load (Starts with fetching semesters)
     fetchSemestersAndPopulate();
 });
 </script>
