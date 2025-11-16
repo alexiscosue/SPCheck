@@ -6141,6 +6141,10 @@ def api_hr_evaluations():
                 SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
                 SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
             0) AS overall_score,
+            -- NEW: Individual Scores
+            COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score END), 0) AS student_score,
+            COALESCE(SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END), 0) AS supervisor_score,
+            COALESCE(SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score END), 0) AS peer_score,
             
             -- Store position for separate filtering/list
             pr.position AS faculty_position
@@ -6207,13 +6211,17 @@ def api_hr_evaluations():
     return_db_connection(conn)
 
     # Shape results to JSON
+    # IMPORTANT: Ensure the column indices match the SQL SELECT statement (9 total columns before position)
     evals = [{
         "personnelid": row[0],
         "name": row[1],
         "department": row[2],
         "position": row[3],
         "studentresponses": row[4],
-        "avgscore": row[5]
+        "avgscore": row[5],
+        "student_score": row[6],     # NEW
+        "supervisor_score": row[7],  # NEW
+        "peer_score": row[8],        # NEW
     } for row in evaluations]
 
     # Combine table data and KPIs into the final JSON response
@@ -6222,8 +6230,92 @@ def api_hr_evaluations():
         evaluations=evals, 
         kpis=kpis,
         unique_positions=unique_positions,
-        acadcalendar_info=acadcalendar_info # NEW: Dynamic term info
+        acadcalendar_info=acadcalendar_info # Dynamic term info
     )
+
+
+@app.route('/api/hr/update-evaluation-score', methods=['POST'])
+@require_auth([20003])
+def api_hr_update_evaluation_score():
+    """Manually update a specific evaluation score (e.g., Peer Score)"""
+    try:
+        data = request.get_json()
+        updates = data.get('updates', [])
+        term_id = data.get('term_id')
+        
+        if not updates or not term_id:
+            return jsonify({'success': False, 'error': 'Missing updates or term ID.'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        user_id = session['user_id']
+        hr_personnel_info = get_personnel_info(user_id)
+        hr_personnel_id = hr_personnel_info.get('personnel_id')
+        
+        updated_count = 0
+        
+        for update in updates:
+            personnel_id = update.get('personnel_id')
+            peer_score = update.get('peer_score')
+            
+            if personnel_id and peer_score is not None:
+                # 1. Fetch current score and name for logging
+                cursor.execute("""
+                    SELECT fe.score, CONCAT(p.firstname, ' ', p.lastname)
+                    FROM personnel p
+                    LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s AND fe.evaluator_type = 'peer'
+                    WHERE p.personnel_id = %s
+                """, (term_id, personnel_id))
+                
+                result = cursor.fetchone()
+                current_score = result[0] if result and result[0] is not None else 0.0
+                faculty_name = result[1] if result else "Unknown Faculty"
+                
+                # 2. Perform INSERT or UPDATE (ON CONFLICT)
+                cursor.execute("""
+                    INSERT INTO faculty_evaluations (
+                        personnel_id, acadcalendar_id, evaluator_type, score, total_responses, last_updated, class_id
+                    ) VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP, 0)
+                    ON CONFLICT (personnel_id, acadcalendar_id, class_id, evaluator_type)
+                    DO UPDATE SET
+                        score = EXCLUDED.score,
+                        last_updated = CURRENT_TIMESTAMP
+                """, (
+                    personnel_id,
+                    term_id,
+                    'peer',
+                    float(peer_score),
+                    1 # Manually set responses to 1 for manual entry to count
+                ))
+                updated_count += 1
+                
+                # 3. Log Audit Action
+                log_audit_action(
+                    hr_personnel_id,
+                    "Manual Evaluation Score Update",
+                    f"HR manually set Peer Score for {faculty_name} (Term ID: {term_id})",
+                    before_value=f"Peer Score: {float(current_score):.2f}",
+                    after_value=f"Peer Score: {float(peer_score):.2f}"
+                )
+                
+        conn.commit()
+        cursor.close()
+        return_db_connection(conn)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully updated {updated_count} Peer Score record(s).',
+            'updated_count': updated_count
+        })
+        
+    except Exception as e:
+        print(f"Error updating evaluation score: {e}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/hr/faculty-evaluation-report/<int:personnel_id>')
@@ -6270,7 +6362,7 @@ def api_hr_faculty_evaluation_report(personnel_id):
                 evaluator_type, 
                 score, 
                 total_responses,
-                qualitative_feedback  -- NEW: Select feedback column
+                qualitative_feedback
             FROM faculty_evaluations 
             WHERE personnel_id = %s AND acadcalendar_id = %s
         """, (personnel_id, term_id))
@@ -6280,7 +6372,7 @@ def api_hr_faculty_evaluation_report(personnel_id):
         # 3. Aggregate data, calculate overall score, and collect feedback
         total_score = 0
         rating_breakdown = []
-        qualitative_feedback = [] # Initialize empty list for actual feedback
+        qualitative_feedback = []
         
         # Fixed weights based on business logic: Student(55%), Supervisor(35%), Peer(10%)
         weights = {'student': 0.55, 'supervisor': 0.35, 'peer': 0.10}
@@ -6320,7 +6412,7 @@ def api_hr_faculty_evaluation_report(personnel_id):
                 'semester_display': semester_display,
                 'overall_rating': total_score,
                 'rating_breakdown': rating_breakdown,
-                'qualitative_feedback': qualitative_feedback # <-- Use actual data
+                'qualitative_feedback': qualitative_feedback
             }
         })
 

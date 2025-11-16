@@ -65,6 +65,9 @@
               </div>
           </div>
           <div class="right">
+            <button class="btn secondary" id="cancelScoresBtn" style="display:none;">
+              <i class='bx bx-x'></i>&nbsp; Cancel
+            </button>
             <button class="btn primary" id="update-eval-btn" >
               Update Evaluation Records
             </button>
@@ -101,11 +104,14 @@
           <table id="evalTable" aria-label="Evaluations table">
             <thead>
               <tr>
-                <th><span class="sortable" data-sort="faculty">Faculty <span class="sort-ind" id="sortFaculty"></span></span></th>
-                <th><span class="sortable" data-sort="dept">Department <span class="sort-ind" id="sortDept"></span></span></th>
-                <th><span class="sortable" data-sort="position">Position <span class="sort-ind" id="sortPosition"></span></span></th>
-                <th><span class="sortable" data-sort="response">Response Rate <span class="sort-ind" id="sortResponse"></span></span></th>
-                <th><span class="sortable" data-sort="rating">Rating <span class="sort-ind" id="sortRating"></span></span></th>
+                <th>Faculty</th>
+                <th>Department</th>
+                <th>Position</th>
+                <th>Student Response Rate</th>
+                <th>Student</th>
+                <th>Supervisor</th>
+                <th>Peer</th>
+                <th>Overall Score</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -272,13 +278,117 @@
 {% block extra_scripts %}
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script>
-window.CURRENT_TERM_ID = {{ acadcalendar_id }}; // Retained as initial fallback
+window.CURRENT_TERM_ID = {{ acadcalendar_id }}; 
 const MODAL = document.getElementById('evaluationModal');
 let ALL_COLLEGES = []; 
 
-let EVALUATIONS_DATA = []; // Store raw data array for pagination
+let EVALUATIONS_DATA = []; 
 const PAGE_SIZE = 10;
 let CURRENT_PAGE = 1;
+
+// --- NEW/MODIFIED FUNCTIONS FOR ROW EDITING ---
+
+function toggleRowEdit(personnelId) {
+    const row = $(`#evalTableBody tr[data-personnel-id="${personnelId}"]`);
+    const isEditing = row.attr('data-editing') === 'true';
+
+    if (!isEditing) {
+        // --- Enter Edit Mode ---
+        
+        // 1. Convert peer score display to input field
+        const peerScoreCell = row.find('td.peer-score-cell');
+        const currentValue = peerScoreCell.data('current-value') || 0.0;
+        
+        peerScoreCell.html(`
+            <input type="number" 
+                   min="0" max="4" step="0.01"
+                   value="${parseFloat(currentValue).toFixed(2)}"
+                   class="time-editable peer-score-input"
+                   data-original-value="${parseFloat(currentValue).toFixed(2)}"
+                   style="width: 60px; text-align: center; border: 1px solid #ddd; padding: 4px; border-radius: 4px;">
+        `);
+
+        // 2. Change Action Buttons: View/Download/Link -> Save/Cancel
+        row.find('.action-buttons').html(`
+            <button class="btn primary" onclick="saveSingleScore(${personnelId})">
+                <i class='bx bx-save'></i>&nbsp; Save
+            </button>
+            <button class="btn secondary" onclick="cancelSingleEdit(${personnelId})">
+                <i class='bx bx-x'></i>&nbsp; Cancel
+            </button>
+        `);
+
+        row.attr('data-editing', 'true');
+        
+        // Disable other edit buttons on the page
+        $('.edit-score-btn').prop('disabled', true);
+        $('.page-controls button').prop('disabled', true);
+        
+    } else {
+        // --- Exit Edit Mode (Render back to display mode) ---
+        renderTablePage(CURRENT_PAGE);
+        
+        // Re-enable all edit buttons and controls
+        $('.edit-score-btn').prop('disabled', false);
+        $('.page-controls button').prop('disabled', false);
+    }
+}
+
+function cancelSingleEdit(personnelId) {
+    // Simply re-render the current page to discard changes and exit edit mode
+    renderTablePage(CURRENT_PAGE);
+}
+
+function saveSingleScore(personnelId) {
+    const row = $(`#evalTableBody tr[data-personnel-id="${personnelId}"]`);
+    const peerScoreInput = row.find('input.peer-score-input');
+    
+    if (!peerScoreInput.length) return;
+
+    const originalValue = peerScoreInput.data('original-value');
+    const newValue = parseFloat(peerScoreInput.val());
+    
+    if (isNaN(newValue) || newValue < 0 || newValue > 4) {
+        alert("Invalid score. Please enter a value between 0.00 and 4.00.");
+        peerScoreInput.focus();
+        return;
+    }
+
+    if (newValue.toFixed(2) === originalValue) {
+        alert("No change detected.");
+        toggleRowEdit(personnelId); // Exit edit mode without saving
+        return;
+    }
+    
+    if (!confirm(`Confirm manual score update for this faculty member to ${newValue.toFixed(2)}?`)) {
+        return;
+    }
+
+    const saveBtn = row.find('.action-buttons .btn.primary');
+    saveBtn.prop('disabled', true).html("<i class='bx bx-loader-alt bx-spin'></i>&nbsp; Saving...");
+
+    const scoreToUpdate = [{
+        personnel_id: personnelId,
+        peer_score: newValue.toFixed(2)
+    }];
+    
+    $.ajax({
+        url: '/api/hr/update-evaluation-score',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ updates: scoreToUpdate, term_id: $('#semesterFilter').val() || window.CURRENT_TERM_ID }),
+        success: function(response) {
+            alert(response.message);
+            // Refresh data for the whole table (will exit edit mode)
+            loadEvaluations(); 
+        },
+        error: function(xhr) {
+            alert(`Save failed. ${xhr.responseJSON?.error || 'Server error.'}`);
+            saveBtn.prop('disabled', false).html("<i class='bx bx-save'></i>&nbsp; Save");
+        }
+    });
+}
+// --- END NEW FUNCTIONS ---
 
 
 function renderTablePage(pageNumber) {
@@ -300,6 +410,14 @@ function renderTablePage(pageNumber) {
         $('#nextPage').prop('disabled', true);
         return;
     }
+
+    // Format score utility function
+    const formatScore = (score) => {
+        const num = parseFloat(score);
+        // Only return score if it's > 0, otherwise return dash
+        return (num > 0) ? num.toFixed(2) : '—';
+    };
+
 
     // --- RENDER ROWS ---
     paginatedData.forEach(function(row) {
@@ -327,16 +445,40 @@ function renderTablePage(pageNumber) {
         // NEW: Check if rating is zero or less to disable download
         const disableDownload = (rating <= 0 || isNaN(rating)) ? 'disabled' : '';
 
+        // NEW: Formatted individual scores
+        const studentScore = formatScore(row.student_score);
+        const supervisorScore = formatScore(row.supervisor_score);
+        const peerScore = formatScore(row.peer_score); // This is the value displayed by default
+
+        // MODIFIED OVERALL RATING CELL (Left Aligned)
+        const overallDisplay = (rating > 0) ? 
+            `<span class="status ${statusClass}" style="padding: 4px 8px;">${rating.toFixed(2)} - ${statusLabel}</span>` : 
+            `<span class="status pending">${statusLabel}</span>`;
+            
+        // Get the current row editing state (used after a re-render/cancel)
+        const rowElement = $(`#evalTableBody tr[data-personnel-id="${row.personnelid}"]`);
+        const isEditing = rowElement.attr('data-editing') === 'true';
+
         tbody.append(
-          '<tr>' +
+          `<tr data-personnel-id="${row.personnelid}">` +
             `<td>${row.name}</td>` +
             `<td>${row.department}</td>` +
             `<td>${row.position || 'N/A'}</td>` +
             `<td>${studentResponses} — ${responseStatusLabel}</td>` +
-            `<td><span class="status ${statusClass}">${statusLabel} (${rating.toFixed(2)})</span></td>` +
-            `<td>
-                <button class="btn action" onclick="openModal(${row.personnelid}, '${row.name}', ${rating.toFixed(2)}, ${studentResponses})"><i class='bx bx-show-alt'></i>&nbsp;View</button>
-                <button class="btn secondary" onclick="downloadReport(${row.personnelid})" ${disableDownload}><i class='bx bx-download'></i></button>
+            `<td style="text-align: center;">${studentScore}</td>` + 
+            `<td style="text-align: center;">${supervisorScore}</td>` + 
+            `<td style="text-align: center;" class="peer-score-cell" data-current-value="${parseFloat(row.peer_score) || 0}">${peerScore}</td>` +
+            `<td style="text-align: left;">${overallDisplay}</td>` +
+            `<td class="action-buttons">
+                <button class="btn secondary edit-score-btn" onclick="toggleRowEdit(${row.personnelid})">
+                    <i class='bx bx-edit'></i>&nbsp; Edit
+                </button>
+                <button class="btn action" onclick="openModal(${row.personnelid}, '${row.name}', ${rating.toFixed(2)}, ${studentResponses})">
+                    <i class='bx bx-show-alt'></i>&nbsp;View
+                </button>
+                <button class="btn secondary" onclick="downloadReport(${row.personnelid})" ${disableDownload}>
+                    <i class='bx bx-download'></i>
+                </button>
                 <button class="btn action" onclick="openLinkModal(${row.personnelid}, '${row.name}')" title="Generate Evaluation Link">
                     <i class='bx bx-link-alt'></i>
                 </button>
@@ -358,9 +500,8 @@ function renderTablePage(pageNumber) {
 }
 
 
-// --- NEW DELETE FUNCTION ---
+// --- DELETE MODAL FUNCTIONS ---
 function deleteAcademicTerm(termId, termName) {
-    // Basic safety check for current term status (prevent accidental deletion of ongoing/archived)
     if (termId == $('#semesterFilter').val() && !$('#cycleStatus').text().includes('Not Started')) {
         alert("Cannot delete the current active term that is In Progress or Finished. Only terms with status 'Not Started' can be deleted.");
         return;
@@ -386,7 +527,6 @@ function confirmDelete() {
     const button = $('#confirmDeleteBtn');
     button.prop('disabled', true).html("<i class='bx bx-loader-alt bx-spin'></i>&nbsp; Deleting...");
 
-    // Call the dedicated DELETE API endpoint
     $.ajax({
         url: `/api/hr/acadcalendar/${termId}`,
         type: 'DELETE',
@@ -394,8 +534,8 @@ function confirmDelete() {
             if (response.success) {
                 alert(`Successfully deleted term: ${termName}. The list will now refresh.`);
                 closeDeleteModal();
-                $('#semesterFilter').val(''); // Clear selection
-                fetchSemestersAndPopulate(); // Refresh the list and current view
+                $('#semesterFilter').val(''); 
+                fetchSemestersAndPopulate(); 
             } else {
                 alert(`Deletion failed. Reason: ${response.error}`);
                 button.prop('disabled', false).html("<i class='bx bx-trash'></i>&nbsp; Delete Permanently");
@@ -411,7 +551,6 @@ function confirmDelete() {
 
 
 function loadEvaluations() {
-    // Determine which term ID to use: selected filter or the global current ID
     const selectedTerm = $('#semesterFilter').val();
     const termIdToUse = selectedTerm || window.CURRENT_TERM_ID; 
 
@@ -421,16 +560,15 @@ function loadEvaluations() {
     var position = $('#positionFilter').val() || ''; 
     var responseRate = $('#responseRateFilter').val() || ''; 
 
-    // Clear table and show loading state
     $('#evalTableBody').html('<tr><td colspan="6" class="table-empty">Loading evaluations...</td></tr>');
     $('#emptyState').hide();
     $('#termDisplay').html('📅 Loading...');
     $('#durationDates').text('Loading...');
-    $('#cycleStatusContainer').html('<strong>🔔 Status:</strong> <span id="cycleStatus">Loading...</span>'); // Reset status container
+    $('#cycleStatusContainer').html('<strong>🔔 Status:</strong> <span id="cycleStatus">Loading...</span>'); 
 
 
     $.get('/api/hr/evaluations', {
-        term: termIdToUse, // Use the selected/current term ID
+        term: termIdToUse, 
         dept: dept,
         status: status, 
         search: search,
@@ -458,10 +596,10 @@ function loadEvaluations() {
             $('#termDisplay').html(info.display);
             
             const selectedOption = $('#semesterFilter option:selected');
-            const startDateString = selectedOption.data('start'); // YYYY-MM-DD
-            const endDateString = selectedOption.data('end');   // YYYY-MM-DD
+            const startDateString = selectedOption.data('start');
+            const endDateString = selectedOption.data('end');
 
-            let durationText = info.deadline; // Fallback to just deadline
+            let durationText = info.deadline; 
 
             // 1. Calculate Duration (Start Date - End Date)
             if (startDateString && endDateString) {
@@ -479,7 +617,7 @@ function loadEvaluations() {
             // 2. Calculate Dynamic Status and Delete Permission
             let statusText = "N/A";
             let statusColor = "#6b7280"; 
-            let canDelete = false; // Flag to enable/disable button
+            let canDelete = false; 
 
             if (startDateString && endDateString) {
                 const termStartDate = new Date(startDateString);
@@ -492,15 +630,15 @@ function loadEvaluations() {
 
                 if (today < termStartDate) {
                     statusText = "Not Started";
-                    statusColor = "#3b82f6"; // Blue/Info
+                    statusColor = "#3b82f6"; 
                     canDelete = true;
                 } else if (today >= termStartDate && today <= termEndDate) {
                     statusText = "In Progress";
-                    statusColor = "#f59e0b"; // Amber/Warn
+                    statusColor = "#f59e0b"; 
                     canDelete = false;
                 } else {
                     statusText = "Finished";
-                    statusColor = "#166534"; // Green/Success
+                    statusColor = "#166534"; 
                     canDelete = false;
                 }
             } else {
@@ -550,19 +688,17 @@ function loadEvaluations() {
 
         // --- 4. STORE DATA & RENDER FIRST PAGE ---
         if(data.success && data.evaluations.length > 0) {
-            EVALUATIONS_DATA = data.evaluations; // Store the full filtered dataset
-            CURRENT_PAGE = 1; // Reset to first page
+            EVALUATIONS_DATA = data.evaluations; 
+            CURRENT_PAGE = 1; 
             renderTablePage(CURRENT_PAGE);
         } else {
             EVALUATIONS_DATA = [];
-            renderTablePage(1); // Renders empty state
+            renderTablePage(1); 
         }
     }).fail(function() {
         $('#evalTableBody').html('<tr><td colspan="6" class="table-empty" style="color:#991b1b;">Failed to load data from API.</td></tr>');
     });
 }
-
-// REMOVED old fetchAllCollegesAndInitialize function
 
 function fetchSemestersAndPopulate() {
     const semesterFilter = $('#semesterFilter');
@@ -595,7 +731,6 @@ function fetchSemestersAndPopulate() {
                 }
             });
 
-            // --- INTEGRATED COLLEGE FETCH ---
             $.get('/api/hr/colleges-list', function(collegeData) {
                 if (collegeData.success && collegeData.colleges) {
                     ALL_COLLEGES = collegeData.colleges.map(c => c.collegename).sort();
@@ -605,21 +740,19 @@ function fetchSemestersAndPopulate() {
                         deptFilter.append(`<option value="${d}">${d}</option>`);
                     });
                 }
-                // FINAL STEP: Load evaluations only after semesters and colleges are fetched
                 loadEvaluations(); 
             }).fail(function() {
                 console.error('Failed to fetch college list. Proceeding with loadEvaluations.');
-                loadEvaluations(); // Proceed even if colleges fail
+                loadEvaluations(); 
             });
-            // --- END INTEGRATED COLLEGE FETCH ---
 
         } else {
             semesterFilter.empty().append('<option value="">Error Loading Terms</option>');
-            loadEvaluations(); // Fallback load with default term ID
+            loadEvaluations(); 
         }
     }).fail(function() {
         semesterFilter.empty().append('<option value="">API Error</option>');
-        loadEvaluations(); // Final failure fallback
+        loadEvaluations(); 
     });
 }
 
@@ -638,7 +771,6 @@ function getStatusInfo(rating) {
 
 function openModal(personnelId, facultyName, overallRating, studentResponses) {
     $('#modalTitle').text(`Evaluation Report: ${facultyName}`);
-    // Cap percentage at 100%
     const circlePercentage = Math.min((overallRating / 5) * 100, 100); 
     $('#overallRatingCircle').css('--percentage', `${circlePercentage}`);
     $('#overallRatingValue').text(overallRating.toFixed(2));
@@ -648,12 +780,12 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
     const statusInfo = getStatusInfo(overallRating);
     $('#finalStatusBadge').text(statusInfo.label).removeClass().addClass(`status ${statusInfo.class}`);
     
+    $('#reportSemester').text('Loading...'); // Reset semester text temporarily
     $('#ratingBreakdownBody').empty().append('<tr><td colspan="2" style="text-align:center;">Loading details...</td></tr>');
     $('#feedbackList').empty();
     $('#noFeedback').show();
     MODAL.style.display = 'flex';
 
-    // Fetch detailed report data
     $.get(`/api/hr/faculty-evaluation-report/${personnelId}?term_id=${window.CURRENT_TERM_ID}`, function(data) {
         $('#ratingBreakdownBody').empty();
         $('#feedbackList').empty();
@@ -661,23 +793,62 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
         if (data.success && data.report) {
             const report = data.report;
             
-            // Populate Breakdown Table
+            // --- NEW: Define all expected evaluation types and their weights/placeholders ---
+            const expectedTypes = {
+                'Student': { weight: 0.55, score: 0.00, responses: 0, disclaimer: "No student responses recorded." },
+                'Supervisor': { weight: 0.35, score: 0.00, responses: 0, disclaimer: "No supervisor evaluation recorded." },
+                'Peer': { weight: 0.10, score: 0.00, responses: 0, disclaimer: "No peer evaluation recorded." }
+            };
+
+            // --- Map existing data into the expected structure ---
             report.rating_breakdown.forEach(item => {
+                const type = item.type; // 'Student', 'Supervisor', or 'Peer'
+                if (expectedTypes[type]) {
+                    expectedTypes[type].score = item.score;
+                    expectedTypes[type].responses = item.total_responses;
+                    // Remove disclaimer if score > 0
+                    if (item.score > 0) {
+                        expectedTypes[type].disclaimer = null;
+                    } else if (type === 'Student' && item.total_responses > 0) {
+                        // Special case: Score is 0 but responses > 0 (e.g., waiting for calculation)
+                        expectedTypes[type].disclaimer = "Responses received but score is not available (Score: 0.00).";
+                    }
+                }
+            });
+            
+            // --- Render all three types, using placeholder data when score is 0 ---
+            Object.keys(expectedTypes).forEach(type => {
+                const item = expectedTypes[type];
                 const weight = item.weight * 100;
+                const scoreDisplay = (item.score > 0) ? item.score.toFixed(2) : '—';
+                
+                // Determine the row class for visual indicator
+                let rowClass = (item.score > 0) ? '' : 'style="background-color: #fcfcfc;"';
+                
+                let scoreCellContent;
+                
+                if (item.score > 0) {
+                    scoreCellContent = `<td style="text-align: right; font-weight: 700; color: var(--spc-maroon); padding: 5px 0;">${scoreDisplay}</td>`;
+                } else if (item.disclaimer) {
+                    // Use disclaimer/indicator when score is 0/missing
+                    scoreCellContent = `<td style="text-align: right; font-weight: 700; color: var(--muted); padding: 5px 0;">${scoreDisplay} <i class='bx bx-info-circle' title="${item.disclaimer}"></i></td>`;
+                } else {
+                    scoreCellContent = `<td style="text-align: right; font-weight: 700; color: var(--muted); padding: 5px 0;">${scoreDisplay} <i class='bx bx-info-circle' title="Score is 0.00, indicating no evaluation was recorded."></i></td>`;
+                }
+                
                 $('#ratingBreakdownBody').append(`
-                    <tr>
-                        <td style="font-weight: 500; padding: 5px 0;">${item.type} (${weight.toFixed(0)}%)</td>
-                        <td style="text-align: right; font-weight: 700; color: var(--spc-maroon); padding: 5px 0;">${item.score.toFixed(2)}</td>
+                    <tr ${rowClass}>
+                        <td style="font-weight: 500; padding: 5px 0;">${type} (${weight.toFixed(0)}%)</td>
+                        ${scoreCellContent}
                     </tr>
                 `);
             });
+            // --- END NEW RENDERING ---
+
             
-            // Populate Feedback
             if (report.qualitative_feedback && report.qualitative_feedback.length > 0) {
                 
-                // Filtering Logic: Filter out unwanted delimiters/placeholders
                 const cleanFeedback = report.qualitative_feedback.filter(comment => {
-                    // Filter out comments that are empty, only whitespace, or specifically the delimiter '---'
                     return comment.trim() !== '' && comment.trim() !== '---';
                 });
 
@@ -692,14 +863,12 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
                     });
                     $('#noFeedback').hide();
                 } else {
-                    // If all comments were filtered out (e.g., they were all '---'), show empty state
                     $('#noFeedback').show().text('No qualitative feedback available.');
                 }
             } else {
                 $('#noFeedback').show().text('No qualitative feedback available.');
             }
             
-            // Update modal title elements again with fresh data
             $('#reportSemester').text(report.semester_display);
         } else {
             $('#ratingBreakdownBody').html('<tr><td colspan="2" style="text-align:center; color:#ef4444;">Failed to load report details.</td></tr>');
@@ -716,7 +885,7 @@ function closeModal() {
 }
 
 function downloadReport(personnelId) {
-    const termId = $('#semesterFilter').val() || window.CURRENT_TERM_ID; // Use selected term ID
+    const termId = $('#semesterFilter').val() || window.CURRENT_TERM_ID; 
     const url = `/api/hr/faculty-evaluation-report-pdf/${personnelId}?term_id=${termId}`;
     window.open(url, '_blank');
 }
@@ -724,13 +893,11 @@ function downloadReport(personnelId) {
 function openLinkModal(personnelId, facultyName) {
     const currentTermId = $('#semesterFilter').val() || window.CURRENT_TERM_ID;
     
-    // Clear previous state
     $('#linkForm')[0].reset();
     $('#linkResultBox').hide();
-    $('#linkModalTitle').text(`Generate Link for Faculty: ${facultyName}`);
+    $('#linkModalTitle').text(`Generate Link for Faculty: N/A`);
     $('#linkFacultyName').text(facultyName);
     
-    // Set hidden fields
     $('#linkPersonnelId').val(personnelId);
     $('#linkAcadCalendarId').val(currentTermId);
 
@@ -741,7 +908,7 @@ function closeLinkModal() {
     $('#linkModal').css('display', 'none');
 }
 
-// === NEW CYCLE MODAL FUNCTIONS ===
+
 function openNewCycleModal() {
     $('#newCycleModalTitle').text('Initiate New Evaluation Term');
     $('#newCycleForm')[0].reset();
@@ -752,7 +919,6 @@ function openNewCycleModal() {
 function closeNewCycleModal() {
     $('#newCycleModal').css('display', 'none');
 }
-// === END NEW CYCLE MODAL FUNCTIONS ===
 
 
 // --- JQUERY INITIALIZATION AND EVENT ATTACHMENT ---
@@ -762,29 +928,22 @@ $(document).ready(function() {
         const button = $(this);
         const originalHtml = button.html();
 
-        // 1. Show Loading State
         button.prop('disabled', true).html('<i class="bx bx-loader-alt bx-spin"></i>&nbsp; Updating...');
         
         $.post('/hr/fetch-evaluations', {}, function(response) {
-            // 2. On Success
-            loadEvaluations(); // Refresh table
-            
-            // Use an ephemeral feedback message (similar to a toast or quick flash)
+            loadEvaluations(); 
             const successHtml = `<i class='bx bx-check-shield'></i>&nbsp; Updated (${response.updated_count || '0'})!`;
             button.html(successHtml);
             
-            // Revert after a short delay
             setTimeout(() => {
                 button.prop('disabled', false).html(originalHtml);
             }, 3000);
 
         }).fail(function(xhr) {
-            // 3. On Failure
             const errorMessage = "Update Failed!";
             const errorHtml = `<i class='bx bx-x-circle'></i>&nbsp; ${errorMessage}`;
-            button.html(errorHtml).css('background', '#dc2626'); // Use red for failure
+            button.html(errorHtml).css('background', '#dc2626'); 
             
-            // Revert and reset style after a short delay
             setTimeout(() => {
                 button.prop('disabled', false).html(originalHtml).css('background', ''); 
                 alert(xhr.responseJSON?.message || "Failed to update evaluation records. See server logs.");
@@ -800,6 +959,12 @@ $(document).ready(function() {
     $('#newCycleBtn').click(function() {
         openNewCycleModal();
     });
+    
+    // --- NEW: Hide/Show Save/Cancel buttons as they are now row-specific actions ---
+    $('#editScoresBtn').click(function() {
+        alert("Use the 'Edit Score' button in the Actions column next to the score you wish to modify.");
+    });
+    // --- END NEW HANDLERS ---
     
     // 4. Form submission handler for creating a new academic term
     $('#newCycleForm').submit(function(e) {
@@ -829,7 +994,7 @@ $(document).ready(function() {
                     messageBox.text(`Success! New term created (ID: ${response.new_id}). Refreshing data...`).css('color', '#16a34a');
                     
                     window.CURRENT_TERM_ID = response.new_id; 
-                    fetchSemestersAndPopulate(); // Rerun to update the dropdown list
+                    fetchSemestersAndPopulate(); 
                     
                     setTimeout(() => {
                         closeNewCycleModal();
@@ -899,7 +1064,6 @@ $(document).ready(function() {
 
         btn.prop('disabled', true).html("<i class='bx bx-loader-alt bx-spin'></i>&nbsp; Generating...");
         
-        // This AJAX call targets the new API endpoint you will create in app.py
         $.ajax({
             url: '/api/hr/generate-evaluation-link',
             type: 'POST',
