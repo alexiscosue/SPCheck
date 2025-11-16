@@ -65,9 +65,6 @@
               </div>
           </div>
           <div class="right">
-            <button class="btn secondary" id="cancelScoresBtn" style="display:none;">
-              <i class='bx bx-x'></i>&nbsp; Cancel
-            </button>
             <button class="btn primary" id="update-eval-btn" >
               Update Evaluation Records
             </button>
@@ -138,7 +135,7 @@
           <div class="emp-modal-body" style="padding: 24px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <h3 style="margin: 0; font-size: 1.1rem; color: #333;">Summary for <span id="reportSemester">Semester 1, AY 2025-2026</span></h3>
-                <button class="btn primary" id="modalDownloadBtn" onclick="downloadReport(this.dataset.personnelId)">
+                <button class="btn primary" id="modalDownloadBtn" data-personnel-id="0">
                     <i class='bx bx-download'></i>&nbsp; Download PDF
                 </button>
               </div>
@@ -177,7 +174,7 @@
     <div id="newCycleModal" class="hr-modal-wrapper" style="display: none;">
         <div class="hr-modal-content" style="max-width: 500px;">
             <div class="emp-modal-header" style="background: var(--spc-maroon);">
-                <h2 id="newCycleModalTitle" style="color: white;">Initiate New Evaluation Term</h2>
+                <h2 id="newCycleModalTitle" style="color: white; font-size: 1.2rem;">Initiate New Evaluation Term</h2>
                 <span class="emp-close" onclick="closeNewCycleModal()" style="color: white;">&times;</span>
             </div>
             <div class="emp-modal-body">
@@ -273,6 +270,37 @@
             </div>
         </div>
     </div>
+    
+    <div id="saveConfirmModal" class="hr-modal-wrapper" style="display: none;">
+        <div class="hr-modal-content" style="max-width: 400px;">
+            <div class="emp-modal-header" style="background: #f59e0b;">
+                <h2 id="saveModalTitle" style="color: white; font-size: 1.2rem;">Confirm Score Update</h2>
+                <span class="emp-close" onclick="closeSaveConfirmModal()" style="color: white;">&times;</span>
+            </div>
+            <div class="emp-modal-body" style="text-align: center;">
+                <i class='bx bx-edit' style="font-size: 3rem; color: #f59e0b; margin-bottom: 15px;"></i>
+                <p style="margin-bottom: 15px;">
+                    You are about to manually set the Peer Score for 
+                    <strong id="facultyToConfirm">N/A</strong> to 
+                    <strong id="scoreToConfirm">N/A</strong>.
+                </p>
+                <p style="font-size: 13px; color: #555; font-weight: 500;">
+                    This action will recalculate the faculty member's Overall Score.
+                </p>
+                
+                <input type="hidden" id="confirmPersonnelId">
+                
+                <div style="display: flex; justify-content: space-between; gap: 10px; margin-top: 20px;">
+                    <button class="btn secondary emp-btn-cancel" onclick="closeSaveConfirmModal()" style="flex: 1;">
+                        Cancel
+                    </button>
+                    <button class="btn primary" id="executeSaveBtn" style="flex: 1; background: #f59e0b;">
+                        Confirm & Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -286,18 +314,137 @@ let EVALUATIONS_DATA = [];
 const PAGE_SIZE = 10;
 let CURRENT_PAGE = 1;
 
-// --- NEW/MODIFIED FUNCTIONS FOR ROW EDITING ---
+
+// --- NEW TOAST UTILITY FUNCTION ---
+function showToast(message, type = 'success', duration = 3000) {
+    // Uses the existing .toast styles defined in style.css
+    const toast = $('<div>').addClass('toast show').text(message);
+    
+    // Apply specific colors/icons based on type (assuming success/error/warning types)
+    if (type === 'error') {
+        toast.css({ 'background': '#dc2626', 'color': 'white' });
+        toast.prepend("<i class='bx bx-x-circle'></i>&nbsp;");
+    } else if (type === 'warning') {
+        toast.css({ 'background': '#f59e0b', 'color': '#111' });
+        toast.prepend("<i class='bx bx-error-alt'></i>&nbsp;");
+    } else {
+        toast.css({ 'background': '#10b981', 'color': 'white' });
+        toast.prepend("<i class='bx bx-check'></i>&nbsp;");
+    }
+
+    // Append to body (assuming no specific toast container ID exists)
+    $('body').append(toast);
+    
+    setTimeout(() => {
+        toast.removeClass('show').addClass('hide');
+        toast.remove();
+    }, duration);
+}
+// --- END TOAST UTILITY ---
+
+
+// --- NEW SAVE CONFIRMATION MODAL FUNCTIONS ---
+function openSaveConfirmModal(personnelId, score) {
+    const row = $(`#evalTableBody tr[data-personnel-id="${personnelId}"]`);
+    const facultyName = row.find('td:nth-child(1)').text().trim(); 
+
+    $('#facultyToConfirm').text(facultyName);
+    $('#scoreToConfirm').text(parseFloat(score).toFixed(2));
+    $('#confirmPersonnelId').val(personnelId);
+
+    // Get the execute button reference and reset its state before showing the modal
+    const executeBtn = $('#executeSaveBtn');
+    executeBtn.prop('disabled', false).html("Confirm & Save").css('background', '#f59e0b');
+
+    // Temporarily store the score data on the button itself before opening
+    executeBtn.data('peer-score-value', score);
+
+    $('#saveConfirmModal').css('display', 'flex');
+    
+    // Disable other edit buttons and global controls while modal is open
+    // NOTE: These are already disabled by toggleRowEdit(), but we keep them disabled.
+    $('.edit-score-btn').prop('disabled', true);
+    $('#update-eval-btn').prop('disabled', true);
+    $('#newCycleBtn').prop('disabled', true);
+    $('.page-controls button').prop('disabled', true);
+}
+
+function closeSaveConfirmModal() {
+    $('#saveConfirmModal').css('display', 'none');
+}
+
+// Function to handle the final execution from the modal
+function confirmAndExecuteSave() {
+    const personnelId = $('#confirmPersonnelId').val();
+    const score = $('#executeSaveBtn').data('peer-score-value');
+    
+    const executeBtn = $('#executeSaveBtn');
+    const row = $(`#evalTableBody tr[data-personnel-id="${personnelId}"]`);
+    
+    // 1. Immediately visually lock the button
+    executeBtn.prop('disabled', true).html("<i class='bx bx-loader-alt bx-spin'></i>&nbsp; Saving...");
+
+    // 2. Hide the confirmation modal is now removed, the modal stays open until AJAX finishes.
+
+    const scoreToUpdate = [{
+        personnel_id: personnelId,
+        peer_score: parseFloat(score).toFixed(2)
+    }];
+    
+    $.ajax({
+        url: '/api/hr/update-evaluation-score',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ updates: scoreToUpdate, term_id: $('#semesterFilter').val() || window.CURRENT_TERM_ID }),
+        success: function(response) {
+            showToast(response.message);
+            
+            // 🎯 FIX: Close the modal only AFTER successful save
+            closeSaveConfirmModal(); 
+            
+            // Full refresh after successful save (this re-enables all controls correctly)
+            loadEvaluations(); 
+            
+        },
+        error: function(xhr) {
+            showToast(`Save failed. ${xhr.responseJSON?.error || 'Server error.'}`, 'error');
+            
+            // 🎯 FIX: Manually reset the edit state for the specific row and re-enable global controls.
+            closeSaveConfirmModal(); 
+            cancelSingleEdit(personnelId); 
+        }
+    });
+}
+// --- END NEW SAVE CONFIRMATION MODAL FUNCTIONS ---
+
+
+// --- MODIFIED ROW EDITING FUNCTIONS ---
+
+function reRenderCurrentPage() {
+    renderTablePage(CURRENT_PAGE);
+    // Re-enable global controls that were disabled upon entering edit mode
+    $('#update-eval-btn').prop('disabled', false);
+    $('#newCycleBtn').prop('disabled', false);
+}
 
 function toggleRowEdit(personnelId) {
     const row = $(`#evalTableBody tr[data-personnel-id="${personnelId}"]`);
     const isEditing = row.attr('data-editing') === 'true';
+    
+    // Disable other edit buttons and global controls
+    const disableAll = !isEditing;
+    $('.edit-score-btn').prop('disabled', disableAll);
+    $('#update-eval-btn').prop('disabled', disableAll);
+    $('#newCycleBtn').prop('disabled', disableAll);
+    $('.page-controls button').prop('disabled', disableAll);
+
 
     if (!isEditing) {
         // --- Enter Edit Mode ---
         
         // 1. Convert peer score display to input field
         const peerScoreCell = row.find('td.peer-score-cell');
-        const currentValue = peerScoreCell.data('current-value') || 0.0;
+        const currentValue = peerScoreCell.data('current-value') || 0.0; 
         
         peerScoreCell.html(`
             <input type="number" 
@@ -308,7 +455,7 @@ function toggleRowEdit(personnelId) {
                    style="width: 60px; text-align: center; border: 1px solid #ddd; padding: 4px; border-radius: 4px;">
         `);
 
-        // 2. Change Action Buttons: View/Download/Link -> Save/Cancel
+        // 2. Change Action Buttons: View/Download/Link/Edit -> Save/Cancel
         row.find('.action-buttons').html(`
             <button class="btn primary" onclick="saveSingleScore(${personnelId})">
                 <i class='bx bx-save'></i>&nbsp; Save
@@ -320,23 +467,16 @@ function toggleRowEdit(personnelId) {
 
         row.attr('data-editing', 'true');
         
-        // Disable other edit buttons on the page
-        $('.edit-score-btn').prop('disabled', true);
-        $('.page-controls button').prop('disabled', true);
-        
     } else {
-        // --- Exit Edit Mode (Render back to display mode) ---
-        renderTablePage(CURRENT_PAGE);
-        
-        // Re-enable all edit buttons and controls
-        $('.edit-score-btn').prop('disabled', false);
-        $('.page-controls button').prop('disabled', false);
+        // --- Exit Edit Mode (Render back to display mode via cancelSingleEdit or loadEvaluations) ---
+        row.attr('data-editing', 'false');
     }
 }
 
 function cancelSingleEdit(personnelId) {
-    // Simply re-render the current page to discard changes and exit edit mode
-    renderTablePage(CURRENT_PAGE);
+    // Re-render the current page to discard local changes and exit edit mode
+    $(`#evalTableBody tr[data-personnel-id="${personnelId}"]`).attr('data-editing', 'false'); // Explicitly set state before re-rendering
+    reRenderCurrentPage();
 }
 
 function saveSingleScore(personnelId) {
@@ -349,46 +489,22 @@ function saveSingleScore(personnelId) {
     const newValue = parseFloat(peerScoreInput.val());
     
     if (isNaN(newValue) || newValue < 0 || newValue > 4) {
-        alert("Invalid score. Please enter a value between 0.00 and 4.00.");
+        showToast("Invalid score. Please enter a value between 0.00 and 4.00.", 'error'); 
         peerScoreInput.focus();
         return;
     }
 
     if (newValue.toFixed(2) === originalValue) {
-        alert("No change detected.");
-        toggleRowEdit(personnelId); // Exit edit mode without saving
+        showToast("No change detected.", 'warning');
+        cancelSingleEdit(personnelId); // Exit edit mode without saving
         return;
     }
     
-    if (!confirm(`Confirm manual score update for this faculty member to ${newValue.toFixed(2)}?`)) {
-        return;
-    }
-
-    const saveBtn = row.find('.action-buttons .btn.primary');
-    saveBtn.prop('disabled', true).html("<i class='bx bx-loader-alt bx-spin'></i>&nbsp; Saving...");
-
-    const scoreToUpdate = [{
-        personnel_id: personnelId,
-        peer_score: newValue.toFixed(2)
-    }];
-    
-    $.ajax({
-        url: '/api/hr/update-evaluation-score',
-        type: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify({ updates: scoreToUpdate, term_id: $('#semesterFilter').val() || window.CURRENT_TERM_ID }),
-        success: function(response) {
-            alert(response.message);
-            // Refresh data for the whole table (will exit edit mode)
-            loadEvaluations(); 
-        },
-        error: function(xhr) {
-            alert(`Save failed. ${xhr.responseJSON?.error || 'Server error.'}`);
-            saveBtn.prop('disabled', false).html("<i class='bx bx-save'></i>&nbsp; Save");
-        }
-    });
+    // --- TRIGGER CUSTOM CONFIRMATION MODAL ---
+    openSaveConfirmModal(personnelId, newValue.toFixed(2));
+    // The actual save execution is now handled by confirmAndExecuteSave()
 }
-// --- END NEW FUNCTIONS ---
+// --- END MODIFIED ROW EDITING FUNCTIONS ---
 
 
 function renderTablePage(pageNumber) {
@@ -417,7 +533,9 @@ function renderTablePage(pageNumber) {
         // Only return score if it's > 0, otherwise return dash
         return (num > 0) ? num.toFixed(2) : '—';
     };
-
+    
+    // Check if any row is currently in edit mode (to disable other buttons)
+    const isAnyRowEditing = $(`#evalTableBody tr[data-editing="true"]`).length > 0;
 
     // --- RENDER ROWS ---
     paginatedData.forEach(function(row) {
@@ -455,52 +573,85 @@ function renderTablePage(pageNumber) {
             `<span class="status ${statusClass}" style="padding: 4px 8px;">${rating.toFixed(2)} - ${statusLabel}</span>` : 
             `<span class="status pending">${statusLabel}</span>`;
             
-        // Get the current row editing state (used after a re-render/cancel)
-        const rowElement = $(`#evalTableBody tr[data-personnel-id="${row.personnelid}"]`);
-        const isEditing = rowElement.attr('data-editing') === 'true';
-
-        tbody.append(
-          `<tr data-personnel-id="${row.personnelid}">` +
-            `<td>${row.name}</td>` +
-            `<td>${row.department}</td>` +
-            `<td>${row.position || 'N/A'}</td>` +
-            `<td>${studentResponses} — ${responseStatusLabel}</td>` +
-            `<td style="text-align: center;">${studentScore}</td>` + 
-            `<td style="text-align: center;">${supervisorScore}</td>` + 
-            `<td style="text-align: center;" class="peer-score-cell" data-current-value="${parseFloat(row.peer_score) || 0}">${peerScore}</td>` +
-            `<td style="text-align: left;">${overallDisplay}</td>` +
-            `<td class="action-buttons">
-                <button class="btn secondary edit-score-btn" onclick="toggleRowEdit(${row.personnelid})">
+        // Check if this specific row is being edited (It shouldn't be if we use loadEvaluations() correctly, but good for rendering checks)
+        const rowBeingEdited = $(`#evalTableBody tr[data-personnel-id="${row.personnelid}"][data-editing="true"]`).length > 0;
+        
+        // If the row is NOT being edited, render default buttons + Edit button
+        if (!rowBeingEdited) {
+             // Default buttons + Edit Score button
+            const actionButtons = `
+                <button class="btn secondary edit-score-btn" onclick="toggleRowEdit(${row.personnelid})" ${isAnyRowEditing ? 'disabled' : ''}>
                     <i class='bx bx-edit'></i>&nbsp; Edit
                 </button>
-                <button class="btn action" onclick="openModal(${row.personnelid}, '${row.name}', ${rating.toFixed(2)}, ${studentResponses})">
+                <button class="btn action" onclick="openModal(${row.personnelid}, '${row.name}', ${rating.toFixed(2)}, ${studentResponses})" ${isAnyRowEditing ? 'disabled' : ''}>
                     <i class='bx bx-show-alt'></i>&nbsp;View
                 </button>
-                <button class="btn secondary" onclick="downloadReport(${row.personnelid})" ${disableDownload}>
+                <button class="btn secondary" onclick="downloadReport(${row.personnelid})" ${disableDownload} ${isAnyRowEditing ? 'disabled' : ''}>
                     <i class='bx bx-download'></i>
                 </button>
-                <button class="btn action" onclick="openLinkModal(${row.personnelid}, '${row.name}')" title="Generate Evaluation Link">
-                    <i class='bx bx-link-alt'></i>
-                </button>
-            </td>` +
-          '</tr>'
-        );
+
+            `;
+            
+            // Render default row
+            tbody.append(
+              `<tr data-personnel-id="${row.personnelid}">` +
+                `<td>${row.name}</td>` +
+                `<td>${row.department}</td>` +
+                `<td>${row.position || 'N/A'}</td>` +
+                `<td>${studentResponses} — ${responseStatusLabel}</td>` +
+                `<td style="text-align: center;">${studentScore}</td>` + 
+                `<td style="text-align: center;">${supervisorScore}</td>` + 
+                `<td style="text-align: center;" class="peer-score-cell" data-current-value="${parseFloat(row.peer_score) || 0}">${peerScore}</td>` +
+                `<td style="text-align: left;">${overallDisplay}</td>` +
+                `<td class="action-buttons">${actionButtons}</td>` +
+              '</tr>'
+            );
+            
+        } else {
+            // If row is already editing (should be rare if using loadEvaluations correctly, but handles state persistence if necessary)
+            // This is primarily handled inside toggleRowEdit function before re-render, but ensures a fallback.
+             tbody.append(
+              `<tr data-personnel-id="${row.personnelid}" data-editing="true">` +
+                `<td>${row.name}</td>` +
+                `<td>${row.department}</td>` +
+                `<td>${row.position || 'N/A'}</td>` +
+                `<td>${studentResponses} — ${responseStatusLabel}</td>` +
+                `<td style="text-align: center;">${studentScore}</td>` + 
+                `<td style="text-align: center;">${supervisorScore}</td>` + 
+                `<td style="text-align: center;" class="peer-score-cell" data-current-value="${parseFloat(row.peer_score) || 0}">
+                    <input type="number" min="0" max="4" step="0.01" value="${(parseFloat(row.peer_score) || 0).toFixed(2)}" class="time-editable peer-score-input" data-original-value="${(parseFloat(row.peer_score) || 0).toFixed(2)}" style="width: 60px; text-align: center; border: 1px solid #ddd; padding: 4px; border-radius: 4px;">
+                </td>` +
+                `<td style="text-align: left;">${overallDisplay}</td>` +
+                `<td class="action-buttons">
+                    <button class="btn primary" onclick="saveSingleScore(${row.personnelid})">
+                        <i class='bx bx-save'></i>&nbsp; Save
+                    </button>
+                    <button class="btn secondary" onclick="cancelSingleEdit(${row.personnelid})">
+                        <i class='bx bx-x'></i>&nbsp; Cancel
+                    </button>
+                </td>` +
+              '</tr>'
+            );
+        }
     });
 
     // --- UPDATE PAGINATION CONTROLS ---
     $('#evalTable').show();
     $('#emptyState').hide();
+    
+    // Disable pagination if any row is being edited
+    const disablePagination = $(`#evalTableBody tr[data-editing="true"]`).length > 0;
 
     $('#pagerInfo').text(`Showing ${startIndex + 1} to ${Math.min(endIndex, totalRecords)} of ${totalRecords} records (Page ${pageNumber} of ${totalPages})`);
     
-    $('#prevPage').prop('disabled', pageNumber === 1);
-    $('#nextPage').prop('disabled', pageNumber === totalPages);
+    $('#prevPage').prop('disabled', pageNumber === 1 || disablePagination);
+    $('#nextPage').prop('disabled', pageNumber === totalPages || disablePagination);
 
     CURRENT_PAGE = pageNumber;
 }
 
 
-// --- DELETE MODAL FUNCTIONS ---
+// --- DELETE MODAL FUNCTIONS (Unchanged) ---
 function deleteAcademicTerm(termId, termName) {
     if (termId == $('#semesterFilter').val() && !$('#cycleStatus').text().includes('Not Started')) {
         alert("Cannot delete the current active term that is In Progress or Finished. Only terms with status 'Not Started' can be deleted.");
@@ -532,17 +683,17 @@ function confirmDelete() {
         type: 'DELETE',
         success: function(response) {
             if (response.success) {
-                alert(`Successfully deleted term: ${termName}. The list will now refresh.`);
+                showToast(`Successfully deleted term: ${termName}. The list will now refresh.`);
                 closeDeleteModal();
                 $('#semesterFilter').val(''); 
                 fetchSemestersAndPopulate(); 
             } else {
-                alert(`Deletion failed. Reason: ${response.error}`);
+                showToast(`Deletion failed. Reason: ${response.error}`, 'error');
                 button.prop('disabled', false).html("<i class='bx bx-trash'></i>&nbsp; Delete Permanently");
             }
         },
         error: function(xhr) {
-            alert(`API Error: Could not delete term. ${xhr.responseJSON?.error || 'Server error.'}`);
+            showToast(`API Error: Could not delete term. ${xhr.responseJSON?.error || 'Server error.'}`, 'error');
             button.prop('disabled', false).html("<i class='bx bx-trash'></i>&nbsp; Delete Permanently");
         }
     });
@@ -770,11 +921,20 @@ function getStatusInfo(rating) {
 }
 
 function openModal(personnelId, facultyName, overallRating, studentResponses) {
+    // Check if another row is currently being edited
+    if ($(`#evalTableBody tr[data-editing="true"]`).length > 0) {
+        showToast("Please save or cancel the current score edit before viewing a report.", 'warning');
+        return;
+    }
+
     $('#modalTitle').text(`Evaluation Report: ${facultyName}`);
     const circlePercentage = Math.min((overallRating / 5) * 100, 100); 
     $('#overallRatingCircle').css('--percentage', `${circlePercentage}`);
     $('#overallRatingValue').text(overallRating.toFixed(2));
-    $('#modalDownloadBtn').data('personnel-id', personnelId);
+    
+    // *** FIX HERE: Set the data-personnel-id attribute for the modal's download button ***
+    $('#modalDownloadBtn').data('personnel-id', personnelId); 
+    
     $('#studentResponsesCount').text(studentResponses);
     
     const statusInfo = getStatusInfo(overallRating);
@@ -946,7 +1106,7 @@ $(document).ready(function() {
             
             setTimeout(() => {
                 button.prop('disabled', false).html(originalHtml).css('background', ''); 
-                alert(xhr.responseJSON?.message || "Failed to update evaluation records. See server logs.");
+                showToast(xhr.responseJSON?.message || "Failed to update evaluation records. See server logs.", 'error');
             }, 4000);
         });
     });
@@ -960,11 +1120,18 @@ $(document).ready(function() {
         openNewCycleModal();
     });
     
-    // --- NEW: Hide/Show Save/Cancel buttons as they are now row-specific actions ---
-    $('#editScoresBtn').click(function() {
-        alert("Use the 'Edit Score' button in the Actions column next to the score you wish to modify.");
+    // NEW: Handler for the modal's download button
+    $('#modalDownloadBtn').click(function() {
+        const personnelId = $(this).data('personnel-id');
+        if (personnelId > 0) {
+            downloadReport(personnelId);
+        } else {
+            showToast("Error: Personnel ID not set for download. Try clicking the View button again.", 'error');
+        }
     });
-    // --- END NEW HANDLERS ---
+    
+    // NEW: Attach the final save executor to the modal's button
+    $('#executeSaveBtn').off('click').on('click', confirmAndExecuteSave);
     
     // 4. Form submission handler for creating a new academic term
     $('#newCycleForm').submit(function(e) {
@@ -1051,6 +1218,14 @@ $(document).ready(function() {
         }
     });
     
+    $('#saveConfirmModal').click(function(event) {
+        if (event.target === this) {
+            // Note: We don't call cancelSingleEdit here, we just close the modal
+            // The row should still be in edit mode if the user closes the modal by clicking outside.
+            closeSaveConfirmModal();
+        }
+    });
+    
     // 7. Link Generation Form Handler
     $('#linkForm').submit(function(e) {
         e.preventDefault();
@@ -1078,13 +1253,13 @@ $(document).ready(function() {
                     $('#generatedLink').val(response.link);
                     $('#linkResultBox').show();
                 } else {
-                    alert(`Error generating link: ${response.error}`);
+                    showToast(`Error generating link: ${response.error}`, 'error');
                     $('#linkResultBox').hide();
                 }
                 btn.prop('disabled', false).html(originalHtml);
             },
             error: function(xhr) {
-                alert(`API Error: ${xhr.responseJSON?.error || 'Server error generating link.'}`);
+                showToast(`API Error: ${xhr.responseJSON?.error || 'Server error generating link.'}`, 'error');
                 btn.prop('disabled', false).html(originalHtml);
             }
         });

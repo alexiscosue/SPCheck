@@ -6430,19 +6430,41 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
     # 1. FETCH DATA (Reusing your existing API logic)
     report_response = api_hr_faculty_evaluation_report(personnel_id)
     if report_response.status_code != 200:
-        return report_response # Return JSON error from data fetch
+        return report_response
     
-    # Safely load JSON response data
     from flask import json
     report_data = json.loads(report_response.data.decode('utf-8'))['report']
 
+    # --- NEW: 1. Detect Non-Final Status and Identify Missing Components ---
+    is_final = True
+    missing_components = []
+    
+    # Required component weights
+    required_weights = {
+        'Student': 0.55, 
+        'Supervisor': 0.35, 
+        'Peer': 0.10
+    }
+    
+    # Tally weights from fetched data
+    fetched_weights = {item['type']: item['weight'] for item in report_data.get('rating_breakdown', [])}
+    
+    # Check for missing weights (This explicitly identifies which component is missing)
+    for component, required_weight in required_weights.items():
+        if fetched_weights.get(component, 0) == 0:
+            is_final = False
+            missing_components.append(component)
+
+    # Secondary check: If overall score is 0 and no components are missing, something is wrong
+    if report_data.get('overall_rating', 0.0) == 0.0 and is_final:
+        is_final = False # Mark as non-final if overall score is 0 despite 'complete' breakdown (all scores were 0)
+        
     # 2. SETUP DOCUMENT
     buffer = BytesIO()
     
-    # Use SimpleDocTemplate for Platypus Flowables (handles pagination automatically)
     doc = SimpleDocTemplate(
         buffer, 
-        pagesize=(8.5 * inch, 11 * inch), # Letter size
+        pagesize=(8.5 * inch, 11 * inch),
         topMargin=0.75 * inch, 
         leftMargin=0.75 * inch, 
         rightMargin=0.75 * inch, 
@@ -6454,13 +6476,22 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
 
     # 3. ADD HEADER & METADATA
     
-    # Title Style
     title_style = ParagraphStyle(
         'Title', 
         parent=styles['h1'], 
         fontSize=16, 
         textColor=colors.HexColor('#7b1113'),
-        spaceAfter=12
+        spaceAfter=6
+    )
+
+    preliminary_style = ParagraphStyle(
+        'Disclaimer', 
+        parent=styles['h2'], 
+        fontSize=14, 
+        textColor=colors.red,
+        alignment=1, # Center
+        spaceAfter=18,
+        spaceBefore=12
     )
 
     faculty_name = report_data.get('faculty_name', 'Faculty Report')
@@ -6468,6 +6499,22 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
     overall_rating = report_data.get('overall_rating', 0.0)
 
     story.append(Paragraph("Saint Peter's College - Faculty Evaluation Report", title_style))
+    
+    # --- NEW: 2. Add a Prominent Disclaimer if not final ---
+    if not is_final:
+        story.append(Paragraph(
+            "<b>*** PRELIMINARY REPORT - NOT FINALIZED ***</b>", 
+            preliminary_style
+        ))
+        
+        missing_list_str = ", ".join(missing_components)
+        warning_message = f"Warning: This report is incomplete. Missing components are: {missing_list_str}. Final score relies on missing components being weighted as zero."
+        
+        story.append(Paragraph(
+            f"<font color='#FF0000' size='9'><i>{warning_message}</i></font>", 
+            styles['Normal']
+        ))
+    
     story.append(Paragraph(f"<b>Faculty:</b> {faculty_name}", styles['Normal']))
     story.append(Paragraph(f"<b>Department:</b> {report_data.get('college', 'N/A')}", styles['Normal']))
     story.append(Paragraph(f"<b>Semester:</b> {semester}", styles['Normal']))
@@ -6475,7 +6522,6 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
 
     # 4. OVERALL RATING TABLE
     
-    # Data for the Overall Summary
     overall_data = [
         ['Overall Weighted Score:', f'{overall_rating:.2f}'],
         ['Final Status:', f'{overall_rating:.2f} ({getStatusLabel(overall_rating)})'],
@@ -6500,7 +6546,6 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
 
     # 5. RATING BREAKDOWN TABLE
     
-    # Header for breakdown
     breakdown_header = [
         Paragraph("<b>Evaluator</b>", styles['Normal']), 
         Paragraph("<b>Weight</b>", styles['Normal']), 
@@ -6511,10 +6556,21 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
 
     for item in report_data.get('rating_breakdown', []):
         weight_percent = f"{item.get('weight', 0) * 100:.0f}%"
+        
+        score = item.get('score', 0.0)
+        score_display = f"{score:.2f}"
+        
+        # If score is zero, and it's a weighted component, show indicator
+        if score == 0.0 and item.get('weight', 0) > 0 and report_data.get('overall_rating', 0.0) > 0:
+            score_display = f"{score_display} (Missing)"
+        elif score == 0.0 and item.get('weight', 0) > 0 and report_data.get('overall_rating', 0.0) == 0.0:
+            score_display = f"{score:.2f}"
+
+
         breakdown_data.append([
             item.get('type').capitalize(),
             weight_percent,
-            f"{item.get('score', 0.0):.2f}",
+            score_display,
             item.get('total_responses', 0)
         ])
 
@@ -6591,17 +6647,6 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
     response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
     
     return response
-
-# Helper function to determine the status label (place this outside the route, near getStatusInfo in JS)
-def getStatusLabel(rating):
-    if rating >= 3:
-        return 'Above Average'
-    elif rating >= 2:
-        return 'Average'
-    elif rating > 0:
-        return 'Below Average'
-    else:
-        return 'Not Rated'
 
 @app.route('/api/hr/new-evaluation-cycle', methods=['POST'])
 @require_auth([20003])
