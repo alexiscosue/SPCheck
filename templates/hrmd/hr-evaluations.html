@@ -65,6 +65,9 @@
               </div>
           </div>
           <div class="right">
+            <button class="btn secondary" id="cancelScoresBtn" style="display:none;">
+              <i class='bx bx-x'></i>&nbsp; Cancel
+            </button>
             <button class="btn primary" id="update-eval-btn" >
               Update Evaluation Records
             </button>
@@ -101,10 +104,6 @@
           <table id="evalTable" aria-label="Evaluations table">
             <thead>
               <tr>
-                <!-- <th><span class="sortable" data-sort="faculty">Faculty <span class="sort-ind" id="sortFaculty"></span></span></th>
-                <th><span class="sortable" data-sort="dept">Department <span class="sort-ind" id="sortDept"></span></span></th>
-                <th><span class="sortable" data-sort="position">Position <span class="sort-ind" id="sortPosition"></span></span></th>
-                <th><span class="sortable" data-sort="response">Response Rate <span class="sort-ind" id="sortResponse"></span></span></th> -->
                 <th>Faculty</th>
                 <th>Department</th>
                 <th>Position</th>
@@ -113,7 +112,6 @@
                 <th>Supervisor</th>
                 <th>Peer</th>
                 <th>Overall Score</th>
-                <!-- <th><span class="sortable" data-sort="rating">Overall <span class="sort-ind" id="sortRating"></span></span></th> -->
                 <th>Actions</th>
               </tr>
             </thead>
@@ -288,6 +286,110 @@ let EVALUATIONS_DATA = [];
 const PAGE_SIZE = 10;
 let CURRENT_PAGE = 1;
 
+// --- NEW/MODIFIED FUNCTIONS FOR ROW EDITING ---
+
+function toggleRowEdit(personnelId) {
+    const row = $(`#evalTableBody tr[data-personnel-id="${personnelId}"]`);
+    const isEditing = row.attr('data-editing') === 'true';
+
+    if (!isEditing) {
+        // --- Enter Edit Mode ---
+        
+        // 1. Convert peer score display to input field
+        const peerScoreCell = row.find('td.peer-score-cell');
+        const currentValue = peerScoreCell.data('current-value') || 0.0;
+        
+        peerScoreCell.html(`
+            <input type="number" 
+                   min="0" max="4" step="0.01"
+                   value="${parseFloat(currentValue).toFixed(2)}"
+                   class="time-editable peer-score-input"
+                   data-original-value="${parseFloat(currentValue).toFixed(2)}"
+                   style="width: 60px; text-align: center; border: 1px solid #ddd; padding: 4px; border-radius: 4px;">
+        `);
+
+        // 2. Change Action Buttons: View/Download/Link -> Save/Cancel
+        row.find('.action-buttons').html(`
+            <button class="btn primary" onclick="saveSingleScore(${personnelId})">
+                <i class='bx bx-save'></i>&nbsp; Save
+            </button>
+            <button class="btn secondary" onclick="cancelSingleEdit(${personnelId})">
+                <i class='bx bx-x'></i>&nbsp; Cancel
+            </button>
+        `);
+
+        row.attr('data-editing', 'true');
+        
+        // Disable other edit buttons on the page
+        $('.edit-score-btn').prop('disabled', true);
+        $('.page-controls button').prop('disabled', true);
+        
+    } else {
+        // --- Exit Edit Mode (Render back to display mode) ---
+        renderTablePage(CURRENT_PAGE);
+        
+        // Re-enable all edit buttons and controls
+        $('.edit-score-btn').prop('disabled', false);
+        $('.page-controls button').prop('disabled', false);
+    }
+}
+
+function cancelSingleEdit(personnelId) {
+    // Simply re-render the current page to discard changes and exit edit mode
+    renderTablePage(CURRENT_PAGE);
+}
+
+function saveSingleScore(personnelId) {
+    const row = $(`#evalTableBody tr[data-personnel-id="${personnelId}"]`);
+    const peerScoreInput = row.find('input.peer-score-input');
+    
+    if (!peerScoreInput.length) return;
+
+    const originalValue = peerScoreInput.data('original-value');
+    const newValue = parseFloat(peerScoreInput.val());
+    
+    if (isNaN(newValue) || newValue < 0 || newValue > 4) {
+        alert("Invalid score. Please enter a value between 0.00 and 4.00.");
+        peerScoreInput.focus();
+        return;
+    }
+
+    if (newValue.toFixed(2) === originalValue) {
+        alert("No change detected.");
+        toggleRowEdit(personnelId); // Exit edit mode without saving
+        return;
+    }
+    
+    if (!confirm(`Confirm manual score update for this faculty member to ${newValue.toFixed(2)}?`)) {
+        return;
+    }
+
+    const saveBtn = row.find('.action-buttons .btn.primary');
+    saveBtn.prop('disabled', true).html("<i class='bx bx-loader-alt bx-spin'></i>&nbsp; Saving...");
+
+    const scoreToUpdate = [{
+        personnel_id: personnelId,
+        peer_score: newValue.toFixed(2)
+    }];
+    
+    $.ajax({
+        url: '/api/hr/update-evaluation-score',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ updates: scoreToUpdate, term_id: $('#semesterFilter').val() || window.CURRENT_TERM_ID }),
+        success: function(response) {
+            alert(response.message);
+            // Refresh data for the whole table (will exit edit mode)
+            loadEvaluations(); 
+        },
+        error: function(xhr) {
+            alert(`Save failed. ${xhr.responseJSON?.error || 'Server error.'}`);
+            saveBtn.prop('disabled', false).html("<i class='bx bx-save'></i>&nbsp; Save");
+        }
+    });
+}
+// --- END NEW FUNCTIONS ---
+
 
 function renderTablePage(pageNumber) {
     const tbody = $('#evalTableBody');
@@ -346,29 +448,37 @@ function renderTablePage(pageNumber) {
         // NEW: Formatted individual scores
         const studentScore = formatScore(row.student_score);
         const supervisorScore = formatScore(row.supervisor_score);
-        const peerScore = formatScore(row.peer_score);
+        const peerScore = formatScore(row.peer_score); // This is the value displayed by default
 
         // MODIFIED OVERALL RATING CELL (Left Aligned)
         const overallDisplay = (rating > 0) ? 
             `<span class="status ${statusClass}" style="padding: 4px 8px;">${rating.toFixed(2)} - ${statusLabel}</span>` : 
             `<span class="status pending">${statusLabel}</span>`;
-
+            
+        // Get the current row editing state (used after a re-render/cancel)
+        const rowElement = $(`#evalTableBody tr[data-personnel-id="${row.personnelid}"]`);
+        const isEditing = rowElement.attr('data-editing') === 'true';
 
         tbody.append(
-          '<tr>' +
+          `<tr data-personnel-id="${row.personnelid}">` +
             `<td>${row.name}</td>` +
             `<td>${row.department}</td>` +
             `<td>${row.position || 'N/A'}</td>` +
             `<td>${studentResponses} — ${responseStatusLabel}</td>` +
-            // NEW RATING CELLS (Center Aligned)
             `<td style="text-align: center;">${studentScore}</td>` + 
             `<td style="text-align: center;">${supervisorScore}</td>` + 
-            `<td style="text-align: center;">${peerScore}</td>` + 
-            // MODIFIED OVERALL RATING CELL (Left Aligned)
+            `<td style="text-align: center;" class="peer-score-cell" data-current-value="${parseFloat(row.peer_score) || 0}">${peerScore}</td>` +
             `<td style="text-align: left;">${overallDisplay}</td>` +
-            `<td>
-                <button class="btn action" onclick="openModal(${row.personnelid}, '${row.name}', ${rating.toFixed(2)}, ${studentResponses})"><i class='bx bx-show-alt'></i>&nbsp;View</button>
-                <button class="btn secondary" onclick="downloadReport(${row.personnelid})" ${disableDownload}><i class='bx bx-download'></i></button>
+            `<td class="action-buttons">
+                <button class="btn secondary edit-score-btn" onclick="toggleRowEdit(${row.personnelid})">
+                    <i class='bx bx-edit'></i>&nbsp; Edit
+                </button>
+                <button class="btn action" onclick="openModal(${row.personnelid}, '${row.name}', ${rating.toFixed(2)}, ${studentResponses})">
+                    <i class='bx bx-show-alt'></i>&nbsp;View
+                </button>
+                <button class="btn secondary" onclick="downloadReport(${row.personnelid})" ${disableDownload}>
+                    <i class='bx bx-download'></i>
+                </button>
                 <button class="btn action" onclick="openLinkModal(${row.personnelid}, '${row.name}')" title="Generate Evaluation Link">
                     <i class='bx bx-link-alt'></i>
                 </button>
@@ -785,7 +895,7 @@ function openLinkModal(personnelId, facultyName) {
     
     $('#linkForm')[0].reset();
     $('#linkResultBox').hide();
-    $('#linkModalTitle').text(`Generate Link for Faculty: ${facultyName}`);
+    $('#linkModalTitle').text(`Generate Link for Faculty: N/A`);
     $('#linkFacultyName').text(facultyName);
     
     $('#linkPersonnelId').val(personnelId);
@@ -849,6 +959,12 @@ $(document).ready(function() {
     $('#newCycleBtn').click(function() {
         openNewCycleModal();
     });
+    
+    // --- NEW: Hide/Show Save/Cancel buttons as they are now row-specific actions ---
+    $('#editScoresBtn').click(function() {
+        alert("Use the 'Edit Score' button in the Actions column next to the score you wish to modify.");
+    });
+    // --- END NEW HANDLERS ---
     
     // 4. Form submission handler for creating a new academic term
     $('#newCycleForm').submit(function(e) {

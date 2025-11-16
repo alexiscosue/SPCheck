@@ -6179,6 +6179,90 @@ def api_hr_evaluations():
     )
 
 
+@app.route('/api/hr/update-evaluation-score', methods=['POST'])
+@require_auth([20003])
+def api_hr_update_evaluation_score():
+    """Manually update a specific evaluation score (e.g., Peer Score)"""
+    try:
+        data = request.get_json()
+        updates = data.get('updates', [])
+        term_id = data.get('term_id')
+        
+        if not updates or not term_id:
+            return jsonify({'success': False, 'error': 'Missing updates or term ID.'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        user_id = session['user_id']
+        hr_personnel_info = get_personnel_info(user_id)
+        hr_personnel_id = hr_personnel_info.get('personnel_id')
+        
+        updated_count = 0
+        
+        for update in updates:
+            personnel_id = update.get('personnel_id')
+            peer_score = update.get('peer_score')
+            
+            if personnel_id and peer_score is not None:
+                # 1. Fetch current score and name for logging
+                cursor.execute("""
+                    SELECT fe.score, CONCAT(p.firstname, ' ', p.lastname)
+                    FROM personnel p
+                    LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s AND fe.evaluator_type = 'peer'
+                    WHERE p.personnel_id = %s
+                """, (term_id, personnel_id))
+                
+                result = cursor.fetchone()
+                current_score = result[0] if result and result[0] is not None else 0.0
+                faculty_name = result[1] if result else "Unknown Faculty"
+                
+                # 2. Perform INSERT or UPDATE (ON CONFLICT)
+                cursor.execute("""
+                    INSERT INTO faculty_evaluations (
+                        personnel_id, acadcalendar_id, evaluator_type, score, total_responses, last_updated, class_id
+                    ) VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP, 0)
+                    ON CONFLICT (personnel_id, acadcalendar_id, class_id, evaluator_type)
+                    DO UPDATE SET
+                        score = EXCLUDED.score,
+                        last_updated = CURRENT_TIMESTAMP
+                """, (
+                    personnel_id,
+                    term_id,
+                    'peer',
+                    float(peer_score),
+                    1 # Manually set responses to 1 for manual entry to count
+                ))
+                updated_count += 1
+                
+                # 3. Log Audit Action
+                log_audit_action(
+                    hr_personnel_id,
+                    "Manual Evaluation Score Update",
+                    f"HR manually set Peer Score for {faculty_name} (Term ID: {term_id})",
+                    before_value=f"Peer Score: {float(current_score):.2f}",
+                    after_value=f"Peer Score: {float(peer_score):.2f}"
+                )
+                
+        conn.commit()
+        cursor.close()
+        return_db_connection(conn)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully updated {updated_count} Peer Score record(s).',
+            'updated_count': updated_count
+        })
+        
+    except Exception as e:
+        print(f"Error updating evaluation score: {e}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/hr/faculty-evaluation-report/<int:personnel_id>')
 @require_auth([20003])
 def api_hr_faculty_evaluation_report(personnel_id):
