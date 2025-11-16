@@ -41,7 +41,7 @@
         <div class="controls">
           <div class="left">
             <div class="search-filter">
-              <input type="text" id="evalSearch" placeholder="Search faculty...">
+              <input type="text" id="evalSearch" placeholder="Search Faculty Name...">
               <select id="semesterFilter">
                 <option value="">Loading Semesters...</option>
               </select>
@@ -88,7 +88,11 @@
             </div>
             <div style="display:flex;gap:20px;font-size:14px;">
               <div><strong>⏳ Duration:</strong> <span id="durationDates">Loading...</span></div>
-              <div><strong>🔔 Status:</strong> <span id="cycleStatus" style="color:#f59e0b;font-weight:600;">Loading...</span></div>
+              
+              <div id="cycleStatusContainer">
+                <strong>🔔 Status:</strong> 
+                <span id="cycleStatus" style="color:#f59e0b;font-weight:600;">Loading...</span>
+              </div>
             </div>
           </div>
         </div>
@@ -178,7 +182,6 @@
                         <option value="">Select Semester</option>
                         <option value="First Semester">First Semester</option>
                         <option value="Second Semester">Second Semester</option>
-                        <option value="Summer Semester">Summer Semester</option>
                     </select>
                     
                     <label for="new_acadyear">Academic Year (e.g., 2025-2026)</label>
@@ -193,6 +196,74 @@
                     <button type="submit" class="btn primary" id="saveNewCycleBtn" style="width: 100%; margin-top: 15px;">Create Term & Roll Cycle</button>
                     <div id="cycleFormMessage" class="form-message" style="margin-top: 10px; display:none;"></div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="deleteTermModal" class="hr-modal-wrapper" style="display: none;">
+        <div class="hr-modal-content" style="max-width: 400px;">
+            <div class="emp-modal-header" style="background: #dc2626;">
+                <h2 id="deleteModalTitle" style="color: white; font-size: 1.2rem;">Confirm Deletion</h2>
+                <span class="emp-close" onclick="closeDeleteModal()" style="color: white;">&times;</span>
+            </div>
+            <div class="emp-modal-body" style="text-align: center;">
+                <i class='bx bx-trash' style="font-size: 3rem; color: #dc2626; margin-bottom: 15px;"></i>
+                <p style="margin-bottom: 20px;">
+                    You are about to permanently delete the term: 
+                    <strong id="termToDeleteName">N/A</strong>.
+                </p>
+                <p style="font-size: 13px; color: #ef4444; font-weight: 600;">
+                    WARNING: This action cannot be undone.
+                </p>
+                
+                <input type="hidden" id="termToDeleteId">
+                
+                <div style="display: flex; justify-content: space-between; gap: 10px; margin-top: 20px;">
+                    <button class="btn secondary emp-btn-cancel" onclick="closeDeleteModal()" style="flex: 1;">
+                        Cancel
+                    </button>
+                    <button class="btn primary" id="confirmDeleteBtn" onclick="confirmDelete()" style="flex: 1; background: #dc2626;">
+                        <i class='bx bx-trash'></i>&nbsp; Delete Permanently
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="linkModal" class="hr-modal-wrapper" style="display: none;">
+        <div class="hr-modal-content" style="max-width: 500px;">
+            <div class="emp-modal-header" style="background: #3b82f6;">
+                <h2 id="linkModalTitle" style="color: white; font-size: 1.2rem;">Generate Link for Faculty: N/A</h2>
+                <span class="emp-close" onclick="closeLinkModal()" style="color: white;">&times;</span>
+            </div>
+            <div class="emp-modal-body">
+                <p style="margin-bottom: 20px;">
+                    Select the evaluator type to generate a pre-filled Google Form link for <strong id="linkFacultyName">N/A</strong>.
+                </p>
+                <form id="linkForm">
+                    <input type="hidden" id="linkPersonnelId">
+                    <input type="hidden" id="linkAcadCalendarId">
+
+                    <label for="evaluatorType">Evaluator Type</label>
+                    <select id="evaluatorType" required>
+                        <option value="">Select Evaluator</option>
+                        <option value="student">Student</option>
+                        <option value="supervisor">Supervisor</option>
+                        <option value="peer">Peer</option>
+                    </select>
+
+                    <button type="submit" class="btn primary" id="generateLinkBtn" style="width: 100%; margin-top: 15px; background: #3b82f6;">
+                        <i class='bx bx-link-alt'></i>&nbsp; Generate Link
+                    </button>
+                </form>
+
+                <div id="linkResultBox" class="card" style="margin-top: 20px; display:none; background: #f0fdf4; border: 1px solid #d1fae5;">
+                    <p style="font-weight: 600; color: #065f46; margin-bottom: 8px;">✅ Link Generated:</p>
+                    <textarea id="generatedLink" rows="3" readonly style="width: 100%; border: 1px solid #d1fae5; padding: 10px; resize: none; font-size: 13px; background: white;"></textarea>
+                    <button class="btn secondary" id="copyLinkBtn" style="margin-top: 10px;">
+                        <i class='bx bx-copy'></i>&nbsp; Copy to Clipboard
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -253,6 +324,9 @@ function renderTablePage(pageNumber) {
                                   '<span style="color:#166534;font-weight:600">Met</span>' : 
                                   '<span style="color:#991b1b;font-weight:600">Not Met</span>';
 
+        // NEW: Check if rating is zero or less to disable download
+        const disableDownload = (rating <= 0 || isNaN(rating)) ? 'disabled' : '';
+
         tbody.append(
           '<tr>' +
             `<td>${row.name}</td>` +
@@ -262,7 +336,10 @@ function renderTablePage(pageNumber) {
             `<td><span class="status ${statusClass}">${statusLabel} (${rating.toFixed(2)})</span></td>` +
             `<td>
                 <button class="btn action" onclick="openModal(${row.personnelid}, '${row.name}', ${rating.toFixed(2)}, ${studentResponses})"><i class='bx bx-show-alt'></i>&nbsp;View</button>
-                <button class="btn secondary" onclick="downloadReport(${row.personnelid})"><i class='bx bx-download'></i></button>
+                <button class="btn secondary" onclick="downloadReport(${row.personnelid})" ${disableDownload}><i class='bx bx-download'></i></button>
+                <button class="btn action" onclick="openLinkModal(${row.personnelid}, '${row.name}')" title="Generate Evaluation Link">
+                    <i class='bx bx-link-alt'></i>
+                </button>
             </td>` +
           '</tr>'
         );
@@ -281,6 +358,58 @@ function renderTablePage(pageNumber) {
 }
 
 
+// --- NEW DELETE FUNCTION ---
+function deleteAcademicTerm(termId, termName) {
+    // Basic safety check for current term status (prevent accidental deletion of ongoing/archived)
+    if (termId == $('#semesterFilter').val() && !$('#cycleStatus').text().includes('Not Started')) {
+        alert("Cannot delete the current active term that is In Progress or Finished. Only terms with status 'Not Started' can be deleted.");
+        return;
+    }
+    openDeleteModal(termId, termName);
+}
+
+function openDeleteModal(termId, termName) {
+    $('#termToDeleteName').text(termName);
+    $('#termToDeleteId').val(termId);
+    $('#deleteTermModal').css('display', 'flex');
+    $('#confirmDeleteBtn').prop('disabled', false).html("<i class='bx bx-trash'></i>&nbsp; Delete Permanently");
+}
+
+function closeDeleteModal() {
+    $('#deleteTermModal').css('display', 'none');
+}
+
+function confirmDelete() {
+    const termId = $('#termToDeleteId').val();
+    const termName = $('#termToDeleteName').text();
+
+    const button = $('#confirmDeleteBtn');
+    button.prop('disabled', true).html("<i class='bx bx-loader-alt bx-spin'></i>&nbsp; Deleting...");
+
+    // Call the dedicated DELETE API endpoint
+    $.ajax({
+        url: `/api/hr/acadcalendar/${termId}`,
+        type: 'DELETE',
+        success: function(response) {
+            if (response.success) {
+                alert(`Successfully deleted term: ${termName}. The list will now refresh.`);
+                closeDeleteModal();
+                $('#semesterFilter').val(''); // Clear selection
+                fetchSemestersAndPopulate(); // Refresh the list and current view
+            } else {
+                alert(`Deletion failed. Reason: ${response.error}`);
+                button.prop('disabled', false).html("<i class='bx bx-trash'></i>&nbsp; Delete Permanently");
+            }
+        },
+        error: function(xhr) {
+            alert(`API Error: Could not delete term. ${xhr.responseJSON?.error || 'Server error.'}`);
+            button.prop('disabled', false).html("<i class='bx bx-trash'></i>&nbsp; Delete Permanently");
+        }
+    });
+}
+// ----------------------------
+
+
 function loadEvaluations() {
     // Determine which term ID to use: selected filter or the global current ID
     const selectedTerm = $('#semesterFilter').val();
@@ -297,7 +426,7 @@ function loadEvaluations() {
     $('#emptyState').hide();
     $('#termDisplay').html('📅 Loading...');
     $('#durationDates').text('Loading...');
-    $('#cycleStatus').text('Loading...').css('color', '#f59e0b');
+    $('#cycleStatusContainer').html('<strong>🔔 Status:</strong> <span id="cycleStatus">Loading...</span>'); // Reset status container
 
 
     $.get('/api/hr/evaluations', {
@@ -347,42 +476,58 @@ function loadEvaluations() {
             }
             $('#durationDates').text(durationText);
 
-            // 2. Calculate Dynamic Status (Not Started, In Progress, Finished)
+            // 2. Calculate Dynamic Status and Delete Permission
             let statusText = "N/A";
-            let statusColor = "#6b7280"; // Gray/Muted
+            let statusColor = "#6b7280"; 
+            let canDelete = false; // Flag to enable/disable button
 
             if (startDateString && endDateString) {
                 const termStartDate = new Date(startDateString);
                 const termEndDate = new Date(endDateString);
                 const today = new Date();
                 
-                // Normalize dates to midnight for fair comparison
                 today.setHours(0, 0, 0, 0); 
                 termStartDate.setHours(0, 0, 0, 0);
                 termEndDate.setHours(0, 0, 0, 0);
 
                 if (today < termStartDate) {
-                    // Today is before the start date
                     statusText = "Not Started";
                     statusColor = "#3b82f6"; // Blue/Info
+                    canDelete = true;
                 } else if (today >= termStartDate && today <= termEndDate) {
-                    // Today is during the term
                     statusText = "In Progress";
                     statusColor = "#f59e0b"; // Amber/Warn
+                    canDelete = false;
                 } else {
-                    // Today is after the end date
                     statusText = "Finished";
                     statusColor = "#166534"; // Green/Success
+                    canDelete = false;
                 }
             } else {
                  statusText = "Date Missing";
                  statusColor = "#6b7280";
             }
+            
+            // 3. Render Status and Delete Button into the container
+            const currentTermId = selectedOption.val();
+            const currentTermName = info.display.replace('📅 ', '').trim();
 
-            $('#cycleStatus').text(statusText).css('color', statusColor);
+            const deleteButtonHtml = canDelete ? `
+                <button class="btn secondary" 
+                        onclick="deleteAcademicTerm(${currentTermId}, '${currentTermName}')" 
+                        title="Delete Academic Term" 
+                        style="margin-left: 10px; padding: 6px 8px; font-size: 14px; background-color: #fef2f2; color: #dc2626; border: 1px solid #fecaca;">
+                    <i class='bx bx-trash'></i>
+                </button>` : '';
+
+            $('#cycleStatusContainer').html(`
+                <strong>🔔 Status:</strong> 
+                <span id="cycleStatus" style="color:${statusColor};font-weight:600;">${statusText}</span>
+                ${deleteButtonHtml}
+            `);
         }
         
-        // --- 3. REBUILD DROPDOWNS (Excluding Semester Filter) ---
+        // --- 3. REBUILD DROPDOWNS ---
         var deptFilter = $('#deptFilter');
         var currentDeptVal = deptFilter.val();
         if (ALL_COLLEGES.length > 0) {
@@ -576,6 +721,26 @@ function downloadReport(personnelId) {
     window.open(url, '_blank');
 }
 
+function openLinkModal(personnelId, facultyName) {
+    const currentTermId = $('#semesterFilter').val() || window.CURRENT_TERM_ID;
+    
+    // Clear previous state
+    $('#linkForm')[0].reset();
+    $('#linkResultBox').hide();
+    $('#linkModalTitle').text(`Generate Link for Faculty: ${facultyName}`);
+    $('#linkFacultyName').text(facultyName);
+    
+    // Set hidden fields
+    $('#linkPersonnelId').val(personnelId);
+    $('#linkAcadCalendarId').val(currentTermId);
+
+    $('#linkModal').css('display', 'flex');
+}
+
+function closeLinkModal() {
+    $('#linkModal').css('display', 'none');
+}
+
 // === NEW CYCLE MODAL FUNCTIONS ===
 function openNewCycleModal() {
     $('#newCycleModalTitle').text('Initiate New Evaluation Term');
@@ -708,8 +873,73 @@ $(document).ready(function() {
             closeNewCycleModal();
         }
     });
+    
+    $('#deleteTermModal').click(function(event) {
+        if (event.target === this) {
+            closeDeleteModal();
+        }
+    });
+    
+    $('#linkModal').click(function(event) {
+        if (event.target === this) {
+            closeLinkModal();
+        }
+    });
+    
+    // 7. Link Generation Form Handler
+    $('#linkForm').submit(function(e) {
+        e.preventDefault();
+        
+        const btn = $('#generateLinkBtn');
+        const originalHtml = btn.html();
+        
+        const facultyId = $('#linkPersonnelId').val();
+        const termId = $('#linkAcadCalendarId').val();
+        const evaluatorType = $('#evaluatorType').val();
 
-    // 7. Initial data load (Starts with fetching semesters)
+        btn.prop('disabled', true).html("<i class='bx bx-loader-alt bx-spin'></i>&nbsp; Generating...");
+        
+        // This AJAX call targets the new API endpoint you will create in app.py
+        $.ajax({
+            url: '/api/hr/generate-evaluation-link',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                personnel_id: facultyId,
+                acadcalendar_id: termId,
+                evaluator_type: evaluatorType
+            }),
+            success: function(response) {
+                if (response.success && response.link) {
+                    $('#generatedLink').val(response.link);
+                    $('#linkResultBox').show();
+                } else {
+                    alert(`Error generating link: ${response.error}`);
+                    $('#linkResultBox').hide();
+                }
+                btn.prop('disabled', false).html(originalHtml);
+            },
+            error: function(xhr) {
+                alert(`API Error: ${xhr.responseJSON?.error || 'Server error generating link.'}`);
+                btn.prop('disabled', false).html(originalHtml);
+            }
+        });
+    });
+    
+    // 8. Copy Link Button Handler
+    $('#copyLinkBtn').click(function() {
+        const linkField = $('#generatedLink');
+        linkField.select();
+        document.execCommand('copy');
+        
+        const originalText = $(this).html();
+        $(this).html("<i class='bx bx-check'></i>&nbsp; Copied!");
+        setTimeout(() => {
+            $(this).html(originalText);
+        }, 1500);
+    });
+
+    // 9. Initial data load (Starts with fetching semesters)
     fetchSemestersAndPopulate();
 });
 </script>

@@ -88,6 +88,7 @@
     <div class="tabs_profile">
       <div class="tab active" data-tab="promotions">Promotions</div>
       <div class="tab" data-tab="regularizations">Regularizations</div>
+      <div class="tab" data-tab="auditlogs">Audit Logs</div>
     </div>
 
     <!-- Promotions Table -->
@@ -189,6 +190,24 @@
               <td colspan="7" style="text-align:center">No eligible faculty found</td>
             </tr>
             {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="tab-content" id="auditlogs" style="display: none;">
+      <div class="table">
+        <table>
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Action</th>
+              <th>Details</th>
+              <th>Performed By</th>
+            </tr>
+          </thead>
+          <tbody id="auditLogsBody">
+            <tr><td colspan="4" style="text-align:center;padding:2rem;color:#6b7280">Loading audit logs...</td></tr>
           </tbody>
         </table>
       </div>
@@ -296,11 +315,13 @@ function showModalLoading(show) {
   }
 }
 
-// Tabs with filter visibility toggle
+
+// Tabs with filter visibility toggle and new Audit Logs tab
 const tabs = document.querySelectorAll('.tab');
 const contents = document.querySelectorAll('.tab-content');
 const promotionFilters = document.getElementById('promotionFilters');
 const regularizationFilters = document.getElementById('regularizationFilters');
+const auditLogsTabContent = document.getElementById('auditlogs');
 
 tabs.forEach(tab => {
   tab.addEventListener('click', () => {
@@ -309,16 +330,24 @@ tabs.forEach(tab => {
     const target = tab.getAttribute('data-tab');
     contents.forEach(c => c.classList.remove('active'));
     document.getElementById(target).classList.add('active');
-    
+
     if (target === 'promotions') {
       promotionFilters.style.display = 'flex';
       regularizationFilters.style.display = 'none';
-    } else {
+      auditLogsTabContent.style.display = 'none';
+    } else if (target === 'regularizations') {
       promotionFilters.style.display = 'none';
       regularizationFilters.style.display = 'flex';
+      auditLogsTabContent.style.display = 'none';
+    } else if (target === 'auditlogs') {
+      promotionFilters.style.display = 'none';
+      regularizationFilters.style.display = 'none';
+      auditLogsTabContent.style.display = 'block';
+      loadAuditLogs();
     }
   });
 });
+
 
 // PROMOTION FILTERING
 const searchPromotionInput = document.getElementById('searchPromotionName');
@@ -715,5 +744,46 @@ fetch(`/api/profile/image-base64/${facultyId}`)
     }
     // If not, logo.png remains as src
   });
+
+  
+
+
+function loadAuditLogs() {
+  const tbody = document.getElementById('auditLogsBody');
+  tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:#6b7280">Loading audit logs...</td></tr>';
+
+  fetch('/api/audit-logs')
+    .then(response => response.json())
+    .then(data => {
+      tbody.innerHTML = '';
+      if (data.success && data.audit_events.length > 0) {
+        data.audit_events.forEach(evt => {
+          let statusClass = 'pending';
+          if (evt.event.toLowerCase().includes('reject')) statusClass = 'nu';
+          else if (evt.event.toLowerCase().includes('approve')) statusClass = 'ok';
+          else if (evt.event.toLowerCase().includes('submit') || evt.event.toLowerCase().includes('initiate')) statusClass = 'pending';
+          else if (evt.event.toLowerCase().includes('forward') || evt.event.toLowerCase().includes('endorsement') || evt.event.toLowerCase().includes('recommendation')) statusClass = 'warn';
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td style="white-space:nowrap;font-size:13px">${new Date(evt.timestamp).toLocaleString()}</td>
+            <td><span class="status ${statusClass}">${evt.type} - ${evt.event}</span></td>
+            <td style="font-size:14px">${evt.notes || ''}</td>
+            <td style="font-weight:500">${evt.performed_by || 'System'}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } else {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:#6b7280">No audit logs found</td></tr>';
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:#dc2626">Error loading audit logs</td></tr>';
+    });
+}
+
+
+
 </script>
 {% endblock %}

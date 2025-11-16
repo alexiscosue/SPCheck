@@ -24,6 +24,25 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch, mm
 from reportlab.lib import colors
 
+def log_audit(action, details, personnel_id=None):
+    """
+    Log actions to existing auditlogs table
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT INTO auditlogs (action, details, personnel_id, created_at)
+            VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+        """, (action, details, personnel_id))
+        
+        conn.commit()
+        cursor.close()
+        return_db_connection(conn)
+    except Exception as e:
+        print(f"Audit log error: {str(e)}")
+
 
 load_dotenv()
 
@@ -5950,7 +5969,6 @@ def api_hr_evaluation_dashboard_data():
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# Replace the existing api_hr_evaluations function in app.py with this code
 
 @app.route('/api/hr/evaluations', methods=['GET'])
 @require_auth([20003])
@@ -6246,7 +6264,6 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
     term_id = request.args.get('term_id')
 
     # 1. FETCH DATA (Reusing your existing API logic)
-    # We need to call the API function directly to get its data
     report_response = api_hr_faculty_evaluation_report(personnel_id)
     if report_response.status_code != 200:
         return report_response # Return JSON error from data fetch
@@ -6406,7 +6423,6 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
     response.headers['Content-Type'] = 'application/pdf'
     
     # 8c. Set the Content-Disposition header once, ensuring it is the only one.
-    # We use .set() or direct assignment to prevent duplicates.
     filename = f'Evaluation_Report_{faculty_name.replace(" ", "_")}_T{term_id}.pdf'
     response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
     
@@ -6423,7 +6439,6 @@ def getStatusLabel(rating):
     else:
         return 'Not Rated'
 
-# --- NEW FEATURE: New Evaluation Cycle API STUB ---
 @app.route('/api/hr/new-evaluation-cycle', methods=['POST'])
 @require_auth([20003])
 def api_hr_new_evaluation_cycle():
@@ -6432,7 +6447,6 @@ def api_hr_new_evaluation_cycle():
         data = request.get_json()
         current_term_id = data.get('current_term_id')
         
-        # 1. Simulate finding the next term (e.g., current is 80001, next is 80002)
         next_term_id = int(current_term_id) + 1
         
         # 2. Get HR Personnel ID for audit logging
@@ -6519,7 +6533,7 @@ def fetch_evaluations():
                     source['type'], 
                     row['Score'],
                     row['Total Responses'],
-                    qualitative_feedback      # <-- Use the new feedback field
+                    qualitative_feedback      
                 ))
                 total_updated += 1
             
@@ -6542,6 +6556,73 @@ def fetch_evaluations():
                 pass
         return jsonify(message=f"Critical error processing evaluations. Check logs for details. Error: {str(e)}"), 500
 
+# In app.py
+
+# --- PLACEHOLDER GOOGLE FORM CONFIGURATION ---
+# *** REPLACE THESE VALUES WITH YOUR ACTUAL GOOGLE FORM LINKS AND ENTRY IDs ***
+GOOGLE_FORM_CONFIG = {
+    'base_url': "https://docs.google.com/forms/d/e/1FAIpQLSfP_YOUR_FORM_ID_HERE/viewform",
+    'entry_ids': {
+        'personnel_id': 'entry.123456789',   # Placeholder: Field for Faculty ID
+        'acadcalendar_id': 'entry.987654321', # Placeholder: Field for Term ID
+        'evaluator_type': 'entry.112233445'  # Placeholder: Field for Evaluator Type
+    }
+}
+# -----------------------------------------------
+
+
+@app.route('/api/hr/generate-evaluation-link', methods=['POST'])
+@require_auth([20003])
+def api_hr_generate_evaluation_link():
+    """Generates a pre-filled Google Form link for a specific evaluation."""
+    try:
+        data = request.get_json()
+        personnel_id = data.get('personnel_id')
+        acadcalendar_id = data.get('acadcalendar_id')
+        evaluator_type = data.get('evaluator_type')
+        
+        if not all([personnel_id, acadcalendar_id, evaluator_type]):
+            return jsonify({'success': False, 'error': 'Missing personnel ID, term ID, or evaluator type.'}), 400
+
+        # 1. Fetch Faculty Name for logging
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT firstname, lastname FROM personnel WHERE personnel_id = %s", (personnel_id,))
+        faculty_info = cursor.fetchone()
+        cursor.close()
+        return_db_connection(conn)
+        
+        if not faculty_info:
+            return jsonify({'success': False, 'error': 'Faculty not found.'}), 404
+        
+        faculty_name = f"{faculty_info[0]} {faculty_info[1]}"
+        
+        # 2. Build the pre-filled link
+        config = GOOGLE_FORM_CONFIG
+        
+        prefill_url = (
+            f"{config['base_url']}?"
+            f"&{config['entry_ids']['personnel_id']}={personnel_id}"
+            f"&{config['entry_ids']['acadcalendar_id']}={acadcalendar_id}"
+            f"&{config['entry_ids']['evaluator_type']}={evaluator_type.capitalize()}"
+            f"&usp=pp_url" # Ensures the URL is correctly formatted for pre-filling
+        )
+        
+        # 3. Log Audit Action
+        hr_personnel_info = get_personnel_info(session['user_id'])
+        log_audit_action(
+            hr_personnel_info.get('personnel_id'),
+            "Evaluation Link Generated",
+            f"Generated {evaluator_type.capitalize()} link for {faculty_name} (ID: {personnel_id}) for Term ID {acadcalendar_id}"
+        )
+
+        return jsonify({'success': True, 'link': prefill_url})
+        
+    except Exception as e:
+        print(f"Error generating evaluation link: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/hr_attendance')
 @require_auth([20003])
@@ -6964,6 +7045,14 @@ def forward_to_president():
                 after_value='Status: President Review'
             )
         
+        # After updating status to 'pres'
+        log_audit(
+            action='PROMOTION_FORWARD_PRESIDENT',
+            details=f'VPAA forwarded promotion application (ID: {application_id}) to President',
+            personnel_id=session.get('user_id')
+        )
+
+        
         cursor.close()
         return_db_connection(conn)
         
@@ -7033,47 +7122,54 @@ def approve_regularization_by_president():
 
 
 @app.route('/api/regularization/reject', methods=['POST'])
-@require_auth([20004, 20005])  # VPAA or President
+@require_auth([20004])
 def reject_regularization():
-    """VP/President rejects regularization"""
+    """President rejects regularization"""
     try:
         data = request.get_json()
         regularization_id = data.get('regularization_id')
-        remarks = data.get('remarks', '')
+        rejection_reason = data.get('rejection_reason', 'No reason provided')
         
         conn = get_db_connection()
         cursor = conn.cursor()
         
+        # Get faculty_id
+        cursor.execute("""
+            SELECT faculty_id 
+            FROM regularization_application 
+            WHERE regularization_id = %s
+        """, (regularization_id,))
+        
+        result = cursor.fetchone()
+        if not result:
+            return jsonify({'success': False, 'error': 'Regularization not found'}), 404
+        
+        faculty_id = result[0]
+        
         philippines_tz = pytz.timezone('Asia/Manila')
         current_time = datetime.now(philippines_tz)
         
-        user_role = session.get('user_role')
-        
-        if user_role == 20004:  # VPAA
-            cursor.execute("""
-                UPDATE regularization_application 
-                SET current_status = %s,
-                    final_decision = %s,
-                    vpa_notes = %s
-                WHERE regularization_id = %s
-            """, ('rejected', 0, remarks, regularization_id))
-        else:  # President
-            cursor.execute("""
-                UPDATE regularization_application 
-                SET current_status = %s,
-                    final_decision = %s,
-                    pres_notes = %s
-                WHERE regularization_id = %s
-            """, ('rejected', 0, remarks, regularization_id))
+        cursor.execute("""
+            UPDATE regularization_application 
+            SET current_status = %s,
+                final_decision = %s,
+                pres_notes = %s
+            WHERE regularization_id = %s
+        """, ('rejected', 0, rejection_reason, regularization_id))
         
         conn.commit()
+        
+        # ✅ ADD AUDIT LOG
+        log_audit(
+            action='REGULARIZATION_REJECT',
+            details=f'President rejected regularization (ID: {regularization_id}) for faculty (ID: {faculty_id}). Reason: {rejection_reason}',
+            personnel_id=session.get('user_id')
+        )
+        
         cursor.close()
         return_db_connection(conn)
         
-        return jsonify({
-            'success': True, 
-            'message': 'Regularization rejected'
-        })
+        return jsonify({'success': True, 'message': 'Regularization rejected'})
     
     except Exception as e:
         print(f"Error rejecting regularization: {e}")
@@ -7216,6 +7312,14 @@ def promotion_document_upload():
         RETURNING application_id
     """, (faculty_id, cover_letter_data, resume_cv_data, resume_cv_filename, 
           cover_letter_filename, requested_rank, 'hrmd'))
+    
+    # After promotion application inserted successfully
+    log_audit(
+        action='PROMOTION_SUBMIT',
+        details=f'Faculty submitted promotion application for {requested_rank}',
+        personnel_id=faculty_id
+    )
+    
     
     conn.commit()
     cursor.close()
@@ -7596,7 +7700,14 @@ def forward_to_vpaa():
                 before_value='Status: HRMD Review',
                 after_value='Status: VPAA Review'
             )
-        
+
+        # After updating status to 'vpa'
+        log_audit(
+            action='PROMOTION_FORWARD_VPAA',
+            details=f'HRMD forwarded promotion application (ID: {application_id}) to VPAA',
+            personnel_id=session.get('user_id')
+        )
+
         cursor.close()
         return_db_connection(conn)
         
@@ -7676,6 +7787,14 @@ def approve_promotion():
                 after_value=f'Status: Approved (Rank updated to {requested_rank})'
             )
         
+        # After approval
+            log_audit(
+                action='PROMOTION_APPROVE',
+                details=f'President approved promotion application (ID: {application_id})',
+                personnel_id=session.get('user_id')
+            )
+
+        
         cursor.close()
         return_db_connection(conn)
         
@@ -7748,7 +7867,14 @@ def reject_promotion():
                 before_value=f'Status: {current_status}',
                 after_value=f'Status: Rejected (Reason: {rejection_reason})'
             )
-        
+        # After rejection
+
+        log_audit(
+            action='PROMOTION_REJECT',
+            details=f'Promotion application (ID: {application_id}) rejected. Reason: {rejection_reason}',
+            personnel_id=session.get('user_id')
+        )
+
         cursor.close()
         return_db_connection(conn)
         
@@ -7909,6 +8035,14 @@ def initiate_regularization():
                 before_value=f'Years of service: {years_of_service:.2f}',
                 after_value='Status: Pending VPAA review'
             )
+
+        # After inserting regularization
+        log_audit(
+            action='REGULARIZATION_INITIATE',
+            details=f'HRMD initiated regularization for faculty (ID: {faculty_id})',
+            personnel_id=session.get('user_id')
+        )
+
         
         cursor.close()
         return_db_connection(conn)
@@ -7941,6 +8075,19 @@ def approve_regularization():
         conn = get_db_connection()
         cursor = conn.cursor()
         
+        # Get faculty_id for audit logging
+        cursor.execute("""
+            SELECT faculty_id 
+            FROM regularization_application 
+            WHERE regularization_id = %s
+        """, (regularization_id,))
+        
+        result = cursor.fetchone()
+        if not result:
+            return jsonify({'success': False, 'error': 'Regularization not found'}), 404
+        
+        faculty_id = result[0]
+        
         philippines_tz = pytz.timezone('Asia/Manila')
         current_time = datetime.now(philippines_tz)
         
@@ -7953,6 +8100,14 @@ def approve_regularization():
         """, ('approved', current_time, 1, regularization_id))
         
         conn.commit()
+        
+        # ✅ ADD AUDIT LOG HERE (after successful update, before closing connection)
+        log_audit(
+            action='REGULARIZATION_APPROVE',
+            details=f'President approved regularization application (ID: {regularization_id}) for faculty (ID: {faculty_id})',
+            personnel_id=session.get('user_id')
+        )
+        
         cursor.close()
         return_db_connection(conn)
         
@@ -7963,6 +8118,7 @@ def approve_regularization():
         if conn:
             conn.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/faculty/promotion/eligibility')
 @require_auth([20001, 20002])
@@ -8078,6 +8234,152 @@ def get_promotion_list():
     except Exception as e:
         print(f'Error fetching promotion list: {str(e)}')
         return jsonify({'success': False, 'error': 'Failed to fetch promotion list'}), 500
+    
+@app.route('/api/audit-logs')
+@require_auth([20003])  # HR role only
+def get_audit_logs():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Promotions audit
+        cursor.execute("""
+            SELECT application_id, faculty_id, date_submitted, current_status,
+                final_decision, hrmd_approval_date, vpa_approval_date, pres_approval_date,
+                hrmd_remarks, vpa_remarks, pres_remarks, rejection_reason
+            FROM promotion_application
+            ORDER BY date_submitted DESC
+            LIMIT 100
+        """)
+        promotions = cursor.fetchall()
+
+        # Regularizations audit
+        cursor.execute("""
+            SELECT regularization_id, faculty_id, date_initiated, current_status,
+                final_decision, hrmd_endorsement_date, vpa_recommendation_date, pres_approval_date,
+                hrmd_notes, vpa_notes, pres_notes
+            FROM regularization_application
+            ORDER BY date_initiated DESC
+            LIMIT 100
+        """)
+        regularizations = cursor.fetchall()
+
+        # Build audit timeline list
+        audit_events = []
+
+        for promo in promotions:
+            (application_id, faculty_id, submitted, status, decision,
+             hrmd_date, vpa_date, pres_date, hrmd_notes, vpa_notes, pres_notes, rejection_reason) = promo
+
+            audit_events.append({
+                'type': 'Promotion',
+                'application_id': application_id,
+                'faculty_id': faculty_id,
+                'timestamp': submitted,
+                'event': 'Submitted',
+                'notes': None
+            })
+
+            if hrmd_date:
+                audit_events.append({
+                    'type': 'Promotion',
+                    'application_id': application_id,
+                    'faculty_id': faculty_id,
+                    'timestamp': hrmd_date,
+                    'event': 'HRMD Approval',
+                    'notes': hrmd_notes
+                })
+
+            if vpa_date:
+                audit_events.append({
+                    'type': 'Promotion',
+                    'application_id': application_id,
+                    'faculty_id': faculty_id,
+                    'timestamp': vpa_date,
+                    'event': 'VPAA Approval',
+                    'notes': vpa_notes
+                })
+
+            if pres_date:
+                audit_events.append({
+                    'type': 'Promotion',
+                    'application_id': application_id,
+                    'faculty_id': faculty_id,
+                    'timestamp': pres_date,
+                    'event': 'President Approval',
+                    'notes': pres_notes
+                })
+
+            if rejection_reason:
+                audit_events.append({
+                    'type': 'Promotion',
+                    'application_id': application_id,
+                    'faculty_id': faculty_id,
+                    'timestamp': submitted,  # submission time fallback
+                    'event': 'Rejection',
+                    'notes': rejection_reason
+                })
+
+        for reg in regularizations:
+            (regularization_id, faculty_id, initiated, status, decision,
+             hrmd_date, vpa_date, pres_date, hrmd_notes, vpa_notes, pres_notes) = reg
+
+            audit_events.append({
+                'type': 'Regularization',
+                'application_id': regularization_id,
+                'faculty_id': faculty_id,
+                'timestamp': initiated,
+                'event': 'Initiated',
+                'notes': hrmd_notes
+            })
+
+            if hrmd_date:
+                audit_events.append({
+                    'type': 'Regularization',
+                    'application_id': regularization_id,
+                    'faculty_id': faculty_id,
+                    'timestamp': hrmd_date,
+                    'event': 'HRMD Endorsement',
+                    'notes': hrmd_notes
+                })
+
+            if vpa_date:
+                audit_events.append({
+                    'type': 'Regularization',
+                    'application_id': regularization_id,
+                    'faculty_id': faculty_id,
+                    'timestamp': vpa_date,
+                    'event': 'VPAA Recommendation',
+                    'notes': vpa_notes
+                })
+
+            if pres_date:
+                audit_events.append({
+                    'type': 'Regularization',
+                    'application_id': regularization_id,
+                    'faculty_id': faculty_id,
+                    'timestamp': pres_date,
+                    'event': 'President Approval',
+                    'notes': pres_notes
+                })
+
+        # Sort all events descending by timestamp
+        audit_events.sort(key=lambda x: x['timestamp'], reverse=True)
+
+        # Convert timestamps to string ISO format
+        for evt in audit_events:
+            evt['timestamp'] = evt['timestamp'].isoformat() if isinstance(evt['timestamp'], datetime) else str(evt['timestamp'])
+
+        cursor.close()
+        return_db_connection(conn)
+
+        return jsonify({'success': True, 'audit_events': audit_events})
+
+    except Exception as e:
+        print(f"Audit log fetch error: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 
 
 if __name__ == "__main__":
