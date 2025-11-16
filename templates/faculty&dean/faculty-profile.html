@@ -68,6 +68,10 @@
         <p>Avg. Eval Rating</p>
       </div>
       <div class="stat-card">
+        <h3 id="attendance-rating">0%</h3>
+        <p>Attendance Rating</p>
+      </div>
+      <div class="stat-card">
         <h3 id="years-service">0</h3>
         <p>Years of Service</p>
       </div>
@@ -429,6 +433,8 @@ function displayProfileStats(stats) {
   document.getElementById('research-pubs').textContent = stats.research_publications;
   document.getElementById('professional-certs').textContent = stats.professional_certifications;
   document.getElementById('awards-count').textContent = stats.awards_count;
+  const attendanceRating = stats.attendance_rating || 0;
+  document.getElementById('attendance-rating').textContent = `${attendanceRating}%`;
 }
 
 function displayDocuments(docType, documents, filenames) {

@@ -2604,7 +2604,7 @@ def api_get_faculty_profile():
 @app.route('/api/faculty/profile/stats')
 @require_auth([20001, 20002, 20003, 20004])
 def api_get_profile_stats():
-    """OPTIMIZED: Get profile statistics with single query"""
+    """OPTIMIZED: Get profile statistics with single query - INCLUDES ATTENDANCE RATING"""
     try:
         viewing_personnel_id = session.get('viewing_personnel_id')
         if viewing_personnel_id:
@@ -2620,15 +2620,31 @@ def api_get_profile_stats():
         cursor = conn.cursor()
         
         cursor.execute("""
+            SELECT acadcalendar_id FROM acadcalendar 
+            WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+            ORDER BY semesterstart DESC LIMIT 1
+        """)
+        current_semester_result = cursor.fetchone()
+        current_semester_id = current_semester_result[0] if current_semester_result else None
+        
+        cursor.execute("""
             SELECT 
                 pe.hiredate,
                 COALESCE(array_length(pr.certificates, 1), 0) as certificates_count,
                 COALESCE(array_length(pr.publications, 1), 0) as publications_count,
-                COALESCE(array_length(pr.awards, 1), 0) as awards_count
+                COALESCE(array_length(pr.awards, 1), 0) as awards_count,
+                -- Get average attendance rate across all classes for current semester
+                COALESCE(
+                    (SELECT AVG(ar.attendancerate) 
+                     FROM attendancereport ar 
+                     WHERE ar.personnel_id = %s 
+                     AND ar.acadcalendar_id = %s),
+                    0
+                ) as avg_attendance_rate
             FROM personnel pe
             LEFT JOIN profile pr ON pe.personnel_id = pr.personnel_id
             WHERE pe.personnel_id = %s
-        """, (personnel_id,))
+        """, (personnel_id, current_semester_id, personnel_id))
         
         result = cursor.fetchone()
         cursor.close()
@@ -2637,7 +2653,7 @@ def api_get_profile_stats():
         if not result:
             return {'success': False, 'error': 'Personnel record not found'}
         
-        hire_date, certificates_count, publications_count, awards_count = result
+        hire_date, certificates_count, publications_count, awards_count, avg_attendance_rate = result
         
         years_of_service = 0
         if hire_date:
@@ -2650,7 +2666,8 @@ def api_get_profile_stats():
             'years_of_service': years_of_service,
             'professional_certifications': certificates_count,
             'research_publications': publications_count,
-            'awards_count': awards_count
+            'awards_count': awards_count,
+            'attendance_rating': round(float(avg_attendance_rate), 2) if avg_attendance_rate else 0
         }
         
         return {'success': True, 'stats': stats}
