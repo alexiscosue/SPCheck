@@ -6223,7 +6223,7 @@ def api_hr_faculty_evaluation_report(personnel_id):
                 evaluator_type, 
                 score, 
                 total_responses,
-                qualitative_feedback  -- NEW: Select feedback column
+                qualitative_feedback
             FROM faculty_evaluations 
             WHERE personnel_id = %s AND acadcalendar_id = %s
         """, (personnel_id, term_id))
@@ -6233,7 +6233,7 @@ def api_hr_faculty_evaluation_report(personnel_id):
         # 3. Aggregate data, calculate overall score, and collect feedback
         total_score = 0
         rating_breakdown = []
-        qualitative_feedback = [] # Initialize empty list for actual feedback
+        qualitative_feedback = []
         
         # Fixed weights based on business logic: Student(55%), Supervisor(35%), Peer(10%)
         weights = {'student': 0.55, 'supervisor': 0.35, 'peer': 0.10}
@@ -6273,7 +6273,7 @@ def api_hr_faculty_evaluation_report(personnel_id):
                 'semester_display': semester_display,
                 'overall_rating': total_score,
                 'rating_breakdown': rating_breakdown,
-                'qualitative_feedback': qualitative_feedback # <-- Use actual data
+                'qualitative_feedback': qualitative_feedback
             }
         })
 

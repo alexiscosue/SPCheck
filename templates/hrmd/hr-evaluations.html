@@ -348,9 +348,9 @@ function renderTablePage(pageNumber) {
         const supervisorScore = formatScore(row.supervisor_score);
         const peerScore = formatScore(row.peer_score);
 
-        // NEW: Overall Score Display (Score - Average, Left Justified)
+        // MODIFIED OVERALL RATING CELL (Left Aligned)
         const overallDisplay = (rating > 0) ? 
-            `${rating.toFixed(2)} — <span class="status ${statusClass}" style="padding: 2px 6px;">${statusLabel}</span>` : 
+            `<span class="status ${statusClass}" style="padding: 4px 8px;">${rating.toFixed(2)} - ${statusLabel}</span>` : 
             `<span class="status pending">${statusLabel}</span>`;
 
 
@@ -365,7 +365,7 @@ function renderTablePage(pageNumber) {
             `<td style="text-align: center;">${supervisorScore}</td>` + 
             `<td style="text-align: center;">${peerScore}</td>` + 
             // MODIFIED OVERALL RATING CELL (Left Aligned)
-            `<td style="text-align: left;"><span class="status ${statusClass}" style="padding: 4px 8px;">${rating.toFixed(2)} - ${statusLabel}</span></td>` +
+            `<td style="text-align: left;">${overallDisplay}</td>` +
             `<td>
                 <button class="btn action" onclick="openModal(${row.personnelid}, '${row.name}', ${rating.toFixed(2)}, ${studentResponses})"><i class='bx bx-show-alt'></i>&nbsp;View</button>
                 <button class="btn secondary" onclick="downloadReport(${row.personnelid})" ${disableDownload}><i class='bx bx-download'></i></button>
@@ -670,6 +670,7 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
     const statusInfo = getStatusInfo(overallRating);
     $('#finalStatusBadge').text(statusInfo.label).removeClass().addClass(`status ${statusInfo.class}`);
     
+    $('#reportSemester').text('Loading...'); // Reset semester text temporarily
     $('#ratingBreakdownBody').empty().append('<tr><td colspan="2" style="text-align:center;">Loading details...</td></tr>');
     $('#feedbackList').empty();
     $('#noFeedback').show();
@@ -682,15 +683,58 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
         if (data.success && data.report) {
             const report = data.report;
             
+            // --- NEW: Define all expected evaluation types and their weights/placeholders ---
+            const expectedTypes = {
+                'Student': { weight: 0.55, score: 0.00, responses: 0, disclaimer: "No student responses recorded." },
+                'Supervisor': { weight: 0.35, score: 0.00, responses: 0, disclaimer: "No supervisor evaluation recorded." },
+                'Peer': { weight: 0.10, score: 0.00, responses: 0, disclaimer: "No peer evaluation recorded." }
+            };
+
+            // --- Map existing data into the expected structure ---
             report.rating_breakdown.forEach(item => {
+                const type = item.type; // 'Student', 'Supervisor', or 'Peer'
+                if (expectedTypes[type]) {
+                    expectedTypes[type].score = item.score;
+                    expectedTypes[type].responses = item.total_responses;
+                    // Remove disclaimer if score > 0
+                    if (item.score > 0) {
+                        expectedTypes[type].disclaimer = null;
+                    } else if (type === 'Student' && item.total_responses > 0) {
+                        // Special case: Score is 0 but responses > 0 (e.g., waiting for calculation)
+                        expectedTypes[type].disclaimer = "Responses received but score is not available (Score: 0.00).";
+                    }
+                }
+            });
+            
+            // --- Render all three types, using placeholder data when score is 0 ---
+            Object.keys(expectedTypes).forEach(type => {
+                const item = expectedTypes[type];
                 const weight = item.weight * 100;
+                const scoreDisplay = (item.score > 0) ? item.score.toFixed(2) : '—';
+                
+                // Determine the row class for visual indicator
+                let rowClass = (item.score > 0) ? '' : 'style="background-color: #fcfcfc;"';
+                
+                let scoreCellContent;
+                
+                if (item.score > 0) {
+                    scoreCellContent = `<td style="text-align: right; font-weight: 700; color: var(--spc-maroon); padding: 5px 0;">${scoreDisplay}</td>`;
+                } else if (item.disclaimer) {
+                    // Use disclaimer/indicator when score is 0/missing
+                    scoreCellContent = `<td style="text-align: right; font-weight: 700; color: var(--muted); padding: 5px 0;">${scoreDisplay} <i class='bx bx-info-circle' title="${item.disclaimer}"></i></td>`;
+                } else {
+                    scoreCellContent = `<td style="text-align: right; font-weight: 700; color: var(--muted); padding: 5px 0;">${scoreDisplay} <i class='bx bx-info-circle' title="Score is 0.00, indicating no evaluation was recorded."></i></td>`;
+                }
+                
                 $('#ratingBreakdownBody').append(`
-                    <tr>
-                        <td style="font-weight: 500; padding: 5px 0;">${item.type} (${weight.toFixed(0)}%)</td>
-                        <td style="text-align: right; font-weight: 700; color: var(--spc-maroon); padding: 5px 0;">${item.score.toFixed(2)}</td>
+                    <tr ${rowClass}>
+                        <td style="font-weight: 500; padding: 5px 0;">${type} (${weight.toFixed(0)}%)</td>
+                        ${scoreCellContent}
                     </tr>
                 `);
             });
+            // --- END NEW RENDERING ---
+
             
             if (report.qualitative_feedback && report.qualitative_feedback.length > 0) {
                 
