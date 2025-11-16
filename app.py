@@ -5528,7 +5528,6 @@ def api_hr_evaluation_dashboard_data():
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# Replace the existing api_hr_evaluations function in app.py with this code
 
 @app.route('/api/hr/evaluations', methods=['GET'])
 @require_auth([20003])
@@ -5824,7 +5823,6 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
     term_id = request.args.get('term_id')
 
     # 1. FETCH DATA (Reusing your existing API logic)
-    # We need to call the API function directly to get its data
     report_response = api_hr_faculty_evaluation_report(personnel_id)
     if report_response.status_code != 200:
         return report_response # Return JSON error from data fetch
@@ -5984,7 +5982,6 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
     response.headers['Content-Type'] = 'application/pdf'
     
     # 8c. Set the Content-Disposition header once, ensuring it is the only one.
-    # We use .set() or direct assignment to prevent duplicates.
     filename = f'Evaluation_Report_{faculty_name.replace(" ", "_")}_T{term_id}.pdf'
     response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
     
@@ -6001,7 +5998,6 @@ def getStatusLabel(rating):
     else:
         return 'Not Rated'
 
-# --- NEW FEATURE: New Evaluation Cycle API STUB ---
 @app.route('/api/hr/new-evaluation-cycle', methods=['POST'])
 @require_auth([20003])
 def api_hr_new_evaluation_cycle():
@@ -6010,7 +6006,6 @@ def api_hr_new_evaluation_cycle():
         data = request.get_json()
         current_term_id = data.get('current_term_id')
         
-        # 1. Simulate finding the next term (e.g., current is 80001, next is 80002)
         next_term_id = int(current_term_id) + 1
         
         # 2. Get HR Personnel ID for audit logging
@@ -6097,7 +6092,7 @@ def fetch_evaluations():
                     source['type'], 
                     row['Score'],
                     row['Total Responses'],
-                    qualitative_feedback      # <-- Use the new feedback field
+                    qualitative_feedback      
                 ))
                 total_updated += 1
             
@@ -6120,6 +6115,73 @@ def fetch_evaluations():
                 pass
         return jsonify(message=f"Critical error processing evaluations. Check logs for details. Error: {str(e)}"), 500
 
+# In app.py
+
+# --- PLACEHOLDER GOOGLE FORM CONFIGURATION ---
+# *** REPLACE THESE VALUES WITH YOUR ACTUAL GOOGLE FORM LINKS AND ENTRY IDs ***
+GOOGLE_FORM_CONFIG = {
+    'base_url': "https://docs.google.com/forms/d/e/1FAIpQLSfP_YOUR_FORM_ID_HERE/viewform",
+    'entry_ids': {
+        'personnel_id': 'entry.123456789',   # Placeholder: Field for Faculty ID
+        'acadcalendar_id': 'entry.987654321', # Placeholder: Field for Term ID
+        'evaluator_type': 'entry.112233445'  # Placeholder: Field for Evaluator Type
+    }
+}
+# -----------------------------------------------
+
+
+@app.route('/api/hr/generate-evaluation-link', methods=['POST'])
+@require_auth([20003])
+def api_hr_generate_evaluation_link():
+    """Generates a pre-filled Google Form link for a specific evaluation."""
+    try:
+        data = request.get_json()
+        personnel_id = data.get('personnel_id')
+        acadcalendar_id = data.get('acadcalendar_id')
+        evaluator_type = data.get('evaluator_type')
+        
+        if not all([personnel_id, acadcalendar_id, evaluator_type]):
+            return jsonify({'success': False, 'error': 'Missing personnel ID, term ID, or evaluator type.'}), 400
+
+        # 1. Fetch Faculty Name for logging
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT firstname, lastname FROM personnel WHERE personnel_id = %s", (personnel_id,))
+        faculty_info = cursor.fetchone()
+        cursor.close()
+        return_db_connection(conn)
+        
+        if not faculty_info:
+            return jsonify({'success': False, 'error': 'Faculty not found.'}), 404
+        
+        faculty_name = f"{faculty_info[0]} {faculty_info[1]}"
+        
+        # 2. Build the pre-filled link
+        config = GOOGLE_FORM_CONFIG
+        
+        prefill_url = (
+            f"{config['base_url']}?"
+            f"&{config['entry_ids']['personnel_id']}={personnel_id}"
+            f"&{config['entry_ids']['acadcalendar_id']}={acadcalendar_id}"
+            f"&{config['entry_ids']['evaluator_type']}={evaluator_type.capitalize()}"
+            f"&usp=pp_url" # Ensures the URL is correctly formatted for pre-filling
+        )
+        
+        # 3. Log Audit Action
+        hr_personnel_info = get_personnel_info(session['user_id'])
+        log_audit_action(
+            hr_personnel_info.get('personnel_id'),
+            "Evaluation Link Generated",
+            f"Generated {evaluator_type.capitalize()} link for {faculty_name} (ID: {personnel_id}) for Term ID {acadcalendar_id}"
+        )
+
+        return jsonify({'success': True, 'link': prefill_url})
+        
+    except Exception as e:
+        print(f"Error generating evaluation link: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/hr_attendance')
 @require_auth([20003])
