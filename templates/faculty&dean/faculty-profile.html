@@ -158,7 +158,6 @@
   </div>
 </div>
 
-<!-- Document Viewer Modal -->
 <div id="document-modal" class="modal">
   <div class="modal-content">
     <div class="modal-header">
@@ -174,7 +173,6 @@
   </div>
 </div>
 
-<!-- Loading indicator -->
 <div id="loading" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 20px; border-radius: 8px; z-index: 1000;">
   <i class="fas fa-spinner fa-spin"></i> <span id="loading-text">Loading...</span>
 </div>
@@ -415,6 +413,7 @@ function displayProfile() {
 }
 
 function displayProfileStats(stats) {
+  // NEW: Update Avg. Eval Rating KPI
   const evalScore = stats.overall_eval_score || 0.0;
   document.getElementById('avg-eval-rating-kpi').textContent = evalScore.toFixed(2);
   
