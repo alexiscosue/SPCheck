@@ -10,17 +10,17 @@
     <div class="kpi card">
       <div class="icon promo"><i class='bx bx-award'></i></div>
       <div>
-        <div class="title">Pending Review</div>
+        <div class="title">Pending Promotion Review</div>
         <div class="value">{{ promotions|selectattr('status', 'equalto', 'Vpa')|list|length if user_role == 20004 else promotions|selectattr('status', 'equalto', 'Pres')|list|length }}</div>
       </div>
     </div>
-    <div class="kpi card">
-      <div class="icon eval"><i class='bx bx-check-circle'></i></div>
-      <div>
-        <div class="title">Approved This Month</div>
-        <div class="value">{{ promotions|selectattr('status', 'equalto', 'Approved')|list|length }}</div>
-      </div>
+  <div class="kpi card">
+   <div class="icon eval"><i class='bx bx-file-find'></i></div>
+    <div>
+      <div class="title">Pending Regularization Review</div>
+      <div class="value">{{ regularizations|selectattr('reg_status', 'equalto', 'vpa')|list|length if user_role == 20004 else regularizations|selectattr('reg_status', 'equalto', 'pres')|list|length }}</div>
     </div>
+  </div>
     <div class="kpi card">
       <div class="icon fac"><i class='bx bx-user'></i></div>
       <div>
@@ -128,7 +128,7 @@
                 {% endif %}
               </td>
               <td>{{ promo.submitteddate }}</td>
-              <td><button class="btn-action review-promotion-btn" style="background:#f1c40f;color:#111" data-application-id="{{ promo.application_id }}">Review</button></td>
+              <td><button class="btn-action review-promotion-btn" style="background:#f1c40f;color:#111" data-application-id="{{ promo.application_id }}">Approve</button></td>
             </tr>
             {% else %}
             <tr>
@@ -175,7 +175,7 @@
                             data-faculty-name="{{ reg.name }}"
                             data-status="{{ reg.reg_status }}"
                             data-eligible-for="{{ reg.eligible_for }}">
-                      Review
+                      Approve
                     </button>
                   {% else %}
                     <span class="status {{ reg.status_class }}">{{ reg.status }}</span>

@@ -7360,7 +7360,7 @@ def forward_to_president():
         import traceback
         traceback.print_exc()
         if conn:
-            conn.rollback()
+             conn.rollback()
         return jsonify(success=False, error=str(e)), 500
 
 @app.route('/api/regularization/approve-by-president', methods=['POST'])
@@ -7380,11 +7380,18 @@ def approve_regularization_by_president():
         # Additional check: Verify user has "President" position
         user_id = session.get('user_id')
         cursor.execute(
-            "SELECT position FROM profile WHERE personnel_id = %s",
-            (user_id,)
-        )
+                   """
+                    SELECT pr.position 
+                    FROM personnel p
+                    LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+                    WHERE p.user_id = %s
+                    """,
+                    (user_id,)
+                )
         position_result = cursor.fetchone()
         
+        print(f"User ID {user_id} position check result: {position_result}")
+
         if not position_result or position_result[0] != 'President':
             cursor.close()
             return_db_connection(conn)
@@ -7434,7 +7441,85 @@ def approve_regularization_by_president():
             return_db_connection(conn)
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/regularization/forward-to-president', methods=['POST'])
+@require_auth([20004]) # Only VPAA is authorized for this step
+def forward_regularization_to_president():
+    """VPAA forwards regularization application to the President's review queue."""
+    conn = None # Initialize conn outside try block for proper cleanup
+    cursor = None
+    try:
+        data = request.get_json()
+        regularization_id = data.get('regularization_id')
 
+        if not regularization_id:
+            return jsonify(success=False, error='Regularization ID is required'), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        philippines_tz = pytz.timezone('Asia/Manila')
+        current_time = datetime.now(philippines_tz)
+
+        # 1. Fetch faculty_id and current status for auditing
+        cursor.execute(
+            "SELECT faculty_id, current_status FROM regularization_application WHERE regularization_id = %s",
+            (regularization_id,)
+        )
+        result = cursor.fetchone()
+
+        if not result:
+            return jsonify(success=False, error='Regularization application not found.'), 404
+        
+        faculty_id, old_status = result
+
+        # 2. Update status to 'pres' (President Review) and record VPAA action date
+        cursor.execute(
+            """UPDATE regularization_application
+               SET current_status = %s,
+                   vpa_recommendation_date = %s
+               WHERE regularization_id = %s""",
+            ('pres', current_time, regularization_id)
+        )
+        
+        conn.commit()
+
+        # 3. Audit log
+        user_id = session.get('user_id')
+        personnel_info = get_personnel_info(user_id)
+        vp_personnel_id = personnel_info.get('personnel_id')
+        
+        if vp_personnel_id:
+            log_audit_action(
+                vp_personnel_id,
+                'Regularization forwarded',
+                f'VPAA forwarded regularization ID {regularization_id} (Faculty ID: {faculty_id}) to President',
+                before_value=f'Status: {old_status}',
+                after_value='Status: President Review'
+            )
+
+        # Log the general event
+        log_audit(
+            action='REGULARIZATION_FORWARD_PRESIDENT',
+            details=f'VPAA forwarded regularization application (ID: {regularization_id}) to President',
+            personnel_id=vp_personnel_id
+        )
+
+        cursor.close()
+        return_db_connection(conn)
+        
+        return jsonify(success=True, message='Regularization forwarded to President successfully')
+
+    except Exception as e:
+        print(f"Error processing regularization forward: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+            if cursor: cursor.close()
+            return_db_connection(conn)
+        
+        # Return the actual exception message for better debugging
+        return jsonify(success=False, error=f"Server Error during forwarding: {str(e)}"), 500
 
 @app.route('/api/regularization/reject', methods=['POST'])
 @require_auth([20004])
