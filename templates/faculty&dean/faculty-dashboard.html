@@ -205,39 +205,80 @@
   }
 
   function updatePromotionStatus() {
-    const promotionStatusElement = document.getElementById('promotionStatus');
-    
-    // Fetch promotion eligibility data
-    fetch('/api/faculty/promotion/eligibility')
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          const { can_apply, tenure_type, years_employed, has_active_application } = data;
-          
-          let statusHTML = '';
-          
-          if (has_active_application) {
-            // Active application in progress
-            statusHTML = 'In Review <i class="bx bx-time-five" style="color:#f59e0b"></i>';
-          } else if (can_apply) {
-            // Eligible to apply
-            statusHTML = 'Eligible <i class="bx bx-check-circle" style="color:#16a34a"></i>';
-          } else {
-            // Not eligible yet (Probationary)
-            const yearsRemaining = Math.max(0, 3 - years_employed);
-            statusHTML = `${yearsRemaining} Year/s to Eligibility <i class="bx bx-lock-alt" style="color:#6b7280"></i>`;
-          }
-          
-          promotionStatusElement.innerHTML = statusHTML;
+  const promotionStatusElement = document.getElementById('promotionStatus');
+  
+  fetch('/api/faculty/promotion/eligibility')
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        const { 
+          can_apply, 
+          has_active_application, 
+          tenure_type, 
+          years_employed,
+          lock_reasons,
+          months_remaining,
+          is_cooldown_ok
+        } = data;
+        
+        let statusHTML = '';
+        let statusColor = '#6b7280';
+        let statusIcon = 'bx-lock-alt';
+        
+        if (has_active_application) {
+          // Active application in progress
+          statusHTML = 'In Review';
+          statusColor = '#f59e0b';
+          statusIcon = 'bx-time-five';
+        } else if (can_apply) {
+          // Fully eligible to apply
+          statusHTML = 'Eligible';
+          statusColor = '#16a34a';
+          statusIcon = 'bx-check-circle';
         } else {
-          promotionStatusElement.innerHTML = 'Unknown <i class="bx bx-error-circle" style="color:#ef4444"></i>';
+          // Not eligible - show specific reason
+          if (tenure_type === 'Probationary') {
+            const yearsRemaining = Math.max(0, 3 - years_employed);
+            statusHTML = `${yearsRemaining} Yr${yearsRemaining !== 1 ? 's' : ''} to Eligibility`;
+            statusColor = '#6b7280';
+            statusIcon = 'bx-lock-alt';
+          } else if (!is_cooldown_ok) {
+            statusHTML = `Cooldown: ${months_remaining} Mo${months_remaining !== 1 ? 's' : ''}`;
+            statusColor = '#f59e0b';
+            statusIcon = 'bx-timer';
+          } else if (lock_reasons.length > 0) {
+            // Show first lock reason (attendance or eval)
+            if (lock_reasons[0].includes('Attendance')) {
+              statusHTML = 'Locked: Attendance';
+              statusColor = '#ef4444';
+              statusIcon = 'bx-x-circle';
+            } else if (lock_reasons[0].includes('Evaluation')) {
+              statusHTML = 'Locked: Evaluation';
+              statusColor = '#ef4444';
+              statusIcon = 'bx-x-circle';
+            } else {
+              statusHTML = 'Not Eligible';
+              statusColor = '#6b7280';
+              statusIcon = 'bx-lock-alt';
+            }
+          } else {
+            statusHTML = 'Not Eligible';
+            statusColor = '#6b7280';
+            statusIcon = 'bx-lock-alt';
+          }
         }
-      })
-      .catch(error => {
-        console.error('Error fetching promotion eligibility:', error);
+        
+        promotionStatusElement.innerHTML = `${statusHTML} <i class="bx ${statusIcon}" style="color:${statusColor}"></i>`;
+      } else {
         promotionStatusElement.innerHTML = 'Error <i class="bx bx-error-circle" style="color:#ef4444"></i>';
-      });
-  }
+      }
+    })
+    .catch(error => {
+      console.error('Error fetching promotion eligibility:', error);
+      promotionStatusElement.innerHTML = 'Error <i class="bx bx-error-circle" style="color:#ef4444"></i>';
+    });
+}
+
 
   function updateClassSchedule() {
     const scheduleBody = document.getElementById('classScheduleBody');

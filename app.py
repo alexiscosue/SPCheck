@@ -8403,74 +8403,137 @@ def approve_regularization():
 
 @app.route('/api/faculty/promotion/eligibility')
 @require_auth([20001, 20002])
-def api_promotion_eligibility():
-    """Check if faculty is eligible for promotion"""
-    try:
-        user_id = session.get('user_id')
-        
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Get faculty hire date
-        cursor.execute("""
-            SELECT personnel_id, hiredate 
-            FROM personnel 
-            WHERE user_id = %s
-        """, (user_id,))
-        
-        result = cursor.fetchone()
-        if not result:
-            cursor.close()
-            return_db_connection(conn)
-            return jsonify({'success': False, 'error': 'Faculty not found'})
-        
-        personnel_id, hire_date = result
-        
-        # Calculate years employed
-        from datetime import date
-        today = date.today()
-        years_employed = 0
-        can_apply = False
-        tenure_type = "Unknown"
-        
-        if hire_date:
-            years_employed = today.year - hire_date.year
-            months_employed = today.month - hire_date.month
-            
-            if months_employed < 0:
-                years_employed -= 1
-            
-            # Determine eligibility
-            if years_employed >= 3:
-                can_apply = True
-                tenure_type = "Regular" if years_employed < 7 else "Tenured"
-            else:
-                can_apply = False
-                tenure_type = "Probationary"
-        
-        # Check for active promotion application
-        cursor.execute("""
-            SELECT COUNT(*) 
-            FROM promotion_application 
-            WHERE faculty_id = %s AND final_decision IS NULL
-        """, (personnel_id,))
-        
-        has_active = cursor.fetchone()[0] > 0
-        
+def get_promotion_eligibility():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Get faculty info and current term
+    cursor.execute("""
+        SELECT 
+            p.personnel_id, 
+            p.hiredate,
+            (SELECT acadcalendar_id 
+             FROM acadcalendar 
+             WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend 
+             ORDER BY semesterstart DESC 
+             LIMIT 1)
+        FROM personnel p
+        WHERE p.user_id = %s
+    """, (user_id,))
+    
+    result = cursor.fetchone()
+    if not result:
         cursor.close()
         return_db_connection(conn)
+        return jsonify({'success': False, 'error': 'Faculty not found'}), 404
+    
+    faculty_id, hire_date, current_term_id = result
+    
+    # Calculate years of service
+    from datetime import date
+    today = date.today()
+    years_employed = 0
+    
+    if hire_date:
+        years_employed = today.year - hire_date.year
+        if (today.month < hire_date.month) or (today.month == hire_date.month and today.day < hire_date.day):
+            years_employed -= 1
+    
+    # Check attendance rate
+    cursor.execute("""
+        SELECT COALESCE(AVG(ar.attendancerate), 0) AS avg_attendance_rate
+        FROM attendancereport ar
+        WHERE ar.personnel_id = %s AND ar.acadcalendar_id = %s
+    """, (faculty_id, current_term_id))
+    avg_attendance_rate = float(cursor.fetchone()[0] or 0)
+    
+    # Check weighted evaluation score
+    cursor.execute("""
+        SELECT COALESCE(
+            SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
+            SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
+            SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
+            0
+        ) AS weighted_eval_score
+        FROM faculty_evaluations fe
+        WHERE fe.personnel_id = %s AND fe.acadcalendar_id = %s
+    """, (faculty_id, current_term_id))
+    weighted_eval_score = float(cursor.fetchone()[0] or 0)
+    
+    # Check promotion cooldown
+    cursor.execute("""
+        SELECT pres_approval_date
+        FROM promotion_application
+        WHERE faculty_id = %s AND final_decision = 1
+        ORDER BY pres_approval_date DESC
+        LIMIT 1
+    """, (faculty_id,))
+    
+    last_promotion = cursor.fetchone()
+    is_cooldown_ok = True
+    months_remaining = 0
+    
+    if last_promotion and last_promotion[0]:
+        days_since_promotion = (today - last_promotion[0].date()).days
+        years_since_promotion = days_since_promotion / 365.25
         
-        return jsonify({
-            'success': True,
-            'can_apply': can_apply,
-            'tenure_type': tenure_type,
-            'years_employed': years_employed,
-            'has_active_application': has_active
-        })
-        
-    except Exception as e:
-        print(f"Error checking promotion eligibility: {e}")
-        return jsonify({'success': False, 'error': str(e)})
+        if years_since_promotion < 1.0:
+            is_cooldown_ok = False
+            months_remaining = int((365.25 - days_since_promotion) / 30.44)
+    
+    # Check for active application
+    cursor.execute("""
+        SELECT COUNT(*) 
+        FROM promotion_application 
+        WHERE faculty_id = %s AND final_decision IS NULL
+    """, (faculty_id,))
+    has_active_application = cursor.fetchone()[0] > 0
+    
+    cursor.close()
+    return_db_connection(conn)
+    
+    # Determine eligibility
+    is_tenure_ok = years_employed >= 3
+    is_attendance_ok = avg_attendance_rate >= 80.0
+    is_eval_ok = weighted_eval_score >= 3.0
+    can_apply = is_tenure_ok and is_attendance_ok and is_eval_ok and is_cooldown_ok
+    
+    # Determine tenure type
+    if years_employed >= 7:
+        tenure_type = 'Tenured'
+    elif years_employed >= 3:
+        tenure_type = 'Regular'
+    else:
+        tenure_type = 'Probationary'
+    
+    # Build lock reasons for display
+    lock_reasons = []
+    if not is_tenure_ok:
+        lock_reasons.append(f"Requires {3 - years_employed} more year(s) of service")
+    if not is_attendance_ok:
+        lock_reasons.append(f"Attendance: {avg_attendance_rate:.1f}% (needs 80%+)")
+    if not is_eval_ok:
+        lock_reasons.append(f"Evaluation: {weighted_eval_score:.2f} (needs 3.00+)")
+    if not is_cooldown_ok:
+        lock_reasons.append(f"Cooldown: {months_remaining} month(s) remaining")
+    
+    return jsonify({
+        'success': True,
+        'can_apply': can_apply and not has_active_application,
+        'has_active_application': has_active_application,
+        'tenure_type': tenure_type,
+        'years_employed': years_employed,
+        'attendance_rate': avg_attendance_rate,
+        'eval_score': weighted_eval_score,
+        'is_cooldown_ok': is_cooldown_ok,
+        'months_remaining': months_remaining,
+        'lock_reasons': lock_reasons
+    })
+
 
 @app.route('/api/promotion/list')
 @require_auth([20003, 20004, 20005])
