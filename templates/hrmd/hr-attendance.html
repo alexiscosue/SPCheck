@@ -232,10 +232,8 @@
 {% block extra_scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 <script>
-  // Faculty list for excuse dropdown
   let facultyForExcuse = [];
 
-  // Fetch faculty list for excuse dropdown
   async function fetchFacultyForExcuse() {
     try {
         const response = await fetch('/api/hr/faculty-list');
@@ -263,10 +261,8 @@
     }
   }
 
-  // Set default date to today
   document.getElementById('excuseDate').valueAsDate = new Date();
 
-  // Enable/disable excuse button based on form validity
   function updateExcuseButtonState() {
     const facultySelect = document.getElementById('facultySelect');
     const excuseDate = document.getElementById('excuseDate');
@@ -277,12 +273,10 @@
     excuseBtn.disabled = !isFormValid;
   }
 
-  // Event listeners for form changes
   document.getElementById('facultySelect').addEventListener('change', updateExcuseButtonState);
   document.getElementById('excuseDate').addEventListener('change', updateExcuseButtonState);
   document.getElementById('reasonSelect').addEventListener('change', updateExcuseButtonState);
 
-  // Reset form function
   function resetExcuseForm() {
     document.getElementById('facultySelect').value = '';
     document.getElementById('excuseDate').valueAsDate = new Date();
@@ -290,7 +284,7 @@
     updateExcuseButtonState();
   }
 
-  // Handle excuse submission
+
   document.getElementById('excuseBtn').addEventListener('click', async function() {
     const facultySelect = document.getElementById('facultySelect');
     const excuseDate = document.getElementById('excuseDate');
@@ -301,17 +295,14 @@
     const date = excuseDate.value;
     const reason = reasonSelect.value;
     
-    // Final validation
     if (!personnelId || !date || !reason) {
         showNotification('Please select faculty, date, and reason', 'error');
         return;
     }
     
-    // Get faculty name for confirmation
     const faculty = facultyForExcuse.find(f => f.personnel_id == personnelId);
     const facultyName = faculty ? faculty.name : 'Selected Faculty';
     
-    // Enhanced confirmation with reason
     const confirmationMessage = `Are you sure you want to excuse all classes for ${facultyName} on ${date}?\n\nReason: ${reason}`;
     
     if (!confirm(confirmationMessage)) {
@@ -336,11 +327,7 @@
         
         if (result.success) {
             showNotification(result.message, 'success');
-            
-            // Refresh attendance data to show the excused status
             await fetchFacultyAttendance();
-            
-            // Reset form immediately after success
             resetExcuseForm();
             
         } else {
@@ -351,14 +338,12 @@
         console.error('Error excusing absence:', error);
         showNotification('Error excusing absence: ' + error.message, 'error');
     } finally {
-        excuseBtn.disabled = false;
         excuseBtn.innerHTML = '<i class="bx bx-check-shield"></i> Approve Excuse';
+        excuseBtn.disabled = true; 
     }
   });
 
-  // Initialize faculty list for excuse dropdown
   fetchFacultyForExcuse();
-
 
   let isEditingTime = false;
   let timeEditData = new Map();
@@ -736,8 +721,6 @@
             const tr = document.createElement('tr');
             const logKey = `${log.name}_${log.date}_${log.class_name}`;
             const className = log.class_name || 'N/A';
-            
-            // FIX: Handle excused records properly
             const isExcusedRecord = log.status.toLowerCase() === 'excused';
             
             if (isEditingTime) {
