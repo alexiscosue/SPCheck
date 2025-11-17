@@ -152,7 +152,7 @@
               <th>Current Tenure</th>
               <th>Years of Service</th>
               <th>Eligible For</th>
-              <th>Status</th>
+              <th>Action</th>
             </tr>
           </thead>
             <tbody id="regularizationsBody">
@@ -230,10 +230,11 @@
         <iframe id="pdfFrame" style="width:100%;height:500px;border:1px solid #ddd;border-radius:8px;"></iframe>
       </div>
 
-      {% if status == 'vpa' %}
-      <textarea id="hrNotes" placeholder="Add notes (optional - will be visible to next reviewer/all approvers)"></textarea>
-      {% endif %}
-      <!-- Add this RIGHT AFTER the pdfViewer div and BEFORE the textarea -->
+    <div id="notesInputSection" style="margin-top:24px; display:none;"> <label for="hrNotes" style="font-size:14px;font-weight:600;margin-bottom:8px;display:block;">Add Notes or Remarks:</label>
+      <textarea id="hrNotes" placeholder="Add notes for this application (visible to other reviewers)" 
+                style="width:100%;min-height:80px;border-radius:8px;border:1px solid #ccc;padding:10px; resize:vertical;"></textarea>
+    </div>
+      
       <div id="previousNotes" style="margin-top:25px;display:none;">
         <h3 style="color:#333;font-size:16px;font-weight:600;margin-bottom:15px;border-bottom:2px solid #f0f0f0;padding-bottom:10px;">
           <i class='bx bx-time-five' style="vertical-align:middle;margin-right:5px;"></i>Review History
@@ -247,7 +248,7 @@
       <button id="rejectBtn" class="btn reject">Reject</button>
       <button id="forwardApproveBtn" class="btn forward">Forward/Approve</button>
       <button id="viewProfileBtn" class="btn btn-view">View Profile</button>
-      <button id="closeModal" class="btn close">Close</button>
+      <button id="closeModal" class="btn close" style="font-size: 18px;">Close</button>
     </div>
   </div>
 </div>
@@ -534,13 +535,16 @@ function loadPromotionDetails(applicationId) {
           rejectBtn.style.display = 'inline-block';
           forwardApproveBtn.style.display = 'inline-block';
           forwardApproveBtn.textContent = 'Forward to President';
+          notesInputSection.style.display = 'block';
         } else if (data.status.toLowerCase() === 'pres') {
           rejectBtn.style.display = 'inline-block';
           forwardApproveBtn.style.display = 'inline-block';
           forwardApproveBtn.textContent = 'Approve';
+          notesInputSection.style.display = 'block';
         } else {
           rejectBtn.style.display = 'none';
           forwardApproveBtn.style.display = 'none';
+          notesInputSection.style.display = 'none';
         }
         
         setupDocumentLinks(applicationId, data);

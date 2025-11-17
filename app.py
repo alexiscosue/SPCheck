@@ -5618,6 +5618,7 @@ def faculty_promotion():
             p.honorifics,
             c.collegename,
             pr.profilepic,
+            pr.employmentstatus, -- <<< ADDED employmentstatus
             (SELECT acadcalendar_id 
             FROM acadcalendar 
             WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend 
@@ -5636,12 +5637,14 @@ def faculty_promotion():
         return_db_connection(conn)
         return "Faculty record not found", 400
     
+    # Update unpacking to include employment_status
     (faculty_id, hire_date, current_rank, firstname, lastname, 
-     honorifics, college, profilepic, current_term_id) = result
+     honorifics, college, profilepic, employment_status, current_term_id) = result
     
     # DEBUG: Print values
     print(f"DEBUG: Faculty ID = {faculty_id}")
     print(f"DEBUG: Current Term ID = {current_term_id}")
+    print(f"DEBUG: Employment Status = {employment_status}")
     
     # Build faculty name
     faculty_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
@@ -5655,7 +5658,7 @@ def faculty_promotion():
     # --- CHECK ELIGIBILITY CONDITIONS ---
     lock_reasons = []
     
-    # 1. Get attendance rate (minimum 80%) - FIXED QUERY
+    # 1. Get attendance rate (minimum 80%)
     cursor.execute("""
         SELECT 
             COALESCE(AVG(ar.attendancerate), 0) AS avg_attendance_rate,
@@ -5670,9 +5673,9 @@ def faculty_promotion():
     attendance_record_count = attendance_result[1] if attendance_result else 0
     
 
-    print(f"DEBUG: Attendance Rate = {avg_attendance_rate}, Records = {attendance_record_count}, facullty id = {faculty_id}, term id = {current_term_id}")
+    print(f"DEBUG: Attendance Rate = {avg_attendance_rate:.1f}, Records = {attendance_record_count}, facullty id = {faculty_id}, term id = {current_term_id}")
     
-    # 2. Get weighted evaluation score (minimum 3.0) - FIXED CALCULATION
+    # 2. Get weighted evaluation score (minimum 3.0) 
     cursor.execute('''
         SELECT 
             -- Weighted Overall Score (55% + 35% + 10% = 100%)
@@ -5703,12 +5706,8 @@ def faculty_promotion():
         peerscore = 0.0
 
     print(f"DEBUG Weighted Eval Score: {weightedevalscore:.2f}")
-    print(f"DEBUG Student Score: {studentscore:.2f} (weight: 55%)")
-    print(f"DEBUG Supervisor Score: {supervisorscore:.2f} (weight: 35%)")
-    print(f"DEBUG Peer Score: {peerscore:.2f} (weight: 10%)")
-
-
-    # 3. Calculate years of service (minimum 3 years)
+    
+    # 3. Calculate years of service (fallback for eligibility check/display)
     from datetime import date
     today = date.today()
     years_employed = 0
@@ -5721,9 +5720,27 @@ def faculty_promotion():
     print(f"DEBUG: Years Employed = {years_employed}")
     
 # --- ELIGIBILITY CHECKS ---
-    is_tenure_ok = years_employed >= 3
-    if not is_tenure_ok:
-        lock_reasons.append(f"Tenure: Requires minimum 3 years of service (Current: {years_employed} years).")
+
+    # NEW TENURE CHECK LOGIC
+    is_tenure_ok = False
+    
+    if employment_status in ["Regular", "Tenured"]:
+        is_tenure_ok = True
+    elif employment_status == "Probationary":
+        # If probationary, fall back to checking if 3 years of service have passed (standard minimum for promotion)
+        is_tenure_ok = years_employed >= 3
+        if not is_tenure_ok:
+            lock_reasons.append(f"Tenure: Employment Status is 'Probationary'. Requires minimum 3 years of service (Current: {years_employed} years).")
+    else:
+        # If status is NULL or undefined, fall back to checking 3 years of service
+        is_tenure_ok = years_employed >= 3
+        if not is_tenure_ok:
+            lock_reasons.append(f"Tenure: Employment Status missing/unspecified. Requires minimum 3 years of service (Current: {years_employed} years).")
+        
+    if not is_tenure_ok and employment_status in ["Regular", "Tenured"]:
+        # Safety catch for logic errors, unlikely to be triggered now
+        lock_reasons.append(f"Tenure: Current status {employment_status} should be eligible but failed check.")
+
 
     is_attendance_ok = avg_attendance_rate >= 80.0
     if not is_attendance_ok:
@@ -5764,7 +5781,7 @@ def faculty_promotion():
                 months_remaining = int((365.25 - days_since_promotion) / 30.44)
                 lock_reasons.append(f"Promotion Cooldown: Must wait 1 year after last promotion (Last promoted: {last_promotion_date.strftime('%B %d, %Y')}, {months_remaining} months remaining).")
 
-    # Final eligibility determination - NOW INCLUDING COOLDOWN
+    # Final eligibility determination
     can_apply_for_promotion = is_tenure_ok and is_attendance_ok and is_eval_ok and is_cooldown_ok
 
     print(f"DEBUG: Can Apply = {can_apply_for_promotion}")
@@ -5881,13 +5898,16 @@ def faculty_promotion():
         })
     
     # Build template data
+    # Use employment_status for display if available, otherwise fall back to years_employed calc
+    tenure_type_display = employment_status if employment_status else ("Tenured" if years_employed >= 7 else "Regular" if years_employed >= 3 else "Probationary")
+    
     template_data = {
         'faculty_name': faculty_name,
         'college': college or 'College of Computer Studies',
         'profile_image_base64': profile_image_base64,
         'regularization_percentage': 100 if years_employed >= 7 else min(round((years_employed / 3) * 100), 100) if years_employed > 0 else 0,
         'regularization_status': "Tenured Employee" if years_employed >= 7 else "Regular Employee" if years_employed >= 3 else "Probationary",
-        'tenure_type': "Tenured" if years_employed >= 7 else "Regular" if years_employed >= 3 else "Probationary",
+        'tenure_type': tenure_type_display,
         'years_employed': years_employed,
         'months_employed': (today.year - hire_date.year) * 12 + (today.month - hire_date.month) if hire_date else 0,
         'hire_date': hire_date,
@@ -5932,9 +5952,6 @@ def faculty_promotion():
         })
     
     return render_template('faculty&dean/faculty-promotion.html', **template_data)
-
-
-
 
 @app.route('/faculty_profile')
 @require_auth([20001, 20002, 20003])
@@ -7117,7 +7134,7 @@ def hr_settings():
     return render_template('hrmd/hr-settings.html', **personnel_info)
 
 @app.route('/vp_promotions')
-@require_auth([20004, 20005])
+@require_auth([20004])
 def vp_promotions():
     """VP/President Promotions Dashboard with promotions and regularizations"""
     try:

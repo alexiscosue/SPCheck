@@ -253,7 +253,11 @@
         <iframe id="pdfFrame" style="width:100%;height:500px;border:1px solid #ddd;border-radius:8px;"></iframe>
       </div>
       
-      <textarea id="hrNotes" placeholder="Add HRMD notes (optional - will be visible to VPAA and President)"></textarea>
+      <div id="hrNotesSection" style="margin-top:24px; display:none;">
+          <label for="hrNotes" style="font-size:14px;font-weight:600;margin-bottom:8px;display:block;">Add HRMD Notes (visible to VPAA/President):</label>
+          <textarea id="hrNotes" placeholder="Add HRMD notes (optional - will be visible to VPAA and President)"
+                    style="width:100%;min-height:80px;border-radius:8px;border:1px solid #ccc;padding:10px; resize:vertical;"></textarea>
+      </div>
 
       <div id="previousNotes" style="margin-top:25px;display:none;">
         <h3 style="color:#333;font-size:16px;font-weight:600;margin-bottom:15px;border-bottom:2px solid #f0f0f0;padding-bottom:10px;">
@@ -261,16 +265,13 @@
         </h3>
         <div id="notesContainer" class="review-timeline"></div>
       </div>
-
-
-
     </div>
     
     <div class="hr-modal-footer">
       <button id="rejectBtn" class="btn reject">Reject</button>
       <button id="forwardBtn" class="btn forward">Forward to VPAA</button>
       <button id="viewProfileBtn" class="btn btn-view">View Profile</button>
-      <button id="closeModal" class="btn close">Close</button>
+      <button id="closeModal" class="btn close" style="font-size: 18px;">Close</button>
     </div>
   </div>
 </div>
@@ -494,6 +495,7 @@ function loadPromotionDetails(applicationId) {
     .then(result => {
       if (result.success) {
         const data = result.data;
+        currentStatus = data.status; // Update global status for action buttons
 
         document.getElementById('modalFacultyName').textContent = data.name;
         document.getElementById('modalFacultyPosition').textContent = `${data.currentrank} • ${data.department}`;
@@ -502,8 +504,8 @@ function loadPromotionDetails(applicationId) {
         document.getElementById('modalFacultyPhone').textContent = data.phone;
         document.getElementById('modalSubmissionStatus').textContent = data.status;
 
-       const profileImg = document.getElementById('modalProfileImage');
-       profileImg.src = "/static/img/logo.png"; // Set default logo first
+        const profileImg = document.getElementById('modalProfileImage');
+        profileImg.src = "/static/img/logo.png"; // Set default logo first
         profileImg.style.display = 'block';
         profileImg.style.backgroundColor = '#f0f0f0';
         profileImg.alt = 'Faculty Profile';
@@ -514,17 +516,16 @@ function loadPromotionDetails(applicationId) {
             if (imageData.success && imageData.image) {
               profileImg.src = imageData.image;
             }
-            // If not, default logo.png stays shown
           })
           .catch(() => {
             profileImg.src = "/static/img/logo.png";
           });
-        
-        // ====== IMPROVED: Display existing notes in timeline format ======
+
+        // ====== Display existing notes in timeline format ======
         const notesContainer = document.getElementById('notesContainer');
         const previousNotesSection = document.getElementById('previousNotes');
         let notesHTML = '';
-        
+
         if (data.hrmd_remarks) {
           notesHTML += `
             <div class="review-note-card hrmd">
@@ -537,7 +538,7 @@ function loadPromotionDetails(applicationId) {
             </div>
           `;
         }
-        
+
         if (data.vpa_remarks) {
           notesHTML += `
             <div class="review-note-card vpa">
@@ -550,7 +551,7 @@ function loadPromotionDetails(applicationId) {
             </div>
           `;
         }
-        
+
         if (data.pres_remarks) {
           notesHTML += `
             <div class="review-note-card pres">
@@ -563,7 +564,7 @@ function loadPromotionDetails(applicationId) {
             </div>
           `;
         }
-        
+
         if (data.rejection_reason) {
           notesHTML += `
             <div class="review-note-card rejected">
@@ -576,7 +577,7 @@ function loadPromotionDetails(applicationId) {
             </div>
           `;
         }
-        
+
         if (notesHTML) {
           notesContainer.innerHTML = notesHTML;
           previousNotesSection.style.display = 'block';
@@ -584,20 +585,25 @@ function loadPromotionDetails(applicationId) {
           previousNotesSection.style.display = 'none';
         }
         // ====== END IMPROVED ======
-        
+
+        // ====== Status-based Visibility Control for HRMD (FIXED LOGIC) ======
         const rejectBtn = document.getElementById('rejectBtn');
         const forwardBtn = document.getElementById('forwardBtn');
-        
+        const hrNotesSection = document.getElementById('hrNotesSection'); 
+
         if (data.status.toLowerCase() === 'hrmd') {
           rejectBtn.style.display = 'inline-block';
           forwardBtn.style.display = 'inline-block';
+          hrNotesSection.style.display = 'block'; // Show notes for HRMD
         } else {
           rejectBtn.style.display = 'none';
           forwardBtn.style.display = 'none';
+          hrNotesSection.style.display = 'none'; // Hide notes for other statuses
         }
-        
+        // ====== END FIXED LOGIC ======
+
         setupDocumentLinks(applicationId, data);
-        
+
         showModalLoading(false);
         reviewModal.style.display = 'flex';
       } else {
@@ -746,11 +752,9 @@ fetch(`/api/profile/image-base64/${facultyId}`)
   });
 
   
-
-
 function loadAuditLogs() {
   const tbody = document.getElementById('auditLogsBody');
-  tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:#6b7280">Loading audit logs...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:#6b7280; font-style:italic;">Loading audit logs...</td></tr>';
 
   fetch('/api/audit-logs')
     .then(response => response.json())
@@ -759,31 +763,43 @@ function loadAuditLogs() {
       if (data.success && data.audit_events.length > 0) {
         data.audit_events.forEach(evt => {
           let statusClass = 'pending';
-          if (evt.event.toLowerCase().includes('reject')) statusClass = 'nu';
-          else if (evt.event.toLowerCase().includes('approve')) statusClass = 'ok';
-          else if (evt.event.toLowerCase().includes('submit') || evt.event.toLowerCase().includes('initiate')) statusClass = 'pending';
-          else if (evt.event.toLowerCase().includes('forward') || evt.event.toLowerCase().includes('endorsement') || evt.event.toLowerCase().includes('recommendation')) statusClass = 'warn';
+          
+          // Determine status class based on event type for better visual feedback
+          const lowerEvent = evt.event.toLowerCase();
+          
+          if (lowerEvent.includes('reject')) {
+            statusClass = 'nu'; // Rejected (Red)
+          } else if (lowerEvent.includes('approve') || lowerEvent.includes('complete')) {
+            statusClass = 'ok'; // Approved (Green)
+          } else if (lowerEvent.includes('forward') || lowerEvent.includes('recommendation') || lowerEvent.includes('vpa')) {
+            statusClass = 'warn'; // Forwarded/Review (Yellow/Orange)
+          } else if (lowerEvent.includes('submit') || lowerEvent.includes('initiate')) {
+            statusClass = 'pending'; // Submitted/Initial (Blue/Grey)
+          }
 
           const tr = document.createElement('tr');
+          tr.style.verticalAlign = 'top'; // Align content to the top
           tr.innerHTML = `
-            <td style="white-space:nowrap;font-size:13px">${new Date(evt.timestamp).toLocaleString()}</td>
-            <td><span class="status ${statusClass}">${evt.type} - ${evt.event}</span></td>
-            <td style="font-size:14px">${evt.notes || ''}</td>
-            <td style="font-weight:500">${evt.performed_by || 'System'}</td>
+            <td style="white-space:nowrap; font-size:13px; color:#6b7280; padding: 12px 10px;">
+              ${new Date(evt.timestamp).toLocaleString()}
+            </td>
+            <td style="padding: 12px 10px;">
+              <span class="status ${statusClass}" style="font-weight: 600;">${evt.type} - ${evt.event}</span>
+            </td>
+            <td style="font-size:14px; padding: 12px 10px; color:#374151;">${evt.notes || '<em style="color:#a1a1aa;">No remarks recorded</em>'}</td>
+            <td style="font-weight:500; white-space:nowrap; padding: 12px 10px;">${evt.performed_by || 'System'}</td>
           `;
           tbody.appendChild(tr);
         });
       } else {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:#6b7280">No audit logs found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:#6b7280; font-style:italic;">No audit logs found</td></tr>';
       }
     })
     .catch(error => {
       console.error('Error:', error);
-      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:#dc2626">Error loading audit logs</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:#dc2626;">Error loading audit logs</td></tr>';
     });
 }
-
-
 
 </script>
 {% endblock %}
