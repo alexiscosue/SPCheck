@@ -3363,6 +3363,7 @@ def api_update_attendance_time():
                             
                             print(f"   Using schedule for validation: {validation_day} {class_start}-{class_end}")
                             
+                            # === VALIDATION LOGIC ===
                             changes_made = []
                             updates_applied = False
                             
@@ -3370,9 +3371,41 @@ def api_update_attendance_time():
                             original_timeout = current_timeout
                             original_status = current_status
                             
+                            # Convert class times to time objects
+                            if isinstance(class_start, str):
+                                class_start_time = datetime.strptime(class_start[:8], '%H:%M:%S').time()
+                            else:
+                                class_start_time = class_start
+                            
+                            if isinstance(class_end, str):
+                                class_end_time = datetime.strptime(class_end[:8], '%H:%M:%S').time()
+                            else:
+                                class_end_time = class_end
+                            
+                            # Define validation windows
+                            class_start_dt = datetime.combine(date_obj, class_start_time)
+                            class_end_dt = datetime.combine(date_obj, class_end_time)
+                            
+                            # Time-in window: 15 mins before start to 15 mins before end
+                            timein_window_start = (class_start_dt - timedelta(minutes=15)).time()
+                            timein_window_end = (class_end_dt - timedelta(minutes=15)).time()
+                            
+                            # Late threshold: 15 mins after start
+                            late_threshold = (class_start_dt + timedelta(minutes=15)).time()
+                            
+                            # Time-out window: 15 mins before end to 15 mins after end
+                            timeout_window_start = (class_end_dt - timedelta(minutes=15)).time()
+                            timeout_window_end = (class_end_dt + timedelta(minutes=15)).time()
+                            
+                            print(f"   📊 Validation Windows:")
+                            print(f"     Time-in: {timein_window_start} to {timein_window_end}")
+                            print(f"     Late threshold: {late_threshold}")
+                            print(f"     Time-out: {timeout_window_start} to {timeout_window_end}")
+                            
+                            # === VALIDATE TIME-IN ===
                             if 'time_in' in update:
-                                updates_applied = True
-                                if time_in == '':  
+                                if time_in == '':
+                                    # Delete time-in (set to midnight)
                                     midnight_time = f"{date} 00:00:00"
                                     cursor.execute("""
                                         UPDATE attendance 
@@ -3381,19 +3414,34 @@ def api_update_attendance_time():
                                     """, (midnight_time, attendance_id))
                                     changes_made.append("deleted time-in")
                                     print(f"   ✅ Deleted time-in (set to midnight)")
-                                else:  
+                                    updates_applied = True
+                                else:
+                                    # Validate new time-in
                                     time_in_24hr = convert_to_24hour(time_in)
-                                    new_timein = f"{date} {time_in_24hr}"
-                                    cursor.execute("""
-                                        UPDATE attendance 
-                                        SET timein = %s::timestamp AT TIME ZONE 'Asia/Manila'
-                                        WHERE attendance_id = %s
-                                    """, (new_timein, attendance_id))
-                                    changes_made.append(f"set time-in to {time_in}")
-                                    print(f"   ✅ Set time-in to {time_in_24hr}")
+                                    new_timein_time = datetime.strptime(time_in_24hr, '%H:%M:%S').time()
+                                    
+                                    print(f"   🔍 Validating time-in: {new_timein_time}")
+                                    
+                                    # Check if within time-in window
+                                    if timein_window_start <= new_timein_time <= timein_window_end:
+                                        new_timein = f"{date} {time_in_24hr}"
+                                        cursor.execute("""
+                                            UPDATE attendance 
+                                            SET timein = %s::timestamp AT TIME ZONE 'Asia/Manila'
+                                            WHERE attendance_id = %s
+                                        """, (new_timein, attendance_id))
+                                        changes_made.append(f"set time-in to {time_in}")
+                                        print(f"   ✅ Set time-in to {time_in_24hr}")
+                                        updates_applied = True
+                                    else:
+                                        print(f"   ❌ Time-in {new_timein_time} outside valid window")
+                                        # Do NOT update - reject this change
+                                        updates_applied = False
                             
+                            # === VALIDATE TIME-OUT ===
                             if 'time_out' in update:
-                                if time_out == '':  
+                                if time_out == '':
+                                    # Delete time-out
                                     cursor.execute("""
                                         UPDATE attendance 
                                         SET timeout = NULL
@@ -3402,27 +3450,40 @@ def api_update_attendance_time():
                                     changes_made.append("deleted time-out")
                                     print(f"   ✅ Deleted time-out")
                                     updates_applied = True
-                                else:  
+                                else:
+                                    # Check if there's a valid time-in first
                                     current_timein_check = current_timein
                                     if 'time_in' in update and time_in != '':
                                         time_in_24hr = convert_to_24hour(time_in)
                                         current_timein_check = datetime.strptime(f"{date} {time_in_24hr}", "%Y-%m-%d %H:%M:%S")
                                     
                                     if current_timein_check and current_timein_check.strftime('%H:%M:%S') != '00:00:00':
+                                        # Validate new time-out
                                         time_out_24hr = convert_to_24hour(time_out)
-                                        new_timeout = f"{date} {time_out_24hr}"
-                                        cursor.execute("""
-                                            UPDATE attendance 
-                                            SET timeout = %s::timestamp AT TIME ZONE 'Asia/Manila'
-                                            WHERE attendance_id = %s
-                                        """, (new_timeout, attendance_id))
-                                        changes_made.append(f"set time-out to {time_out}")
-                                        print(f"   ✅ Set time-out to {time_out_24hr}")
-                                        updates_applied = True
+                                        new_timeout_time = datetime.strptime(time_out_24hr, '%H:%M:%S').time()
+                                        
+                                        print(f"   🔍 Validating time-out: {new_timeout_time}")
+                                        
+                                        # Check if within time-out window
+                                        if timeout_window_start <= new_timeout_time <= timeout_window_end:
+                                            new_timeout = f"{date} {time_out_24hr}"
+                                            cursor.execute("""
+                                                UPDATE attendance 
+                                                SET timeout = %s::timestamp AT TIME ZONE 'Asia/Manila'
+                                                WHERE attendance_id = %s
+                                            """, (new_timeout, attendance_id))
+                                            changes_made.append(f"set time-out to {time_out}")
+                                            print(f"   ✅ Set time-out to {time_out_24hr}")
+                                            updates_applied = True
+                                        else:
+                                            print(f"   ❌ Time-out {new_timeout_time} outside valid window")
+                                            # Do NOT update - reject this change
+                                            updates_applied = False
                                     else:
                                         print(f"   ⚠️ Cannot add timeout - no valid timein exists")
                                         updates_applied = False
                             
+                            # === UPDATE STATUS BASED ON NEW TIMES ===
                             if updates_applied:
                                 cursor.execute("""
                                     SELECT timein, timeout FROM attendance WHERE attendance_id = %s
@@ -3434,58 +3495,27 @@ def api_update_attendance_time():
                                     new_status = None
                                     
                                     if class_start and class_end and validation_day == day_of_week:
-                                        print(f"   🔍 Validating against class schedule: {class_start}-{class_end}")
+                                        print(f"   📋 Validating against class schedule: {class_start}-{class_end}")
                                         
                                         if updated_timein and updated_timein.strftime('%H:%M:%S') != '00:00:00':
-                                            if isinstance(class_start, str):
-                                                class_start_time = datetime.strptime(class_start[:8], '%H:%M:%S').time()
-                                            else:
-                                                class_start_time = class_start
-                                            
-                                            if isinstance(class_end, str):
-                                                class_end_time = datetime.strptime(class_end[:8], '%H:%M:%S').time()
-                                            else:
-                                                class_end_time = class_end
-                                            
-                                            class_start_dt = datetime.combine(date_obj, class_start_time)
-                                            class_end_dt = datetime.combine(date_obj, class_end_time)
-                                            
                                             timein_dt = updated_timein.astimezone(pytz.timezone('Asia/Manila')).replace(tzinfo=None)
                                             
-                                            # EXACT RFID VALIDATION RULES
-                                            timein_window_start = (class_start_dt - timedelta(minutes=15)).time()
-                                            timein_window_end = (class_end_dt - timedelta(minutes=15)).time()
-                                            present_threshold_dt = class_start_dt + timedelta(minutes=15)
-                                            timeout_window_start = (class_end_dt - timedelta(minutes=15)).time()
-                                            timeout_window_end = (class_end_dt + timedelta(minutes=15)).time()
+                                            print(f"   📊 Status determination:")
+                                            print(f"     Time-in: {timein_dt.time()}")
+                                            print(f"     Late threshold: {late_threshold}")
                                             
-                                            print(f"   📊 Time Windows:")
-                                            print(f"     Time-in window: {timein_window_start} to {timein_window_end}")
-                                            print(f"     Present threshold: {present_threshold_dt.time()}")
-                                            print(f"     Time-out window: {timeout_window_start} to {timeout_window_end}")
-                                            print(f"     Actual time-in: {timein_dt.time()}")
-                                            
-                                            # RULE 1: Check if time-in is within valid time-in window
+                                            # RULE: Present if before late threshold, Late if after
                                             if timein_window_start <= timein_dt.time() <= timein_window_end:
-                                                # RULE 5 & 6: Determine Present vs Late
-                                                if timein_dt <= present_threshold_dt:
+                                                if timein_dt.time() <= late_threshold:
                                                     new_status = "Present"
                                                     print(f"   ✅ Time-in within window: RECORDED AS PRESENT")
                                                 else:
-                                                    new_status = "Late" 
+                                                    new_status = "Late"
                                                     print(f"   ✅ Time-in within window: RECORDED AS LATE")
                                             else:
-                                                # Time-in outside window - check if it's in timeout window (RULE 8)
-                                                if timeout_window_start <= timein_dt.time() <= timeout_window_end:
-                                                    new_status = "Late"
-                                                    print(f"   ✅ Time-in in timeout window: RECORDED AS LATE")
-                                                else:
-                                                    # Time-in completely outside all windows
-                                                    new_status = "Absent"
-                                                    print(f"   ❌ Time-in outside all windows: RECORDED AS ABSENT")
-                                                    
+                                                new_status = "Absent"
+                                                print(f"   ❌ Time-in outside all windows: RECORDED AS ABSENT")
                                         else:
-                                            # No time-in = Absent (RULE 9 & 10)
                                             new_status = "Absent"
                                             print(f"   ❌ No time-in: RECORDED AS ABSENT")
                                     
@@ -3529,13 +3559,13 @@ def api_update_attendance_time():
                                             schedule_parts.append(f"{classday_2} {start2_str}-{end2_str}")
                                         schedule_info = " / ".join(schedule_parts) if schedule_parts else "N/A"
 
-                                    before_timein_str = "None"
-                                    if original_timein and original_timein.strftime('%H:%M:%S') != '00:00:00':
-                                        before_timein_str = original_timein.strftime('%H:%M:%S')
+                                    def clean_value(value):
+                                        if value is None or value == '' or value == '00:00:00':
+                                            return 'None'
+                                        return str(value)
 
-                                    before_timeout_str = "None"
-                                    if original_timeout and original_timeout.strftime('%H:%M:%S') != '00:00:00':
-                                        before_timeout_str = original_timeout.strftime('%H:%M:%S')
+                                    before_timein_str = clean_value(original_timein.strftime('%H:%M:%S') if original_timein and original_timein.strftime('%H:%M:%S') != '00:00:00' else None)
+                                    before_timeout_str = clean_value(original_timeout.strftime('%H:%M:%S') if original_timeout and original_timeout.strftime('%H:%M:%S') != '00:00:00' else None)
 
                                     after_timein_str = "None"
                                     if 'time_in' in update:
