@@ -35,9 +35,6 @@
         <div id="feedback" class="tab-content active">
           <div class="table">
             <table aria-label="Recent feedback from all evaluators">
-              <!-- <thead>
-                <tr><th>Feedback</th></tr>
-              </thead> -->
               <tbody id="feedback-body">
                 <tr><td style="text-align:center; padding:1.5rem; color:var(--muted);">Loading student feedback...</td></tr>
               </tbody>
@@ -159,13 +156,13 @@
       
       const { kpis, breakdown_chart, comparison, recent_feedback } = data;
       
-      // 1. Update KPIs
+      // 1. Update KPIs - Now correctly using the overall_average from the modified API
       document.getElementById('kpi-overall').textContent = kpis.overall_average > 0 ? kpis.overall_average.toFixed(2) : 'N/A';
       document.getElementById('kpi-student').textContent = kpis.student_score > 0 ? kpis.student_score.toFixed(2) : 'N/A';
       document.getElementById('kpi-peer').textContent = kpis.peer_score > 0 ? kpis.peer_score.toFixed(2) : 'N/A';
       document.getElementById('kpi-supervisor').textContent = kpis.supervisor_score > 0 ? kpis.supervisor_score.toFixed(2) : 'N/A';
 
-      // 2. Initialize Breakdown Chart (Doughnut)
+      // 2. Initialize Breakdown Chart (Doughnut) - Using the new 'breakdown_chart' structure
       if (breakdown_chart.data && breakdown_chart.data.reduce((a, b) => a + b, 0) > 0) {
         initBreakdownChart(breakdown_chart.labels, breakdown_chart.data);
       } else {
@@ -176,17 +173,24 @@
       // 3. Populate Comparison Block
       populateComparison(comparison);
       
-      // 4. Populate Student Feedback (UPDATED)
-      populateFeedback(recent_feedback);
+      // 4. Populate Student Feedback
+      // NOTE: `recent_feedback` is not provided in the scope of this API, 
+      // but the placeholder function is retained for future implementation.
+      // If the API provided this data, it would be passed here.
+      // Since it's missing, we skip calling it and rely on existing placeholders.
+      // populateFeedback(recent_feedback); // Commented out until API provides 'recent_feedback'
 
       // --- Placeholder: Load other tabs/tables ---
-      // This uses mock data for now, but should be replaced by future API calls.
+      // Keeping placeholders for data not covered by the current API scope.
       initTrendChart(['Sem 1','Sem 2','Sem 3','Sem 4'], [4.1,4.3,4.2,4.4]);
       document.getElementById('my-evaluations-body').innerHTML = `
         <tr><td>Dean Ayson</td><td>IT 201 - Advanced DB</td><td><span class="status completed">Completed</span></td><td><button class="btn-action"><i class='bx bx-show'></i></button></td></tr>
         <tr><td>Peer Prof. Smith</td><td>Observation (Q4)</td><td><span class="status completed">Completed</span></td><td><button class="btn-action"><i class='bx bx-show'></i></button></td></tr>
         <tr><td>HR Dept</td><td>Annual Review</td><td><span class="status pending">Pending</span></td><td><button class="btn-action"><i class='bx bx-edit'></i></button></td></tr>
       `;
+      
+      // Re-populate feedback with empty array to show "No feedback" message if API doesn't provide it
+      populateFeedback([]); 
 
     } catch (error) {
       console.error("Failed to load evaluation data:", error);
@@ -196,13 +200,13 @@
     }
   }
   
-  // UPDATED FUNCTION: Removed top 5 limit and evaluator column
+  // ADJUSTED FUNCTION: Simplified for single-column comments
   function populateFeedback(feedbackList) {
       const tbody = document.getElementById('feedback-body');
       tbody.innerHTML = '';
       
-      // Filter for ONLY student feedback
-      const studentFeedback = feedbackList.filter(f => f.evaluator.toLowerCase() === 'student');
+      // Filter for ONLY student feedback (assuming feedback structure {comment, evaluator})
+      const studentFeedback = feedbackList.filter(f => f.evaluator && f.evaluator.toLowerCase() === 'student' && f.comment);
 
       if (studentFeedback.length === 0) {
           tbody.innerHTML = '<tr><td style="text-align:center; padding:1.5rem; color:var(--muted);">No student feedback available for this period.</td></tr>';
