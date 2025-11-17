@@ -16,7 +16,6 @@
 {% block page_title %}{% if is_hr_viewing or is_vp_viewing %}{{ firstname }}'s Profile{% else %}My Profile{% endif %}{% endblock %}
 
 {% block content %}
-<!-- Profile Header -->
 <section class="card profile-overview">
   <div class="profile-banner"></div>
 
@@ -45,7 +44,6 @@
   </div>
 </section>
 
-<!-- Tabs -->
 <div class="tabs_profile">
   <div class="tab active" data-tab="overview">Overview</div>
   <div class="tab" data-tab="credentials-docs">Credentials</div>
@@ -53,9 +51,6 @@
   <div class="tab" data-tab="teaching-courses">Teaching</div>
 </div>
 
-<!-- Tab Content -->
-
-<!-- Overview -->
 <div id="overview" class="tab-content active">
   <div class="career-overview-card">
     <div class="career-overview-header">
@@ -64,7 +59,7 @@
 
     <div class="stats">
       <div class="stat-card">
-        <h3>4.6</h3>
+        <h3 id="avg-eval-rating-kpi">0.0</h3>
         <p>Avg. Eval Rating</p>
       </div>
       <div class="stat-card">
@@ -95,13 +90,11 @@
   </div>
 </div>
 
-<!-- Credentials & Documents -->
 <div id="credentials-docs" class="tab-content">
   <div class="card">
     <h3>Credentials & Documents</h3>
     <p style="font-size:13px;color:var(--muted);margin-bottom:20px;">Licenses, degrees, and certifications</p>
     
-    <!-- Licenses Section -->
     <div class="document-section">
       <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-certificate"></i> Licenses</h4>
       <div id="licenses-display" class="documents-grid">
@@ -109,7 +102,6 @@
       </div>
     </div>
 
-    <!-- Degrees Section -->
     <div class="document-section" style="margin-top:30px;">
       <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-graduation-cap"></i> Degrees</h4>
       <div id="degrees-display" class="documents-grid">
@@ -117,7 +109,6 @@
       </div>
     </div>
 
-    <!-- Certificates Section -->
     <div class="document-section" style="margin-top:30px;">
       <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-award"></i> Certificates</h4>
       <div id="certificates-display" class="documents-grid">
@@ -127,13 +118,11 @@
   </div>
 </div>
 
-<!-- Research & Achievements -->
 <div id="research-achievements" class="tab-content">
   <div class="card">
     <h3>Research & Achievements</h3>
     <p style="font-size:13px;color:var(--muted);margin-bottom:20px;">Publications, papers, awards, and recognitions</p>
     
-    <!-- Publications Section -->
     <div class="document-section">
       <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-book"></i> Publications</h4>
       <div id="publications-display" class="documents-grid">
@@ -141,7 +130,6 @@
       </div>
     </div>
 
-    <!-- Awards Section -->
     <div class="document-section" style="margin-top:30px;">
       <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-trophy"></i> Awards</h4>
       <div id="awards-display" class="documents-grid">
@@ -151,13 +139,11 @@
   </div>
 </div>
 
-<!-- Teaching & Courses -->
 <div id="teaching-courses" class="tab-content">
   <div class="card">
     <h3>Teaching & Courses</h3>
     <p style="font-size:13px;color:var(--muted);margin-bottom:20px;">Current and past teaching assignments</p>
     
-    <!-- Semester Navigation -->
     <div class="calendar-header" style="margin:20px 0;">
       <button id="prev-semester-btn" onclick="changeSemester('prev')" class="calendar-nav-btn">‹</button>
       <h4 id="semester-title" style="margin:0;color:var(--text);font-size:16px;font-weight:600;">
@@ -429,6 +415,9 @@ function displayProfile() {
 }
 
 function displayProfileStats(stats) {
+  const evalScore = stats.overall_eval_score || 0.0;
+  document.getElementById('avg-eval-rating-kpi').textContent = evalScore.toFixed(2);
+  
   document.getElementById('years-service').textContent = stats.years_of_service;
   document.getElementById('research-pubs').textContent = stats.research_publications;
   document.getElementById('professional-certs').textContent = stats.professional_certifications;

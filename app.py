@@ -2624,7 +2624,7 @@ def api_get_faculty_profile():
 @app.route('/api/faculty/profile/stats')
 @require_auth([20001, 20002, 20003, 20004])
 def api_get_profile_stats():
-    """OPTIMIZED: Get profile statistics with single query - INCLUDES ATTENDANCE RATING"""
+    """OPTIMIZED: Get profile statistics with single query - INCLUDES ATTENDANCE RATING and EVALUATION SCORE"""
     try:
         viewing_personnel_id = session.get('viewing_personnel_id')
         if viewing_personnel_id:
@@ -2648,6 +2648,17 @@ def api_get_profile_stats():
         current_semester_id = current_semester_result[0] if current_semester_result else None
         
         cursor.execute("""
+            WITH evaluation_data AS (
+                -- Calculate Overall Weighted Evaluation Score (55/35/10)
+                SELECT
+                    COALESCE(
+                        SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
+                        SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
+                        SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
+                    0) AS overall_eval_score
+                FROM faculty_evaluations fe
+                WHERE fe.personnel_id = %s AND fe.acadcalendar_id = %s
+            )
             SELECT 
                 pe.hiredate,
                 COALESCE(array_length(pr.certificates, 1), 0) as certificates_count,
@@ -2660,11 +2671,12 @@ def api_get_profile_stats():
                      WHERE ar.personnel_id = %s 
                      AND ar.acadcalendar_id = %s),
                     0
-                ) as avg_attendance_rate
+                ) as avg_attendance_rate,
+                (SELECT overall_eval_score FROM evaluation_data) as overall_eval_score
             FROM personnel pe
             LEFT JOIN profile pr ON pe.personnel_id = pr.personnel_id
             WHERE pe.personnel_id = %s
-        """, (personnel_id, current_semester_id, personnel_id))
+        """, (personnel_id, current_semester_id, personnel_id, current_semester_id, personnel_id))
         
         result = cursor.fetchone()
         cursor.close()
@@ -2673,7 +2685,7 @@ def api_get_profile_stats():
         if not result:
             return {'success': False, 'error': 'Personnel record not found'}
         
-        hire_date, certificates_count, publications_count, awards_count, avg_attendance_rate = result
+        hire_date, certificates_count, publications_count, awards_count, avg_attendance_rate, overall_eval_score = result
         
         years_of_service = 0
         if hire_date:
@@ -2687,7 +2699,8 @@ def api_get_profile_stats():
             'professional_certifications': certificates_count,
             'research_publications': publications_count,
             'awards_count': awards_count,
-            'attendance_rating': round(float(avg_attendance_rate), 2) if avg_attendance_rate else 0
+            'attendance_rating': round(float(avg_attendance_rate), 2) if avg_attendance_rate else 0,
+            'overall_eval_score': round(float(overall_eval_score), 2) if overall_eval_score else 0.0
         }
         
         return {'success': True, 'stats': stats}
