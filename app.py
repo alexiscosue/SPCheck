@@ -7348,15 +7348,31 @@ def forward_to_president():
         return jsonify(success=False, error=str(e)), 500
 
 @app.route('/api/regularization/approve-by-president', methods=['POST'])
-@require_auth([20004, 20005])  # President only
+@require_auth([20004])  # President only
 def approve_regularization_by_president():
     """President approves regularization"""
     try:
         data = request.get_json()
         regularization_id = data.get('regularization_id')
         
+        if not regularization_id:
+            return jsonify(success=False, error='Regularization ID is required'), 400
+        
         conn = get_db_connection()
         cursor = conn.cursor()
+        
+        # Additional check: Verify user has "President" position
+        user_id = session.get('user_id')
+        cursor.execute(
+            "SELECT position FROM profile WHERE personnel_id = %s",
+            (user_id,)
+        )
+        position_result = cursor.fetchone()
+        
+        if not position_result or position_result[0] != 'President':
+            cursor.close()
+            return_db_connection(conn)
+            return jsonify(success=False, error='Unauthorized: Only President can approve regularizations'), 403
         
         philippines_tz = pytz.timezone('Asia/Manila')
         current_time = datetime.now(philippines_tz)
@@ -7372,7 +7388,6 @@ def approve_regularization_by_president():
         conn.commit()
         
         # Log audit
-        user_id = session.get('user_id')
         personnel_info = get_personnel_info(user_id)
         pres_personnel_id = personnel_info.get('personnel_id')
         
@@ -7399,7 +7414,10 @@ def approve_regularization_by_president():
         traceback.print_exc()
         if conn:
             conn.rollback()
+            cursor.close()
+            return_db_connection(conn)
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 
 @app.route('/api/regularization/reject', methods=['POST'])
@@ -8004,7 +8022,7 @@ def forward_to_vpaa():
 
 
 @app.route('/api/promotion/approve', methods=['POST'])
-@require_auth([20004])  # Only President
+@require_auth([20004])  # Only President role
 def approve_promotion():
     """Final approval of promotion application by President"""
     try:
@@ -8017,6 +8035,19 @@ def approve_promotion():
         
         conn = get_db_connection()
         cursor = conn.cursor()
+        
+        # Additional check: Verify user has "President" position
+        user_id = session.get('user_id')
+        cursor.execute(
+            "SELECT position FROM profile WHERE personnel_id = %s",
+            (user_id,)
+        )
+        position_result = cursor.fetchone()
+        
+        if not position_result or position_result[0] != 'President':
+            cursor.close()
+            return_db_connection(conn)
+            return jsonify(success=False, error='Unauthorized: Only President can approve promotions'), 403
         
         # Get application details
         cursor.execute(
@@ -8055,7 +8086,6 @@ def approve_promotion():
         conn.commit()
         
         # Audit log
-        user_id = session.get('user_id')
         personnel_info = get_personnel_info(user_id)
         personnel_id = personnel_info.get('personnel_id')
         
@@ -8069,12 +8099,11 @@ def approve_promotion():
             )
         
         # After approval
-            log_audit(
-                action='PROMOTION_APPROVE',
-                details=f'President approved promotion application (ID: {application_id})',
-                personnel_id=session.get('user_id')
-            )
-
+        log_audit(
+            action='PROMOTION_APPROVE',
+            details=f'President approved promotion application (ID: {application_id})',
+            personnel_id=user_id
+        )
         
         cursor.close()
         return_db_connection(conn)
@@ -8087,8 +8116,9 @@ def approve_promotion():
         traceback.print_exc()
         if conn:
             conn.rollback()
+            cursor.close()
+            return_db_connection(conn)
         return jsonify(success=False, error=str(e)), 500
-
 
 
 @app.route('/api/promotion/reject', methods=['POST'])
