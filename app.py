@@ -5606,36 +5606,41 @@ def faculty_promotion():
     print(f"DEBUG: Attendance Rate = {avg_attendance_rate}, Records = {attendance_record_count}, facullty id = {faculty_id}, term id = {current_term_id}")
     
     # 2. Get weighted evaluation score (minimum 3.0) - FIXED CALCULATION
-    cursor.execute("""
+    cursor.execute('''
         SELECT 
-            SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score ELSE 0 END) as student_total,
-            COUNT(CASE WHEN fe.evaluator_type = 'student' THEN 1 END) as student_count,
-            SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score ELSE 0 END) as supervisor_total,
-            COUNT(CASE WHEN fe.evaluator_type = 'supervisor' THEN 1 END) as supervisor_count
+            -- Weighted Overall Score (55% + 35% + 10% = 100%)
+            COALESCE(
+                SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
+                SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
+                SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
+                0
+            ) AS weightedevalscore,
+            -- Individual scores for display/debugging
+            COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score END), 0) AS studentscore,
+            COALESCE(SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END), 0) AS supervisorscore,
+            COALESCE(SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score END), 0) AS peerscore
         FROM faculty_evaluations fe
-        WHERE fe.personnel_id = %s 
-          AND fe.acadcalendar_id = %s
-    """, (faculty_id, current_term_id))
-    
-    eval_result = cursor.fetchone()
-    
-    weighted_eval_score = 0.0
-    if eval_result:
-        student_total = float(eval_result[0] or 0)
-        student_count = int(eval_result[1] or 0)
-        supervisor_total = float(eval_result[2] or 0)
-        supervisor_count = int(eval_result[3] or 0)
-        
-        # Calculate weighted average
-        student_avg = (student_total / student_count) if student_count > 0 else 0
-        supervisor_avg = (supervisor_total / supervisor_count) if supervisor_count > 0 else 0
-        
-        # Apply weights: 55% student, 35% supervisor (90% total, adjust if needed)
-        weighted_eval_score = (student_avg * 0.55) + (supervisor_avg * 0.35)
-        
-        print(f"DEBUG: Student Avg = {student_avg}, Supervisor Avg = {supervisor_avg}")
-        print(f"DEBUG: Weighted Eval Score = {weighted_eval_score}")
-    
+        WHERE fe.personnel_id = %s AND fe.acadcalendar_id = %s
+    ''', (faculty_id, current_term_id))
+
+    evalresult = cursor.fetchone()
+    if evalresult:
+        weightedevalscore = float(evalresult[0])
+        studentscore = float(evalresult[1])
+        supervisorscore = float(evalresult[2])
+        peerscore = float(evalresult[3])
+    else:
+        weightedevalscore = 0.0
+        studentscore = 0.0
+        supervisorscore = 0.0
+        peerscore = 0.0
+
+    print(f"DEBUG Weighted Eval Score: {weightedevalscore:.2f}")
+    print(f"DEBUG Student Score: {studentscore:.2f} (weight: 55%)")
+    print(f"DEBUG Supervisor Score: {supervisorscore:.2f} (weight: 35%)")
+    print(f"DEBUG Peer Score: {peerscore:.2f} (weight: 10%)")
+
+
     # 3. Calculate years of service (minimum 3 years)
     from datetime import date
     today = date.today()
@@ -5657,9 +5662,9 @@ def faculty_promotion():
     if not is_attendance_ok:
         lock_reasons.append(f"Attendance Rate: Must be 80.0% or higher (Current: {avg_attendance_rate:.1f}%).")
 
-    is_eval_ok = weighted_eval_score >= 3.0
+    is_eval_ok = weightedevalscore >= 3.0
     if not is_eval_ok:
-        lock_reasons.append(f"Evaluation Score: Weighted average must be 3.00 or higher (Current: {weighted_eval_score:.2f}).")
+        lock_reasons.append(f"Evaluation Score: Weighted average must be 3.00 or higher (Current: {weightedevalscore:.2f}).")
 
     # NEW: Check if 1 year has passed since last approved promotion
     cursor.execute("""
@@ -5824,7 +5829,7 @@ def faculty_promotion():
         'available_ranks': available_ranks,
         'application_history': application_history,
         'avg_attendance_rate': f"{avg_attendance_rate:.1f}",
-        'weighted_eval_score': f"{weighted_eval_score:.2f}",
+        'weighted_eval_score': f"{weightedevalscore:.2f}",
         'lock_reasons': lock_reasons,
         'can_apply_for_promotion': can_apply_for_promotion,
         'application_id': None,
