@@ -90,6 +90,7 @@
       if (mainData.success && evalData.success) {
         dashboardData = { ...mainData, ...evalData }; // Combine data
         updateDashboardDisplay();
+        // MODIFIED: Use the specific 'chart_data' key returned by the eval API
         renderEvaluationChart(dashboardData.chart_data);
       } else {
         console.error('Failed to fetch dashboard data:', mainData.error || evalData.error);
@@ -167,7 +168,8 @@
 
     // Evaluation Score KPI
     const evalScoreElement = document.getElementById('evaluationScore');
-    const overallScore = parseFloat(dashboardData.overall_eval_score);
+    // Using the combined overall_eval_score from the main data fetch (or fallback if it was overwritten)
+    const overallScore = parseFloat(dashboardData.overall_eval_score || dashboardData.kpis.overall_average); 
     const scoreDisplay = overallScore.toFixed(2);
     
     // Determine the trend for overall score (Placeholder logic based on target 4.0/5.0)

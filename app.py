@@ -3998,6 +3998,7 @@ def api_hr_faculty_schedule(personnel_id):
 def api_faculty_evaluations_data():
     """
     Fetches evaluation breakdown data for charts and comparison, INCLUDING qualitative feedback.
+    (MODIFIED to include 'chart_data' for the dashboard bar chart.)
     """
     try:
         user_id = session.get('user_id')
@@ -4111,6 +4112,13 @@ def api_faculty_evaluations_data():
         # Prepare comparison scores
         dept_avg = float(department_avg) if department_avg is not None else your_overall_avg
         college_avg = float(college_wide_avg) if college_wide_avg is not None else your_overall_avg
+        
+        # NEW: Prepare data array for the Dashboard Bar Chart
+        chart_data_for_dashboard = [
+            student_avg, 
+            peer_avg, 
+            supervisor_avg
+        ]
 
 
         return jsonify({
@@ -4133,7 +4141,8 @@ def api_faculty_evaluations_data():
                 'college_avg': college_avg,
                 'college_name': faculty_college_name
             },
-            'recent_feedback': recent_feedback or []
+            'recent_feedback': recent_feedback or [],
+            'chart_data': chart_data_for_dashboard # <-- ADDED FOR DASHBOARD
         })
         
     except Exception as e:
