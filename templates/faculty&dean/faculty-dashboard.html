@@ -5,9 +5,7 @@
 {% block page_title %}Welcome back, {{ faculty_name }}{% endblock %}
 
 {% block content %}
-<!-- Dashboard Grid -->
 <section class="grid">
-  <!-- KPI Cards -->
   <div class="kpis card">
     <div class="kpi card">
       <div class="icon att"><i class='bx bx-check-shield'></i></div>
@@ -21,7 +19,7 @@
       <div class="icon eval"><i class='bx bx-star'></i></div>
       <div>
         <div class="title">Evaluation Score</div>
-        <div class="value">4.4 / 5 <i class='bx bx-up-arrow-alt' style="color:#10b981"></i></div>
+        <div class="value" id="evaluationScore">Loading... <i class='bx bx-loader-alt bx-spin'></i></div>
       </div>
     </div>
 
@@ -42,8 +40,9 @@
     </div>
   </div>
 
-  <!-- Charts -->
   <div class="chart-large">
+    <!-- COMMENTED OUT: Attendance Trends Chart -->
+    <!--
     <div class="chart-card card">
       <div style="display:flex;align-items:center;justify-content:space-between">
         <div style="font-weight:700">Attendance Trend</div>
@@ -51,6 +50,7 @@
       </div>
       <canvas id="myAttendanceChart" height="170"></canvas>
     </div>
+    -->
 
     <div class="chart-card card">
       <div style="font-weight:700;margin-bottom:6px">Evaluation Breakdown</div>
@@ -59,7 +59,6 @@
   </div>
 
   <div class="chart-side">
-    <!-- Class Schedule -->
     <div class="card schedule">
       <div class="card-header">
         <i class='bx bx-calendar'></i>
@@ -76,19 +75,28 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
   let dashboardData = null;
+  let evalChartInstance = null; 
 
   async function fetchDashboardData() {
     try {
-      const response = await fetch('/api/faculty/dashboard');
-      const data = await response.json();
+      // 1. Fetch main dashboard data (KPIs, Overall Eval Score, Schedule)
+      const mainResponse = await fetch('/api/faculty/dashboard');
+      const mainData = await mainResponse.json();
       
-      if (data.success) {
-        dashboardData = data;
+      // 2. Fetch evaluation chart data (Breakdown Scores)
+      const evalResponse = await fetch('/api/faculty/evaluations-data');
+      const evalData = await evalResponse.json();
+      
+      if (mainData.success && evalData.success) {
+        dashboardData = { ...mainData, ...evalData }; // Combine data
         updateDashboardDisplay();
+        // MODIFIED: Use the specific 'chart_data' key returned by the eval API
+        renderEvaluationChart(dashboardData.chart_data);
       } else {
-        console.error('Failed to fetch dashboard data:', data.error);
+        console.error('Failed to fetch dashboard data:', mainData.error || evalData.error);
         showErrorState();
       }
     } catch (error) {
@@ -96,11 +104,64 @@
       showErrorState();
     }
   }
+  
+  // COMMENTED OUT: Static Attendance Chart Setup
+  /*
+  const myAttendanceCtx = document.getElementById('myAttendanceChart').getContext('2d');
+  new Chart(myAttendanceCtx, {
+    type: 'line',
+    data: {
+      labels: ['Week 1','Week 2','Week 3','Week 4'],
+      datasets: [{ label:'Attendance %', data:[94,96,95,97], borderColor:'#7b1113', backgroundColor:'rgba(123,17,19,0.1)', tension:0.35, pointRadius:4, pointBackgroundColor:'#fff' }]
+    },
+    options:{ responsive:true, plugins:{ legend:{ display:false } }, scales:{ y:{ min:80, max:100, ticks:{ stepSize:5 } } } }
+  });
+  */
+
+  function renderEvaluationChart(data) {
+    const evalCtx = document.getElementById('myEvalChart').getContext('2d');
+    
+    // Destroy old chart instance if it exists
+    if (evalChartInstance) {
+      evalChartInstance.destroy();
+    }
+    
+    // Chart Labels: Students, Peers, Supervisors (matches backend output order)
+    const chartLabels = ['Students','Peers','Supervisors'];
+    
+    evalChartInstance = new Chart(evalCtx, {
+      type: 'bar',
+      data: {
+        labels: chartLabels,
+        datasets:[{ 
+          label:'Average Score', 
+          // Data is an array of 3 floats: [Student Avg, Peer Avg, Supervisor Avg]
+          data: data, 
+          backgroundColor:['#3b82f6','#10b981','#f1c40f'] 
+        }]
+      },
+      options:{ 
+        responsive:true, 
+        plugins:{ 
+          legend:{ display:false } 
+        }, 
+        scales:{ 
+          y:{ 
+            min:0, 
+            max:5, 
+            ticks:{ 
+              stepSize:1 
+            } 
+          } 
+        } 
+      }
+    });
+  }
 
   function updateDashboardDisplay() {
     if (!dashboardData) return;
     
-    // Attendance Rate
+    // Attendance Rate KPI
     const attendanceRateElement = document.getElementById('attendanceRate');
     const attendanceRate = dashboardData.attendance_rate.percentage;
     const trend = attendanceRate >= 95 ? 'up-arrow-alt' : attendanceRate >= 85 ? 'right-arrow-alt' : 'down-arrow-alt';
@@ -108,7 +169,32 @@
     
     attendanceRateElement.innerHTML = `${attendanceRate}% <i class='bx bx-${trend}' style="color:${trendColor}"></i>`;
 
-    // Teaching Load
+    // Evaluation Score KPI
+    const evalScoreElement = document.getElementById('evaluationScore');
+    // Using the combined overall_eval_score from the main data fetch (or fallback if it was overwritten)
+    const overallScore = parseFloat(dashboardData.overall_eval_score || dashboardData.kpis.overall_average); 
+    const scoreDisplay = overallScore.toFixed(2);
+    
+    // Determine the trend for overall score (Placeholder logic based on target 4.0/5.0)
+    let evalTrend = 'right-arrow-alt';
+    let evalTrendColor = '#6b7280';
+    
+    if (overallScore >= 4.0) {
+        evalTrend = 'up-arrow-alt';
+        evalTrendColor = '#10b981';
+    } else if (overallScore < 3.0 && overallScore > 0) {
+        evalTrend = 'down-arrow-alt';
+        evalTrendColor = '#ef4444';
+    }
+    
+    // If score is 0.0, show N/A
+    if (overallScore === 0.0) {
+        evalScoreElement.innerHTML = `N/A <i class='bx bx-minus' style="color:#6b7280"></i>`;
+    } else {
+        evalScoreElement.innerHTML = `${scoreDisplay} / 5 <i class='bx bx-${evalTrend}' style="color:${evalTrendColor}"></i>`;
+    }
+
+    // Teaching Load KPI
     const teachingLoadElement = document.getElementById('teachingLoad');
     teachingLoadElement.textContent = `${dashboardData.teaching_load}.0 Units`;
     
@@ -129,11 +215,10 @@
           const { can_apply, tenure_type, years_employed, has_active_application } = data;
           
           let statusHTML = '';
-          let statusColor = '';
           
           if (has_active_application) {
             // Active application in progress
-            statusHTML = 'In Progress <i class="bx bx-time-five" style="color:#f59e0b"></i>';
+            statusHTML = 'In Review <i class="bx bx-time-five" style="color:#f59e0b"></i>';
           } else if (can_apply) {
             // Eligible to apply
             statusHTML = 'Eligible <i class="bx bx-check-circle" style="color:#16a34a"></i>';
@@ -241,35 +326,30 @@
 
   function showErrorState() {
     document.getElementById('attendanceRate').innerHTML = 'Error <i class="bx bx-error-circle" style="color:#ef4444"></i>';
+    document.getElementById('evaluationScore').innerHTML = 'Error <i class="bx bx-error-circle" style="color:#ef4444"></i>';
     document.getElementById('teachingLoad').textContent = 'Error loading';
     document.getElementById('promotionStatus').innerHTML = 'Error <i class="bx bx-error-circle" style="color:#ef4444"></i>';
     document.getElementById('classScheduleBody').innerHTML = '<div style="text-align: center; padding: 1rem; color: #ef4444;">Error loading schedule</div>';
+    
+    // Destroy chart if error occurs to show blank
+    const evalCtx = document.getElementById('myEvalChart').getContext('2d');
+    if (evalChartInstance) {
+      evalChartInstance.destroy();
+    }
+    evalChartInstance = new Chart(evalCtx, {
+      type: 'bar',
+      data: {
+        labels: ['Students','Peers','Supervisors'],
+        datasets:[{ label:'Average Score', data:[0,0,0], backgroundColor:['#3b82f6','#10b981','#f1c40f'] }]
+      },
+      options:{ responsive:true, plugins:{ legend:{ display:false } }, scales:{ y:{ min:0, max:5, ticks:{ stepSize:1 } } } }
+    });
   }
-
-  const myAttendanceCtx = document.getElementById('myAttendanceChart').getContext('2d');
-  new Chart(myAttendanceCtx, {
-    type: 'line',
-    data: {
-      labels: ['Week 1','Week 2','Week 3','Week 4'],
-      datasets: [{ label:'Attendance %', data:[94,96,95,97], borderColor:'#7b1113', backgroundColor:'rgba(123,17,19,0.1)', tension:0.35, pointRadius:4, pointBackgroundColor:'#fff' }]
-    },
-    options:{ responsive:true, plugins:{ legend:{ display:false } }, scales:{ y:{ min:80, max:100, ticks:{ stepSize:5 } } } }
-  });
-
-  const myEvalCtx = document.getElementById('myEvalChart').getContext('2d');
-  new Chart(myEvalCtx, {
-    type: 'bar',
-    data: {
-      labels:['Students','Peers','Admin'],
-      datasets:[{ label:'Average Score', data:[4.5,4.3,4.2], backgroundColor:['#3b82f6','#10b981','#f1c40f'] }]
-    },
-    options:{ responsive:true, plugins:{ legend:{ display:false } }, scales:{ y:{ min:0, max:5, ticks:{ stepSize:1 } } } }
-  });
 
   document.addEventListener('DOMContentLoaded', function() {
     fetchDashboardData();
     
-    setInterval(fetchDashboardData, 5 * 60 * 1000);
+    setInterval(fetchDashboardData, 5 * 60 * 1000); 
   });
 </script>
 {% endblock %}

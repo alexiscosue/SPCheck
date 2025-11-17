@@ -2115,12 +2115,26 @@ def api_faculty_dashboard():
                 CROSS JOIN current_semester cs
                 WHERE a.personnel_id = pd.personnel_id 
                 AND sch.acadcalendar_id = cs.acadcalendar_id
+            ),
+            evaluation_data AS (
+                -- Calculate Overall Weighted Evaluation Score (55/35/10)
+                SELECT
+                    COALESCE(
+                        SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
+                        SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
+                        SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
+                    0) AS overall_average
+                FROM faculty_evaluations fe
+                CROSS JOIN personnel_data pd
+                CROSS JOIN current_semester cs
+                WHERE fe.personnel_id = pd.personnel_id AND fe.acadcalendar_id = cs.acadcalendar_id
             )
             SELECT 
                 (SELECT row_to_json(current_semester) FROM current_semester),
                 (SELECT json_agg(row_to_json(schedule_data)) FROM schedule_data),
                 (SELECT json_agg(row_to_json(attendance_data)) FROM attendance_data),
-                (SELECT COALESCE(SUM(units), 0) FROM schedule_data)
+                (SELECT COALESCE(SUM(units), 0) FROM schedule_data),
+                (SELECT overall_average FROM evaluation_data LIMIT 1) 
         """, (user_id,))
         
         result = cursor.fetchone()
@@ -2130,10 +2144,15 @@ def api_faculty_dashboard():
         if not result or result[0] is None:
             return {'success': False, 'error': 'No active academic calendar found'}
         
-        semester_info_json, schedule_json, attendance_json, teaching_load = result
+        semester_info_json, schedule_json, attendance_json, teaching_load, overall_eval_score = result
         
         semester_start = date.fromisoformat(semester_info_json['semesterstart'])
         semester_end = date.fromisoformat(semester_info_json['semesterend'])
+        
+        # CRITICAL FIX 1: Ensure overall_eval_score is cast safely before use
+        overall_eval_score = float(overall_eval_score) if overall_eval_score is not None else 0.0
+        
+        # [Existing logic for calculating attendance rate, etc., remains here]
         
         scheduled_classes = schedule_json or []
         attendance_records = attendance_json or []
@@ -2262,6 +2281,7 @@ def api_faculty_dashboard():
         return {
             'success': True,
             'attendance_rate': attendance_rate,
+            'overall_eval_score': overall_eval_score,
             'class_schedule': weekly_schedule,
             'teaching_load': int(teaching_load) if teaching_load else 0,
             'semester_info': {
@@ -2604,7 +2624,7 @@ def api_get_faculty_profile():
 @app.route('/api/faculty/profile/stats')
 @require_auth([20001, 20002, 20003, 20004])
 def api_get_profile_stats():
-    """OPTIMIZED: Get profile statistics with single query - INCLUDES ATTENDANCE RATING"""
+    """OPTIMIZED: Get profile statistics with single query - INCLUDES ATTENDANCE RATING and EVALUATION SCORE"""
     try:
         viewing_personnel_id = session.get('viewing_personnel_id')
         if viewing_personnel_id:
@@ -2628,6 +2648,17 @@ def api_get_profile_stats():
         current_semester_id = current_semester_result[0] if current_semester_result else None
         
         cursor.execute("""
+            WITH evaluation_data AS (
+                -- Calculate Overall Weighted Evaluation Score (55/35/10)
+                SELECT
+                    COALESCE(
+                        SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
+                        SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
+                        SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
+                    0) AS overall_eval_score
+                FROM faculty_evaluations fe
+                WHERE fe.personnel_id = %s AND fe.acadcalendar_id = %s
+            )
             SELECT 
                 pe.hiredate,
                 COALESCE(array_length(pr.certificates, 1), 0) as certificates_count,
@@ -2640,11 +2671,12 @@ def api_get_profile_stats():
                      WHERE ar.personnel_id = %s 
                      AND ar.acadcalendar_id = %s),
                     0
-                ) as avg_attendance_rate
+                ) as avg_attendance_rate,
+                (SELECT overall_eval_score FROM evaluation_data) as overall_eval_score
             FROM personnel pe
             LEFT JOIN profile pr ON pe.personnel_id = pr.personnel_id
             WHERE pe.personnel_id = %s
-        """, (personnel_id, current_semester_id, personnel_id))
+        """, (personnel_id, current_semester_id, personnel_id, current_semester_id, personnel_id))
         
         result = cursor.fetchone()
         cursor.close()
@@ -2653,7 +2685,7 @@ def api_get_profile_stats():
         if not result:
             return {'success': False, 'error': 'Personnel record not found'}
         
-        hire_date, certificates_count, publications_count, awards_count, avg_attendance_rate = result
+        hire_date, certificates_count, publications_count, awards_count, avg_attendance_rate, overall_eval_score = result
         
         years_of_service = 0
         if hire_date:
@@ -2667,7 +2699,8 @@ def api_get_profile_stats():
             'professional_certifications': certificates_count,
             'research_publications': publications_count,
             'awards_count': awards_count,
-            'attendance_rating': round(float(avg_attendance_rate), 2) if avg_attendance_rate else 0
+            'attendance_rating': round(float(avg_attendance_rate), 2) if avg_attendance_rate else 0,
+            'overall_eval_score': round(float(overall_eval_score), 2) if overall_eval_score else 0.0
         }
         
         return {'success': True, 'stats': stats}
@@ -2677,6 +2710,7 @@ def api_get_profile_stats():
         import traceback
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
+
 
 @app.route('/api/faculty/profile/personal', methods=['POST'])
 @require_auth([20001, 20002, 20003, 20004])
@@ -3363,6 +3397,7 @@ def api_update_attendance_time():
                             
                             print(f"   Using schedule for validation: {validation_day} {class_start}-{class_end}")
                             
+                            # === VALIDATION LOGIC ===
                             changes_made = []
                             updates_applied = False
                             
@@ -3370,9 +3405,41 @@ def api_update_attendance_time():
                             original_timeout = current_timeout
                             original_status = current_status
                             
+                            # Convert class times to time objects
+                            if isinstance(class_start, str):
+                                class_start_time = datetime.strptime(class_start[:8], '%H:%M:%S').time()
+                            else:
+                                class_start_time = class_start
+                            
+                            if isinstance(class_end, str):
+                                class_end_time = datetime.strptime(class_end[:8], '%H:%M:%S').time()
+                            else:
+                                class_end_time = class_end
+                            
+                            # Define validation windows
+                            class_start_dt = datetime.combine(date_obj, class_start_time)
+                            class_end_dt = datetime.combine(date_obj, class_end_time)
+                            
+                            # Time-in window: 15 mins before start to 15 mins before end
+                            timein_window_start = (class_start_dt - timedelta(minutes=15)).time()
+                            timein_window_end = (class_end_dt - timedelta(minutes=15)).time()
+                            
+                            # Late threshold: 15 mins after start
+                            late_threshold = (class_start_dt + timedelta(minutes=15)).time()
+                            
+                            # Time-out window: 15 mins before end to 15 mins after end
+                            timeout_window_start = (class_end_dt - timedelta(minutes=15)).time()
+                            timeout_window_end = (class_end_dt + timedelta(minutes=15)).time()
+                            
+                            print(f"   📊 Validation Windows:")
+                            print(f"     Time-in: {timein_window_start} to {timein_window_end}")
+                            print(f"     Late threshold: {late_threshold}")
+                            print(f"     Time-out: {timeout_window_start} to {timeout_window_end}")
+                            
+                            # === VALIDATE TIME-IN ===
                             if 'time_in' in update:
-                                updates_applied = True
-                                if time_in == '':  
+                                if time_in == '':
+                                    # Delete time-in (set to midnight)
                                     midnight_time = f"{date} 00:00:00"
                                     cursor.execute("""
                                         UPDATE attendance 
@@ -3381,19 +3448,34 @@ def api_update_attendance_time():
                                     """, (midnight_time, attendance_id))
                                     changes_made.append("deleted time-in")
                                     print(f"   ✅ Deleted time-in (set to midnight)")
-                                else:  
+                                    updates_applied = True
+                                else:
+                                    # Validate new time-in
                                     time_in_24hr = convert_to_24hour(time_in)
-                                    new_timein = f"{date} {time_in_24hr}"
-                                    cursor.execute("""
-                                        UPDATE attendance 
-                                        SET timein = %s::timestamp AT TIME ZONE 'Asia/Manila'
-                                        WHERE attendance_id = %s
-                                    """, (new_timein, attendance_id))
-                                    changes_made.append(f"set time-in to {time_in}")
-                                    print(f"   ✅ Set time-in to {time_in_24hr}")
+                                    new_timein_time = datetime.strptime(time_in_24hr, '%H:%M:%S').time()
+                                    
+                                    print(f"   🔍 Validating time-in: {new_timein_time}")
+                                    
+                                    # Check if within time-in window
+                                    if timein_window_start <= new_timein_time <= timein_window_end:
+                                        new_timein = f"{date} {time_in_24hr}"
+                                        cursor.execute("""
+                                            UPDATE attendance 
+                                            SET timein = %s::timestamp AT TIME ZONE 'Asia/Manila'
+                                            WHERE attendance_id = %s
+                                        """, (new_timein, attendance_id))
+                                        changes_made.append(f"set time-in to {time_in}")
+                                        print(f"   ✅ Set time-in to {time_in_24hr}")
+                                        updates_applied = True
+                                    else:
+                                        print(f"   ❌ Time-in {new_timein_time} outside valid window")
+                                        # Do NOT update - reject this change
+                                        updates_applied = False
                             
+                            # === VALIDATE TIME-OUT ===
                             if 'time_out' in update:
-                                if time_out == '':  
+                                if time_out == '':
+                                    # Delete time-out
                                     cursor.execute("""
                                         UPDATE attendance 
                                         SET timeout = NULL
@@ -3402,27 +3484,40 @@ def api_update_attendance_time():
                                     changes_made.append("deleted time-out")
                                     print(f"   ✅ Deleted time-out")
                                     updates_applied = True
-                                else:  
+                                else:
+                                    # Check if there's a valid time-in first
                                     current_timein_check = current_timein
                                     if 'time_in' in update and time_in != '':
                                         time_in_24hr = convert_to_24hour(time_in)
                                         current_timein_check = datetime.strptime(f"{date} {time_in_24hr}", "%Y-%m-%d %H:%M:%S")
                                     
                                     if current_timein_check and current_timein_check.strftime('%H:%M:%S') != '00:00:00':
+                                        # Validate new time-out
                                         time_out_24hr = convert_to_24hour(time_out)
-                                        new_timeout = f"{date} {time_out_24hr}"
-                                        cursor.execute("""
-                                            UPDATE attendance 
-                                            SET timeout = %s::timestamp AT TIME ZONE 'Asia/Manila'
-                                            WHERE attendance_id = %s
-                                        """, (new_timeout, attendance_id))
-                                        changes_made.append(f"set time-out to {time_out}")
-                                        print(f"   ✅ Set time-out to {time_out_24hr}")
-                                        updates_applied = True
+                                        new_timeout_time = datetime.strptime(time_out_24hr, '%H:%M:%S').time()
+                                        
+                                        print(f"   🔍 Validating time-out: {new_timeout_time}")
+                                        
+                                        # Check if within time-out window
+                                        if timeout_window_start <= new_timeout_time <= timeout_window_end:
+                                            new_timeout = f"{date} {time_out_24hr}"
+                                            cursor.execute("""
+                                                UPDATE attendance 
+                                                SET timeout = %s::timestamp AT TIME ZONE 'Asia/Manila'
+                                                WHERE attendance_id = %s
+                                            """, (new_timeout, attendance_id))
+                                            changes_made.append(f"set time-out to {time_out}")
+                                            print(f"   ✅ Set time-out to {time_out_24hr}")
+                                            updates_applied = True
+                                        else:
+                                            print(f"   ❌ Time-out {new_timeout_time} outside valid window")
+                                            # Do NOT update - reject this change
+                                            updates_applied = False
                                     else:
                                         print(f"   ⚠️ Cannot add timeout - no valid timein exists")
                                         updates_applied = False
                             
+                            # === UPDATE STATUS BASED ON NEW TIMES ===
                             if updates_applied:
                                 cursor.execute("""
                                     SELECT timein, timeout FROM attendance WHERE attendance_id = %s
@@ -3434,58 +3529,27 @@ def api_update_attendance_time():
                                     new_status = None
                                     
                                     if class_start and class_end and validation_day == day_of_week:
-                                        print(f"   🔍 Validating against class schedule: {class_start}-{class_end}")
+                                        print(f"   📋 Validating against class schedule: {class_start}-{class_end}")
                                         
                                         if updated_timein and updated_timein.strftime('%H:%M:%S') != '00:00:00':
-                                            if isinstance(class_start, str):
-                                                class_start_time = datetime.strptime(class_start[:8], '%H:%M:%S').time()
-                                            else:
-                                                class_start_time = class_start
-                                            
-                                            if isinstance(class_end, str):
-                                                class_end_time = datetime.strptime(class_end[:8], '%H:%M:%S').time()
-                                            else:
-                                                class_end_time = class_end
-                                            
-                                            class_start_dt = datetime.combine(date_obj, class_start_time)
-                                            class_end_dt = datetime.combine(date_obj, class_end_time)
-                                            
                                             timein_dt = updated_timein.astimezone(pytz.timezone('Asia/Manila')).replace(tzinfo=None)
                                             
-                                            # EXACT RFID VALIDATION RULES
-                                            timein_window_start = (class_start_dt - timedelta(minutes=15)).time()
-                                            timein_window_end = (class_end_dt - timedelta(minutes=15)).time()
-                                            present_threshold_dt = class_start_dt + timedelta(minutes=15)
-                                            timeout_window_start = (class_end_dt - timedelta(minutes=15)).time()
-                                            timeout_window_end = (class_end_dt + timedelta(minutes=15)).time()
+                                            print(f"   📊 Status determination:")
+                                            print(f"     Time-in: {timein_dt.time()}")
+                                            print(f"     Late threshold: {late_threshold}")
                                             
-                                            print(f"   📊 Time Windows:")
-                                            print(f"     Time-in window: {timein_window_start} to {timein_window_end}")
-                                            print(f"     Present threshold: {present_threshold_dt.time()}")
-                                            print(f"     Time-out window: {timeout_window_start} to {timeout_window_end}")
-                                            print(f"     Actual time-in: {timein_dt.time()}")
-                                            
-                                            # RULE 1: Check if time-in is within valid time-in window
+                                            # RULE: Present if before late threshold, Late if after
                                             if timein_window_start <= timein_dt.time() <= timein_window_end:
-                                                # RULE 5 & 6: Determine Present vs Late
-                                                if timein_dt <= present_threshold_dt:
+                                                if timein_dt.time() <= late_threshold:
                                                     new_status = "Present"
                                                     print(f"   ✅ Time-in within window: RECORDED AS PRESENT")
                                                 else:
-                                                    new_status = "Late" 
+                                                    new_status = "Late"
                                                     print(f"   ✅ Time-in within window: RECORDED AS LATE")
                                             else:
-                                                # Time-in outside window - check if it's in timeout window (RULE 8)
-                                                if timeout_window_start <= timein_dt.time() <= timeout_window_end:
-                                                    new_status = "Late"
-                                                    print(f"   ✅ Time-in in timeout window: RECORDED AS LATE")
-                                                else:
-                                                    # Time-in completely outside all windows
-                                                    new_status = "Absent"
-                                                    print(f"   ❌ Time-in outside all windows: RECORDED AS ABSENT")
-                                                    
+                                                new_status = "Absent"
+                                                print(f"   ❌ Time-in outside all windows: RECORDED AS ABSENT")
                                         else:
-                                            # No time-in = Absent (RULE 9 & 10)
                                             new_status = "Absent"
                                             print(f"   ❌ No time-in: RECORDED AS ABSENT")
                                     
@@ -3529,13 +3593,13 @@ def api_update_attendance_time():
                                             schedule_parts.append(f"{classday_2} {start2_str}-{end2_str}")
                                         schedule_info = " / ".join(schedule_parts) if schedule_parts else "N/A"
 
-                                    before_timein_str = "None"
-                                    if original_timein and original_timein.strftime('%H:%M:%S') != '00:00:00':
-                                        before_timein_str = original_timein.strftime('%H:%M:%S')
+                                    def clean_value(value):
+                                        if value is None or value == '' or value == '00:00:00':
+                                            return 'None'
+                                        return str(value)
 
-                                    before_timeout_str = "None"
-                                    if original_timeout and original_timeout.strftime('%H:%M:%S') != '00:00:00':
-                                        before_timeout_str = original_timeout.strftime('%H:%M:%S')
+                                    before_timein_str = clean_value(original_timein.strftime('%H:%M:%S') if original_timein and original_timein.strftime('%H:%M:%S') != '00:00:00' else None)
+                                    before_timeout_str = clean_value(original_timeout.strftime('%H:%M:%S') if original_timeout and original_timeout.strftime('%H:%M:%S') != '00:00:00' else None)
 
                                     after_timein_str = "None"
                                     if 'time_in' in update:
@@ -3946,8 +4010,8 @@ def api_hr_faculty_schedule(personnel_id):
 @require_auth([20001, 20002])
 def api_faculty_evaluations_data():
     """
-    Fetches comprehensive evaluation data for the currently logged-in faculty member.
-    Includes KPIs, breakdown, comparison, and raw qualitative feedback.
+    Fetches evaluation breakdown data for charts and comparison, INCLUDING qualitative feedback.
+    (MODIFIED to include 'chart_data' for the dashboard bar chart.)
     """
     try:
         user_id = session.get('user_id')
@@ -3960,7 +4024,7 @@ def api_faculty_evaluations_data():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # 1. Determine the current academic calendar ID (or the latest completed one)
+        # 1. Determine the current academic calendar ID
         cursor.execute("""
             SELECT acadcalendar_id
             FROM acadcalendar 
@@ -3970,138 +4034,128 @@ def api_faculty_evaluations_data():
         current_term_result = cursor.fetchone()
         current_term_id = current_term_result[0] if current_term_result else '80001' # Fallback
         
-        # 2. Fetch all personal scores and comparison data in one block
+        # 2. Fetch scores, comparison data, AND feedback
         cursor.execute("""
-            WITH faculty_scores AS (
-                -- Personal scores (Simple average per type for KPI & Weighted total)
+            WITH current_term AS (
+                SELECT acadcalendar_id
+                FROM acadcalendar 
+                WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                ORDER BY semesterstart DESC LIMIT 1
+            ),
+            faculty_scores AS (
+                -- Personal scores (Average score per type)
                 SELECT
                     fe.evaluator_type,
-                    fe.score AS single_score,
-                    fe.total_responses AS total_responses,
-                    fe.qualitative_feedback -- NEW: Include feedback
+                    COALESCE(AVG(fe.score), 0) AS average_score
                 FROM faculty_evaluations fe
-                WHERE fe.personnel_id = %s AND fe.acadcalendar_id = %s
+                WHERE fe.personnel_id = %s AND fe.acadcalendar_id = (SELECT acadcalendar_id FROM current_term)
+                GROUP BY fe.evaluator_type 
             ),
-            
-            personal_aggregates AS (
-                -- Calculate all required KPIs/Breakdown from the scores above
+            -- NEW CTE: Fetch all qualitative feedback for the current term
+            feedback_data AS (
                 SELECT
-                    COALESCE(
-                        SUM(CASE WHEN evaluator_type = 'student' THEN single_score * 0.55 ELSE 0 END) +
-                        SUM(CASE WHEN evaluator_type = 'supervisor' THEN single_score * 0.35 ELSE 0 END) +
-                        SUM(CASE WHEN evaluator_type = 'peer' THEN single_score * 0.10 ELSE 0 END),
-                    0) AS overall_average,
-                    
-                    COALESCE(SUM(CASE WHEN evaluator_type = 'student' THEN single_score END) / COUNT(CASE WHEN evaluator_type = 'student' THEN 1 END), 0) AS student_score,
-                    COALESCE(SUM(CASE WHEN evaluator_type = 'peer' THEN single_score END) / COUNT(CASE WHEN evaluator_type = 'peer' THEN 1 END), 0) AS peer_score,
-                    COALESCE(SUM(CASE WHEN evaluator_type = 'supervisor' THEN single_score END) / COUNT(CASE WHEN evaluator_type = 'supervisor' THEN 1 END), 0) AS supervisor_score
-                FROM faculty_scores
-            ),
-            
-            comparison_base AS (
-                -- All faculty weighted scores (for comparison)
-                SELECT 
-                    p.personnel_id,
-                    p.college_id,
-                    c.collegename,
-                    COALESCE(
-                        SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
-                        SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
-                        SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
-                    0) AS overall_score
-                FROM personnel p
-                LEFT JOIN college c ON p.college_id = c.college_id
-                LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s
-                WHERE p.role_id IN (20001, 20002) AND fe.score IS NOT NULL
-                GROUP BY p.personnel_id, p.college_id, c.collegename
+                    evaluator_type,
+                    qualitative_feedback
+                FROM faculty_evaluations fe
+                WHERE fe.personnel_id = %s AND fe.acadcalendar_id = (SELECT acadcalendar_id FROM current_term)
+                AND fe.qualitative_feedback IS NOT NULL AND fe.qualitative_feedback != ''
             )
             SELECT 
-                -- 1. Individual Scores (KPIs)
-                (SELECT overall_average FROM personal_aggregates),
-                (SELECT student_score FROM personal_aggregates),
-                (SELECT peer_score FROM personal_aggregates),
-                (SELECT supervisor_score FROM personal_aggregates),
+                -- Individual Averages
+                COALESCE(SUM(CASE WHEN evaluator_type = 'student' THEN average_score ELSE 0 END), 0) AS student_avg,
+                COALESCE(SUM(CASE WHEN evaluator_type = 'peer' THEN average_score ELSE 0 END), 0) AS peer_avg,
+                COALESCE(SUM(CASE WHEN evaluator_type = 'supervisor' THEN average_score ELSE 0 END), 0) AS supervisor_avg,
                 
-                -- 2. Comparison Data
-                (SELECT collegename FROM personnel p JOIN college c ON p.college_id = c.college_id WHERE p.personnel_id = %s) AS faculty_college_name,
-                (SELECT AVG(overall_score) FROM comparison_base WHERE overall_score > 0) AS college_wide_avg,
+                -- Comparison Data 
+                (SELECT c.collegename FROM personnel p JOIN college c ON p.college_id = c.college_id WHERE p.personnel_id = %s) AS faculty_college_name,
+                
+                (SELECT AVG(overall_score) FROM (
+                    SELECT 
+                        COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
+                                 SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
+                                 SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) AS overall_score
+                        FROM personnel p
+                        LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = (SELECT acadcalendar_id FROM current_term)
+                        WHERE p.role_id IN (20001, 20002) AND fe.score IS NOT NULL
+                        GROUP BY p.personnel_id
+                ) AS comparison_scores) AS college_wide_avg,
+                
                 (SELECT AVG(cb.overall_score) 
-                 FROM comparison_base cb
-                 WHERE cb.college_id = (SELECT college_id FROM personnel WHERE personnel_id = %s) AND cb.overall_score > 0
+                 FROM (
+                     SELECT 
+                        fe.personnel_id,
+                        p.college_id,
+                        COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
+                                 SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
+                                 SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) AS overall_score
+                     FROM faculty_evaluations fe
+                     JOIN personnel p ON fe.personnel_id = p.personnel_id
+                     WHERE fe.acadcalendar_id = (SELECT acadcalendar_id FROM current_term) AND p.role_id IN (20001, 20002) AND fe.score IS NOT NULL
+                     GROUP BY fe.personnel_id, p.college_id
+                 ) AS cb
+                 WHERE cb.college_id = (SELECT college_id FROM personnel WHERE personnel_id = %s)
                 ) AS department_avg,
                 
-                -- 3. Qualitative Feedback (Aggregate all non-null feedback)
-                json_agg(json_build_object(
-                    'type', evaluator_type, 
-                    'feedback', qualitative_feedback
-                )) FILTER (WHERE qualitative_feedback IS NOT NULL) AS all_feedback_json
+                -- NEW: Aggregate all feedback data into a JSON array
+                (SELECT json_agg(row_to_json(fd)) FROM feedback_data fd) AS recent_feedback
             
             FROM faculty_scores
-            
-        """, (personnel_id, current_term_id, current_term_id, personnel_id, personnel_id))
+        """, (personnel_id, personnel_id, personnel_id, personnel_id))
         
         result = cursor.fetchone()
         cursor.close()
         return_db_connection(conn)
 
-        if not result:
+        if not result or result[0] is None:
             return jsonify({'success': False, 'error': 'No personnel or active term found.'}), 404
         
-        (overall_avg, student_score, peer_score, supervisor_score, 
-         faculty_college_name, college_wide_avg, department_avg, all_feedback_json) = result
+        # Unpack 7 fields now
+        (student_avg, peer_avg, supervisor_avg, faculty_college_name, 
+         college_wide_avg, department_avg, recent_feedback) = result 
+        
+        
+        # Calculate scores and ensure they are floats
+        student_avg = float(student_avg) if student_avg is not None else 0.0
+        peer_avg = float(peer_avg) if peer_avg is not None else 0.0
+        supervisor_avg = float(supervisor_avg) if supervisor_avg is not None else 0.0
 
-        # Ensure scores are floats for JSON serialization
-        overall_avg = float(overall_avg) if overall_avg is not None else 0
-        student_score = float(student_score) if student_score is not None else 0
-        peer_score = float(peer_score) if peer_score is not None else 0
-        supervisor_score = float(supervisor_score) if supervisor_score is not None else 0
+        # Calculate Overall Weighted Average (55% Student, 35% Supervisor, 10% Peer)
+        your_overall_avg = (student_avg * 0.55) + (supervisor_avg * 0.35) + (peer_avg * 0.10)
         
         # Prepare comparison scores
-        your_avg = overall_avg
-        dept_avg = float(department_avg) if department_avg is not None else your_avg
-        college_avg = float(college_wide_avg) if college_wide_avg is not None else your_avg
+        dept_avg = float(department_avg) if department_avg is not None else your_overall_avg
+        college_avg = float(college_wide_avg) if college_wide_avg is not None else your_overall_avg
+        
+        # NEW: Prepare data array for the Dashboard Bar Chart
+        chart_data_for_dashboard = [
+            student_avg, 
+            peer_avg, 
+            supervisor_avg
+        ]
 
-        # --- Process Feedback (Server-side cleanup) ---
-        clean_feedback = []
-        if all_feedback_json:
-            for item in all_feedback_json:
-                eval_type = item['type']
-                feedback_str = item['feedback']
-                
-                if feedback_str and feedback_str.strip():
-                    # Split by newline, strip, and filter out '---' delimiter
-                    comments = [c.strip() for c in feedback_str.split('\n') if c.strip() and c.strip() != '---']
-                    
-                    for comment in comments:
-                        clean_feedback.append({
-                            'evaluator': eval_type.capitalize(),
-                            'comment': comment
-                        })
-        
-        # Calculate Breakdown data (for doughnut chart percentages)
-        breakdown_labels = ['Students (55%)', 'Peers (10%)', 'Supervisors (35%)']
-        breakdown_data = [55, 10, 35] # Fixed weights, sum to 100
-        
+
         return jsonify({
             'success': True,
             'current_term_id': current_term_id,
-            'kpis': {
-                'overall_average': overall_avg,
-                'student_score': student_score,
-                'peer_score': peer_score,
-                'supervisor_score': supervisor_score,
+            'kpis': { 
+                'overall_average': your_overall_avg,
+                'student_score': student_avg,
+                'peer_score': peer_avg,
+                'supervisor_score': supervisor_avg
             },
-            'breakdown_chart': {
-                'labels': breakdown_labels,
-                'data': breakdown_data 
+            'breakdown_chart': { 
+                'labels': ['Student (55%)', 'Supervisor (35%)', 'Peer (10%)'],
+                # Using weighted components for the chart slice sizes
+                'data': [student_avg * 0.55, supervisor_avg * 0.35, peer_avg * 0.10]
             },
             'comparison': {
-                'your_avg': your_avg,
+                'your_avg': your_overall_avg,
                 'dept_avg': dept_avg,
                 'college_avg': college_avg,
                 'college_name': faculty_college_name
             },
-            'recent_feedback': clean_feedback # NEW: Cleaned feedback list
+            'recent_feedback': recent_feedback or [],
+            'chart_data': chart_data_for_dashboard # <-- ADDED FOR DASHBOARD
         })
         
     except Exception as e:
@@ -4979,9 +5033,9 @@ def api_hr_add_schedule():
             return_db_connection(conn)
         return {'success': False, 'error': str(e)}
 
-@app.route('/api/hr/delete-schedule/classes/<int:personnel_id>')  # CHANGED
+@app.route('/api/hr/delete-schedule/classes/<int:personnel_id>') 
 @require_auth([20003])
-def api_hr_delete_schedule_classes(personnel_id):  # RENAMED
+def api_hr_delete_schedule_classes(personnel_id): 
     """Get all schedule classes for a faculty member for deletion dropdown"""
     try:
         conn = get_db_connection()
@@ -5070,7 +5124,7 @@ def api_hr_delete_schedule_classes(personnel_id):  # RENAMED
 @app.route('/api/hr/delete-schedule', methods=['POST'])
 @require_auth([20003])
 def api_hr_delete_schedule():
-    """Delete schedule and all associated attendance records"""
+    """Delete schedule and all associated attendance records AND attendance reports"""
     try:
         data = request.get_json()
         class_id = data.get('class_id')
@@ -5116,9 +5170,21 @@ def api_hr_delete_schedule():
         
         cursor.execute("SELECT COUNT(*) FROM attendance WHERE class_id = %s", (class_id,))
         attendance_count = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM attendancereport WHERE class_id = %s", (class_id,))
+        attendance_report_count = cursor.fetchone()[0]
         cursor.execute("BEGIN")
+        
+        # Delete records in the correct order to respect foreign key constraints:
+        # 1. First delete attendance reports (they reference the class_id)
+        cursor.execute("DELETE FROM attendancereport WHERE class_id = %s", (class_id,))
+        
+        # 2. Then delete attendance records
         cursor.execute("DELETE FROM attendance WHERE class_id = %s", (class_id,))
+        
+        # 3. Finally delete the schedule record
         cursor.execute("DELETE FROM schedule WHERE class_id = %s", (class_id,))
+        
         conn.commit()
         
         hr_user_id = session['user_id']
@@ -5134,20 +5200,21 @@ def api_hr_delete_schedule():
         log_audit_action(
             hr_personnel_id,
             "Schedule deleted",
-            f"HR deleted schedule and {attendance_count} attendance records for {faculty_name}\nClass: {schedule_info}",
-            before_value=f"Schedule existed for class ID: {class_id} with {attendance_count} attendance records",
-            after_value="Schedule and all associated attendance records deleted"
+            f"HR deleted schedule, {attendance_count} attendance records, and {attendance_report_count} attendance reports for {faculty_name}\nClass: {schedule_info}",
+            before_value=f"Schedule existed for class ID: {class_id} with {attendance_count} attendance records and {attendance_report_count} attendance reports",
+            after_value="Schedule and all associated records deleted"
         )
         
         cursor.close()
         return_db_connection(conn)
         
-        message = f'Schedule and {attendance_count} attendance records deleted successfully'
+        message = f'Schedule, {attendance_count} attendance records, and {attendance_report_count} attendance reports deleted successfully'
         
         return {
             'success': True, 
             'message': message,
-            'attendance_records_deleted': attendance_count
+            'attendance_records_deleted': attendance_count,
+            'attendance_reports_deleted': attendance_report_count
         }
         
     except Exception as e:
@@ -6435,19 +6502,41 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
     # 1. FETCH DATA (Reusing your existing API logic)
     report_response = api_hr_faculty_evaluation_report(personnel_id)
     if report_response.status_code != 200:
-        return report_response # Return JSON error from data fetch
+        return report_response
     
-    # Safely load JSON response data
     from flask import json
     report_data = json.loads(report_response.data.decode('utf-8'))['report']
 
+    # --- NEW: 1. Detect Non-Final Status and Identify Missing Components ---
+    is_final = True
+    missing_components = []
+    
+    # Required component weights
+    required_weights = {
+        'Student': 0.55, 
+        'Supervisor': 0.35, 
+        'Peer': 0.10
+    }
+    
+    # Tally weights from fetched data
+    fetched_weights = {item['type']: item['weight'] for item in report_data.get('rating_breakdown', [])}
+    
+    # Check for missing weights (This explicitly identifies which component is missing)
+    for component, required_weight in required_weights.items():
+        if fetched_weights.get(component, 0) == 0:
+            is_final = False
+            missing_components.append(component)
+
+    # Secondary check: If overall score is 0 and no components are missing, something is wrong
+    if report_data.get('overall_rating', 0.0) == 0.0 and is_final:
+        is_final = False # Mark as non-final if overall score is 0 despite 'complete' breakdown (all scores were 0)
+        
     # 2. SETUP DOCUMENT
     buffer = BytesIO()
     
-    # Use SimpleDocTemplate for Platypus Flowables (handles pagination automatically)
     doc = SimpleDocTemplate(
         buffer, 
-        pagesize=(8.5 * inch, 11 * inch), # Letter size
+        pagesize=(8.5 * inch, 11 * inch),
         topMargin=0.75 * inch, 
         leftMargin=0.75 * inch, 
         rightMargin=0.75 * inch, 
@@ -6459,13 +6548,22 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
 
     # 3. ADD HEADER & METADATA
     
-    # Title Style
     title_style = ParagraphStyle(
         'Title', 
         parent=styles['h1'], 
         fontSize=16, 
         textColor=colors.HexColor('#7b1113'),
-        spaceAfter=12
+        spaceAfter=6
+    )
+
+    preliminary_style = ParagraphStyle(
+        'Disclaimer', 
+        parent=styles['h2'], 
+        fontSize=14, 
+        textColor=colors.red,
+        alignment=1, # Center
+        spaceAfter=18,
+        spaceBefore=12
     )
 
     faculty_name = report_data.get('faculty_name', 'Faculty Report')
@@ -6473,6 +6571,22 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
     overall_rating = report_data.get('overall_rating', 0.0)
 
     story.append(Paragraph("Saint Peter's College - Faculty Evaluation Report", title_style))
+    
+    # --- NEW: 2. Add a Prominent Disclaimer if not final ---
+    if not is_final:
+        story.append(Paragraph(
+            "<b>*** PRELIMINARY REPORT - NOT FINALIZED ***</b>", 
+            preliminary_style
+        ))
+        
+        missing_list_str = ", ".join(missing_components)
+        warning_message = f"Warning: This report is incomplete. Missing components are: {missing_list_str}. Final score relies on missing components being weighted as zero."
+        
+        story.append(Paragraph(
+            f"<font color='#FF0000' size='9'><i>{warning_message}</i></font>", 
+            styles['Normal']
+        ))
+    
     story.append(Paragraph(f"<b>Faculty:</b> {faculty_name}", styles['Normal']))
     story.append(Paragraph(f"<b>Department:</b> {report_data.get('college', 'N/A')}", styles['Normal']))
     story.append(Paragraph(f"<b>Semester:</b> {semester}", styles['Normal']))
@@ -6480,7 +6594,6 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
 
     # 4. OVERALL RATING TABLE
     
-    # Data for the Overall Summary
     overall_data = [
         ['Overall Weighted Score:', f'{overall_rating:.2f}'],
         ['Final Status:', f'{overall_rating:.2f} ({getStatusLabel(overall_rating)})'],
@@ -6505,7 +6618,6 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
 
     # 5. RATING BREAKDOWN TABLE
     
-    # Header for breakdown
     breakdown_header = [
         Paragraph("<b>Evaluator</b>", styles['Normal']), 
         Paragraph("<b>Weight</b>", styles['Normal']), 
@@ -6516,10 +6628,21 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
 
     for item in report_data.get('rating_breakdown', []):
         weight_percent = f"{item.get('weight', 0) * 100:.0f}%"
+        
+        score = item.get('score', 0.0)
+        score_display = f"{score:.2f}"
+        
+        # If score is zero, and it's a weighted component, show indicator
+        if score == 0.0 and item.get('weight', 0) > 0 and report_data.get('overall_rating', 0.0) > 0:
+            score_display = f"{score_display} (Missing)"
+        elif score == 0.0 and item.get('weight', 0) > 0 and report_data.get('overall_rating', 0.0) == 0.0:
+            score_display = f"{score:.2f}"
+
+
         breakdown_data.append([
             item.get('type').capitalize(),
             weight_percent,
-            f"{item.get('score', 0.0):.2f}",
+            score_display,
             item.get('total_responses', 0)
         ])
 
@@ -6596,17 +6719,6 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
     response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
     
     return response
-
-# Helper function to determine the status label (place this outside the route, near getStatusInfo in JS)
-def getStatusLabel(rating):
-    if rating >= 3:
-        return 'Above Average'
-    elif rating >= 2:
-        return 'Average'
-    elif rating > 0:
-        return 'Below Average'
-    else:
-        return 'Not Rated'
 
 @app.route('/api/hr/new-evaluation-cycle', methods=['POST'])
 @require_auth([20003])
