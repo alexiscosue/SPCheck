@@ -14,7 +14,7 @@
     </div>
 
     <div class="chart-large">
-      <div class="chart-card-f  card">
+      <!-- <div class="chart-card-f  card">
         <div class="card-header"><i class='bx bx-list-ul'></i><span>Faculty Evaluations</span></div>
         <div class="table">
           <table aria-label="Peer and Admin Evaluations for my performance">
@@ -24,7 +24,7 @@
             </tbody>
           </table>
         </div>
-      </div>
+      </div> -->
 
       <div class="card chart-large">
         <div class="tabs">
@@ -137,10 +137,28 @@
     
     // Set loading states
     const kpiElements = ['kpi-overall', 'kpi-student', 'kpi-peer', 'kpi-supervisor'];
-    kpiElements.forEach(id => document.getElementById(id).textContent = '...');
-    document.getElementById('comparison-wrapper').innerHTML = '<div style="text-align:center; color:var(--muted); padding:20px;">Loading comparison...</div>';
-    document.getElementById('breakdown-error').style.display = 'none';
-    document.getElementById('feedback-body').innerHTML = '<tr><td style="text-align:center; padding:1.5rem; color:var(--muted);">Loading student feedback...</td></tr>';
+    kpiElements.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '...';
+    });
+    
+    // ADDED CHECK: Only try to set innerHTML if element exists
+    const comparisonWrapper = document.getElementById('comparison-wrapper');
+    if (comparisonWrapper) {
+        comparisonWrapper.innerHTML = '<div style="text-align:center; color:var(--muted); padding:20px;">Loading comparison...</div>';
+    }
+    
+    // ADDED CHECK: Only try to hide error if element exists
+    const breakdownError = document.getElementById('breakdown-error');
+    if (breakdownError) {
+        breakdownError.style.display = 'none';
+    }
+    
+    const feedbackBody = document.getElementById('feedback-body');
+    if (feedbackBody) {
+        feedbackBody.innerHTML = '<tr><td style="text-align:center; padding:1.5rem; color:var(--muted);">Loading student feedback...</td></tr>';
+    }
+
 
     try {
       const response = await fetch(apiURL);
@@ -148,9 +166,17 @@
       
       if (!data.success) {
         console.error("API Error:", data.error);
-        kpiElements.forEach(id => document.getElementById(id).textContent = 'Error');
-        document.getElementById('comparison-wrapper').innerHTML = `<div style="text-align:center; color:#dc2626; padding:20px;">${data.error || "Failed to load comparison data."}</div>`;
-        document.getElementById('feedback-body').innerHTML = '<tr><td style="text-align:center; padding:1.5rem; color:#dc2626;">Error loading feedback.</td></tr>';
+        kpiElements.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = 'Error';
+        });
+        
+        if (comparisonWrapper) {
+            comparisonWrapper.innerHTML = `<div style="text-align:center; color:#dc2626; padding:20px;">${data.error || "Failed to load comparison data."}</div>`;
+        }
+        if (feedbackBody) {
+             feedbackBody.innerHTML = '<tr><td style="text-align:center; padding:1.5rem; color:#dc2626;">Error loading feedback.</td></tr>';
+        }
         return;
       }
       
@@ -166,35 +192,54 @@
       if (breakdown_chart.data && breakdown_chart.data.reduce((a, b) => a + b, 0) > 0) {
         initBreakdownChart(breakdown_chart.labels, breakdown_chart.data);
       } else {
-        document.getElementById('breakdown-error').style.display = 'block';
+        const breakdownError = document.getElementById('breakdown-error');
+        if (breakdownError) {
+             breakdownError.style.display = 'block';
+        }
         if (breakdownChartInstance) breakdownChartInstance.destroy();
       }
 
       // 3. Populate Comparison Block
-      populateComparison(comparison);
+      if (comparisonWrapper) {
+          populateComparison(comparison);
+      }
       
       // 4. Populate Student Feedback
-      populateFeedback(recent_feedback); 
+      if (feedbackBody) {
+          populateFeedback(recent_feedback); 
+      }
 
       // --- Placeholder: Load other tabs/tables ---
       initTrendChart(['Sem 1','Sem 2','Sem 3','Sem 4'], [4.1,4.3,4.2,4.4]);
-      document.getElementById('my-evaluations-body').innerHTML = `
-        <tr><td>Dean Ayson</td><td>IT 201 - Advanced DB</td><td><span class="status completed">Completed</span></td><td><button class="btn-action"><i class='bx bx-show'></i></button></td></tr>
-        <tr><td>Peer Prof. Smith</td><td>Observation (Q4)</td><td><span class="status completed">Completed</span></td><td><button class="btn-action"><i class='bx bx-show'></i></button></td></tr>
-        <tr><td>HR Dept</td><td>Annual Review</td><td><span class="status pending">Pending</span></td><td><button class="btn-action"><i class='bx bx-edit'></i></button></td></tr>
-      `;
+      const evaluationsBody = document.getElementById('my-evaluations-body');
+      if (evaluationsBody) {
+           evaluationsBody.innerHTML = `
+            <tr><td>Dean Ayson</td><td>IT 201 - Advanced DB</td><td><span class="status completed">Completed</span></td><td><button class="btn-action"><i class='bx bx-show'></i></button></td></tr>
+            <tr><td>Peer Prof. Smith</td><td>Observation (Q4)</td><td><span class="status completed">Completed</span></td><td><button class="btn-action"><i class='bx bx-show'></i></button></td></tr>
+            <tr><td>HR Dept</td><td>Annual Review</td><td><span class="status pending">Pending</span></td><td><button class="btn-action"><i class='bx bx-edit'></i></button></td></tr>
+          `;
+      }
+
 
     } catch (error) {
       console.error("Failed to load evaluation data:", error);
-      kpiElements.forEach(id => document.getElementById(id).textContent = 'Error');
-      document.getElementById('comparison-wrapper').innerHTML = '<div style="text-align:center; color:#dc2626; padding:20px;">Failed to load comparison data.</div>';
-      document.getElementById('feedback-body').innerHTML = '<tr><td style="text-align:center; padding:1.5rem; color:#dc2626;">Failed to load feedback data.</td></tr>';
+      kpiElements.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = 'Error';
+      });
+      if (comparisonWrapper) {
+           comparisonWrapper.innerHTML = '<div style="text-align:center; color:#dc2626; padding:20px;">Failed to load comparison data.</div>';
+      }
+      if (feedbackBody) {
+           feedbackBody.innerHTML = '<tr><td style="text-align:center; padding:1.5rem; color:#dc2626;">Failed to load feedback data.</td></tr>';
+      }
     }
   }
   
-  // MODIFIED FUNCTION: Now splits by both newline (\n) and the database delimiter (---)
   function populateFeedback(feedbackList) {
       const tbody = document.getElementById('feedback-body');
+      if (!tbody) return; // Added check
+      
       tbody.innerHTML = '';
       
       const studentComments = [];
@@ -234,6 +279,8 @@
 
   function populateComparison(comparison) {
     const wrapper = document.getElementById('comparison-wrapper');
+    if (!wrapper) return; // Added check
+    
     const { your_avg, dept_avg, college_avg, college_name } = comparison;
 
     // Helper to calculate width and format score
@@ -263,7 +310,7 @@
     `;
   }
 
-  // --- Tab Logic (Original) ---
+  // --- Tab Logic 
   const tabBtns = document.querySelectorAll(".tab-btn");
   const tabContents = document.querySelectorAll(".tab-content");
 
