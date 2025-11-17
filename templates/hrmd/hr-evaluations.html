@@ -744,7 +744,11 @@ function loadEvaluations() {
         // --- 2. UPDATE ACADEMIC CALENDAR INFO (Duration & Status) ---
         if (data.acadcalendar_info) {
             const info = data.acadcalendar_info;
-            $('#termDisplay').html(info.display);
+            
+            // Clean the term display string provided by the API (e.g., "📅 First Semester — AY AY 2025-2026")
+            let cleanedDisplay = info.display.replace('AY AY', 'AY').replace('  ', ' ').trim();
+            
+            $('#termDisplay').html(cleanedDisplay);
             
             const selectedOption = $('#semesterFilter option:selected');
             const startDateString = selectedOption.data('start');
@@ -1029,7 +1033,9 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
                 $('#noFeedback').show().text('No qualitative feedback available.');
             }
             
-            $('#reportSemester').text(report.semester_display);
+            // Apply the same cleaning to the modal's semester display
+            let cleanedReportSemester = report.semester_display.replace('AY AY', 'AY').replace('  ', ' ').trim();
+            $('#reportSemester').text(cleanedReportSemester);
         } else {
             $('#ratingBreakdownBody').html('<tr><td colspan="2" style="text-align:center; color:#ef4444;">Failed to load report details.</td></tr>');
             $('#noFeedback').show().text('Error loading qualitative feedback.');
@@ -1083,6 +1089,26 @@ function closeNewCycleModal() {
 
 // --- JQUERY INITIALIZATION AND EVENT ATTACHMENT ---
 $(document).ready(function() {
+    // --- START NEW FIX: CLEAN UP DUPLICATE 'AY' IN DISPLAY TEXT ---
+    // Function to run immediately and on loadEvaluations update
+    function cleanupTermDisplay(elementId = 'termDisplay') {
+        const $element = $(`#${elementId}`);
+        let currentText = $element.text();
+        
+        // Target: "📅 First Semester — AY AY 2025–2026" or "Semester 1 — AY AY 2025–2026"
+        // Replace 'AY AY' with 'AY' and replace double spaces with single space.
+        let cleanedText = currentText.replace('AY AY', 'AY').replace('  ', ' ').trim();
+
+        // Apply the cleaned text back to the element if a change occurred.
+        if (cleanedText !== currentText) {
+             $element.text(cleanedText); 
+        }
+    }
+    // Run the cleanup immediately for the default HTML content
+    cleanupTermDisplay(); 
+    // --- END NEW FIX ---
+
+
     // 1. Attach button click handlers (Update Records)
     $('#update-eval-btn').click(function() {
         const button = $(this);

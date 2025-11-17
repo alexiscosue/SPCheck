@@ -646,7 +646,7 @@ def get_current_acadcalendar_info(acadcalendar_id):
                 'acad_year': acadyear_clean,
                 'deadline': semesterend.strftime('%b %d, %Y'), # e.g., Dec 20, 2025
                 # 3. Construct the final display string: "📅 First Semester — AY 2025-2026"
-                'display': f"📅 {semester_display} — AY {acadyear_clean}"
+                'display': f"📅 {semester_display} — {acadyear_clean}"
             }
         
     except Exception as e:
@@ -6584,7 +6584,14 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
     )
 
     faculty_name = report_data.get('faculty_name', 'Faculty Report')
-    semester = report_data.get('semester_display', 'N/A')
+    
+    # --- START FIX: Cleaning Semester Display String for PDF ---
+    raw_semester = report_data.get('semester_display', 'N/A')
+    
+    # Replace any instance of "AY AY" with a single "AY" and strip extra spaces.
+    semester = raw_semester.replace('AY AY', 'AY').replace('  ', ' ').strip() 
+    # --- END FIX ---
+
     overall_rating = report_data.get('overall_rating', 0.0)
 
     story.append(Paragraph("Saint Peter's College - Faculty Evaluation Report", title_style))
