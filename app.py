@@ -3963,14 +3963,11 @@ def api_hr_faculty_schedule(personnel_id):
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
 
-# app.py: (Modified api_faculty_evaluations_data)
-
 @app.route('/api/faculty/evaluations-data')
 @require_auth([20001, 20002])
 def api_faculty_evaluations_data():
     """
-    Fetches evaluation breakdown data for charts and comparison.
-    (MODIFIED to include overall_average and individual averages in KPIs)
+    Fetches evaluation breakdown data for charts and comparison, INCLUDING qualitative feedback.
     """
     try:
         user_id = session.get('user_id')
@@ -3993,24 +3990,39 @@ def api_faculty_evaluations_data():
         current_term_result = cursor.fetchone()
         current_term_id = current_term_result[0] if current_term_result else '80001' # Fallback
         
-        # 2. Fetch scores and comparison data
+        # 2. Fetch scores, comparison data, AND feedback
         cursor.execute("""
-            WITH faculty_scores AS (
+            WITH current_term AS (
+                SELECT acadcalendar_id
+                FROM acadcalendar 
+                WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                ORDER BY semesterstart DESC LIMIT 1
+            ),
+            faculty_scores AS (
                 -- Personal scores (Average score per type)
                 SELECT
                     fe.evaluator_type,
-                    -- Use AVG() here to get the average score (0-5 scale) for chart data
                     COALESCE(AVG(fe.score), 0) AS average_score
                 FROM faculty_evaluations fe
-                WHERE fe.personnel_id = %s AND fe.acadcalendar_id = %s
+                WHERE fe.personnel_id = %s AND fe.acadcalendar_id = (SELECT acadcalendar_id FROM current_term)
                 GROUP BY fe.evaluator_type 
+            ),
+            -- NEW CTE: Fetch all qualitative feedback for the current term
+            feedback_data AS (
+                SELECT
+                    evaluator_type,
+                    qualitative_feedback
+                FROM faculty_evaluations fe
+                WHERE fe.personnel_id = %s AND fe.acadcalendar_id = (SELECT acadcalendar_id FROM current_term)
+                AND fe.qualitative_feedback IS NOT NULL AND fe.qualitative_feedback != ''
             )
             SELECT 
+                -- Individual Averages
                 COALESCE(SUM(CASE WHEN evaluator_type = 'student' THEN average_score ELSE 0 END), 0) AS student_avg,
                 COALESCE(SUM(CASE WHEN evaluator_type = 'peer' THEN average_score ELSE 0 END), 0) AS peer_avg,
                 COALESCE(SUM(CASE WHEN evaluator_type = 'supervisor' THEN average_score ELSE 0 END), 0) AS supervisor_avg,
                 
-                -- Comparison data (Overall averages across all faculty for context)
+                -- Comparison Data 
                 (SELECT c.collegename FROM personnel p JOIN college c ON p.college_id = c.college_id WHERE p.personnel_id = %s) AS faculty_college_name,
                 
                 (SELECT AVG(overall_score) FROM (
@@ -4019,7 +4031,7 @@ def api_faculty_evaluations_data():
                                  SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
                                  SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) AS overall_score
                         FROM personnel p
-                        LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s
+                        LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = (SELECT acadcalendar_id FROM current_term)
                         WHERE p.role_id IN (20001, 20002) AND fe.score IS NOT NULL
                         GROUP BY p.personnel_id
                 ) AS comparison_scores) AS college_wide_avg,
@@ -4034,25 +4046,28 @@ def api_faculty_evaluations_data():
                                  SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) AS overall_score
                      FROM faculty_evaluations fe
                      JOIN personnel p ON fe.personnel_id = p.personnel_id
-                     WHERE fe.acadcalendar_id = %s AND p.role_id IN (20001, 20002) AND fe.score IS NOT NULL
+                     WHERE fe.acadcalendar_id = (SELECT acadcalendar_id FROM current_term) AND p.role_id IN (20001, 20002) AND fe.score IS NOT NULL
                      GROUP BY fe.personnel_id, p.college_id
                  ) AS cb
                  WHERE cb.college_id = (SELECT college_id FROM personnel WHERE personnel_id = %s)
-                ) AS department_avg
+                ) AS department_avg,
+                
+                -- NEW: Aggregate all feedback data into a JSON array
+                (SELECT json_agg(row_to_json(fd)) FROM feedback_data fd) AS recent_feedback
             
             FROM faculty_scores
-            
-        """, (personnel_id, current_term_id, personnel_id, current_term_id, current_term_id, personnel_id))
+        """, (personnel_id, personnel_id, personnel_id, personnel_id))
         
         result = cursor.fetchone()
         cursor.close()
         return_db_connection(conn)
 
-        if not result:
+        if not result or result[0] is None:
             return jsonify({'success': False, 'error': 'No personnel or active term found.'}), 404
         
+        # Unpack 7 fields now
         (student_avg, peer_avg, supervisor_avg, faculty_college_name, 
-         college_wide_avg, department_avg) = result
+         college_wide_avg, department_avg, recent_feedback) = result 
         
         
         # Calculate scores and ensure they are floats
@@ -4063,14 +4078,6 @@ def api_faculty_evaluations_data():
         # Calculate Overall Weighted Average (55% Student, 35% Supervisor, 10% Peer)
         your_overall_avg = (student_avg * 0.55) + (supervisor_avg * 0.35) + (peer_avg * 0.10)
         
-        
-        # Prepare chart data (Labels: Students, Peers, Supervisors)
-        chart_data = [
-            student_avg, 
-            peer_avg, 
-            supervisor_avg
-        ]
-        
         # Prepare comparison scores
         dept_avg = float(department_avg) if department_avg is not None else your_overall_avg
         college_avg = float(college_wide_avg) if college_wide_avg is not None else your_overall_avg
@@ -4079,14 +4086,15 @@ def api_faculty_evaluations_data():
         return jsonify({
             'success': True,
             'current_term_id': current_term_id,
-            'kpis': { # <-- NEW 'kpis' KEY
+            'kpis': { 
                 'overall_average': your_overall_avg,
                 'student_score': student_avg,
                 'peer_score': peer_avg,
                 'supervisor_score': supervisor_avg
             },
-            'breakdown_chart': { # Renamed for clarity on frontend
+            'breakdown_chart': { 
                 'labels': ['Student (55%)', 'Supervisor (35%)', 'Peer (10%)'],
+                # Using weighted components for the chart slice sizes
                 'data': [student_avg * 0.55, supervisor_avg * 0.35, peer_avg * 0.10]
             },
             'comparison': {
@@ -4095,14 +4103,8 @@ def api_faculty_evaluations_data():
                 'college_avg': college_avg,
                 'college_name': faculty_college_name
             },
-            # Removed the original 'chart_data' key since its components are split to kpis and breakdown_chart
+            'recent_feedback': recent_feedback or []
         })
-        
-    except Exception as e:
-        print(f"Error fetching faculty evaluation data: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
         
     except Exception as e:
         print(f"Error fetching faculty evaluation data: {e}")
