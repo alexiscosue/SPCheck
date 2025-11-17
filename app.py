@@ -5728,18 +5728,10 @@ def faculty_promotion():
         is_tenure_ok = True
     elif employment_status == "Probationary":
         # If probationary, fall back to checking if 3 years of service have passed (standard minimum for promotion)
-        is_tenure_ok = years_employed >= 3
+        is_tenure_ok = False
         if not is_tenure_ok:
-            lock_reasons.append(f"Tenure: Employment Status is 'Probationary'. Requires minimum 3 years of service (Current: {years_employed} years).")
-    else:
-        # If status is NULL or undefined, fall back to checking 3 years of service
-        is_tenure_ok = years_employed >= 3
-        if not is_tenure_ok:
-            lock_reasons.append(f"Tenure: Employment Status missing/unspecified. Requires minimum 3 years of service (Current: {years_employed} years).")
-        
-    if not is_tenure_ok and employment_status in ["Regular", "Tenured"]:
-        # Safety catch for logic errors, unlikely to be triggered now
-        lock_reasons.append(f"Tenure: Current status {employment_status} should be eligible but failed check.")
+            lock_reasons.append(f"Tenure: Employment Status is Probationary. Must be Regular or Tenured to apply for promotion.")
+
 
 
     is_attendance_ok = avg_attendance_rate >= 80.0
@@ -5906,7 +5898,7 @@ def faculty_promotion():
         'college': college or 'College of Computer Studies',
         'profile_image_base64': profile_image_base64,
         'regularization_percentage': 100 if years_employed >= 7 else min(round((years_employed / 3) * 100), 100) if years_employed > 0 else 0,
-        'regularization_status': "Tenured Employee" if years_employed >= 7 else "Regular Employee" if years_employed >= 3 else "Probationary",
+        'regularization_status': employment_status if employment_status else ("Tenured Employee" if years_employed >= 7 else "Regular Employee" if years_employed >= 3 else "Probationary"),
         'tenure_type': tenure_type_display,
         'years_employed': years_employed,
         'months_employed': (today.year - hire_date.year) * 12 + (today.month - hire_date.month) if hire_date else 0,
@@ -8465,17 +8457,19 @@ def get_promotion_eligibility():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Get faculty info and current term
+    # Get faculty info, hire date, employment status, and current term
     cursor.execute("""
         SELECT 
             p.personnel_id, 
             p.hiredate,
+            pr.employmentstatus, 
             (SELECT acadcalendar_id 
              FROM acadcalendar 
              WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend 
              ORDER BY semesterstart DESC 
              LIMIT 1)
         FROM personnel p
+        LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
         WHERE p.user_id = %s
     """, (user_id,))
     
@@ -8485,9 +8479,9 @@ def get_promotion_eligibility():
         return_db_connection(conn)
         return jsonify({'success': False, 'error': 'Faculty not found'}), 404
     
-    faculty_id, hire_date, current_term_id = result
+    faculty_id, hire_date, employment_status, current_term_id = result
     
-    # Calculate years of service
+    # Calculate years of service (Used for fallback and display)
     from datetime import date
     today = date.today()
     years_employed = 0
@@ -8537,6 +8531,7 @@ def get_promotion_eligibility():
         
         if years_since_promotion < 1.0:
             is_cooldown_ok = False
+            # Calculate months remaining for lock reason display (30.44 days per month avg)
             months_remaining = int((365.25 - days_since_promotion) / 30.44)
     
     # Check for active application
@@ -8550,24 +8545,45 @@ def get_promotion_eligibility():
     cursor.close()
     return_db_connection(conn)
     
-    # Determine eligibility
-    is_tenure_ok = years_employed >= 3
+    # --- Determine Eligibility and Tenure Status ---
+    
+    is_tenure_ok = False
+    
+    if employment_status in ["Regular", "Tenured"]:
+        is_tenure_ok = True
+    elif employment_status == "Probationary":
+        # Probationary requires 3 years of service minimum for promotion eligibility
+        is_tenure_ok = years_employed >= 3
+    else:
+        # Fallback for NULL/missing employment_status: Check 3 years of service
+        is_tenure_ok = years_employed >= 3
+        
     is_attendance_ok = avg_attendance_rate >= 80.0
     is_eval_ok = weighted_eval_score >= 3.0
     can_apply = is_tenure_ok and is_attendance_ok and is_eval_ok and is_cooldown_ok
+
+    # Determine tenure type (for display, prioritizing employment_status)
+    tenure_type = employment_status
+    if not tenure_type:
+        if years_employed >= 7:
+            tenure_type = 'Tenured'
+        elif years_employed >= 3:
+            tenure_type = 'Regular'
+        else:
+            tenure_type = 'Probationary'
     
-    # Determine tenure type
-    if years_employed >= 7:
-        tenure_type = 'Tenured'
-    elif years_employed >= 3:
-        tenure_type = 'Regular'
-    else:
-        tenure_type = 'Probationary'
-    
-    # Build lock reasons for display
+    # Build lock reasons for display (Updated to match logic)
     lock_reasons = []
+    
     if not is_tenure_ok:
-        lock_reasons.append(f"Requires {3 - years_employed} more year(s) of service")
+        if employment_status == "Probationary" and years_employed < 3:
+            years_needed = 3 - years_employed
+            lock_reasons.append(f"Requires {years_needed} more year(s) of service (Probationary)")
+        elif not employment_status and years_employed < 3:
+            years_needed = 3 - years_employed
+            lock_reasons.append(f"Requires {years_needed} more year(s) of service (Status Missing)")
+        # Note: If is_tenure_ok is False for Regular/Tenured status, it implies a data integrity error.
+
     if not is_attendance_ok:
         lock_reasons.append(f"Attendance: {avg_attendance_rate:.1f}% (needs 80%+)")
     if not is_eval_ok:

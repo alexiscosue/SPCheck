@@ -238,10 +238,19 @@
         } else {
           // Not eligible - show specific reason
           if (tenure_type === 'Probationary') {
-            const yearsRemaining = Math.max(0, 3 - years_employed);
-            statusHTML = `${yearsRemaining} Yr${yearsRemaining !== 1 ? 's' : ''} to Eligibility`;
-            statusColor = '#6b7280';
-            statusIcon = 'bx-lock-alt';
+                const yearsRemaining = Math.max(0, 3 - years_employed);
+
+                if (years_employed >= 3) {
+                    // Condition 1: Probationary, but eligible by time (>= 3 years)
+                    statusHTML = 'Eligible for Regularization';
+                    statusColor = '#22c55e'; // Green for success/eligibility
+                    statusIcon = 'bx-check-circle';
+                } else {
+                    // Condition 2: Probationary, and still serving the required time (< 3 years)
+                    statusHTML = `${yearsRemaining} Yr${yearsRemaining !== 1 ? 's' : ''} to Eligibility`;
+                    statusColor = '#6b7280'; // Gray/muted for pending
+                    statusIcon = 'bx-time-five'; // Changed icon to 'time-five' for countdown/pending
+                }
           } else if (!is_cooldown_ok) {
             statusHTML = `Cooldown: ${months_remaining} Mo${months_remaining !== 1 ? 's' : ''}`;
             statusColor = '#f59e0b';
