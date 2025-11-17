@@ -41,6 +41,8 @@
   </div>
 
   <div class="chart-large">
+    <!-- COMMENTED OUT: Attendance Trends Chart -->
+    <!--
     <div class="chart-card card">
       <div style="display:flex;align-items:center;justify-content:space-between">
         <div style="font-weight:700">Attendance Trend</div>
@@ -48,6 +50,7 @@
       </div>
       <canvas id="myAttendanceChart" height="170"></canvas>
     </div>
+    -->
 
     <div class="chart-card card">
       <div style="font-weight:700;margin-bottom:6px">Evaluation Breakdown</div>
@@ -75,7 +78,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
   let dashboardData = null;
-  let evalChartInstance = null; // Store chart instance
+  let evalChartInstance = null; 
 
   async function fetchDashboardData() {
     try {
@@ -102,7 +105,8 @@
     }
   }
   
-  // Static Chart Setup (Placeholder structure remains, data is replaced)
+  // COMMENTED OUT: Static Attendance Chart Setup
+  /*
   const myAttendanceCtx = document.getElementById('myAttendanceChart').getContext('2d');
   new Chart(myAttendanceCtx, {
     type: 'line',
@@ -112,7 +116,7 @@
     },
     options:{ responsive:true, plugins:{ legend:{ display:false } }, scales:{ y:{ min:80, max:100, ticks:{ stepSize:5 } } } }
   });
-
+  */
 
   function renderEvaluationChart(data) {
     const evalCtx = document.getElementById('myEvalChart').getContext('2d');
@@ -154,7 +158,6 @@
     });
   }
 
-
   function updateDashboardDisplay() {
     if (!dashboardData) return;
     
@@ -190,7 +193,6 @@
     } else {
         evalScoreElement.innerHTML = `${scoreDisplay} / 5 <i class='bx bx-${evalTrend}' style="color:${evalTrendColor}"></i>`;
     }
-
 
     // Teaching Load KPI
     const teachingLoadElement = document.getElementById('teachingLoad');
@@ -347,7 +349,6 @@
   document.addEventListener('DOMContentLoaded', function() {
     fetchDashboardData();
     
-    // Fetch and update data every 5 minutes
     setInterval(fetchDashboardData, 5 * 60 * 1000); 
   });
 </script>

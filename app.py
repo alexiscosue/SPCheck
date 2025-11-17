@@ -5033,9 +5033,9 @@ def api_hr_add_schedule():
             return_db_connection(conn)
         return {'success': False, 'error': str(e)}
 
-@app.route('/api/hr/delete-schedule/classes/<int:personnel_id>')  # CHANGED
+@app.route('/api/hr/delete-schedule/classes/<int:personnel_id>') 
 @require_auth([20003])
-def api_hr_delete_schedule_classes(personnel_id):  # RENAMED
+def api_hr_delete_schedule_classes(personnel_id): 
     """Get all schedule classes for a faculty member for deletion dropdown"""
     try:
         conn = get_db_connection()
@@ -5124,7 +5124,7 @@ def api_hr_delete_schedule_classes(personnel_id):  # RENAMED
 @app.route('/api/hr/delete-schedule', methods=['POST'])
 @require_auth([20003])
 def api_hr_delete_schedule():
-    """Delete schedule and all associated attendance records"""
+    """Delete schedule and all associated attendance records AND attendance reports"""
     try:
         data = request.get_json()
         class_id = data.get('class_id')
@@ -5170,9 +5170,21 @@ def api_hr_delete_schedule():
         
         cursor.execute("SELECT COUNT(*) FROM attendance WHERE class_id = %s", (class_id,))
         attendance_count = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM attendancereport WHERE class_id = %s", (class_id,))
+        attendance_report_count = cursor.fetchone()[0]
         cursor.execute("BEGIN")
+        
+        # Delete records in the correct order to respect foreign key constraints:
+        # 1. First delete attendance reports (they reference the class_id)
+        cursor.execute("DELETE FROM attendancereport WHERE class_id = %s", (class_id,))
+        
+        # 2. Then delete attendance records
         cursor.execute("DELETE FROM attendance WHERE class_id = %s", (class_id,))
+        
+        # 3. Finally delete the schedule record
         cursor.execute("DELETE FROM schedule WHERE class_id = %s", (class_id,))
+        
         conn.commit()
         
         hr_user_id = session['user_id']
@@ -5188,20 +5200,21 @@ def api_hr_delete_schedule():
         log_audit_action(
             hr_personnel_id,
             "Schedule deleted",
-            f"HR deleted schedule and {attendance_count} attendance records for {faculty_name}\nClass: {schedule_info}",
-            before_value=f"Schedule existed for class ID: {class_id} with {attendance_count} attendance records",
-            after_value="Schedule and all associated attendance records deleted"
+            f"HR deleted schedule, {attendance_count} attendance records, and {attendance_report_count} attendance reports for {faculty_name}\nClass: {schedule_info}",
+            before_value=f"Schedule existed for class ID: {class_id} with {attendance_count} attendance records and {attendance_report_count} attendance reports",
+            after_value="Schedule and all associated records deleted"
         )
         
         cursor.close()
         return_db_connection(conn)
         
-        message = f'Schedule and {attendance_count} attendance records deleted successfully'
+        message = f'Schedule, {attendance_count} attendance records, and {attendance_report_count} attendance reports deleted successfully'
         
         return {
             'success': True, 
             'message': message,
-            'attendance_records_deleted': attendance_count
+            'attendance_records_deleted': attendance_count,
+            'attendance_reports_deleted': attendance_report_count
         }
         
     except Exception as e:

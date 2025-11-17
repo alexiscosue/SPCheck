@@ -722,36 +722,62 @@
             const logKey = `${log.name}_${log.date}_${log.class_name}`;
             const className = log.class_name || 'N/A';
             const isExcusedRecord = log.status.toLowerCase() === 'excused';
+            const isAbsentRecord = log.status.toLowerCase() === 'absent';
             
             if (isEditingTime) {
-                const currentTimeIn = timeEditData.has(logKey) ? timeEditData.get(logKey).timeIn : (log.time_in !== '—' ? log.time_in : '');
-                const currentTimeOut = timeEditData.has(logKey) ? timeEditData.get(logKey).timeOut : (log.time_out !== '—' ? log.time_out : '');
-                
-                tr.innerHTML = `
-                    <td>${log.name}</td>
-                    <td>${log.date}</td>
-                    <td>${className}</td>
-                    <td>${log.room || 'N/A'}</td>
-                    <td class="time-cell">
-                        <input type="time" 
-                              class="time-editable" 
-                              value="${currentTimeIn}" 
-                              data-log-key="${logKey}"
-                              data-field="timeIn">
-                    </td>
-                    <td class="time-cell">
-                        <input type="time" 
-                              class="time-editable" 
-                              value="${currentTimeOut}" 
-                              data-log-key="${logKey}"
-                              data-field="timeOut">
-                    </td>
-                    <td><span class="status ${log.status.toLowerCase()}">${log.status}</span></td>
-                `;
+                if (isExcusedRecord) {
+                    tr.innerHTML = `
+                        <td>${log.name}</td>
+                        <td>${log.date}</td>
+                        <td>${className}</td>
+                        <td>${log.room || 'N/A'}</td>
+                        <td class="time-cell">
+                            <input type="time" 
+                                  class="time-editable" 
+                                  value="" 
+                                  data-log-key="${logKey}"
+                                  data-field="timeIn"
+                                  placeholder="--:--">
+                        </td>
+                        <td class="time-cell">
+                            <input type="time" 
+                                  class="time-editable" 
+                                  value="" 
+                                  data-log-key="${logKey}"
+                                  data-field="timeOut"
+                                  placeholder="--:--">
+                        </td>
+                        <td><span class="status ${log.status.toLowerCase()}">${log.status}</span></td>
+                    `;
+                } else {
+                    const currentTimeIn = timeEditData.has(logKey) ? timeEditData.get(logKey).timeIn : (log.time_in !== '—' ? log.time_in : '');
+                    const currentTimeOut = timeEditData.has(logKey) ? timeEditData.get(logKey).timeOut : (log.time_out !== '—' ? log.time_out : '');
+                    
+                    tr.innerHTML = `
+                        <td>${log.name}</td>
+                        <td>${log.date}</td>
+                        <td>${className}</td>
+                        <td>${log.room || 'N/A'}</td>
+                        <td class="time-cell">
+                            <input type="time" 
+                                  class="time-editable" 
+                                  value="${currentTimeIn}" 
+                                  data-log-key="${logKey}"
+                                  data-field="timeIn">
+                        </td>
+                        <td class="time-cell">
+                            <input type="time" 
+                                  class="time-editable" 
+                                  value="${currentTimeOut}" 
+                                  data-log-key="${logKey}"
+                                  data-field="timeOut">
+                        </td>
+                        <td><span class="status ${log.status.toLowerCase()}">${log.status}</span></td>
+                    `;
+                }
             } else {
-                // FIX: For excused records, show "--" instead of the fake time
-                const timeIn12Hour = isExcusedRecord ? '—' : convertTo12Hour(log.time_in);
-                const timeOut12Hour = isExcusedRecord ? '—' : convertTo12Hour(log.time_out);
+                const timeIn12Hour = (isExcusedRecord || isAbsentRecord) ? '—' : convertTo12Hour(log.time_in);
+                const timeOut12Hour = (isExcusedRecord || isAbsentRecord) ? '—' : convertTo12Hour(log.time_out);
                 
                 tr.innerHTML = `
                     <td>${log.name}</td>
@@ -777,7 +803,7 @@
     }
     
     updatePaginationControls(currentPage, totalPages, totalRecords);
-  }
+}
 
   function showNotification(message, type = 'info') {
     const notification = document.createElement('div');
