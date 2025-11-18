@@ -8132,7 +8132,12 @@ def approve_promotion():
         # Additional check: Verify user has "President" position
         user_id = session.get('user_id')
         cursor.execute(
-            "SELECT position FROM profile WHERE personnel_id = %s",
+            """
+            SELECT pr.position 
+            FROM personnel p
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            WHERE p.user_id = %s
+            """,
             (user_id,)
         )
         position_result = cursor.fetchone()
