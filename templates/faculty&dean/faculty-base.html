@@ -112,7 +112,6 @@
               .then(response => response.json())
               .then(profileData => {
                 if (profileData.success && profileData.image) {
-                  // Update the profile image in the top bar
                   const profileImg = document.querySelector('.profile img');
                   if (profileImg) {
                     profileImg.src = profileData.image;

@@ -8115,7 +8115,7 @@ def forward_to_vpaa():
 
 
 @app.route('/api/promotion/approve', methods=['POST'])
-@require_auth([20004])  # Only President role
+@require_auth([20004])
 def approve_promotion():
     """Final approval of promotion application by President"""
     try:
@@ -8129,7 +8129,6 @@ def approve_promotion():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Additional check: Verify user has "President" position
         user_id = session.get('user_id')
         cursor.execute(
             """
@@ -8220,7 +8219,7 @@ def approve_promotion():
 
 
 @app.route('/api/promotion/reject', methods=['POST'])
-@require_auth([20003, 20004, 20005])  # HR, VPAA, and President can reject
+@require_auth([20003, 20004])
 def reject_promotion():
     """Reject promotion application - Does NOT update faculty rank"""
     try:
@@ -8445,7 +8444,7 @@ def initiate_regularization():
                 after_value='Status: Pending VPAA review'
             )
 
-        # After inserting regularization
+
         log_audit(
             action='REGULARIZATION_INITIATE',
             details=f'HRMD initiated regularization for faculty (ID: {faculty_id})',
@@ -8510,7 +8509,6 @@ def approve_regularization():
         
         conn.commit()
         
-        # ✅ ADD AUDIT LOG HERE (after successful update, before closing connection)
         log_audit(
             action='REGULARIZATION_APPROVE',
             details=f'President approved regularization application (ID: {regularization_id}) for faculty (ID: {faculty_id})',
@@ -8637,7 +8635,6 @@ def get_promotion_eligibility():
         # Probationary requires 3 years of service minimum for promotion eligibility
         is_tenure_ok = years_employed >= 3
     else:
-        # Fallback for NULL/missing employment_status: Check 3 years of service
         is_tenure_ok = years_employed >= 3
         
     is_attendance_ok = avg_attendance_rate >= 80.0
@@ -8654,7 +8651,6 @@ def get_promotion_eligibility():
         else:
             tenure_type = 'Probationary'
     
-    # Build lock reasons for display (Updated to match logic)
     lock_reasons = []
     
     if not is_tenure_ok:
@@ -8664,7 +8660,6 @@ def get_promotion_eligibility():
         elif not employment_status and years_employed < 3:
             years_needed = 3 - years_employed
             lock_reasons.append(f"Requires {years_needed} more year(s) of service (Status Missing)")
-        # Note: If is_tenure_ok is False for Regular/Tenured status, it implies a data integrity error.
 
     if not is_attendance_ok:
         lock_reasons.append(f"Attendance: {avg_attendance_rate:.1f}% (needs 80%+)")
@@ -8811,7 +8806,7 @@ def get_audit_logs():
                     'type': 'Promotion',
                     'application_id': application_id,
                     'faculty_id': faculty_id,
-                    'timestamp': submitted,  # submission time fallback
+                    'timestamp': submitted,
                     'event': 'Rejection',
                     'notes': rejection_reason
                 })
@@ -8859,10 +8854,8 @@ def get_audit_logs():
                     'notes': pres_notes
                 })
 
-        # Sort all events descending by timestamp
         audit_events.sort(key=lambda x: x['timestamp'], reverse=True)
 
-        # Convert timestamps to string ISO format
         for evt in audit_events:
             evt['timestamp'] = evt['timestamp'].isoformat() if isinstance(evt['timestamp'], datetime) else str(evt['timestamp'])
 
