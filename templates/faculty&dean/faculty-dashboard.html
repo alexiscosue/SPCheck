@@ -93,7 +93,7 @@
       if (mainData.success && evalData.success) {
         dashboardData = { ...mainData, ...evalData }; // Combine data
         updateDashboardDisplay();
-        // MODIFIED: Use the specific 'chart_data' key returned by the eval API
+        // Use the specific 'chart_data' key returned by the eval API
         renderEvaluationChart(dashboardData.chart_data);
       } else {
         console.error('Failed to fetch dashboard data:', mainData.error || evalData.error);

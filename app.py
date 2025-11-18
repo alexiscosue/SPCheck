@@ -4686,7 +4686,7 @@ def api_hr_delete_acadcalendar(id):
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # ⚠️ Check for dependencies before deleting
+        # Check for dependencies before deleting
         cursor.execute("SELECT COUNT(*) FROM schedule WHERE acadcalendar_id = %s", (id,))
         if cursor.fetchone()[0] > 0:
             cursor.close()
@@ -6139,7 +6139,7 @@ def api_hr_evaluations():
     # Define the term ID for use in all queries
     current_term_id = term if term else '80001'
     
-    # NEW: Fetch academic calendar display information
+    # Fetch academic calendar display information
     acadcalendar_info = get_current_acadcalendar_info(current_term_id)
 
     # --- KPI 1, 2, 3, & 4 Calculation (Combined Query) ---
@@ -6186,7 +6186,7 @@ def api_hr_evaluations():
     
     kpi_results = cursor.fetchone()
     
-    # Map results (handle case where no results are returned, typically if the table is empty)
+    # Map results
     if kpi_results:
         kpis = {
             "total_faculty": kpi_results[0],
@@ -6247,7 +6247,7 @@ def api_hr_evaluations():
         like = f"%{search.lower()}%"
         params.extend([like, like])
         
-    # NEW: Position Filter
+    # Position Filter
     if position_filter:
         query += " AND pr.position = %s"
         params.append(position_filter)
@@ -6267,7 +6267,7 @@ def api_hr_evaluations():
         elif status == 'below-average':
             query += " AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) > 0.0 AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) < 2.0"
             
-    # NEW: Response Rate Filter
+    # Response Rate Filter
     if response_rate_filter == 'met':
         query += " AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.total_responses ELSE 0 END), 0) >= 10"
     elif response_rate_filter == 'not-met':
@@ -6300,9 +6300,9 @@ def api_hr_evaluations():
         "position": row[3],
         "studentresponses": row[4],
         "avgscore": row[5],
-        "student_score": row[6],     # NEW
-        "supervisor_score": row[7],  # NEW
-        "peer_score": row[8],        # NEW
+        "student_score": row[6],     
+        "supervisor_score": row[7],  
+        "peer_score": row[8],        
     } for row in evaluations]
 
     # Combine table data and KPIs into the final JSON response
@@ -6461,7 +6461,7 @@ def api_hr_faculty_evaluation_report(personnel_id):
         for eval_type, score, total_responses, feedback in evaluation_rows:
             weight = weights.get(eval_type, 0)
             
-            # Fix: Convert score (Decimal) to float before multiplication
+            # Convert score (Decimal) to float before multiplication
             score_float = float(score) if score is not None else 0.0
             weighted_score = score_float * weight
             total_score += weighted_score
@@ -6473,13 +6473,11 @@ def api_hr_faculty_evaluation_report(personnel_id):
                 'total_responses': total_responses
             })
             
-            # --- NEW: Process Feedback ---
+            # --- Process Feedback ---
             if feedback and feedback.strip():
-                # Split multiple comments if stored with a delimiter (e.g., newline)
-                # Assuming feedback might contain multiple comments separated by newlines
                 comments = [c.strip() for c in feedback.split('\n') if c.strip()]
                 qualitative_feedback.extend(comments)
-            # --- END NEW: Process Feedback ---
+            # --- Process Feedback ---
 
 
         cursor.close()
@@ -6536,9 +6534,8 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
             is_final = False
             missing_components.append(component)
 
-    # Secondary check: If overall score is 0 and no components are missing, something is wrong
     if report_data.get('overall_rating', 0.0) == 0.0 and is_final:
-        is_final = False # Mark as non-final if overall score is 0 despite 'complete' breakdown (all scores were 0)
+        is_final = False 
         
     # 2. SETUP DOCUMENT
     buffer = BytesIO()
@@ -6577,12 +6574,9 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
 
     faculty_name = report_data.get('faculty_name', 'Faculty Report')
     
-    # --- START FIX: Cleaning Semester Display String for PDF ---
     raw_semester = report_data.get('semester_display', 'N/A')
     
-    # Replace any instance of "AY AY" with a single "AY" and strip extra spaces.
     semester = raw_semester.replace('AY AY', 'AY').replace('  ', ' ').strip() 
-    # --- END FIX ---
 
     overall_rating = report_data.get('overall_rating', 0.0)
 
@@ -6721,7 +6715,7 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
     # 7. BUILD PDF
     doc.build(story)
 
-    # 8. SEND RESPONSE (Cleaned up to prevent double headers)
+    # 8. SEND RESPONSE
     buffer.seek(0)
     
     # 8a. Create the response object.
@@ -6853,16 +6847,14 @@ def fetch_evaluations():
                 pass
         return jsonify(message=f"Critical error processing evaluations. Check logs for details. Error: {str(e)}"), 500
 
-# In app.py
 
 # --- PLACEHOLDER GOOGLE FORM CONFIGURATION ---
-# *** REPLACE THESE VALUES WITH YOUR ACTUAL GOOGLE FORM LINKS AND ENTRY IDs ***
 GOOGLE_FORM_CONFIG = {
     'base_url': "https://docs.google.com/forms/d/e/1FAIpQLSfP_YOUR_FORM_ID_HERE/viewform",
     'entry_ids': {
-        'personnel_id': 'entry.123456789',   # Placeholder: Field for Faculty ID
-        'acadcalendar_id': 'entry.987654321', # Placeholder: Field for Term ID
-        'evaluator_type': 'entry.112233445'  # Placeholder: Field for Evaluator Type
+        'personnel_id': 'entry.123456789',   
+        'acadcalendar_id': 'entry.987654321', 
+        'evaluator_type': 'entry.112233445'  
     }
 }
 # -----------------------------------------------

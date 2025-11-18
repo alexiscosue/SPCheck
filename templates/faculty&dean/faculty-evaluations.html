@@ -142,13 +142,11 @@
         if (el) el.textContent = '...';
     });
     
-    // ADDED CHECK: Only try to set innerHTML if element exists
     const comparisonWrapper = document.getElementById('comparison-wrapper');
     if (comparisonWrapper) {
         comparisonWrapper.innerHTML = '<div style="text-align:center; color:var(--muted); padding:20px;">Loading comparison...</div>';
     }
     
-    // ADDED CHECK: Only try to hide error if element exists
     const breakdownError = document.getElementById('breakdown-error');
     if (breakdownError) {
         breakdownError.style.display = 'none';
@@ -238,7 +236,7 @@
   
   function populateFeedback(feedbackList) {
       const tbody = document.getElementById('feedback-body');
-      if (!tbody) return; // Added check
+      if (!tbody) return
       
       tbody.innerHTML = '';
       
