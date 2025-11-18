@@ -315,12 +315,11 @@ const PAGE_SIZE = 10;
 let CURRENT_PAGE = 1;
 
 
-// --- NEW TOAST UTILITY FUNCTION ---
+// --- TOAST UTILITY FUNCTION ---
 function showToast(message, type = 'success', duration = 3000) {
     // Uses the existing .toast styles defined in style.css
     const toast = $('<div>').addClass('toast show').text(message);
     
-    // Apply specific colors/icons based on type (assuming success/error/warning types)
     if (type === 'error') {
         toast.css({ 'background': '#dc2626', 'color': 'white' });
         toast.prepend("<i class='bx bx-x-circle'></i>&nbsp;");
@@ -332,7 +331,6 @@ function showToast(message, type = 'success', duration = 3000) {
         toast.prepend("<i class='bx bx-check'></i>&nbsp;");
     }
 
-    // Append to body (assuming no specific toast container ID exists)
     $('body').append(toast);
     
     setTimeout(() => {
@@ -343,7 +341,7 @@ function showToast(message, type = 'success', duration = 3000) {
 // --- END TOAST UTILITY ---
 
 
-// --- NEW SAVE CONFIRMATION MODAL FUNCTIONS ---
+// --- SAVE CONFIRMATION MODAL FUNCTIONS ---
 function openSaveConfirmModal(personnelId, score) {
     const row = $(`#evalTableBody tr[data-personnel-id="${personnelId}"]`);
     const facultyName = row.find('td:nth-child(1)').text().trim(); 
@@ -361,8 +359,6 @@ function openSaveConfirmModal(personnelId, score) {
 
     $('#saveConfirmModal').css('display', 'flex');
     
-    // Disable other edit buttons and global controls while modal is open
-    // NOTE: These are already disabled by toggleRowEdit(), but we keep them disabled.
     $('.edit-score-btn').prop('disabled', true);
     $('#update-eval-btn').prop('disabled', true);
     $('#newCycleBtn').prop('disabled', true);
@@ -399,23 +395,19 @@ function confirmAndExecuteSave() {
         success: function(response) {
             showToast(response.message);
             
-            // 🎯 FIX: Close the modal only AFTER successful save
             closeSaveConfirmModal(); 
             
-            // Full refresh after successful save (this re-enables all controls correctly)
             loadEvaluations(); 
-            
         },
         error: function(xhr) {
             showToast(`Save failed. ${xhr.responseJSON?.error || 'Server error.'}`, 'error');
             
-            // 🎯 FIX: Manually reset the edit state for the specific row and re-enable global controls.
             closeSaveConfirmModal(); 
             cancelSingleEdit(personnelId); 
         }
     });
 }
-// --- END NEW SAVE CONFIRMATION MODAL FUNCTIONS ---
+// --- NEW SAVE CONFIRMATION MODAL FUNCTIONS ---
 
 
 // --- MODIFIED ROW EDITING FUNCTIONS ---
@@ -474,8 +466,7 @@ function toggleRowEdit(personnelId) {
 }
 
 function cancelSingleEdit(personnelId) {
-    // Re-render the current page to discard local changes and exit edit mode
-    $(`#evalTableBody tr[data-personnel-id="${personnelId}"]`).attr('data-editing', 'false'); // Explicitly set state before re-rendering
+    $(`#evalTableBody tr[data-personnel-id="${personnelId}"]`).attr('data-editing', 'false'); 
     reRenderCurrentPage();
 }
 
@@ -502,7 +493,6 @@ function saveSingleScore(personnelId) {
     
     // --- TRIGGER CUSTOM CONFIRMATION MODAL ---
     openSaveConfirmModal(personnelId, newValue.toFixed(2));
-    // The actual save execution is now handled by confirmAndExecuteSave()
 }
 // --- END MODIFIED ROW EDITING FUNCTIONS ---
 
@@ -560,10 +550,10 @@ function renderTablePage(pageNumber) {
                                   '<span style="color:#166534;font-weight:600">Met</span>' : 
                                   '<span style="color:#991b1b;font-weight:600">Not Met</span>';
 
-        // NEW: Check if rating is zero or less to disable download
+        // Check if rating is zero or less to disable download
         const disableDownload = (rating <= 0 || isNaN(rating)) ? 'disabled' : '';
 
-        // NEW: Formatted individual scores
+        // Formatted individual scores
         const studentScore = formatScore(row.student_score);
         const supervisorScore = formatScore(row.supervisor_score);
         const peerScore = formatScore(row.peer_score); // This is the value displayed by default
@@ -608,8 +598,6 @@ function renderTablePage(pageNumber) {
             );
             
         } else {
-            // If row is already editing (should be rare if using loadEvaluations correctly, but handles state persistence if necessary)
-            // This is primarily handled inside toggleRowEdit function before re-render, but ensures a fallback.
              tbody.append(
               `<tr data-personnel-id="${row.personnelid}" data-editing="true">` +
                 `<td>${row.name}</td>` +
@@ -651,7 +639,7 @@ function renderTablePage(pageNumber) {
 }
 
 
-// --- DELETE MODAL FUNCTIONS (Unchanged) ---
+// --- DELETE MODAL FUNCTIONS ---
 function deleteAcademicTerm(termId, termName) {
     if (termId == $('#semesterFilter').val() && !$('#cycleStatus').text().includes('Not Started')) {
         alert("Cannot delete the current active term that is In Progress or Finished. Only terms with status 'Not Started' can be deleted.");
@@ -936,7 +924,6 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
     $('#overallRatingCircle').css('--percentage', `${circlePercentage}`);
     $('#overallRatingValue').text(overallRating.toFixed(2));
     
-    // *** FIX HERE: Set the data-personnel-id attribute for the modal's download button ***
     $('#modalDownloadBtn').data('personnel-id', personnelId); 
     
     $('#studentResponsesCount').text(studentResponses);
@@ -957,7 +944,7 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
         if (data.success && data.report) {
             const report = data.report;
             
-            // --- NEW: Define all expected evaluation types and their weights/placeholders ---
+            // --- Define all expected evaluation types and their weights/placeholders ---
             const expectedTypes = {
                 'Student': { weight: 0.55, score: 0.00, responses: 0, disclaimer: "No student responses recorded." },
                 'Supervisor': { weight: 0.35, score: 0.00, responses: 0, disclaimer: "No supervisor evaluation recorded." },
@@ -1007,7 +994,6 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
                     </tr>
                 `);
             });
-            // --- END NEW RENDERING ---
 
             
             if (report.qualitative_feedback && report.qualitative_feedback.length > 0) {
@@ -1033,7 +1019,6 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
                 $('#noFeedback').show().text('No qualitative feedback available.');
             }
             
-            // Apply the same cleaning to the modal's semester display
             let cleanedReportSemester = report.semester_display.replace('AY AY', 'AY').replace('  ', ' ').trim();
             $('#reportSemester').text(cleanedReportSemester);
         } else {
@@ -1089,14 +1074,11 @@ function closeNewCycleModal() {
 
 // --- JQUERY INITIALIZATION AND EVENT ATTACHMENT ---
 $(document).ready(function() {
-    // --- START NEW FIX: CLEAN UP DUPLICATE 'AY' IN DISPLAY TEXT ---
     // Function to run immediately and on loadEvaluations update
     function cleanupTermDisplay(elementId = 'termDisplay') {
         const $element = $(`#${elementId}`);
         let currentText = $element.text();
         
-        // Target: "📅 First Semester — AY AY 2025–2026" or "Semester 1 — AY AY 2025–2026"
-        // Replace 'AY AY' with 'AY' and replace double spaces with single space.
         let cleanedText = currentText.replace('AY AY', 'AY').replace('  ', ' ').trim();
 
         // Apply the cleaned text back to the element if a change occurred.
@@ -1106,7 +1088,6 @@ $(document).ready(function() {
     }
     // Run the cleanup immediately for the default HTML content
     cleanupTermDisplay(); 
-    // --- END NEW FIX ---
 
 
     // 1. Attach button click handlers (Update Records)
@@ -1146,7 +1127,7 @@ $(document).ready(function() {
         openNewCycleModal();
     });
     
-    // NEW: Handler for the modal's download button
+    // Handler for the modal's download button
     $('#modalDownloadBtn').click(function() {
         const personnelId = $(this).data('personnel-id');
         if (personnelId > 0) {
@@ -1156,7 +1137,6 @@ $(document).ready(function() {
         }
     });
     
-    // NEW: Attach the final save executor to the modal's button
     $('#executeSaveBtn').off('click').on('click', confirmAndExecuteSave);
     
     // 4. Form submission handler for creating a new academic term
@@ -1246,8 +1226,6 @@ $(document).ready(function() {
     
     $('#saveConfirmModal').click(function(event) {
         if (event.target === this) {
-            // Note: We don't call cancelSingleEdit here, we just close the modal
-            // The row should still be in edit mode if the user closes the modal by clicking outside.
             closeSaveConfirmModal();
         }
     });
