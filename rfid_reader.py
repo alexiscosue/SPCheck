@@ -353,13 +353,10 @@ class RFIDReader:
                         timing_msg = f"{minutes_late} minutes late"
                     
                     # Create new attendance record
-                    cursor.execute("SELECT COALESCE(MAX(attendance_id), 70000) FROM attendance")
-                    new_id = cursor.fetchone()[0] + 1
-                    
                     cursor.execute("""
-                        INSERT INTO attendance (attendance_id, personnel_id, class_id, attendancestatus, timein, timeout)
-                        VALUES (%s, %s, %s, %s, %s, NULL)
-                    """, (new_id, personnel_id, class_id, status, current_time))
+                        INSERT INTO attendance (personnel_id, class_id, attendancestatus, timein, timeout)
+                        VALUES (%s, %s, %s, %s, NULL)
+                    """, (personnel_id, class_id, status, current_time))
 
                     try:
                         cursor.execute("SELECT acadcalendar_id FROM schedule WHERE class_id = %s", (class_id,))

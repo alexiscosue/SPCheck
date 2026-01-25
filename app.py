@@ -370,19 +370,16 @@ def check_and_record_absences():
                             existing = cursor.fetchone()
                             
                             if not existing:
-                                cursor.execute("SELECT COALESCE(MAX(attendance_id), 70000) FROM attendance")
-                                new_id = cursor.fetchone()[0] + 1
-                                
                                 naive_midnight = datetime.combine(check_date, datetime.min.time())
                                 absence_timestamp = philippines_tz.localize(naive_midnight)
-                                
+
                                 cursor.execute("""
                                     INSERT INTO attendance (
-                                        attendance_id, personnel_id, class_id, 
+                                        personnel_id, class_id,
                                         attendancestatus, timein, timeout
                                     )
-                                    VALUES (%s, %s, %s, %s, %s, NULL)
-                                """, (new_id, personnel_id, class_id, 'Absent', absence_timestamp))
+                                    VALUES (%s, %s, %s, %s, NULL)
+                                """, (personnel_id, class_id, 'Absent', absence_timestamp))
                                 
                                 absences_recorded += 1
                                 

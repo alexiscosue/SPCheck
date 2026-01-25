@@ -7,10 +7,21 @@
 {% block content %}
 <!-- Search & Filters -->
 <div class="filters">
-  <input type="text" id="searchInput" placeholder="Search by Name, Role, Position, Status, Phone...">
+  <input type="text" id="searchInput" placeholder="Search by Name, Role, Position, Status...">
   <select id="collegeFilter">
     <option value="all">All Colleges</option>
     <!-- College options will be populated from database -->
+  </select>
+  <select id="positionFilter">
+    <option value="all">All Positions</option>
+    <option value="Instructor">Instructor</option>
+    <option value="Assistant Professor">Assistant Professor</option>
+    <option value="Associate Professor">Associate Professor</option>
+    <option value="Professor">Professor</option>
+    <option value="Dean">Dean</option>
+    <option value="HR Staff">HR Staff</option>
+    <option value="Vice President">Vice President</option>
+    <option value="President">President</option>
   </select>
   <select id="statusFilter">
     <option value="all">All Status</option>
@@ -43,12 +54,12 @@
   <table class="employee-table" style="table-layout: fixed; width: 100%;">
     <thead>
       <tr>
-        <th style="width: 150px; cursor: pointer;" data-sort="name">Name <span class="sort-icon">↕</span></th>
-        <th style="width: 160px; cursor: pointer;" data-sort="college">College <span class="sort-icon">↕</span></th>
+        <th style="width: 165px; cursor: pointer;" data-sort="name">Name <span class="sort-icon">↕</span></th>
+        <th style="width: 200px; cursor: pointer;" data-sort="college">College <span class="sort-icon">↕</span></th>
         <th style="width: 60px; cursor: pointer;" data-sort="role">Role <span class="sort-icon">↕</span></th>
         <th style="width: 120px; cursor: pointer;" data-sort="position">Position <span class="sort-icon">↕</span></th>
-        <th style="width: 150px; cursor: pointer;" data-sort="status">Status <span class="sort-icon">↕</span></th>
-        <th style="width: 180px; cursor: pointer;" data-sort="email">Email <span class="sort-icon">↕</span></th>
+        <th style="width: 80px; cursor: pointer;" data-sort="status">Status <span class="sort-icon">↕</span></th>
+        <th style="width: 195px; cursor: pointer;" data-sort="email">Email <span class="sort-icon">↕</span></th>
         <th style="width: 110px; cursor: pointer;" data-sort="phone">Phone <span class="sort-icon">↕</span></th>
         <th style="width: 60px;">Action</th>
       </tr>
@@ -1816,6 +1827,23 @@ async function populateTable() {
   renderEmployees();
 }
 
+function formatNameSurnameFirst(name) {
+  if (!name) return '';
+  const parts = name.split(',').map(part => part.trim());
+  if (parts.length === 0) return name;
+  const mainName = parts[0];
+  const nameWords = mainName.split(' ').filter(word => word.length > 0);
+  if (nameWords.length < 2) return name;
+  const surname = nameWords[nameWords.length - 1];
+  const firstNames = nameWords.slice(0, -1).join(' ');
+  let formattedName = `${surname}, ${firstNames}`;
+  if (parts.length > 1) {
+    const credentials = parts.slice(1).join(', ');
+    formattedName += `, ${credentials}`;
+  }
+  return formattedName;
+}
+
 function sortEmployees(employees, column, direction) {
   return [...employees].sort((a, b) => {
     let aValue = a[column];
@@ -1858,21 +1886,23 @@ function renderEmployees() {
   
   const searchTerm = document.getElementById('searchInput').value.toLowerCase();
   const collegeValue = document.getElementById('collegeFilter').value;
+  const positionValue = document.getElementById('positionFilter').value;
   const statusValue = document.getElementById('statusFilter').value;
-  
+
   filteredEmployees = allEmployees.filter(emp => {
-    const matchesSearch = searchTerm === '' || 
+    const matchesSearch = searchTerm === '' ||
       emp.name.toLowerCase().includes(searchTerm) ||
       emp.role.toLowerCase().includes(searchTerm) ||
       emp.position.toLowerCase().includes(searchTerm) ||
       emp.status.toLowerCase().includes(searchTerm) ||
       emp.phone.toLowerCase().includes(searchTerm);
-    
+
     const matchesCollege = collegeValue === 'all' || emp.college === collegeValue;
-    const matchesStatus = statusValue === 'all' || 
+    const matchesPosition = positionValue === 'all' || emp.position === positionValue;
+    const matchesStatus = statusValue === 'all' ||
       emp.status.toLowerCase().includes(statusValue.toLowerCase());
-    
-    return matchesSearch && matchesCollege && matchesStatus;
+
+    return matchesSearch && matchesCollege && matchesPosition && matchesStatus;
   });
   
   if (currentSort.column) {
@@ -1886,15 +1916,15 @@ function renderEmployees() {
   const currentPageEmployees = filteredEmployees.slice(startIndex, endIndex);
   
   if (currentPageEmployees.length === 0) {
-    const message = filteredEmployees.length === 0 && (searchTerm || collegeValue !== 'all' || statusValue !== 'all') ? 
-      'No records match your search criteria' : 
+    const message = filteredEmployees.length === 0 && (searchTerm || collegeValue !== 'all' || positionValue !== 'all' || statusValue !== 'all') ?
+      'No records match your search criteria' :
       'No employee data available';
     tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 2rem; color: #6b7280;">${message}</td></tr>`;
   } else {
     currentPageEmployees.forEach(emp => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${emp.name}</td>
+        <td>${formatNameSurnameFirst(emp.name)}</td>
         <td>${emp.college}</td>
         <td>${emp.role}</td>
         <td>${emp.position}</td>
@@ -1952,15 +1982,17 @@ function viewEmployeeProfile(personnelId, role) {
 function setupFilters() {
   const searchInput = document.getElementById('searchInput');
   const collegeFilter = document.getElementById('collegeFilter');
+  const positionFilter = document.getElementById('positionFilter');
   const statusFilter = document.getElementById('statusFilter');
-  
+
   function applyFilters() {
     currentPage = 1;
     renderEmployees();
   }
-  
+
   searchInput.addEventListener('input', applyFilters);
   collegeFilter.addEventListener('change', applyFilters);
+  positionFilter.addEventListener('change', applyFilters);
   statusFilter.addEventListener('change', applyFilters);
   
   document.getElementById('prevPage').addEventListener('click', () => {
