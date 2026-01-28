@@ -51,6 +51,7 @@
         <button class="tab-btn active" data-tab="logs">All Faculty Logs</button>
         <button class="tab-btn" data-tab="classes">View Classes</button>
         <button class="tab-btn" data-tab="rfidlogs">RFID Logs</button>
+        <button class="tab-btn" data-tab="campusentry">Campus Entry</button>
       </div>
 
       <!-- All Faculty Logs -->
@@ -141,26 +142,85 @@
         </div>
       </div>
 
-      <!-- Replace the current rfid-controls section with this: -->
-      <div class="rfid-controls">
-        <button class="rfid-btn" id="rfidBtn">
-          <i class='bx bx-power-off'></i>
-          <span id="rfidBtnText">Start RFID Reader</span>
-        </button>
-        <div class="rfid-status" id="rfidStatus">
-          <span class="status-indicator" id="statusIndicator"></span>
-          <span id="statusText">Reader Offline</span>
+      <!-- Campus Entry Tab (Biometric Logs) -->
+      <div id="campusentry" class="tab-content">
+        <div class="search-filter">
+            <input type="text" id="campusEntrySearch" placeholder="Search by name, remarks, or date...">
         </div>
-        
-        <button class="edit-remarks-btn" id="editRemarksBtn" style="display: none;">
-          <i class='bx bx-edit-alt'></i>
-          <span id="editRemarksBtnText">Edit Remarks</span>
-        </button>
-        
-        <button class="edit-time-btn" id="editTimeBtn" style="display: none;">
-          <i class='bx bx-time'></i>
-          <span id="editTimeBtnText">Edit Time In/Out</span>
-        </button>
+        <div class="hr-pagination-controls">
+            <button id="prevPageCampusEntry" class="hr-pagination-btn">‹</button>
+            <span id="pageInfoCampusEntry">0 records</span>
+            <button id="nextPageCampusEntry" class="hr-pagination-btn">›</button>
+        </div>
+        <div class="table">
+            <table class="hr-attendance-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Date</th>
+                        <th>Tap Time</th>
+                        <th>Remarks</th>
+                    </tr>
+                </thead>
+                <tbody id="campusEntryBody">
+                    <tr><td colspan="4" style="text-align: center; padding: 2rem; color: #6b7280;">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+      </div>
+
+      <!-- Reader Controls Container - Only visible on All Faculty Logs -->
+      <div id="readerControlsContainer">
+        <div class="rfid-controls">
+          <button class="rfid-btn" id="rfidBtn">
+            <i class='bx bx-power-off'></i>
+            <span id="rfidBtnText">Start RFID Reader</span>
+          </button>
+          <div class="rfid-status" id="rfidStatus">
+            <span class="status-indicator" id="statusIndicator"></span>
+            <span id="statusText">Reader Offline</span>
+          </div>
+        </div>
+
+        <!-- Biometric Controls - Below RFID -->
+        <div class="rfid-controls" style="margin-top: 10px;">
+          <button class="rfid-btn" id="biometricBtn">
+            <i class='bx bx-fingerprint'></i>
+            <span id="biometricBtnText">Start Biometric Reader</span>
+          </button>
+          <div class="rfid-status" id="biometricStatus">
+            <span class="status-indicator" id="biometricStatusIndicator"></span>
+            <span id="biometricStatusText">Biometric Offline</span>
+          </div>
+        </div>
+
+        <!-- Edit Time Button - Only for All Faculty Logs -->
+        <div class="rfid-controls" style="margin-top: 10px;">
+          <button class="edit-time-btn" id="editTimeBtn" style="display: none;">
+            <i class='bx bx-time'></i>
+            <span id="editTimeBtnText">Edit Time In/Out</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Edit Remarks for RFID Logs - Only visible on RFID Logs tab -->
+      <div id="rfidEditControlsContainer" style="display: none;">
+        <div class="rfid-controls">
+          <button class="edit-remarks-btn" id="editRemarksBtn">
+            <i class='bx bx-edit-alt'></i>
+            <span id="editRemarksBtnText">Edit Remarks</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Edit Remarks for Campus Entry - Only visible on Campus Entry tab -->
+      <div id="campusEntryEditControlsContainer" style="display: none;">
+        <div class="rfid-controls">
+          <button class="edit-remarks-btn" id="editBiometricRemarksBtn">
+            <i class='bx bx-edit-alt'></i>
+            <span id="editBiometricRemarksBtnText">Edit Remarks</span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -354,31 +414,59 @@
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       btn.classList.add('active');
       document.getElementById(btn.dataset.tab).classList.add('active');
-      
-      const editRemarksBtn = document.getElementById('editRemarksBtn');
+
+      const readerControlsContainer = document.getElementById('readerControlsContainer');
+      const rfidEditControlsContainer = document.getElementById('rfidEditControlsContainer');
+      const campusEntryEditControlsContainer = document.getElementById('campusEntryEditControlsContainer');
       const editTimeBtn = document.getElementById('editTimeBtn');
-      
-      if (btn.dataset.tab === 'rfidlogs') {
-        editRemarksBtn.style.display = 'flex';
-        editTimeBtn.style.display = 'none';
-        isEditingRemarks = false;
-        isEditingTime = false;
-        editRemarksBtn.classList.remove('active');
-        editTimeBtn.classList.remove('active');
-      } else if (btn.dataset.tab === 'logs') {
-        editRemarksBtn.style.display = 'none';
+      const editRemarksBtn = document.getElementById('editRemarksBtn');
+      const editBiometricRemarksBtn = document.getElementById('editBiometricRemarksBtn');
+
+      // Reset all editing states when switching tabs
+      isEditingRemarks = false;
+      isEditingTime = false;
+      isEditingBiometricRemarks = false;
+      remarksEditData.clear();
+      timeEditData.clear();
+      biometricRemarksEditData.clear();
+
+      // Reset button appearances
+      editRemarksBtn.classList.remove('active');
+      document.getElementById('editRemarksBtnText').textContent = 'Edit Remarks';
+      editRemarksBtn.querySelector('i').className = 'bx bx-edit-alt';
+
+      editTimeBtn.classList.remove('active');
+      document.getElementById('editTimeBtnText').textContent = 'Edit Time In/Out';
+      editTimeBtn.querySelector('i').className = 'bx bx-time';
+
+      editBiometricRemarksBtn.classList.remove('active');
+      document.getElementById('editBiometricRemarksBtnText').textContent = 'Edit Remarks';
+      editBiometricRemarksBtn.querySelector('i').className = 'bx bx-edit-alt';
+
+      if (btn.dataset.tab === 'logs') {
+        // All Faculty Logs - Show reader controls and Edit Time button
+        readerControlsContainer.style.display = 'block';
+        rfidEditControlsContainer.style.display = 'none';
+        campusEntryEditControlsContainer.style.display = 'none';
         editTimeBtn.style.display = 'flex';
-        isEditingRemarks = false;
-        isEditingTime = false;
-        editRemarksBtn.classList.remove('active');
-        editTimeBtn.classList.remove('active');
-      } else {
-        editRemarksBtn.style.display = 'none';
-        editTimeBtn.style.display = 'none';
-        isEditingRemarks = false;
-        isEditingTime = false;
-        editRemarksBtn.classList.remove('active');
-        editTimeBtn.classList.remove('active');
+        renderLogs();
+      } else if (btn.dataset.tab === 'classes') {
+        // View Classes - No buttons
+        readerControlsContainer.style.display = 'none';
+        rfidEditControlsContainer.style.display = 'none';
+        campusEntryEditControlsContainer.style.display = 'none';
+      } else if (btn.dataset.tab === 'rfidlogs') {
+        // RFID Logs - Only Edit Remarks for RFID
+        readerControlsContainer.style.display = 'none';
+        rfidEditControlsContainer.style.display = 'block';
+        campusEntryEditControlsContainer.style.display = 'none';
+        renderRFIDLogs();
+      } else if (btn.dataset.tab === 'campusentry') {
+        // Campus Entry - Only Edit Remarks for Biometric
+        readerControlsContainer.style.display = 'none';
+        rfidEditControlsContainer.style.display = 'none';
+        campusEntryEditControlsContainer.style.display = 'block';
+        renderCampusEntryLogs();
       }
     });
   });
@@ -1399,11 +1487,105 @@
     }
   });
 
+  // ==================== BIOMETRIC READER CONTROLS ====================
+  let biometricReaderActive = false;
+
+  async function checkBiometricStatus() {
+    try {
+      const response = await fetch('/api/biometric/status');
+      const data = await response.json();
+
+      if (data.success) {
+        updateBiometricUI(data.is_running, data.port, data.started_by);
+      }
+    } catch (error) {
+      console.error('Error checking biometric status:', error);
+    }
+  }
+
+  function updateBiometricUI(isRunning, port, startedBy) {
+    biometricReaderActive = isRunning;
+    const btn = document.getElementById('biometricBtn');
+    const btnText = document.getElementById('biometricBtnText');
+    const statusIndicator = document.getElementById('biometricStatusIndicator');
+    const statusText = document.getElementById('biometricStatusText');
+
+    if (isRunning) {
+      btn.classList.add('active');
+      btnText.textContent = 'Stop Biometric Reader';
+      statusIndicator.classList.add('active');
+
+      let statusMessage = port ? `Biometric Active (${port})` : 'Biometric Active';
+      if (startedBy) {
+        statusMessage += ` - Started by ${startedBy}`;
+      }
+      statusText.textContent = statusMessage;
+    } else {
+      btn.classList.remove('active');
+      btnText.textContent = 'Start Biometric Reader';
+      statusIndicator.classList.remove('active');
+      statusText.textContent = 'Biometric Offline';
+    }
+  }
+
+  document.getElementById('biometricBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('biometricBtn');
+    btn.disabled = true;
+
+    try {
+        if (biometricReaderActive) {
+            const response = await fetch('/api/biometric/stop', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'}
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                updateBiometricUI(false);
+                showNotification('Biometric reader stopped successfully.', 'success');
+            } else {
+                showNotification('Failed to stop biometric reader: ' + result.error, 'error');
+            }
+        } else {
+            const response = await fetch('/api/biometric/start', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'}
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                updateBiometricUI(true, result.port);
+
+                if (result.already_running) {
+                    showNotification('Biometric reader was already running on ' + result.port, 'info');
+                } else {
+                    showNotification('Biometric reader started successfully. Personnel can now scan fingerprints.', 'success');
+                }
+            } else {
+                showNotification('Failed to start biometric reader: ' + result.error, 'error');
+            }
+        }
+    } catch (error) {
+        console.error('Error toggling biometric reader:', error);
+        showNotification('Error: ' + error.message, 'error');
+    } finally {
+        btn.disabled = false;
+    }
+  });
+
+  // Check biometric status on page load and periodically
+  checkBiometricStatus();
+  setInterval(checkBiometricStatus, 10000);
+
+  // ==================== END BIOMETRIC READER CONTROLS ====================
+
   let rfidLogs = [];
   let currentPageRfidLogs = 1;
   let filteredRfidLogs = [];
   let isEditingRemarks = false;
   let remarksEditData = new Map();
+  let isEditingBiometricRemarks = false;
+  let biometricRemarksEditData = new Map();
 
   async function fetchRFIDLogs() {
       try {
@@ -1535,6 +1717,211 @@
       goToPageRfidLogs(currentPageRfidLogs + 1);
   });
 
+  // ==================== CAMPUS ENTRY (BIOMETRIC LOGS) ====================
+  let biometricLogs = [];
+  let currentPageCampusEntry = 1;
+  let filteredBiometricLogs = [];
+
+  async function fetchBiometricLogs() {
+      try {
+          const response = await fetch('/api/biometric/logs');
+          const data = await response.json();
+
+          if (data.success) {
+              // Process logs to extract date and time from tap_time ISO format
+              biometricLogs = (data.biometric_logs || []).map(log => {
+                  const tapDateTime = new Date(log.tap_time);
+                  const date = tapDateTime.toISOString().split('T')[0]; // YYYY-MM-DD
+                  const hours = tapDateTime.getHours();
+                  const minutes = tapDateTime.getMinutes().toString().padStart(2, '0');
+                  const seconds = tapDateTime.getSeconds().toString().padStart(2, '0');
+                  const time = `${hours}:${minutes}:${seconds}`; // HH:MM:SS for conversion
+
+                  return {
+                      ...log,
+                      date: date,
+                      time: time,
+                      personnel_name: log.person_name || 'Unknown'
+                  };
+              });
+              currentPageCampusEntry = 1;
+              renderCampusEntryLogs();
+          } else {
+              console.error('Failed to fetch biometric logs:', data.error);
+              renderCampusEntryLogs();
+          }
+      } catch (error) {
+          console.error('Error fetching biometric logs:', error);
+          renderCampusEntryLogs();
+      }
+  }
+
+  function renderCampusEntryLogs() {
+    const tbody = document.getElementById('campusEntryBody');
+    tbody.innerHTML = '';
+
+    let search = document.getElementById('campusEntrySearch').value.toLowerCase();
+
+    filteredBiometricLogs = biometricLogs.filter(log => {
+        const searchMatch = !search ||
+            log.personnel_name.toLowerCase().includes(search) ||
+            log.remarks.toLowerCase().includes(search) ||
+            log.date.includes(search) ||
+            log.time.includes(search);
+
+        return searchMatch;
+    });
+
+    const totalRecords = filteredBiometricLogs.length;
+    const totalPages = Math.ceil(totalRecords / recordsPerPage);
+    const startIndex = (currentPageCampusEntry - 1) * recordsPerPage;
+    const endIndex = startIndex + recordsPerPage;
+    const currentPageRecords = filteredBiometricLogs.slice(startIndex, endIndex);
+
+    if (currentPageRecords.length === 0) {
+        const message = filteredBiometricLogs.length === 0 && search ?
+            'No records match your search criteria' :
+            'No campus entry data available';
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 2rem; color: #6b7280;">${message}</td></tr>`;
+    } else {
+        currentPageRecords.forEach((log) => {
+            const tr = document.createElement('tr');
+            const tapTime12Hour = convertTo12HourWithSeconds(log.time);
+            const logId = log.log_id;
+
+            if (isEditingBiometricRemarks) {
+                const currentRemarks = biometricRemarksEditData.has(logId) ? biometricRemarksEditData.get(logId) : log.remarks;
+
+                tr.innerHTML = `
+                    <td>${log.personnel_name}</td>
+                    <td>${log.date}</td>
+                    <td>${tapTime12Hour}</td>
+                    <td>
+                        <input type="text"
+                               class="biometric-remarks-editable"
+                               value="${currentRemarks}"
+                               data-log-id="${logId}"
+                               placeholder="Enter remarks...">
+                    </td>
+                `;
+            } else {
+                tr.innerHTML = `
+                    <td>${log.personnel_name}</td>
+                    <td>${log.date}</td>
+                    <td>${tapTime12Hour}</td>
+                    <td>${log.remarks}</td>
+                `;
+            }
+            tbody.appendChild(tr);
+        });
+
+        if (isEditingBiometricRemarks) {
+            const inputs = tbody.querySelectorAll('.biometric-remarks-editable');
+            inputs.forEach(input => {
+                input.addEventListener('input', (e) => {
+                    const logId = parseInt(e.target.dataset.logId);
+                    biometricRemarksEditData.set(logId, e.target.value);
+                });
+            });
+        }
+    }
+
+    updateCampusEntryPaginationControls(currentPageCampusEntry, totalPages, totalRecords);
+  }
+
+  function updateCampusEntryPaginationControls(page, totalPages, totalRecords) {
+      const pageInfo = document.getElementById('pageInfoCampusEntry');
+      const prevBtn = document.getElementById('prevPageCampusEntry');
+      const nextBtn = document.getElementById('nextPageCampusEntry');
+
+      if (totalRecords === 0) {
+          pageInfo.textContent = '0 records';
+      } else {
+          const startRecord = ((page - 1) * recordsPerPage) + 1;
+          const endRecord = Math.min(page * recordsPerPage, totalRecords);
+          pageInfo.textContent = `${startRecord} - ${endRecord} of ${totalRecords} records`;
+      }
+
+      prevBtn.disabled = page <= 1;
+      nextBtn.disabled = page >= totalPages || totalPages === 0;
+  }
+
+  function goToPageCampusEntry(page) {
+      const totalPages = Math.ceil(filteredBiometricLogs.length / recordsPerPage);
+      if (page >= 1 && page <= totalPages) {
+          currentPageCampusEntry = page;
+          renderCampusEntryLogs();
+      }
+  }
+
+  document.getElementById('campusEntrySearch').addEventListener('input', () => {
+      currentPageCampusEntry = 1;
+      renderCampusEntryLogs();
+  });
+
+  document.getElementById('prevPageCampusEntry').addEventListener('click', () => {
+      goToPageCampusEntry(currentPageCampusEntry - 1);
+  });
+
+  document.getElementById('nextPageCampusEntry').addEventListener('click', () => {
+      goToPageCampusEntry(currentPageCampusEntry + 1);
+  });
+
+  // Edit Biometric Remarks Button Handler
+  document.getElementById('editBiometricRemarksBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('editBiometricRemarksBtn');
+    const btnText = document.getElementById('editBiometricRemarksBtnText');
+    const btnIcon = btn.querySelector('i');
+
+    if (!isEditingBiometricRemarks) {
+        isEditingBiometricRemarks = true;
+        biometricRemarksEditData.clear();
+        btn.classList.add('active');
+        btnText.textContent = 'Save Remarks';
+        btnIcon.className = 'bx bx-save';
+        renderCampusEntryLogs();
+    } else {
+        if (biometricRemarksEditData.size > 0) {
+            btn.disabled = true;
+
+            try {
+                const updates = Array.from(biometricRemarksEditData.entries()).map(([log_id, remarks]) => ({
+                    log_id,
+                    remarks
+                }));
+
+                const response = await fetch('/api/hr/update-biometric-remarks', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ updates })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showNotification(`Successfully updated ${result.updated_count} remark(s)`, 'success');
+                    await fetchBiometricLogs();
+                } else {
+                    showNotification('Failed to update remarks: ' + result.error, 'error');
+                }
+            } catch (error) {
+                console.error('Error updating biometric remarks:', error);
+                showNotification('Error updating remarks: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        isEditingBiometricRemarks = false;
+        biometricRemarksEditData.clear();
+        btn.classList.remove('active');
+        btnText.textContent = 'Edit Remarks';
+        btnIcon.className = 'bx bx-edit-alt';
+        renderCampusEntryLogs();
+    }
+  });
+  // ==================== END CAMPUS ENTRY ====================
+
   document.getElementById('editRemarksBtn').addEventListener('click', async () => {
     const btn = document.getElementById('editRemarksBtn');
     const btnText = document.getElementById('editRemarksBtnText');
@@ -1590,20 +1977,42 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     checkRFIDStatus();
+    checkBiometricStatus();
     fetchFacultyAttendance();
     fetchFacultyList();
     fetchRFIDLogs();
+    fetchBiometricLogs();
     startNotificationListener();
-    
+
+    // Initialize button visibility based on active tab (default is 'logs')
     const activeTab = document.querySelector('.tab-btn.active');
     if (activeTab) {
-      const editRemarksBtn = document.getElementById('editRemarksBtn');
+      const readerControlsContainer = document.getElementById('readerControlsContainer');
+      const rfidEditControlsContainer = document.getElementById('rfidEditControlsContainer');
+      const campusEntryEditControlsContainer = document.getElementById('campusEntryEditControlsContainer');
       const editTimeBtn = document.getElementById('editTimeBtn');
-      
-      if (activeTab.dataset.tab === 'rfidlogs') {
-        editRemarksBtn.style.display = 'flex';
-      } else if (activeTab.dataset.tab === 'logs') {
+
+      if (activeTab.dataset.tab === 'logs') {
+        // All Faculty Logs - Show reader controls and Edit Time button
+        readerControlsContainer.style.display = 'block';
+        rfidEditControlsContainer.style.display = 'none';
+        campusEntryEditControlsContainer.style.display = 'none';
         editTimeBtn.style.display = 'flex';
+      } else if (activeTab.dataset.tab === 'classes') {
+        // View Classes - No buttons
+        readerControlsContainer.style.display = 'none';
+        rfidEditControlsContainer.style.display = 'none';
+        campusEntryEditControlsContainer.style.display = 'none';
+      } else if (activeTab.dataset.tab === 'rfidlogs') {
+        // RFID Logs - Only Edit Remarks for RFID
+        readerControlsContainer.style.display = 'none';
+        rfidEditControlsContainer.style.display = 'block';
+        campusEntryEditControlsContainer.style.display = 'none';
+      } else if (activeTab.dataset.tab === 'campusentry') {
+        // Campus Entry - Only Edit Remarks for Biometric
+        readerControlsContainer.style.display = 'none';
+        rfidEditControlsContainer.style.display = 'none';
+        campusEntryEditControlsContainer.style.display = 'block';
       }
     }
   });
