@@ -1,0 +1,5 @@
+# Export from the new database server
+/usr/local/opt/postgresql@17/bin/pg_dump "postgresql://spcheck_user:lW8SHs3IYfSzdldtFVSgfdnlIaguJhtf@dpg-d48ontqli9vc739e8i90-a.oregon-postgres.render.com:5432/spcheck_nf0n" -F c -v --no-owner --no-privileges --blobs -f spcheck_new.dump
+
+# Import back to the same new database server
+/usr/local/opt/postgresql@17/bin/pg_restore -h dpg-d48ontqli9vc739e8i90-a.oregon-postgres.render.com -p 5432 -U spcheck_user -d spcheck_nf0n -v --no-owner --no-privileges spcheck_new.dump

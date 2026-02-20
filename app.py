@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import pg8000
 from pg8000 import dbapi
 from rfid_reader import RFIDReader
+from biometric_reader import BiometricReader
 from datetime import timedelta, datetime
 from flask import Response
 import json
@@ -29,7 +30,7 @@ def log_audit(action, details, personnel_id=None):
     Log actions to existing auditlogs table
     """
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -39,7 +40,7 @@ def log_audit(action, details, personnel_id=None):
         
         conn.commit()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
     except Exception as e:
         print(f"Audit log error: {str(e)}")
 
@@ -97,7 +98,7 @@ def update_attendance_report(personnel_id, class_id, acadcalendar_id, conn=None)
     """
     should_close = False
     if conn is None:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         should_close = True
     
     try:
@@ -122,7 +123,7 @@ def update_attendance_report(personnel_id, class_id, acadcalendar_id, conn=None)
         if not stats:
             cursor.close()
             if should_close:
-                return_db_connection(conn)
+                db_pool.return_connection(conn)
             return
         
         present, late, excused, absent, total = stats
@@ -172,7 +173,7 @@ def update_attendance_report(personnel_id, class_id, acadcalendar_id, conn=None)
         cursor.close()
         
         if should_close:
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
         
         print(f"✅ Updated attendance report: Personnel {personnel_id}, Class {class_id}, Rate: {attendance_rate:.2f}")
         
@@ -182,7 +183,7 @@ def update_attendance_report(personnel_id, class_id, acadcalendar_id, conn=None)
             conn.rollback()
         if should_close and cursor:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
 
 
 # ========== CONNECTION POOLING ==========
@@ -203,11 +204,11 @@ class ConnectionPool:
     
     def _create_connection(self):
         conn = pg8000.dbapi.connect(
-            host=os.getenv('DB_HOST', 'dpg-d48ontqli9vc739e8i90-a.oregon-postgres.render.com'),
+            host=os.getenv('DB_HOST'),
             port=int(os.getenv('DB_PORT', 5432)),
-            database=os.getenv('DB_NAME', 'spcheck_nf0n'),
-            user=os.getenv('DB_USER', 'spcheck_user'),
-            password=os.getenv('DB_PASSWORD', 'lW8SHs3IYfSzdldtFVSgfdnlIaguJhtf'),
+            database=os.getenv('DB_NAME'),
+            user=os.getenv('DB_USER'),
+            password=os.getenv('DB_PASSWORD'),
             ssl_context=True
         )
 
@@ -245,6 +246,7 @@ class ConnectionPool:
 
 db_pool = ConnectionPool(min_connections=3, max_connections=15)
 rfid_reader = RFIDReader(db_pool)
+biometric_reader = BiometricReader(db_pool)
 
 absence_checker_thread = None
 absence_checker_running = False
@@ -252,10 +254,18 @@ absence_checker_running = False
 rfid_reader_state = {
     'is_running': False,
     'port': None,
-    'started_by': None, 
+    'started_by': None,
     'started_at': None
 }
 rfid_state_lock = threading.Lock()
+
+biometric_reader_state = {
+    'is_running': False,
+    'port': None,
+    'started_by': None,
+    'started_at': None
+}
+biometric_state_lock = threading.Lock()
 
 def get_rfid_state():
     """Get current RFID reader state"""
@@ -274,18 +284,37 @@ def update_rfid_state(is_running, port=None, started_by=None):
             rfid_reader_state['started_by'] = None
             rfid_reader_state['started_at'] = None
 
+def get_biometric_state():
+    """Get current biometric reader state"""
+    with biometric_state_lock:
+        return biometric_reader_state.copy()
+
+def update_biometric_state(is_running, port=None, started_by=None):
+    """Update biometric reader state"""
+    with biometric_state_lock:
+        biometric_reader_state['is_running'] = is_running
+        biometric_reader_state['port'] = port
+        if started_by:
+            biometric_reader_state['started_by'] = started_by
+            biometric_reader_state['started_at'] = datetime.now(pytz.timezone('Asia/Manila')).isoformat()
+        elif not is_running:
+            biometric_reader_state['started_by'] = None
+            biometric_reader_state['started_at'] = None
+
 def check_and_record_absences():
     """Independent absence checker - calculates dates from schedule and records absences"""
     global absence_checker_running
     
     while absence_checker_running:
+        conn = None
+        cursor = None
         try:
             philippines_tz = pytz.timezone('Asia/Manila')
             current_time = datetime.now(philippines_tz)
             current_date = current_time.date()
             current_time_only = current_time.time()
-            
-            conn = get_db_connection()
+
+            conn = db_pool.get_connection()
             cursor = conn.cursor()
             
             cursor.execute("""
@@ -370,19 +399,16 @@ def check_and_record_absences():
                             existing = cursor.fetchone()
                             
                             if not existing:
-                                cursor.execute("SELECT COALESCE(MAX(attendance_id), 70000) FROM attendance")
-                                new_id = cursor.fetchone()[0] + 1
-                                
                                 naive_midnight = datetime.combine(check_date, datetime.min.time())
                                 absence_timestamp = philippines_tz.localize(naive_midnight)
-                                
+
                                 cursor.execute("""
                                     INSERT INTO attendance (
-                                        attendance_id, personnel_id, class_id, 
+                                        personnel_id, class_id,
                                         attendancestatus, timein, timeout
                                     )
-                                    VALUES (%s, %s, %s, %s, %s, NULL)
-                                """, (new_id, personnel_id, class_id, 'Absent', absence_timestamp))
+                                    VALUES (%s, %s, %s, %s, NULL)
+                                """, (personnel_id, class_id, 'Absent', absence_timestamp))
                                 
                                 absences_recorded += 1
                                 
@@ -457,7 +483,7 @@ def check_and_record_absences():
                 print(f"Total absences recorded: {absences_recorded}")
             
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             
         except Exception as e:
             print(f"Error in absence checker: {e}")
@@ -465,7 +491,7 @@ def check_and_record_absences():
                 try:
                     conn.rollback()
                     cursor.close()
-                    return_db_connection(conn)
+                    db_pool.return_connection(conn)
                 except:
                     pass
         
@@ -616,7 +642,7 @@ def getStatusLabel(rating):
 def get_current_acadcalendar_info(acadcalendar_id):
     """Fetches semester name, year, and end date for display."""
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -627,7 +653,7 @@ def get_current_acadcalendar_info(acadcalendar_id):
         
         result = cursor.fetchone()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         if result:
             semester, acadyear, semesterend = result
@@ -694,7 +720,7 @@ def get_personnel_info(user_id):
         return cached
     
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -720,7 +746,7 @@ def get_personnel_info(user_id):
         
         result = cursor.fetchone()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         if result:
             firstname, lastname, honorifics, collegename, employee_no, rolename, email, position, employmentstatus, personnel_id, profilepic = result
@@ -797,7 +823,7 @@ def api_faculty_attendance():
     """OPTIMIZED: Single complex query instead of multiple queries"""
     try:
         user_id = session['user_id']
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -853,7 +879,7 @@ def api_faculty_attendance():
         
         result = cursor.fetchone()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         if not result or result[0] is None:
             return {'success': False, 'error': 'No active academic calendar found'}
@@ -1098,7 +1124,146 @@ def api_rfid_ports():
         print(f"Error listing ports: {e}")
         return {'success': False, 'error': str(e)}
 
-notification_queues = {}  
+# ==================== BIOMETRIC API ENDPOINTS ====================
+
+@app.route('/api/biometric/start', methods=['POST'])
+@require_auth([20001, 20002, 20003])
+def api_biometric_start():
+    """Start the biometric reader - accessible by Faculty, Dean, and HR"""
+    try:
+        state = get_biometric_state()
+        if state['is_running']:
+            return {
+                'success': True,
+                'message': f"Biometric reader already running on {state['port']}",
+                'port': state['port'],
+                'already_running': True
+            }
+
+        data = request.get_json(silent=True) or {}
+        port = data.get('port')
+
+        result = biometric_reader.start_reading(port)
+
+        if result.get('success'):
+            user_id = session.get('user_id')
+            personnel_info = get_personnel_info(user_id)
+            started_by = personnel_info.get('personnel_name', 'Unknown')
+
+            update_biometric_state(
+                is_running=True,
+                port=result.get('port'),
+                started_by=started_by
+            )
+
+            print(f"✅ Biometric Reader started by: {started_by}")
+
+        return result
+
+    except Exception as e:
+        print(f"Error starting biometric reader: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/biometric/stop', methods=['POST'])
+@require_auth([20001, 20002, 20003])
+def api_biometric_stop():
+    """Stop the biometric reader - accessible by Faculty, Dean, and HR"""
+    try:
+        result = biometric_reader.stop_reading()
+
+        if result.get('success'):
+            update_biometric_state(is_running=False, port=None)
+
+            user_id = session.get('user_id')
+            personnel_info = get_personnel_info(user_id)
+            stopped_by = personnel_info.get('personnel_name', 'Unknown')
+            print(f"🛑 Biometric Reader stopped by: {stopped_by}")
+
+        return result
+
+    except Exception as e:
+        print(f"Error stopping biometric reader: {e}")
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/biometric/status')
+@require_auth([20001, 20002, 20003])
+def api_biometric_status():
+    """Get biometric reader status - accessible by Faculty, Dean, and HR"""
+    try:
+        state = get_biometric_state()
+        return {
+            'success': True,
+            'is_running': state['is_running'],
+            'port': state['port'],
+            'started_by': state.get('started_by'),
+            'started_at': state.get('started_at')
+        }
+
+    except Exception as e:
+        print(f"Error getting biometric status: {e}")
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/biometric/logs')
+@require_auth([20003])
+def api_biometric_logs():
+    """Get biometric logs - accessible by HR only"""
+    conn = None
+    cursor = None
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT
+                bl.biometriclog_id,
+                bl.biometric_id,
+                bl.taptime,
+                bl.status,
+                bl.remarks,
+                b.biometric_uid,
+                p.firstname,
+                p.lastname,
+                p.honorifics
+            FROM biometriclogs bl
+            LEFT JOIN biometric b ON bl.biometric_id = b.biometric_id
+            LEFT JOIN personnel p ON b.personnel_id = p.personnel_id
+            ORDER BY bl.taptime DESC
+            LIMIT 500
+        """)
+
+        logs = []
+        for row in cursor.fetchall():
+            firstname, lastname, honorifics = row[6], row[7], row[8]
+            if firstname and lastname:
+                person_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+            else:
+                person_name = "Unknown"
+            logs.append({
+                'log_id': row[0],
+                'biometric_id': row[1],
+                'tap_time': row[2].isoformat() if row[2] else None,
+                'status': row[3],
+                'remarks': row[4],
+                'biometric_uid': row[5],
+                'person_name': person_name
+            })
+
+        return {'success': True, 'biometric_logs': logs}
+
+    except Exception as e:
+        print(f"Error getting biometric logs: {e}")
+        return {'success': False, 'error': str(e)}
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            db_pool.return_connection(conn)
+
+# ==================== END BIOMETRIC API ENDPOINTS ====================
+
+notification_queues = {}
 notification_lock = threading.Lock()
 
 def broadcast_notification(personnel_id, notification_data):
@@ -1264,7 +1429,7 @@ def api_faculty_semesters():
         return cached
     
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -1286,7 +1451,7 @@ def api_faculty_semesters():
         
         semesters = cursor.fetchall()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         semester_options = []
         current_semester_id = None
@@ -1343,7 +1508,7 @@ def api_faculty_attendance_by_semester(semester_id):
     """Get faculty attendance data with proper date handling for absent records"""
     try:
         user_id = session['user_id']
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -1391,7 +1556,7 @@ def api_faculty_attendance_by_semester(semester_id):
         
         result = cursor.fetchone()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         if not result or result[0] is None:
             return {'success': False, 'error': 'Academic calendar not found'}
@@ -1544,14 +1709,14 @@ def api_excuse_absence_bulk():
         except ValueError:
             return {'success': False, 'error': 'Invalid date format. Use YYYY-MM-DD'}
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("SELECT firstname, lastname FROM personnel WHERE personnel_id = %s", (personnel_id,))
         faculty_info = cursor.fetchone()
         if not faculty_info:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return {'success': False, 'error': 'Faculty not found'}
         
         faculty_name = f"{faculty_info[0]} {faculty_info[1]}"
@@ -1570,7 +1735,7 @@ def api_excuse_absence_bulk():
         
         if before_count == 0:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return {'success': False, 'error': f'No attendance records found for {faculty_name} on {target_date}. Only existing records can be excused.'}
         
         cursor.execute("""
@@ -1627,7 +1792,7 @@ def api_excuse_absence_bulk():
         )
         
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         if updated_count == 0:
             return {
@@ -1656,7 +1821,7 @@ def api_get_attendance_report(personnel_id, class_id):
     try:
         semester_id = request.args.get('semester_id')
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         # Get current semester if not specified
@@ -1671,7 +1836,7 @@ def api_get_attendance_report(personnel_id, class_id):
         
         if not semester_id:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return jsonify({'success': False, 'error': 'No active semester found'})
         
         # Get attendance report
@@ -1704,7 +1869,7 @@ def api_get_attendance_report(personnel_id, class_id):
         
         result = cursor.fetchone()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         if not result:
             return jsonify({
@@ -1750,7 +1915,7 @@ def api_get_personnel_attendance_reports(personnel_id):
     try:
         semester_id = request.args.get('semester_id')
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         if not semester_id:
@@ -1764,7 +1929,7 @@ def api_get_personnel_attendance_reports(personnel_id):
         
         if not semester_id:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return jsonify({'success': False, 'error': 'No active semester found'})
         
         cursor.execute("""
@@ -1790,7 +1955,7 @@ def api_get_personnel_attendance_reports(personnel_id):
         
         results = cursor.fetchall()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         reports = []
         for row in results:
@@ -1830,7 +1995,7 @@ def api_get_all_attendance_reports():
     try:
         semester_id = request.args.get('semester_id')
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         if not semester_id:
@@ -1844,7 +2009,7 @@ def api_get_all_attendance_reports():
         
         if not semester_id:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return jsonify({'success': False, 'error': 'No active semester found'})
         
         cursor.execute("""
@@ -1875,7 +2040,7 @@ def api_get_all_attendance_reports():
         
         results = cursor.fetchall()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         reports = []
         for row in results:
@@ -1927,7 +2092,7 @@ def api_faculty_teaching_schedule(semester_id):
             if not personnel_id:
                 return {'success': False, 'error': 'Personnel record not found'}
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -1952,7 +2117,7 @@ def api_faculty_teaching_schedule(semester_id):
         
         results = cursor.fetchall()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         if not results:
             return {'success': False, 'error': 'Academic calendar not found'}
@@ -2069,7 +2234,7 @@ def api_faculty_dashboard():
     """OPTIMIZED: Get faculty dashboard data with single query"""
     try:
         user_id = session['user_id']
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -2139,7 +2304,7 @@ def api_faculty_dashboard():
         
         result = cursor.fetchone()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         if not result or result[0] is None:
             return {'success': False, 'error': 'No active academic calendar found'}
@@ -2302,7 +2467,7 @@ def api_faculty_dashboard():
 def api_hr_today_classes_attendance():
     """Get today's attendance statistics based on CLASSES scheduled today"""
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         philippines_tz = pytz.timezone('Asia/Manila')
@@ -2338,7 +2503,7 @@ def api_hr_today_classes_attendance():
         
         if total_classes_today == 0:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return {
                 'success': True,
                 'attendance_percentage': 0,
@@ -2379,7 +2544,7 @@ def api_hr_today_classes_attendance():
         present_classes = cursor.fetchone()[0] or 0
         
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         attendance_percentage = round((present_classes / total_classes_today) * 100) if total_classes_today > 0 else 0
         
@@ -2403,7 +2568,7 @@ def api_hr_today_classes_attendance():
 def api_audit_logs():
     """Get audit logs for HR view"""
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -2423,7 +2588,7 @@ def api_audit_logs():
         
         logs = cursor.fetchall()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         audit_logs = []
         for log in logs:
@@ -2463,7 +2628,7 @@ def api_audit_logs():
 def log_audit_action(personnel_id, action, details=None, before_value=None, after_value=None, evidence=None):
     """Log audit actions to the auditlogs table with improved formatting"""
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         def clean_value(value):
@@ -2486,7 +2651,7 @@ def log_audit_action(personnel_id, action, details=None, before_value=None, afte
         
         conn.commit()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         print(f"📝 Audit logged: {action} by personnel_id {personnel_id}")
         return True
@@ -2511,7 +2676,7 @@ def api_get_faculty_profile():
             if not personnel_id:
                 return {'success': False, 'error': 'Personnel record not found'}
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -2611,7 +2776,7 @@ def api_get_faculty_profile():
                 profile_data[doc_type] = [base64.b64encode(bytes(doc)).decode('utf-8') for doc in doc_array]
         
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         return {'success': True, 'profile': profile_data}
         
@@ -2636,7 +2801,7 @@ def api_get_profile_stats():
             if not personnel_id:
                 return {'success': False, 'error': 'Personnel record not found'}
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -2680,7 +2845,7 @@ def api_get_profile_stats():
         
         result = cursor.fetchone()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         if not result:
             return {'success': False, 'error': 'Personnel record not found'}
@@ -2737,7 +2902,7 @@ def api_update_personal_info():
             else:
                 return {'success': False, 'error': 'Phone number must start with +63'}
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         personnel_info = get_personnel_info(user_id)
@@ -2745,7 +2910,7 @@ def api_update_personal_info():
         
         if not personnel_id:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return {'success': False, 'error': 'Personnel record not found'}
         
         cursor.execute("SELECT phone FROM personnel WHERE personnel_id = %s", (personnel_id,))
@@ -2789,7 +2954,7 @@ def api_update_personal_info():
         
         conn.commit()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         cache_key = f"personnel_info_{user_id}"
         with _cache_lock:
@@ -2835,7 +3000,7 @@ def api_update_documents():
     """API endpoint to update document uploads - FIXED VERSION"""
     try:
         user_id = session['user_id']
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         personnel_info = get_personnel_info(user_id)
@@ -2843,7 +3008,7 @@ def api_update_documents():
         
         if not personnel_id:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return {'success': False, 'error': 'Personnel record not found'}
         
         cursor.execute("SELECT profile_id FROM profile WHERE personnel_id = %s", (personnel_id,))
@@ -2959,7 +3124,7 @@ def api_update_documents():
                     )
         
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         return {'success': True, 'message': 'Documents updated successfully'}
         
@@ -2990,7 +3155,7 @@ def api_update_password():
         if len(new_password) < 6:
             return {'success': False, 'error': 'Password must be at least 6 characters long'}
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("SELECT password FROM users WHERE user_id = %s", (user_id,))
@@ -2998,12 +3163,12 @@ def api_update_password():
         
         if not current_pass_result or current_pass_result[0] != current_password:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return {'success': False, 'error': 'Current password is incorrect'}
         
         if current_password == new_password:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return {'success': False, 'error': 'New password cannot be the same as current password'}
         
         personnel_info = get_personnel_info(user_id)
@@ -3015,7 +3180,7 @@ def api_update_password():
         
         conn.commit()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         if personnel_id:
             log_audit_action(
@@ -3044,7 +3209,7 @@ def api_delete_document(doc_type, index):
         if doc_type not in ['licenses', 'degrees', 'certificates', 'publications', 'awards']:
             return {'success': False, 'error': 'Invalid document type'}
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         personnel_info = get_personnel_info(user_id)
@@ -3052,7 +3217,7 @@ def api_delete_document(doc_type, index):
         
         if not personnel_id:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return {'success': False, 'error': 'Personnel record not found'}
         
         column_mapping = {
@@ -3074,7 +3239,7 @@ def api_delete_document(doc_type, index):
         
         if not doc_result or not doc_result[0] or len(doc_result[0]) == 0:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return {'success': False, 'error': 'No documents found'}
         
         doc_array = list(doc_result[0])
@@ -3082,7 +3247,7 @@ def api_delete_document(doc_type, index):
         
         if index < 0 or index >= len(doc_array):
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return {'success': False, 'error': 'Invalid document index'}
         
         deleted_filename = filenames[index] if index < len(filenames) else f"Document_{index+1}"
@@ -3102,7 +3267,7 @@ def api_delete_document(doc_type, index):
         
         conn.commit()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         before_text = ", ".join(before_filenames) if before_filenames != ["None"] else "None"
         after_text = ", ".join(after_filenames) if after_filenames != ["None"] else "None"
@@ -3128,7 +3293,7 @@ def api_delete_document(doc_type, index):
 def api_hr_faculty_attendance():
     """SIMPLE: Get all faculty attendance data - SHOW ONLY WHAT'S IN DATABASE"""
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         philippines_tz = pytz.timezone('Asia/Manila')
@@ -3160,7 +3325,7 @@ def api_hr_faculty_attendance():
         total_faculty = cursor.fetchone()[0]
         
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         attendance_logs = []
         status_counts = {'present': 0, 'late': 0, 'absent': 0, 'excused': 0}
@@ -3263,7 +3428,7 @@ def api_update_attendance_time():
         if not updates:
             return {'success': False, 'error': 'No updates provided'}
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         user_id = session['user_id']
@@ -3646,7 +3811,7 @@ def api_update_attendance_time():
         
         conn.commit()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         print(f"✅ Successfully processed {updated_count} attendance record updates")
         
@@ -3663,7 +3828,7 @@ def api_update_attendance_time():
         if conn:
             conn.rollback()
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/hr/update-rfid-remarks', methods=['POST'])
@@ -3677,7 +3842,7 @@ def api_update_rfid_remarks():
         if not updates:
             return {'success': False, 'error': 'No updates provided'}
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         user_id = session['user_id']
@@ -3712,7 +3877,7 @@ def api_update_rfid_remarks():
         
         conn.commit()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         return {
             'success': True,
@@ -3726,12 +3891,72 @@ def api_update_rfid_remarks():
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
 
+@app.route('/api/hr/update-biometric-remarks', methods=['POST'])
+@require_auth([20003])
+def api_update_biometric_remarks():
+    """Update remarks for multiple biometric logs"""
+    try:
+        data = request.get_json()
+        updates = data.get('updates', [])
+
+        if not updates:
+            return {'success': False, 'error': 'No updates provided'}
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        user_id = session['user_id']
+        personnel_info = get_personnel_info(user_id)
+        personnel_id = personnel_info.get('personnel_id')
+
+        updated_count = 0
+
+        for update in updates:
+            log_id = update.get('log_id')
+            remarks = update.get('remarks', '')
+
+            if log_id:
+                cursor.execute("SELECT remarks FROM biometriclogs WHERE biometriclog_id = %s", (log_id,))
+                current_remarks_result = cursor.fetchone()
+                current_remarks = current_remarks_result[0] if current_remarks_result else ""
+
+                cursor.execute("""
+                    UPDATE biometriclogs
+                    SET remarks = %s
+                    WHERE biometriclog_id = %s
+                """, (remarks, log_id))
+                updated_count += 1
+
+                log_audit_action(
+                    personnel_id,
+                    "Biometric remarks updated",
+                    f"HR updated remarks for biometric log",
+                    before_value=f"Remarks: {current_remarks}" if current_remarks else "Remarks: Not set",
+                    after_value=f"Remarks: {remarks}" if remarks else "Remarks: Cleared"
+                )
+
+        conn.commit()
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        return {
+            'success': True,
+            'message': f'Successfully updated {updated_count} remark(s)',
+            'updated_count': updated_count
+        }
+
+    except Exception as e:
+        print(f"Error updating biometric remarks: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
 @app.route('/api/hr/rfid-logs')
 @require_auth([20003])
 def api_hr_rfid_logs():
     """Get all RFID logs for HR view with milliseconds"""
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -3750,7 +3975,7 @@ def api_hr_rfid_logs():
         
         logs = cursor.fetchall()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         rfid_logs = []
         for log in logs:
@@ -3798,7 +4023,7 @@ def api_hr_faculty_list():
         return cached
     
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -3829,7 +4054,7 @@ def api_hr_faculty_list():
         
         faculty_records = cursor.fetchall()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         faculty_list = []
         for record in faculty_records:
@@ -3864,7 +4089,7 @@ def api_hr_faculty_list():
 def api_hr_faculty_schedule(personnel_id):
     """HR view: Get faculty teaching schedule with 15-minute grid precision"""
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -3895,7 +4120,7 @@ def api_hr_faculty_schedule(personnel_id):
         
         results = cursor.fetchall()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         if not results:
             return {'success': False, 'error': 'Academic calendar not found'}
@@ -4021,7 +4246,7 @@ def api_faculty_evaluations_data():
         if not personnel_id:
             return jsonify({'success': False, 'error': 'Personnel record not found'}), 404
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         # 1. Determine the current academic calendar ID
@@ -4104,7 +4329,7 @@ def api_faculty_evaluations_data():
         
         result = cursor.fetchone()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
 
         if not result or result[0] is None:
             return jsonify({'success': False, 'error': 'No personnel or active term found.'}), 404
@@ -4174,7 +4399,7 @@ def api_hr_employees_list():
     #     return cached
     
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -4200,7 +4425,7 @@ def api_hr_employees_list():
         
         employees = cursor.fetchall()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         employees_list = []
         for emp in employees:
@@ -4279,19 +4504,19 @@ def api_hr_add_employee():
         if not re.match(phone_pattern, phone):
             return {'success': False, 'error': 'Phone number must be in format: +63 912 345 6789'}
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("SELECT user_id FROM users WHERE email = %s", (email,))
         if cursor.fetchone():
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return {'success': False, 'error': 'Email already exists'}
         
         cursor.execute("SELECT personnel_id FROM personnel WHERE employee_no = %s", (employee_no,))
         if cursor.fetchone():
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return {'success': False, 'error': 'Employee number already exists'}
         
         cursor.execute("SELECT COALESCE(MAX(user_id), 10000) FROM users")
@@ -4327,7 +4552,7 @@ def api_hr_add_employee():
         
         conn.commit()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         hr_user_id = session['user_id']
         hr_personnel_info = get_personnel_info(hr_user_id)
@@ -4362,7 +4587,7 @@ def api_hr_add_employee():
         if conn:
             conn.rollback()
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/hr/delete-employee', methods=['POST'])
@@ -4377,14 +4602,14 @@ def api_hr_delete_employee():
         if not personnel_id:
             return {'success': False, 'error': 'Personnel ID is required'}
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT user_id FROM personnel WHERE personnel_id = %s", (personnel_id,))
         user_result = cursor.fetchone()
         
         if not user_result:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return {'success': False, 'error': 'Employee not found'}
         
         user_id = user_result[0]
@@ -4407,7 +4632,7 @@ def api_hr_delete_employee():
         )
         
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         return {
             'success': True, 
@@ -4421,7 +4646,7 @@ def api_hr_delete_employee():
         if conn:
             conn.rollback()
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/hr/subjects-list')
@@ -4429,7 +4654,7 @@ def api_hr_delete_employee():
 def api_hr_subjects_list():
     """Get all subjects for schedule dropdown"""
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -4440,7 +4665,7 @@ def api_hr_subjects_list():
         
         subjects = cursor.fetchall()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         subjects_list = []
         for subject in subjects:
@@ -4468,7 +4693,7 @@ def api_hr_subjects_list():
 def api_hr_subjects_by_faculty(personnel_id):
     """Get subjects filtered by faculty's college"""
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("SELECT college_id FROM personnel WHERE personnel_id = %s", (personnel_id,))
@@ -4476,7 +4701,7 @@ def api_hr_subjects_by_faculty(personnel_id):
         
         if not faculty_college or not faculty_college[0]:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return {'success': False, 'error': 'Faculty college not found'}
         
         college_id = faculty_college[0]
@@ -4490,7 +4715,7 @@ def api_hr_subjects_by_faculty(personnel_id):
         
         subjects = cursor.fetchall()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         subjects_list = []
         for subject in subjects:
@@ -4519,7 +4744,7 @@ def api_hr_subjects_by_faculty(personnel_id):
 def api_hr_get_acadcalendar():
     """Get all academic calendar records."""
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -4536,7 +4761,7 @@ def api_hr_get_acadcalendar():
         
         records = cursor.fetchall()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         calendar_list = []
         for rec in records:
@@ -4575,7 +4800,7 @@ def api_hr_add_acadcalendar():
         if not all([semester, acadyear, start_date, end_date]):
             return {'success': False, 'error': 'All fields are required.'}
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("SELECT COALESCE(MAX(acadcalendar_id), 80000) FROM acadcalendar")
@@ -4588,7 +4813,7 @@ def api_hr_add_acadcalendar():
         
         conn.commit()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
 
         # Log the action
         hr_personnel_info = get_personnel_info(session['user_id'])
@@ -4610,7 +4835,7 @@ def api_hr_add_acadcalendar():
         if conn:
             conn.rollback()
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/hr/acadcalendar/<int:id>', methods=['PUT'])
@@ -4627,7 +4852,7 @@ def api_hr_update_acadcalendar(id):
         if not all([semester, acadyear, start_date, end_date]):
             return {'success': False, 'error': 'All fields are required.'}
 
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         # Fetch current data for logging
@@ -4639,7 +4864,7 @@ def api_hr_update_acadcalendar(id):
         
         if not current_data:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return {'success': False, 'error': 'Record not found.'}
         
         current_semester, current_year, current_start, current_end = current_data
@@ -4652,7 +4877,7 @@ def api_hr_update_acadcalendar(id):
         
         conn.commit()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
 
         # Log the action
         hr_personnel_info = get_personnel_info(session['user_id'])
@@ -4675,7 +4900,7 @@ def api_hr_update_acadcalendar(id):
         if conn:
             conn.rollback()
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/hr/acadcalendar/<int:id>', methods=['DELETE'])
@@ -4683,14 +4908,14 @@ def api_hr_update_acadcalendar(id):
 def api_hr_delete_acadcalendar(id):
     """Delete an academic calendar record."""
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         # Check for dependencies before deleting
         cursor.execute("SELECT COUNT(*) FROM schedule WHERE acadcalendar_id = %s", (id,))
         if cursor.fetchone()[0] > 0:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return {'success': False, 'error': 'Cannot delete. Schedule records are linked to this term.'}
 
         cursor.execute("SELECT semester, acadyear FROM acadcalendar WHERE acadcalendar_id = %s", (id,))
@@ -4701,7 +4926,7 @@ def api_hr_delete_acadcalendar(id):
         
         conn.commit()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
 
         if deleted_count > 0:
             hr_personnel_info = get_personnel_info(session['user_id'])
@@ -4724,7 +4949,7 @@ def api_hr_delete_acadcalendar(id):
         if conn:
             conn.rollback()
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
         return {'success': False, 'error': str(e)}
 
 
@@ -4804,7 +5029,7 @@ def api_hr_check_schedule_conflicts():
         starttime_2 = data.get('starttime_2')
         endtime_2 = data.get('endtime_2')
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         def format_time_ampm(time_str):
@@ -4911,7 +5136,7 @@ def api_hr_check_schedule_conflicts():
                     conflicts.append(conflict_info)
         
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         if conflicts:
             conflict_message = "❌ SCHEDULE CONFLICTS DETECTED:\n\n" + "\n\n".join(conflicts) + "\n\nPlease choose a different time slot."
@@ -4955,7 +5180,7 @@ def api_hr_add_schedule():
             if not data.get(field):
                 return {'success': False, 'error': f'All required fields must be filled. Missing: {field}'}
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         conflict_check = api_hr_check_schedule_conflicts()
@@ -4971,7 +5196,7 @@ def api_hr_add_schedule():
 
         if not semester_info:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return {'success': False, 'error': 'Invalid semester selected'}
 
         cursor.execute("""
@@ -4991,7 +5216,7 @@ def api_hr_add_schedule():
         
         conn.commit()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         hr_user_id = session['user_id']
         hr_personnel_info = get_personnel_info(hr_user_id)
@@ -5030,7 +5255,7 @@ def api_hr_add_schedule():
         if conn:
             conn.rollback()
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/hr/delete-schedule/classes/<int:personnel_id>') 
@@ -5038,7 +5263,7 @@ def api_hr_add_schedule():
 def api_hr_delete_schedule_classes(personnel_id): 
     """Get all schedule classes for a faculty member for deletion dropdown"""
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -5061,7 +5286,7 @@ def api_hr_delete_schedule_classes(personnel_id):
         
         schedules = cursor.fetchall()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         schedule_list = []
         for schedule in schedules:
@@ -5132,7 +5357,7 @@ def api_hr_delete_schedule():
         if not class_id:
             return {'success': False, 'error': 'Class ID is required'}
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -5160,7 +5385,7 @@ def api_hr_delete_schedule():
         
         if not schedule_result:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return {'success': False, 'error': 'Schedule not found'}
         
         (class_id, subjectcode, subjectname, classsection, classday_1, starttime_1, endtime_1,
@@ -5206,7 +5431,7 @@ def api_hr_delete_schedule():
         )
         
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         message = f'Schedule, {attendance_count} attendance records, and {attendance_report_count} attendance reports deleted successfully'
         
@@ -5224,7 +5449,7 @@ def api_hr_delete_schedule():
         if conn:
             conn.rollback()
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
         
         if 'violates foreign key constraint' in str(e):
             return {
@@ -5242,7 +5467,7 @@ def hr_employee_profile(personnel_id):
 
         hr_info = get_personnel_info(session['user_id'])
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -5266,7 +5491,7 @@ def hr_employee_profile(personnel_id):
         
         result = cursor.fetchone()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         if result:
             firstname, lastname, honorifics, collegename, employee_no, rolename, email, position, employmentstatus = result
@@ -5305,7 +5530,7 @@ def faculty_employee_profile(personnel_id):
     try:
         hr_info = get_personnel_info(session['user_id'])
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -5329,7 +5554,7 @@ def faculty_employee_profile(personnel_id):
         
         result = cursor.fetchone()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         if result:
             firstname, lastname, honorifics, collegename, employee_no, rolename, email, position, employmentstatus = result
@@ -5368,7 +5593,7 @@ def vp_employee_profile(personnel_id):
     try:
         hr_info = get_personnel_info(session['user_id'])
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -5393,7 +5618,7 @@ def vp_employee_profile(personnel_id):
         print(f"Executing SQL for VP profile with personnel_id: {personnel_id}")
         result = cursor.fetchone()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         if result:
             firstname, lastname, honorifics, collegename, employee_no, rolename, email, position, employmentstatus = result
@@ -5447,7 +5672,7 @@ def api_hr_colleges_list():
         return cached
     
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -5458,7 +5683,7 @@ def api_hr_colleges_list():
         
         colleges = cursor.fetchall()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         colleges_list = []
         for college in colleges:
@@ -5496,7 +5721,7 @@ def login():
         password = request.form.get('password')
 
         try:
-            conn = get_db_connection()
+            conn = db_pool.get_connection()
             cursor = conn.cursor()
             
             cursor.execute("SELECT user_id FROM users WHERE email = %s", (email,))
@@ -5504,7 +5729,7 @@ def login():
             
             if not user_exists:
                 cursor.close()
-                return_db_connection(conn)
+                db_pool.return_connection(conn)
                 return render_template('login.html', error="User does not exist.")
             
             cursor.execute("""
@@ -5530,7 +5755,7 @@ def login():
                 
                 conn.commit()
                 cursor.close()
-                return_db_connection(conn)
+                db_pool.return_connection(conn)
                 
                 session['user_id'] = user_id
                 session['email'] = user_email
@@ -5565,7 +5790,7 @@ def login():
                     )
                 
                 cursor.close()
-                return_db_connection(conn)
+                db_pool.return_connection(conn)
                 return render_template('login.html', error="Invalid password. Please try again.")
                 
         except Exception as e:
@@ -5604,7 +5829,7 @@ def faculty_promotion():
     if not user_id:
         return "Unauthorized", 401
     
-    conn = get_db_connection()
+    conn = db_pool.get_connection()
     cursor = conn.cursor()
     
     # Get faculty info and current academic term
@@ -5634,7 +5859,7 @@ def faculty_promotion():
     
     if not result:
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         return "Faculty record not found", 400
     
     # Update unpacking to include employment_status
@@ -5859,7 +6084,7 @@ def faculty_promotion():
     history_rows = cursor.fetchall()
     
     cursor.close()
-    return_db_connection(conn)
+    db_pool.return_connection(conn)
     
     # Build history list
     application_history = []
@@ -5992,7 +6217,7 @@ def api_hr_evaluation_dashboard_data():
     FIXED: Removed the invalid GROUP BY clause and simplified the final SELECT logic.
     """
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         # 1. Determine the current academic calendar ID
@@ -6068,7 +6293,7 @@ def api_hr_evaluation_dashboard_data():
         
         result = cursor.fetchone()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         if not result or result[0] is None:
             return jsonify({
@@ -6133,7 +6358,7 @@ def api_hr_evaluations():
     position_filter = request.args.get('position', '') 
     response_rate_filter = request.args.get('response_rate', '') 
     
-    conn = get_db_connection()
+    conn = db_pool.get_connection()
     cursor = conn.cursor()
 
     # Define the term ID for use in all queries
@@ -6289,7 +6514,7 @@ def api_hr_evaluations():
     unique_positions = [row[0] for row in cursor.fetchall() if row[0] and row[0].strip() != '']
     
     cursor.close()
-    return_db_connection(conn)
+    db_pool.return_connection(conn)
 
     # Shape results to JSON
     # IMPORTANT: Ensure the column indices match the SQL SELECT statement (9 total columns before position)
@@ -6327,7 +6552,7 @@ def api_hr_update_evaluation_score():
         if not updates or not term_id:
             return jsonify({'success': False, 'error': 'Missing updates or term ID.'}), 400
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         user_id = session['user_id']
@@ -6382,7 +6607,7 @@ def api_hr_update_evaluation_score():
                 
         conn.commit()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         return jsonify({
             'success': True,
@@ -6412,7 +6637,7 @@ def api_hr_faculty_evaluation_report(personnel_id):
         return jsonify({'success': False, 'error': 'Missing term ID'}), 400
 
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
 
         # 1. Fetch Faculty Name, College, and Semester Info
@@ -6430,7 +6655,7 @@ def api_hr_faculty_evaluation_report(personnel_id):
         
         if not info_row:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return jsonify({'success': False, 'error': 'Faculty or Semester not found'}), 404
         
         firstname, lastname, honorifics, collegename, semester_name, acadyear = info_row
@@ -6481,7 +6706,7 @@ def api_hr_faculty_evaluation_report(personnel_id):
 
 
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
 
         return jsonify({
             'success': True,
@@ -6779,7 +7004,7 @@ def fetch_evaluations():
     conn = None 
     
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         print("--- [EVAL UPDATE] Starting evaluation fetch process ---")
 
@@ -6830,7 +7055,7 @@ def fetch_evaluations():
             
         conn.commit()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         print(f"✅ [EVAL UPDATE] Database COMMIT successful. Total records updated: {total_updated}")
         return jsonify(message=f"Successfully imported and updated {total_updated} evaluation records from all sources.", success=True)
 
@@ -6842,7 +7067,7 @@ def fetch_evaluations():
             conn.rollback()
             try:
                 cursor.close()
-                return_db_connection(conn)
+                db_pool.return_connection(conn)
             except:
                 pass
         return jsonify(message=f"Critical error processing evaluations. Check logs for details. Error: {str(e)}"), 500
@@ -6874,12 +7099,12 @@ def api_hr_generate_evaluation_link():
             return jsonify({'success': False, 'error': 'Missing personnel ID, term ID, or evaluator type.'}), 400
 
         # 1. Fetch Faculty Name for logging
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT firstname, lastname FROM personnel WHERE personnel_id = %s", (personnel_id,))
         faculty_info = cursor.fetchone()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         if not faculty_info:
             return jsonify({'success': False, 'error': 'Faculty not found.'}), 404
@@ -6926,7 +7151,7 @@ def hr_promotions():
     try:
         personnel_info = get_personnel_info(session['user_id'])
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         # === FETCH PROMOTIONS ===
@@ -7029,7 +7254,7 @@ def hr_promotions():
         
         all_faculty = cursor.fetchall()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         # Format regularization data
         regularizations_list = []
@@ -7132,7 +7357,7 @@ def vp_promotions():
         personnel_info = get_personnel_info(session['user_id'])
         user_role = session.get('user_role')
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         # === FETCH PROMOTIONS ===
@@ -7209,7 +7434,7 @@ def vp_promotions():
         
         active_regs = cursor.fetchall()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         # Format regularization data
         regularizations_list = []
@@ -7303,7 +7528,7 @@ def forward_to_president():
         if not application_id:
             return jsonify(success=False, error='Application ID is required'), 400
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         philippines_tz = pytz.timezone('Asia/Manila')
@@ -7343,7 +7568,7 @@ def forward_to_president():
 
         
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         return jsonify(success=True, message='Application forwarded to President successfully')
         
@@ -7366,7 +7591,7 @@ def approve_regularization_by_president():
         if not regularization_id:
             return jsonify(success=False, error='Regularization ID is required'), 400
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         # Additional check: Verify user has "President" position
@@ -7386,7 +7611,7 @@ def approve_regularization_by_president():
 
         if not position_result or position_result[0] != 'President':
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return jsonify(success=False, error='Unauthorized: Only President can approve regularizations'), 403
         
         philippines_tz = pytz.timezone('Asia/Manila')
@@ -7416,7 +7641,7 @@ def approve_regularization_by_president():
             )
         
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         return jsonify({
             'success': True, 
@@ -7430,7 +7655,7 @@ def approve_regularization_by_president():
         if conn:
             conn.rollback()
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/regularization/forward-to-president', methods=['POST'])
@@ -7446,7 +7671,7 @@ def forward_regularization_to_president():
         if not regularization_id:
             return jsonify(success=False, error='Regularization ID is required'), 400
 
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         philippines_tz = pytz.timezone('Asia/Manila')
@@ -7497,7 +7722,7 @@ def forward_regularization_to_president():
         )
 
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         return jsonify(success=True, message='Regularization forwarded to President successfully')
 
@@ -7508,7 +7733,7 @@ def forward_regularization_to_president():
         if conn:
             conn.rollback()
             if cursor: cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
         
         # Return the actual exception message for better debugging
         return jsonify(success=False, error=f"Server Error during forwarding: {str(e)}"), 500
@@ -7522,7 +7747,7 @@ def reject_regularization():
         regularization_id = data.get('regularization_id')
         rejection_reason = data.get('rejection_reason', 'No reason provided')
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         # Get faculty_id
@@ -7559,7 +7784,7 @@ def reject_regularization():
         )
         
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         return jsonify({'success': True, 'message': 'Regularization rejected'})
     
@@ -7590,7 +7815,7 @@ def logout():
     
     if user_id:
         try:
-            conn = get_db_connection()
+            conn = db_pool.get_connection()
             cursor = conn.cursor()
             
             cursor.execute("SELECT lastlogin FROM users WHERE user_id = %s", (user_id,))
@@ -7620,7 +7845,7 @@ def logout():
             
             conn.commit()
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
         except Exception as e:
             print(f"Error logging logout action: {e}")
     
@@ -7631,12 +7856,12 @@ def logout():
 @app.route('/test-db')
 def test_db():
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT version();")
         version = cursor.fetchone()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         return f"Database connected successfully! Version: {version[0]}"
     except Exception as e:
         return f"Database connection failed: {e}"
@@ -7649,7 +7874,7 @@ def promotion_document_upload():
     if not userid:
         return "Unauthorized", 401
 
-    conn = get_db_connection()
+    conn = db_pool.get_connection()
     cursor = conn.cursor()
 
     # Get faculty_id from personnel via user_id
@@ -7727,7 +7952,7 @@ def view_resume():
     if not userid:
         return "Unauthorized", 401
 
-    conn = get_db_connection()
+    conn = db_pool.get_connection()
     cursor = conn.cursor()
 
     # get faculty_id
@@ -7763,7 +7988,7 @@ def view_cover_letter():
     if not userid:
         return "Unauthorized", 401
 
-    conn = get_db_connection()
+    conn = db_pool.get_connection()
     cursor = conn.cursor()
 
     # Get faculty_id from user_id
@@ -7804,7 +8029,7 @@ def delete_submission():
     if not userid:
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
 
-    conn = get_db_connection()
+    conn = db_pool.get_connection()
     cursor = conn.cursor()
 
     try:
@@ -7813,7 +8038,7 @@ def delete_submission():
         result = cursor.fetchone()
         if not result:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return jsonify({'success': False, 'error': 'Faculty record not found'}), 400
 
         faculty_id = result[0]
@@ -7828,19 +8053,19 @@ def delete_submission():
         
         if deleted_count == 0:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return jsonify({'success': False, 'error': 'No active application found to delete'}), 400
 
         conn.commit()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
 
         return jsonify({'success': True, 'message': 'Application deleted successfully'})
     
     except Exception as e:
         conn.rollback()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -7850,7 +8075,7 @@ def delete_submission():
 def get_promotion_details(application_id):
     """Get detailed promotion information - COMPLETE VERSION"""
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -7887,7 +8112,7 @@ def get_promotion_details(application_id):
         
         if not row:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return jsonify(success=False, error='Application not found'), 404
         
         (app_id, faculty_id, firstname, lastname, honorifics, phone, college, 
@@ -7905,7 +8130,7 @@ def get_promotion_details(application_id):
             profile_image_base64 = f"data:image/jpeg;base64,{base64.b64encode(bytes(pic_row[0])).decode('utf-8')}"
         
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         return jsonify(
             success=True,
@@ -7946,7 +8171,7 @@ def get_promotion_details(application_id):
 def get_profile_image_base64(personnel_id):
     """Get profile picture as base64 for embedding in HTML"""
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute(
@@ -7956,7 +8181,7 @@ def get_profile_image_base64(personnel_id):
         
         result = cursor.fetchone()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         if result and result[0]:
             binary_image = bytes(result[0])
@@ -8014,7 +8239,7 @@ def get_profile_image_base64(personnel_id):
 def get_promotion_document(application_id, doc_type):
     """Serve PDF documents from promotion_application table"""
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         # Validate doc_type
@@ -8031,7 +8256,7 @@ def get_promotion_document(application_id, doc_type):
         
         result = cursor.fetchone()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         if result and result[0]:
             binary_pdf = bytes(result[0])
@@ -8061,7 +8286,7 @@ def forward_to_vpaa():
         if not application_id:
             return jsonify(success=False, error='Application ID is required'), 400
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         philippines_tz = pytz.timezone('Asia/Manila')
@@ -8101,7 +8326,7 @@ def forward_to_vpaa():
         )
 
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         return jsonify(success=True, message='Application forwarded to VPAA successfully')
         
@@ -8126,7 +8351,7 @@ def approve_promotion():
         if not application_id:
             return jsonify(success=False, error='Application ID is required'), 400
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         user_id = session.get('user_id')
@@ -8143,7 +8368,7 @@ def approve_promotion():
         
         if not position_result or position_result[0] != 'President':
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return jsonify(success=False, error='Unauthorized: Only President can approve promotions'), 403
         
         # Get application details
@@ -8155,7 +8380,7 @@ def approve_promotion():
         
         if not result:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return jsonify(success=False, error='Application not found'), 404
         
         faculty_id, requested_rank = result
@@ -8203,7 +8428,7 @@ def approve_promotion():
         )
         
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         return jsonify(success=True, message=f'Promotion approved! Faculty rank updated to {requested_rank}')
         
@@ -8214,7 +8439,7 @@ def approve_promotion():
         if conn:
             conn.rollback()
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
         return jsonify(success=False, error=str(e)), 500
 
 
@@ -8233,7 +8458,7 @@ def reject_promotion():
         if not rejection_reason:
             return jsonify(success=False, error='Rejection reason is required'), 400
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         # Get current status
@@ -8245,7 +8470,7 @@ def reject_promotion():
         
         if not result:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return jsonify(success=False, error='Application not found'), 404
         
         current_status = result[0]
@@ -8284,7 +8509,7 @@ def reject_promotion():
         )
 
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         return jsonify(success=True, message='Promotion application rejected')
         
@@ -8302,7 +8527,7 @@ def reject_promotion():
 def get_eligible_faculty():
     """Get list of faculty eligible for regularization"""
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -8332,7 +8557,7 @@ def get_eligible_faculty():
         
         eligible_faculty = cursor.fetchall()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         faculty_list = []
         for f in eligible_faculty:
@@ -8377,7 +8602,7 @@ def initiate_regularization():
         faculty_id = data.get('faculty_id')
         notes = data.get('notes', '')
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         cursor.execute("SELECT hiredate FROM personnel WHERE personnel_id = %s", (faculty_id,))
@@ -8385,7 +8610,7 @@ def initiate_regularization():
         
         if not result or not result[0]:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return jsonify({'success': False, 'error': 'Faculty not found or no hire date'}), 400
         
         hire_date = result[0]
@@ -8401,7 +8626,7 @@ def initiate_regularization():
         
         if years_of_service < 3:
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return jsonify({
                 'success': False, 
                 'error': f'Faculty not eligible. Only {years_of_service:.1f} years of service.'
@@ -8414,7 +8639,7 @@ def initiate_regularization():
         
         if cursor.fetchone():
             cursor.close()
-            return_db_connection(conn)
+            db_pool.return_connection(conn)
             return jsonify({'success': False, 'error': 'Faculty already has active regularization'}), 400
         
         import pytz
@@ -8453,7 +8678,7 @@ def initiate_regularization():
 
         
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         next_tenure = "Tenured" if years_of_service >= 7 else "Regular"
         
@@ -8480,7 +8705,7 @@ def approve_regularization():
         data = request.get_json()
         regularization_id = data.get('regularization_id')
         
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
         
         # Get faculty_id for audit logging
@@ -8516,7 +8741,7 @@ def approve_regularization():
         )
         
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         
         return jsonify({'success': True, 'message': 'Regularization approved successfully'})
     
@@ -8534,7 +8759,7 @@ def get_promotion_eligibility():
     if not user_id:
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
     
-    conn = get_db_connection()
+    conn = db_pool.get_connection()
     cursor = conn.cursor()
     
     # Get faculty info, hire date, employment status, and current term
@@ -8556,7 +8781,7 @@ def get_promotion_eligibility():
     result = cursor.fetchone()
     if not result:
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
         return jsonify({'success': False, 'error': 'Faculty not found'}), 404
     
     faculty_id, hire_date, employment_status, current_term_id = result
@@ -8623,7 +8848,7 @@ def get_promotion_eligibility():
     has_active_application = cursor.fetchone()[0] > 0
     
     cursor.close()
-    return_db_connection(conn)
+    db_pool.return_connection(conn)
     
     # --- Determine Eligibility and Tenure Status ---
     
@@ -8688,7 +8913,7 @@ def get_promotion_list():
     status_filter = request.args.get('status', None)
 
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
 
         if status_filter:
@@ -8707,7 +8932,7 @@ def get_promotion_list():
 
         rows = cursor.fetchall()
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
 
         data = [
             {
@@ -8730,7 +8955,7 @@ def get_promotion_list():
 @require_auth([20003])  # HR role only
 def get_audit_logs():
     try:
-        conn = get_db_connection()
+        conn = db_pool.get_connection()
         cursor = conn.cursor()
 
         # Promotions audit
@@ -8860,7 +9085,7 @@ def get_audit_logs():
             evt['timestamp'] = evt['timestamp'].isoformat() if isinstance(evt['timestamp'], datetime) else str(evt['timestamp'])
 
         cursor.close()
-        return_db_connection(conn)
+        db_pool.return_connection(conn)
 
         return jsonify({'success': True, 'audit_events': audit_events})
 
