@@ -6,43 +6,6 @@
 
 {% block content %}
 <section class="grid" aria-live="polite">
-  <!-- KPI Cards Commented Out - Data fetching still works in background -->
-  <!--
-  <div class="kpis card" style="padding:16px">
-    <div class="kpi card" style="gap:14px">
-      <div class="icon fac"><i class='bx bx-check-shield' style="font-size:20px"></i></div>
-      <div>
-        <div class="title">Total Faculty</div>
-        <div class="value" id="kpi-att">0</div>
-      </div>
-    </div>
-
-    <div class="kpi card" style="gap:14px">
-      <div class="icon eval"><i class='bx bx-user'></i></div>
-      <div>
-        <div class="title">Present Today</div>
-        <div class="value" id="kpi-fac">0</div>
-      </div>
-    </div>
-
-    <div class="kpi card" style="gap:14px">
-      <div class="icon promo"><i class='bx bx-check-circle'></i></div>
-      <div>
-        <div class="title">Late today</div>
-        <div class="value" id="kpi-eval">0</div>
-      </div>
-    </div>
-
-    <div class="kpi card" style="gap:14px">
-      <div class="icon att"><i class='bx bx-award'></i></div>
-      <div>
-        <div class="title">Absent Today</div>
-        <div class="value" id="kpi-promo">0</div>
-      </div>
-    </div>
-  </div>
-  -->
-
   <!-- Main Content Area with Sidebar Layout -->
   <div class="hr-attendance-layout" style="grid-column: 1 / -1;">
     <!-- Left: Tabs + Content -->
@@ -52,6 +15,7 @@
         <button class="tab-btn" data-tab="classes">View Classes</button>
         <button class="tab-btn" data-tab="rfidlogs">RFID Logs</button>
         <button class="tab-btn" data-tab="campusentry">Campus Entry</button>
+        <button class="tab-btn" data-tab="analytics"><i class='bx bx-bar-chart-alt-2' style="vertical-align:middle;margin-right:4px"></i>Analytics</button>
       </div>
 
       <!-- All Faculty Logs -->
@@ -169,6 +133,123 @@
         </div>
       </div>
 
+      <!-- Analytics Tab -->
+      <div id="analytics" class="tab-content">
+
+        <!-- Header row: title + semester selector -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+          <div>
+            <span style="font-size:15px;font-weight:700;color:var(--text)">Attendance Analytics</span>
+            <span style="font-size:12px;color:var(--muted);margin-left:8px">Historical trends and faculty-level breakdown</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <label for="analyticsSemesterSelect" style="font-size:13px;color:var(--muted);white-space:nowrap">Semester:</label>
+            <select id="analyticsSemesterSelect" style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--text);cursor:pointer">
+              <option value="">Loading…</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Analytics KPI Cards -->
+        <div class="kpis" style="margin-bottom:20px">
+          <div class="kpi card" style="gap:14px">
+            <div class="icon fac"><i class='bx bx-trending-up'></i></div>
+            <div>
+              <div class="title">Avg. Attendance Rate</div>
+              <div class="value" id="an-kpi-rate">—</div>
+            </div>
+          </div>
+          <div class="kpi card" style="gap:14px">
+            <div class="icon" style="background:#d1fae5"><i class='bx bx-check-circle' style="color:#16a34a"></i></div>
+            <div>
+              <div class="title">Present Sessions</div>
+              <div class="value" id="an-kpi-present">—</div>
+            </div>
+          </div>
+          <div class="kpi card" style="gap:14px">
+            <div class="icon eval"><i class='bx bx-time'></i></div>
+            <div>
+              <div class="title">Late Sessions</div>
+              <div class="value" id="an-kpi-late">—</div>
+            </div>
+          </div>
+          <div class="kpi card" style="gap:14px">
+            <div class="icon att"><i class='bx bx-x-circle'></i></div>
+            <div>
+              <div class="title">Absent Sessions</div>
+              <div class="value" id="an-kpi-absent">—</div>
+            </div>
+          </div>
+          <div class="kpi card" style="gap:14px">
+            <div class="icon promo"><i class='bx bx-shield-check'></i></div>
+            <div>
+              <div class="title">Excused Sessions</div>
+              <div class="value" id="an-kpi-excused">—</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:20px">
+
+          <!-- Trend Chart -->
+          <div class="card" style="padding:14px">
+            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Attendance Trends Across Semesters</div>
+            <div style="position:relative;height:260px">
+              <canvas id="analyticsTrendChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Distribution Doughnut -->
+          <div class="card" style="padding:14px;display:flex;flex-direction:column;align-items:center">
+            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;align-self:flex-start">Status Distribution</div>
+            <div style="position:relative;height:190px;width:100%">
+              <canvas id="analyticsDistChart"></canvas>
+            </div>
+            <div id="analyticsDistLegend" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center"></div>
+          </div>
+
+        </div>
+
+        <!-- Faculty Breakdown Table -->
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Faculty Breakdown — Selected Semester</div>
+
+          <!-- Search + Pagination -->
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+            <input type="text" id="breakdownSearch" placeholder="Search by name, subject, or section…"
+              style="flex:1;min-width:200px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--text)">
+            <div class="hr-pagination-controls" style="margin:0">
+              <button id="breakdownPrev" class="hr-pagination-btn">‹</button>
+              <span id="breakdownPageInfo" style="font-size:12px;color:var(--muted)">0 records</span>
+              <button id="breakdownNext" class="hr-pagination-btn">›</button>
+            </div>
+          </div>
+
+          <div class="table">
+            <table class="hr-attendance-table" id="breakdownTable">
+              <thead>
+                <tr>
+                  <th style="cursor:pointer" data-sort-bd="faculty_name">Faculty <span class="bd-sort-icon">↕</span></th>
+                  <th style="cursor:pointer" data-sort-bd="subject_code">Subject <span class="bd-sort-icon">↕</span></th>
+                  <th style="cursor:pointer" data-sort-bd="section">Section <span class="bd-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-bd="present">Present <span class="bd-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-bd="late">Late <span class="bd-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-bd="absent">Absent <span class="bd-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-bd="excused">Excused <span class="bd-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-bd="total">Total <span class="bd-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-bd="rate">Rate <span class="bd-sort-icon">↕</span></th>
+                </tr>
+              </thead>
+              <tbody id="analyticsBreakdownBody">
+                <tr><td colspan="9" style="text-align:center;padding:2rem;color:#6b7280">Select a semester to view breakdown</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
       <!-- Reader Controls Container - Only visible on All Faculty Logs -->
       <div id="readerControlsContainer">
         <div class="rfid-controls">
@@ -224,14 +305,9 @@
       </div>
     </div>
 
-    <!-- Right: Status Breakdown + Excuse Container -->
+    <!-- Right: Excuse Container -->
     <div class="hr-attendance-sidebar">
-      <div class="chart-card card">
-        <div class="card-header"><i class='bx bx-pie-chart-alt'></i>Status Breakdown</div>
-        <canvas id="statusBreakdown" height="200"></canvas>
-      </div>
-      
-      <!-- New Excuse Absence Container -->
+      <!-- Excuse Absence Container -->
       <div class="chart-card card">
         <div class="card-header"><i class='bx bx-calendar-x'></i>Excuse Absence</div>
         <div class="excused-container">
@@ -293,6 +369,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 <script>
   let facultyForExcuse = [];
+  let analyticsLoaded  = false;
 
   async function fetchFacultyForExcuse() {
     try {
@@ -467,6 +544,15 @@
         rfidEditControlsContainer.style.display = 'none';
         campusEntryEditControlsContainer.style.display = 'block';
         renderCampusEntryLogs();
+      } else if (btn.dataset.tab === 'analytics') {
+        // Analytics - Hide all controls, lazy-load analytics
+        readerControlsContainer.style.display = 'none';
+        rfidEditControlsContainer.style.display = 'none';
+        campusEntryEditControlsContainer.style.display = 'none';
+        if (!analyticsLoaded) {
+          loadAnalyticsSemesters();
+          analyticsLoaded = true;
+        }
       }
     });
   });
@@ -510,6 +596,21 @@
     hours = hours % 12 || 12;
     
     return `${hours}:${minutes}:${seconds} ${period}`;
+  }
+
+  function formatTapTime(tapTime) {
+    // Input: "Sunday, 2026-02-22 10:30:45.1"
+    // Output: "Sunday February 22, 2026 10:30 PM"
+    const parts = tapTime.split(', ');
+    const datePart = parts.length > 1 ? parts.slice(1).join(', ') : tapTime;
+    const d = new Date(datePart.replace(' ', 'T'));
+    if (isNaN(d)) return tapTime;
+    const weekday = d.toLocaleString('en-US', { weekday: 'long' });
+    const month   = d.toLocaleString('en-US', { month: 'long' });
+    const day     = d.getDate();
+    const year    = d.getFullYear();
+    const time    = d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    return `${weekday} ${month} ${day}, ${year} ${time}`;
   }
 
   function showRFIDNotification(data) {
@@ -559,8 +660,6 @@
     
     notification.classList.add(colorClass);
     
-    const formattedTime = convertTo12HourWithSeconds(data.tap_time);
-    
     let content = `
         <div class="notification-header">
             <i class='bx ${icon}'></i>
@@ -570,7 +669,7 @@
             </button>
         </div>
         <div class="notification-body">
-            <div class="notification-time">${formattedTime}</div>
+            <div class="notification-time">${formatTapTime(data.tap_time)}</div>
     `;
     
     if (data.person_name) {
@@ -634,6 +733,68 @@
     }, 10000);
   }
 
+  function showBiometricNotification(data) {
+    if (!data || !data.tap_time) return;
+
+    const container = document.getElementById('notificationContainer');
+    const notification = document.createElement('div');
+    notification.className = 'rfid-notification';
+
+    let icon = 'bx-fingerprint';
+    let colorClass = 'info';
+    let title = 'Biometric Scanned';
+
+    if (data.action === 'entry') {
+        icon = 'bx-log-in-circle';
+        colorClass = 'success';
+        title = 'Entry Recorded';
+    } else if (data.action === 'exit') {
+        icon = 'bx-log-out-circle';
+        colorClass = 'success';
+        title = 'Exit Recorded';
+    } else if (data.action === 'buffer_period') {
+        icon = 'bx-time';
+        colorClass = 'info';
+        title = 'Already Scanned';
+    } else if (data.action === 'unknown_biometric') {
+        icon = 'bx-error-circle';
+        colorClass = 'error';
+        title = 'Unknown Fingerprint';
+    }
+
+    notification.classList.add(colorClass);
+
+    let content = `
+        <div class="notification-header">
+            <i class='bx ${icon}'></i>
+            <strong>${title}</strong>
+            <button class="notification-close" onclick="this.parentElement.parentElement.remove()">
+                <i class='bx bx-x'></i>
+            </button>
+        </div>
+        <div class="notification-body">
+            <div class="notification-time">${formatTapTime(data.tap_time)}</div>
+    `;
+
+    if (data.person_name) {
+        content += `<div class="notification-class"><strong>${data.person_name}</strong></div>`;
+    }
+
+    content += `<div class="notification-message">${data.message}</div></div>`;
+
+    notification.innerHTML = content;
+    container.appendChild(notification);
+
+    setTimeout(() => { notification.classList.add('show'); }, 10);
+
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.classList.remove('show');
+            setTimeout(() => { if (notification.parentElement) notification.remove(); }, 300);
+        }
+    }, 10000);
+  }
+
   let facultyLogs = [];
   let facultyList = [];
   let currentPage = 1;
@@ -642,45 +803,23 @@
   let statusBreakdown = { present: 0, late: 0, absent: 0 };
   let currentPageClasses = 1;
   let filteredFaculty = [];
-  let notificationEventSource = null;
-
   function startNotificationListener() {
-    if (notificationEventSource) {
-      notificationEventSource.close();
-    }
-    
-    notificationEventSource = new EventSource('/api/hr/rfid-notifications');
-    
-    notificationEventSource.onmessage = function(event) {
-      try {
-        const data = JSON.parse(event.data);
+    // SSE is handled by the base template (NotifSystem).
+    // This page only listens for the dispatched custom event.
+    window.addEventListener('spcheck-notification', function(e) {
+      const data = e.detail;
+      if (!data || !data.tap_time) return;
 
-        if (data.connected === true) {
-          console.log('SSE connection established for HR notifications');
-          return;
-        }
-        
-        console.log('HR Received RFID notification:', data);
-        
-        if (data.tap_time) {
-          showRFIDNotification(data);
-          
-          setTimeout(() => {
-            fetchFacultyAttendance();
-            fetchRFIDLogs();
-          }, 500);
-        }
-      } catch (error) {
-        console.error('Error parsing HR notification:', error);
+      if (data.notification_type === 'biometric') {
+        showBiometricNotification(data);
+      } else {
+        showRFIDNotification(data);
+        setTimeout(() => {
+          fetchFacultyAttendance();
+          fetchRFIDLogs();
+        }, 500);
       }
-    };
-    
-    notificationEventSource.onerror = function(error) {
-      console.error('HR Notification stream error:', error);
-      setTimeout(() => {
-        startNotificationListener();
-      }, 5000);
-    };
+    });
   }
 
   function sortAttendanceByClassTime(attendanceLogs) {
@@ -746,32 +885,25 @@
   }
 
   function clearDisplays() {
-    // KPI elements are commented out, but function remains for compatibility
-    /*
     document.getElementById('kpi-att').textContent = '0';
     document.getElementById('kpi-fac').textContent = '0';
     document.getElementById('kpi-eval').textContent = '0';
     document.getElementById('kpi-promo').textContent = '0';
-    */
-    
+
     document.getElementById('logsBody').innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #6b7280;">No attendance data available</td></tr>';
-    
+
     if (window.breakdownChart) {
       window.breakdownChart.destroy();
     }
-    
+
     updatePaginationControls(1, 1, 0);
   }
 
   function updateKPICards(kpis) {
-    // KPI elements are commented out, but function remains for compatibility
-    // This function will still be called but won't update anything
-    /*
     document.getElementById('kpi-att').textContent = kpis.total_faculty || 0;
     document.getElementById('kpi-fac').textContent = kpis.present_today || 0;
     document.getElementById('kpi-eval').textContent = kpis.late_today || 0;
     document.getElementById('kpi-promo').textContent = kpis.absent_today || 0;
-    */
   }
 
   function renderLogs() {
@@ -2044,9 +2176,312 @@
 
   window.addEventListener('beforeunload', () => {
     stopAutoRefresh();
-    if (notificationEventSource) {
-      notificationEventSource.close();
-    }
   });
+
+  // ============================================================
+  // ATTENDANCE ANALYTICS
+  // ============================================================
+
+  let analyticsTrendChart = null;
+  let analyticsDistChart  = null;
+
+  async function loadAnalyticsSemesters() {
+    try {
+      const resp = await fetch('/api/faculty/semesters');
+      const data = await resp.json();
+      if (!data.success) return;
+
+      const sel = document.getElementById('analyticsSemesterSelect');
+      sel.innerHTML = '';
+
+      const semesters = data.semesters || [];
+      semesters.forEach(function (sem) {
+        const opt = document.createElement('option');
+        opt.value = sem.id;
+        opt.textContent = sem.text;
+        if (sem.is_current) opt.selected = true;
+        sel.appendChild(opt);
+      });
+
+      // If nothing pre-selected (no current semester), pick first
+      if (!sel.value && semesters.length > 0) {
+        sel.value = semesters[0].id;
+      }
+
+      fetchAnalytics(sel.value);
+
+      sel.addEventListener('change', function () {
+        fetchAnalytics(this.value);
+      });
+    } catch (e) {
+      console.error('Error loading analytics semesters:', e);
+    }
+  }
+
+  async function fetchAnalytics(semesterId) {
+    try {
+      const url = semesterId
+        ? '/api/hr/attendance-analytics?semester_id=' + semesterId
+        : '/api/hr/attendance-analytics';
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (!data.success) return;
+
+      updateAnalyticsKPIs(data.analytics_kpis);
+      renderTrendChart(data.trends);
+      renderDistributionChart(data.distribution);
+      renderFacultyBreakdown(data.faculty_breakdown);
+    } catch (e) {
+      console.error('Error fetching analytics:', e);
+    }
+  }
+
+  function updateAnalyticsKPIs(kpis) {
+    document.getElementById('an-kpi-rate').textContent    = kpis.avg_rate    ? kpis.avg_rate.toFixed(1) + '%' : '—';
+    document.getElementById('an-kpi-present').textContent = kpis.total_present ?? '—';
+    document.getElementById('an-kpi-late').textContent    = kpis.total_late    ?? '—';
+    document.getElementById('an-kpi-absent').textContent  = kpis.total_absent  ?? '—';
+    document.getElementById('an-kpi-excused').textContent = kpis.total_excused ?? '—';
+  }
+
+  function renderTrendChart(trends) {
+    const ctx = document.getElementById('analyticsTrendChart').getContext('2d');
+    if (analyticsTrendChart) { analyticsTrendChart.destroy(); analyticsTrendChart = null; }
+    if (!trends || trends.length === 0) return;
+
+    analyticsTrendChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: trends.map(t => t.label),
+        datasets: [
+          {
+            label: 'Avg. Rate (%)',
+            data: trends.map(t => t.avg_rate),
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59,130,246,0.08)',
+            fill: true,
+            tension: 0.4,
+            yAxisID: 'yRate',
+            pointRadius: 4,
+            pointHoverRadius: 6
+          },
+          {
+            label: 'Late Sessions',
+            data: trends.map(t => t.total_late),
+            borderColor: '#f59e0b',
+            backgroundColor: 'transparent',
+            tension: 0.4,
+            yAxisID: 'yCounts',
+            pointRadius: 3,
+            borderDash: [5, 3]
+          },
+          {
+            label: 'Absent Sessions',
+            data: trends.map(t => t.total_absent),
+            borderColor: '#ef4444',
+            backgroundColor: 'transparent',
+            tension: 0.4,
+            yAxisID: 'yCounts',
+            pointRadius: 3,
+            borderDash: [5, 3]
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } }
+        },
+        scales: {
+          yRate: {
+            type: 'linear',
+            position: 'left',
+            min: 0,
+            max: 100,
+            title: { display: true, text: 'Rate (%)', font: { size: 11 } },
+            ticks: { font: { size: 11 }, callback: v => v + '%' }
+          },
+          yCounts: {
+            type: 'linear',
+            position: 'right',
+            min: 0,
+            title: { display: true, text: 'Sessions', font: { size: 11 } },
+            ticks: { font: { size: 11 } },
+            grid: { drawOnChartArea: false }
+          },
+          x: {
+            ticks: { font: { size: 11 }, maxRotation: 30 }
+          }
+        }
+      }
+    });
+  }
+
+  function renderDistributionChart(dist) {
+    const ctx = document.getElementById('analyticsDistChart').getContext('2d');
+    if (analyticsDistChart) { analyticsDistChart.destroy(); analyticsDistChart = null; }
+
+    const colors = ['#16a34a', '#f59e0b', '#ef4444', '#6b7280'];
+    const labels = ['Present', 'Late', 'Absent', 'Excused'];
+    const values = [dist.present || 0, dist.late || 0, dist.absent || 0, dist.excused || 0];
+
+    analyticsDistChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: values,
+          backgroundColor: colors,
+          borderWidth: 2,
+          borderColor: '#fff'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        cutout: '68%'
+      }
+    });
+
+    // Custom legend with counts + percentages
+    const legendEl = document.getElementById('analyticsDistLegend');
+    const total = values.reduce((a, b) => a + b, 0);
+    legendEl.innerHTML = labels.map(function (lbl, i) {
+      const pct = total > 0 ? ((values[i] / total) * 100).toFixed(1) : '0.0';
+      return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text)">' +
+        '<span style="width:10px;height:10px;border-radius:50%;background:' + colors[i] + ';flex-shrink:0"></span>' +
+        lbl + ': <strong>' + values[i] + '</strong> (' + pct + '%)' +
+      '</span>';
+    }).join('');
+  }
+
+  // ---- Faculty Breakdown state ----
+  let bdAllData    = [];
+  let bdFiltered   = [];
+  let bdPage       = 1;
+  const bdPerPage  = 10;
+  let bdSort       = { column: 'rate', direction: 'asc' };
+
+  function renderFacultyBreakdown(breakdown) {
+    bdAllData  = breakdown || [];
+    bdPage     = 1;
+    bdSort     = { column: 'rate', direction: 'asc' };
+    document.getElementById('breakdownSearch').value = '';
+    applyBreakdownFilters();
+    updateBdSortIcons();
+  }
+
+  function applyBreakdownFilters() {
+    const q = document.getElementById('breakdownSearch').value.toLowerCase();
+    bdFiltered = bdAllData.filter(function (f) {
+      return !q ||
+        f.faculty_name.toLowerCase().includes(q) ||
+        f.subject_code.toLowerCase().includes(q) ||
+        f.subject_name.toLowerCase().includes(q) ||
+        f.section.toLowerCase().includes(q);
+    });
+
+    // Sort
+    bdFiltered = bdFiltered.slice().sort(function (a, b) {
+      let av = a[bdSort.column];
+      let bv = b[bdSort.column];
+      if (typeof av === 'string') av = av.toLowerCase();
+      if (typeof bv === 'string') bv = bv.toLowerCase();
+      if (av < bv) return bdSort.direction === 'asc' ? -1 : 1;
+      if (av > bv) return bdSort.direction === 'asc' ?  1 : -1;
+      return 0;
+    });
+
+    renderBdPage();
+  }
+
+  function renderBdPage() {
+    const tbody = document.getElementById('analyticsBreakdownBody');
+    const total = bdFiltered.length;
+    const totalPages = Math.max(1, Math.ceil(total / bdPerPage));
+    if (bdPage > totalPages) bdPage = totalPages;
+
+    const start = (bdPage - 1) * bdPerPage;
+    const slice = bdFiltered.slice(start, start + bdPerPage);
+
+    if (slice.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:2rem;color:#6b7280">' +
+        (bdAllData.length === 0 ? 'No data for this semester' : 'No records match your search') +
+        '</td></tr>';
+    } else {
+      tbody.innerHTML = slice.map(function (f) {
+        const rate     = f.rate;
+        const rateColor = rate >= 80 ? '#16a34a' : rate >= 60 ? '#92400e' : '#b91c1c';
+        const rateBg    = rate >= 80 ? '#d1fae5' : rate >= 60 ? '#fef3c7' : '#fee2e2';
+        return '<tr>' +
+          '<td>' + f.faculty_name + '</td>' +
+          '<td>' + f.subject_code + ' — ' + f.subject_name + '</td>' +
+          '<td>' + f.section + '</td>' +
+          '<td style="text-align:center">' + f.present + '</td>' +
+          '<td style="text-align:center">' + f.late + '</td>' +
+          '<td style="text-align:center">' + f.absent + '</td>' +
+          '<td style="text-align:center">' + f.excused + '</td>' +
+          '<td style="text-align:center">' + f.total + '</td>' +
+          '<td style="text-align:center">' +
+            '<span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;background:' +
+            rateBg + ';color:' + rateColor + '">' + rate.toFixed(1) + '%</span>' +
+          '</td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    // Pagination info + button state
+    const from = total === 0 ? 0 : start + 1;
+    const to   = Math.min(start + bdPerPage, total);
+    document.getElementById('breakdownPageInfo').textContent =
+      total === 0 ? '0 records' : from + '–' + to + ' of ' + total;
+    document.getElementById('breakdownPrev').disabled = bdPage <= 1;
+    document.getElementById('breakdownNext').disabled = bdPage >= totalPages;
+  }
+
+  function updateBdSortIcons() {
+    document.querySelectorAll('#breakdownTable th[data-sort-bd]').forEach(function (th) {
+      const icon = th.querySelector('.bd-sort-icon');
+      const col  = th.getAttribute('data-sort-bd');
+      if (col === bdSort.column) {
+        icon.textContent = bdSort.direction === 'asc' ? '↑' : '↓';
+      } else {
+        icon.textContent = '↕';
+      }
+    });
+  }
+
+  // Wire up breakdown controls once DOM is ready
+  document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('breakdownSearch').addEventListener('input', function () {
+      bdPage = 1;
+      applyBreakdownFilters();
+    });
+    document.getElementById('breakdownPrev').addEventListener('click', function () {
+      if (bdPage > 1) { bdPage--; renderBdPage(); }
+    });
+    document.getElementById('breakdownNext').addEventListener('click', function () {
+      const totalPages = Math.ceil(bdFiltered.length / bdPerPage);
+      if (bdPage < totalPages) { bdPage++; renderBdPage(); }
+    });
+    document.querySelectorAll('#breakdownTable th[data-sort-bd]').forEach(function (th) {
+      th.addEventListener('click', function () {
+        const col = th.getAttribute('data-sort-bd');
+        if (bdSort.column === col) {
+          bdSort.direction = bdSort.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+          bdSort.column    = col;
+          bdSort.direction = 'asc';
+        }
+        bdPage = 1;
+        applyBreakdownFilters();
+        updateBdSortIcons();
+      });
+    });
+  });
+
 </script>
 {% endblock %}

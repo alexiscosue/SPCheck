@@ -7,6 +7,7 @@ import pg8000
 from pg8000 import dbapi
 from rfid_reader import RFIDReader
 from biometric_reader import BiometricReader
+from shared_serial import SharedSerialPort
 from datetime import timedelta, datetime
 from flask import Response
 import json
@@ -245,8 +246,9 @@ class ConnectionPool:
                 self.current_connections -= 1
 
 db_pool = ConnectionPool(min_connections=3, max_connections=15)
-rfid_reader = RFIDReader(db_pool)
-biometric_reader = BiometricReader(db_pool)
+shared_serial = SharedSerialPort()
+rfid_reader = RFIDReader(db_pool, shared_serial)
+biometric_reader = BiometricReader(db_pool, shared_serial)
 
 absence_checker_thread = None
 absence_checker_running = False
@@ -1156,7 +1158,7 @@ def api_biometric_start():
                 started_by=started_by
             )
 
-            print(f"✅ Biometric Reader started by: {started_by}")
+            print(f"✅ Biometrics Reader started by: {started_by}")
 
         return result
 
@@ -1267,7 +1269,7 @@ notification_queues = {}
 notification_lock = threading.Lock()
 
 def broadcast_notification(personnel_id, notification_data):
-    """Broadcast notification to specific personnel AND to HR"""
+    """Broadcast notification to specific personnel, HR, and VP/Pres"""
     with notification_lock:
         if personnel_id and personnel_id > 0 and personnel_id in notification_queues:
             for q in notification_queues[personnel_id]:
@@ -1275,7 +1277,7 @@ def broadcast_notification(personnel_id, notification_data):
                     q.put(notification_data)
                 except Exception as e:
                     print(f"Error putting notification in queue: {e}")
-        
+
         hr_key = 'hr_all_notifications'
         if hr_key in notification_queues:
             for q in notification_queues[hr_key]:
@@ -1285,6 +1287,15 @@ def broadcast_notification(personnel_id, notification_data):
                 except Exception as e:
                     print(f"Error putting notification in HR queue: {e}")
 
+        vp_key = 'vp_all_notifications'
+        if vp_key in notification_queues:
+            for q in notification_queues[vp_key]:
+                try:
+                    q.put(notification_data)
+                    print(f"✓ Sent notification to VP: {notification_data.get('action', 'unknown')}")
+                except Exception as e:
+                    print(f"Error putting notification in VP queue: {e}")
+
 def handle_rfid_notification(notification_data):
     """Handle RFID notifications from the reader"""
     personnel_id = notification_data.get('personnel_id')
@@ -1292,6 +1303,14 @@ def handle_rfid_notification(notification_data):
         broadcast_notification(personnel_id, notification_data)
 
 rfid_reader.add_notification_callback(handle_rfid_notification)
+
+def handle_biometric_notification(notification_data):
+    """Handle biometric notifications from the reader"""
+    notification_data['notification_type'] = 'biometric'
+    personnel_id = notification_data.get('personnel_id')  # None for unknown fingerprints
+    broadcast_notification(personnel_id, notification_data)
+
+biometric_reader.add_notification_callback(handle_biometric_notification)
 
 @app.route('/api/faculty/current-personnel')
 @require_auth([20001, 20002, 20003, 20004])
@@ -1409,6 +1428,56 @@ def api_hr_rfid_notifications_stream():
                     except Exception as e:
                         print(f"Error cleaning up HR SSE queue: {e}")
     
+    return Response(
+        event_stream(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive'
+        }
+    )
+
+@app.route('/api/vp/notifications')
+@require_auth([20004])
+def api_vp_notifications_stream():
+    """Server-Sent Events endpoint for VP/Pres to receive ALL notifications"""
+
+    def event_stream():
+        q = queue.Queue()
+        vp_key = 'vp_all_notifications'
+
+        with notification_lock:
+            if vp_key not in notification_queues:
+                notification_queues[vp_key] = []
+            notification_queues[vp_key].append(q)
+
+        print(f"VP SSE connection established - will receive all notifications")
+
+        try:
+            yield f"data: {json.dumps({'connected': True})}\n\n"
+
+            while True:
+                try:
+                    notification = q.get(timeout=30)
+                    if notification:
+                        print(f"VP Sending notification: {notification}")
+                        yield f"data: {json.dumps(notification)}\n\n"
+                except queue.Empty:
+                    yield ": keepalive\n\n"
+        except GeneratorExit:
+            print(f"VP SSE connection closed")
+        finally:
+            with notification_lock:
+                if vp_key in notification_queues:
+                    try:
+                        notification_queues[vp_key].remove(q)
+                        if not notification_queues[vp_key]:
+                            del notification_queues[vp_key]
+                        print(f"Cleaned up VP SSE queue")
+                    except Exception as e:
+                        print(f"Error cleaning up VP SSE queue: {e}")
+
     return Response(
         event_stream(),
         mimetype='text/event-stream',
@@ -3414,6 +3483,153 @@ def api_hr_faculty_attendance():
         import traceback
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
+
+@app.route('/api/hr/attendance-analytics')
+@require_auth([20003])
+def api_hr_attendance_analytics():
+    """Attendance analytics: trends across all semesters + distribution/breakdown for selected semester"""
+    try:
+        semester_id = request.args.get('semester_id')
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        # --- Trends: one row per week (all history) ---
+        cursor.execute("""
+            SELECT
+                DATE_TRUNC('week', a.timein AT TIME ZONE 'Asia/Manila') AS week,
+                COUNT(*) FILTER (WHERE a.attendancestatus = 'Present')  AS total_present,
+                COUNT(*) FILTER (WHERE a.attendancestatus = 'Late')     AS total_late,
+                COUNT(*) FILTER (WHERE a.attendancestatus = 'Absent')   AS total_absent,
+                COUNT(*) FILTER (WHERE a.attendancestatus = 'Excused')  AS total_excused,
+                COUNT(*)                                                 AS total
+            FROM attendance a
+            JOIN personnel p ON a.personnel_id = p.personnel_id
+            WHERE p.role_id IN (20001, 20002)
+              AND a.timein IS NOT NULL
+            GROUP BY DATE_TRUNC('week', a.timein AT TIME ZONE 'Asia/Manila')
+            ORDER BY week ASC
+        """)
+
+        trend_rows = cursor.fetchall()
+        trends = []
+        for row in trend_rows:
+            (week, tot_p, tot_l, tot_a, tot_e, total) = row
+            tot_p = int(tot_p); tot_l = int(tot_l)
+            tot_a = int(tot_a); tot_e = int(tot_e); total = int(total)
+            avg_r = round(((tot_p + tot_e + tot_l * 0.75) / total) * 100, 2) if total > 0 else 0.0
+            label = week.strftime('W%W %b %Y') if week else ''
+            trends.append({
+                'label': label,
+                'total_present': tot_p,
+                'total_late': tot_l,
+                'total_absent': tot_a,
+                'total_excused': tot_e,
+                'avg_rate': avg_r
+            })
+
+        # --- Resolve selected semester (fallback: current, then latest) ---
+        if not semester_id:
+            cursor.execute("""
+                SELECT acadcalendar_id FROM acadcalendar
+                WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                ORDER BY semesterstart DESC LIMIT 1
+            """)
+            result = cursor.fetchone()
+            if result:
+                semester_id = result[0]
+            elif trends:
+                semester_id = trends[-1]['semester_id']
+
+        distribution = {'present': 0, 'late': 0, 'absent': 0, 'excused': 0}
+        analytics_kpis = {
+            'avg_rate': 0.0, 'total_present': 0, 'total_late': 0,
+            'total_absent': 0, 'total_excused': 0, 'faculty_count': 0
+        }
+        faculty_breakdown = []
+
+        if semester_id:
+            # Distribution totals for selected semester
+            cursor.execute("""
+                SELECT
+                    COALESCE(SUM(ar.presentcount), 0),
+                    COALESCE(SUM(ar.latecount), 0),
+                    COALESCE(SUM(ar.absentcount), 0),
+                    COALESCE(SUM(ar.excusedcount), 0),
+                    COUNT(DISTINCT ar.personnel_id),
+                    CASE
+                        WHEN COUNT(ar.attendancereport_id) > 0
+                        THEN ROUND(AVG(ar.attendancerate)::numeric, 2)
+                        ELSE 0
+                    END
+                FROM attendancereport ar
+                JOIN personnel p ON ar.personnel_id = p.personnel_id
+                WHERE ar.acadcalendar_id = %s
+                  AND p.role_id IN (20001, 20002)
+            """, (semester_id,))
+            dist_row = cursor.fetchone()
+            if dist_row:
+                (tot_p, tot_l, tot_a, tot_e, fac_cnt, avg_r) = dist_row
+                distribution = {
+                    'present': int(tot_p), 'late': int(tot_l),
+                    'absent': int(tot_a), 'excused': int(tot_e)
+                }
+                analytics_kpis = {
+                    'avg_rate': float(avg_r),
+                    'total_present': int(tot_p), 'total_late': int(tot_l),
+                    'total_absent': int(tot_a), 'total_excused': int(tot_e),
+                    'faculty_count': int(fac_cnt)
+                }
+
+            # Per-faculty breakdown sorted by attendance rate ascending
+            cursor.execute("""
+                SELECT
+                    p.firstname, p.lastname, p.honorifics,
+                    sub.subjectcode, sub.subjectname,
+                    sch.classsection,
+                    ar.presentcount, ar.latecount, ar.absentcount,
+                    ar.excusedcount, ar.totalclasses, ar.attendancerate
+                FROM attendancereport ar
+                JOIN personnel p  ON ar.personnel_id = p.personnel_id
+                JOIN schedule sch ON ar.class_id     = sch.class_id
+                JOIN subjects sub ON sch.subject_id  = sub.subject_id
+                WHERE ar.acadcalendar_id = %s
+                  AND p.role_id IN (20001, 20002)
+                ORDER BY ar.attendancerate ASC, p.lastname, p.firstname
+            """, (semester_id,))
+            for row in cursor.fetchall():
+                (fn, ln, hon, scode, sname, section, pres, late, absent, excused, total, rate) = row
+                name = f"{fn} {ln}, {hon}" if hon else f"{fn} {ln}"
+                faculty_breakdown.append({
+                    'faculty_name': name,
+                    'subject_code': scode,
+                    'subject_name': sname,
+                    'section': section or '—',
+                    'present': int(pres),
+                    'late': int(late),
+                    'absent': int(absent),
+                    'excused': int(excused),
+                    'total': int(total),
+                    'rate': round(float(rate), 2)
+                })
+
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        return jsonify({
+            'success': True,
+            'trends': trends,
+            'distribution': distribution,
+            'analytics_kpis': analytics_kpis,
+            'faculty_breakdown': faculty_breakdown,
+            'selected_semester_id': int(semester_id) if semester_id else None
+        })
+
+    except Exception as e:
+        print(f"Error fetching attendance analytics: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/hr/update-attendance-time', methods=['POST'])
 @require_auth([20003])

@@ -167,6 +167,21 @@
     return `${hours}:${minutes} ${period}`;
   }
 
+  function formatTapTime(tapTime) {
+    // Input: "Sunday, 2026-02-22 10:30:45.1"
+    // Output: "Sunday February 22, 2026 10:30 PM"
+    const parts = tapTime.split(', ');
+    const datePart = parts.length > 1 ? parts.slice(1).join(', ') : tapTime;
+    const d = new Date(datePart.replace(' ', 'T'));
+    if (isNaN(d)) return tapTime;
+    const weekday = d.toLocaleString('en-US', { weekday: 'long' });
+    const month   = d.toLocaleString('en-US', { month: 'long' });
+    const day     = d.getDate();
+    const year    = d.getFullYear();
+    const time    = d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    return `${weekday} ${month} ${day}, ${year} ${time}`;
+  }
+
   function showRFIDNotification(data) {
     if (!data || !data.personnel_id || !data.tap_time) {
         console.error('Invalid notification data:', data);
@@ -214,7 +229,7 @@
             </button>
         </div>
         <div class="notification-body">
-            <div class="notification-time">${data.tap_time}</div>
+            <div class="notification-time">${formatTapTime(data.tap_time)}</div>
     `;
     
     if (data.subject_code && data.subject_name) {
@@ -256,6 +271,61 @@
     }, 10);
 }
 
+  function showBiometricNotification(data) {
+    if (!data || !data.tap_time) return;
+
+    const container = document.getElementById('notificationContainer');
+    const notification = document.createElement('div');
+    notification.className = 'rfid-notification';
+
+    let icon = 'bx-fingerprint';
+    let colorClass = 'info';
+    let title = 'Biometric Scanned';
+
+    if (data.action === 'entry') {
+        icon = 'bx-log-in-circle';
+        colorClass = 'success';
+        title = 'Entry Recorded';
+    } else if (data.action === 'exit') {
+        icon = 'bx-log-out-circle';
+        colorClass = 'success';
+        title = 'Exit Recorded';
+    } else if (data.action === 'buffer_period') {
+        icon = 'bx-time';
+        colorClass = 'info';
+        title = 'Already Scanned';
+    } else if (data.action === 'unknown_biometric') {
+        icon = 'bx-error-circle';
+        colorClass = 'error';
+        title = 'Unknown Fingerprint';
+    }
+
+    notification.classList.add(colorClass);
+
+    let content = `
+        <div class="notification-header">
+            <i class='bx ${icon}'></i>
+            <strong>${title}</strong>
+            <button class="notification-close" onclick="this.parentElement.parentElement.remove()">
+                <i class='bx bx-x'></i>
+            </button>
+        </div>
+        <div class="notification-body">
+            <div class="notification-time">${formatTapTime(data.tap_time)}</div>
+    `;
+
+    if (data.person_name) {
+        content += `<div class="notification-class"><strong>${data.person_name}</strong></div>`;
+    }
+
+    content += `<div class="notification-message">${data.message}</div></div>`;
+
+    notification.innerHTML = content;
+    container.appendChild(notification);
+
+    setTimeout(() => { notification.classList.add('show'); }, 10);
+  }
+
   let logs = [];
   let classAttendance = [];
   let statusBreakdown = { present: 0, late: 0, absent: 0 };
@@ -265,8 +335,6 @@
   let availableSemesters = [];
   let currentSemesterId = null;
   let currentPersonnelId = null;
-  let notificationEventSource = null;
-
   async function fetchSemesters() {
     try {
       const response = await fetch('/api/faculty/semesters');
@@ -332,47 +400,25 @@
   }
 
   function startNotificationListener() {
-    if (!currentPersonnelId) return;
-    
-    if (notificationEventSource) {
-      notificationEventSource.close();
-    }
-    
-    notificationEventSource = new EventSource(`/api/rfid/notifications/${currentPersonnelId}`);
-    
-    notificationEventSource.onmessage = function(event) {
-      try {
-        const data = JSON.parse(event.data);
-        
-        if (data.connected || !data.personnel_id) {
-          console.log('SSE connection established');
-          return;
-        }
-        
-        console.log('Received RFID notification:', data);
-        
-        if (data.personnel_id && data.tap_time) {
+    // SSE is handled by the base template (NotifSystem).
+    // This page only listens for the dispatched custom event.
+    window.addEventListener('spcheck-notification', function(e) {
+      const data = e.detail;
+      if (!data || !data.tap_time) return;
+
+      if (data.notification_type === 'biometric') {
+        showBiometricNotification(data);
+      } else {
+        if (data.personnel_id && data.personnel_id === currentPersonnelId) {
           showRFIDNotification(data);
-          
           setTimeout(() => {
             if (currentSemesterId) {
               fetchAttendanceData(currentSemesterId);
             }
           }, 500);
         }
-      } catch (error) {
-        console.error('Error parsing notification:', error);
       }
-    };
-    
-    notificationEventSource.onerror = function(error) {
-      console.error('Notification stream error:', error);
-      setTimeout(() => {
-        if (currentPersonnelId) {
-          startNotificationListener();
-        }
-      }, 5000);
-    };
+    });
   }
 
   async function fetchAttendanceData(semesterId) {
@@ -658,10 +704,5 @@
     fetchPersonnelId();
   });
 
-  window.addEventListener('beforeunload', () => {
-    if (notificationEventSource) {
-      notificationEventSource.close();
-    }
-  });
 </script>
 {% endblock %}

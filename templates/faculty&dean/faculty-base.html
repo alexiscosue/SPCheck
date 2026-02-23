@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='img/logo.png') }}">
   
+  <script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
   {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -58,13 +59,10 @@
       <button class="toggle" id="btnToggle"><i class='bx bx-menu'></i></button>
       <h2 style="margin-left:10px">{% block page_title %}Faculty Portal{% endblock %}</h2>
       <div class="actions" style="margin-left:auto">
-        <!-- Notification commented out for future use -->
-        <!--
-        <div class="notif" title="Notifications" aria-live="polite">
-          <i class='bx bx-bell' style="font-size:20px;color:var(--muted)"></i>
-          <div class="badge" id="notifBadge">6</div>
-        </div>
-        -->
+        <button class="notif-bell-btn" id="notifBellBtn" title="Notifications" aria-label="Notifications">
+          <i class='bx bx-bell'></i>
+          <span class="notif-badge" id="notifBadge"></span>
+        </button>
 
         <div class="profile" title="Faculty profile">
           {% if profile_image_base64 and profile_image_base64 != '' %}
@@ -83,22 +81,44 @@
     {% block content %}{% endblock %}
   </div>
 
+  <!-- Notification Panel -->
+  <div class="notif-overlay" id="notifOverlay"></div>
+  <div class="notif-panel" id="notifPanel">
+    <div class="notif-panel-header">
+      <div class="notif-panel-title">
+        <i class='bx bx-bell'></i> Notifications
+      </div>
+      <div class="notif-panel-top-actions">
+        <button class="notif-text-btn" id="notifMarkAllBtn">Mark all read</button>
+        <button class="notif-text-btn" id="notifClearBtn">Clear all</button>
+        <button class="notif-close-btn" id="notifCloseBtn"><i class='bx bx-x'></i></button>
+      </div>
+    </div>
+    <div class="notif-filters">
+      <button class="notif-filter-btn active" data-filter="all">All</button>
+      <button class="notif-filter-btn" data-filter="rfid">RFID</button>
+      <button class="notif-filter-btn" data-filter="biometric">Biometric</button>
+    </div>
+    <div class="notif-list" id="notifList"></div>
+    <div class="notif-panel-footer">Up to 100 notifications stored locally</div>
+  </div>
+
   <!-- Base JavaScript -->
   <script>
     const sidebar = document.getElementById('sidebar');
     const btnToggle = document.getElementById('btnToggle');
-    
+
     // Load sidebar state from localStorage on page load
     document.addEventListener('DOMContentLoaded', function() {
       // Disable transitions temporarily
       sidebar.style.transition = 'none';
-      
+
       const savedSidebarState = localStorage.getItem('sidebarCollapsed');
-      
+
       if (savedSidebarState === 'true') {
         sidebar.classList.add('collapsed');
       }
-      
+
       // Re-enable transitions after a brief delay
       setTimeout(() => {
         sidebar.style.transition = '';
@@ -108,11 +128,11 @@
         .then(response => response.json())
         .then(data => {
           if (data.success && data.personnel_id) {
+            // Load profile image
             fetch(`/api/profile/image-base64/${data.personnel_id}`)
               .then(response => response.json())
               .then(profileData => {
                 if (profileData.success && profileData.image) {
-                  // Update the profile image in the top bar
                   const profileImg = document.querySelector('.profile img');
                   if (profileImg) {
                     profileImg.src = profileData.image;
@@ -120,6 +140,12 @@
                 }
               })
               .catch(error => console.error('Error loading profile image:', error));
+
+            // Init notification system
+            NotifSystem.init({
+              storageKey: 'spcheck_notifs_' + data.personnel_id,
+              sseUrl: '/api/rfid/notifications/' + data.personnel_id
+            });
           }
         })
         .catch(error => console.error('Error fetching personnel ID:', error));
