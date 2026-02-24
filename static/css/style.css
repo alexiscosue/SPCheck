@@ -2199,17 +2199,12 @@ to { opacity: 1; }
 }
 
 .attendance-layout {
-  display: grid;
-  grid-template-columns: 1fr 280px;
-  gap: 18px;
+  display: block;
+  width: 100%;
 }
 
 .attendance-main {
-  min-width: 0; 
-}
-
-.attendance-sidebar {
-  width: 280px;
+  width: 100%;
 }
 
 .attendance-table th {
@@ -2218,16 +2213,6 @@ to { opacity: 1; }
 
 .attendance-table td {
   text-align: center;
-}
-
-@media (max-width: 1100px) {
-  .attendance-layout {
-    grid-template-columns: 1fr;
-  }
-  
-  .attendance-sidebar {
-    width: 100%;
-  }
 }
 
 /* Timetable Styles - 15-Minute Grid System */
@@ -2500,19 +2485,13 @@ to { opacity: 1; }
 
 /* HR Attendance Layout - Similar to Faculty Attendance */
 .hr-attendance-layout {
-  display: grid;
-  grid-template-columns: 1fr 350px;
-  gap: 18px;
-  align-items: start;
+  display: block;
+  width: 100%;
 }
 
 .hr-attendance-main {
-  min-width: 0;
+  width: 100%;
   height: fit-content;
-}
-
-.hr-attendance-sidebar {
-  width: 350px;
 }
 
 .hr-attendance-table th {
@@ -2550,15 +2529,6 @@ to { opacity: 1; }
   cursor: not-allowed;
 }
 
-@media (max-width: 1100px) {
-  .hr-attendance-layout {
-    grid-template-columns: 1fr;
-  }
-  
-  .hr-attendance-sidebar {
-    width: 100%;
-  }
-}
 
 /* HR Timetable Styles - 15-Minute Grid System */
 .hr-timetable-container {
@@ -4112,12 +4082,6 @@ table:has(#campusEntryBody) thead th:nth-child(4) {
 /* REMOVED: .excused-loading styles */
 /* REMOVED: @keyframes spin */
 
-/* Ensure sidebar layout works properly */
-.hr-attendance-sidebar {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-}
 
 .chart-card {
     background: white;

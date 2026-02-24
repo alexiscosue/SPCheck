@@ -149,7 +149,7 @@ class BiometricReader:
                 return
 
             biometric_id, personnel_id, firstname, lastname = result
-            person_name = f"{firstname} {lastname}" if firstname and lastname else f"Personnel #{personnel_id}"
+            person_name = f"{lastname}, {firstname}" if firstname and lastname else f"Personnel #{personnel_id}"
 
             status, remarks, is_buffer = self._determine_status(cursor, biometric_id, current_time, day_name)
             self._log_biometric_scan(cursor, biometric_id, current_time, status, remarks)

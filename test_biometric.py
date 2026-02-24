@@ -162,7 +162,7 @@ def main():
                                 print(f"             VALUES (140001, '{biometric_uid}', YOUR_PERSONNEL_ID);")
                             else:
                                 biometric_id, personnel_id, firstname, lastname = result
-                                person_name = f"{firstname} {lastname}" if firstname else f"Personnel #{personnel_id}"
+                                person_name = f"{lastname}, {firstname}" if firstname else f"Personnel #{personnel_id}"
 
                                 # Determine entry/exit with 15-minute buffer check
                                 today_start = current_time.replace(hour=0, minute=0, second=0, microsecond=0)

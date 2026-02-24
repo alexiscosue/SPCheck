@@ -140,7 +140,7 @@ class RFIDReader:
 
             if person_result:
                 firstname, lastname, honorifics = person_result
-                person_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+                person_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             else:
                 person_name = f"Personnel ID {personnel_id}"
 

@@ -10,12 +10,12 @@
   <div class="hr-attendance-layout" style="grid-column: 1 / -1;">
     <!-- Left: Tabs + Content -->
     <div class="hr-attendance-main card">
-      <div class="tabs">
-        <button class="tab-btn active" data-tab="logs">All Faculty Logs</button>
-        <button class="tab-btn" data-tab="classes">View Classes</button>
-        <button class="tab-btn" data-tab="rfidlogs">RFID Logs</button>
-        <button class="tab-btn" data-tab="campusentry">Campus Entry</button>
-        <button class="tab-btn" data-tab="analytics"><i class='bx bx-bar-chart-alt-2' style="vertical-align:middle;margin-right:4px"></i>Analytics</button>
+      <div class="tabs_profile">
+        <div class="tab active" data-tab="logs">All Faculty Logs</div>
+        <div class="tab" data-tab="classes">View Classes</div>
+        <div class="tab" data-tab="rfidlogs">RFID Logs</div>
+        <div class="tab" data-tab="campusentry">Campus Entry</div>
+        <div class="tab" data-tab="analytics"><i class='bx bx-bar-chart-alt-2' style="vertical-align:middle;margin-right:4px"></i>Analytics</div>
       </div>
 
       <!-- All Faculty Logs -->
@@ -41,6 +41,7 @@
                 <th>Name</th>
                 <th>Date</th>
                 <th>Class</th>
+                <th>Section</th>
                 <th>Room</th>
                 <th>Time In</th>
                 <th>Time Out</th>
@@ -48,7 +49,7 @@
               </tr>
             </thead>
             <tbody id="logsBody">
-              <tr><td colspan="7" style="text-align: center; padding: 2rem; color: #6b7280;">Loading...</td></tr>
+              <tr><td colspan="8" style="text-align: center; padding: 2rem; color: #6b7280;">Loading...</td></tr>
             </tbody>
           </table>
         </div>
@@ -65,7 +66,13 @@
           <button id="nextPageClasses" class="hr-pagination-btn">›</button>
         </div>
         <div class="table">
-          <table>
+          <table style="table-layout:fixed;width:100%">
+            <colgroup>
+              <col style="width:28%">
+              <col style="width:44%">
+              <col style="width:16%">
+              <col style="width:12%">
+            </colgroup>
             <thead>
               <tr>
                 <th>Faculty</th>
@@ -136,18 +143,12 @@
       <!-- Analytics Tab -->
       <div id="analytics" class="tab-content">
 
-        <!-- Header row: title + semester selector -->
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
-          <div>
-            <span style="font-size:15px;font-weight:700;color:var(--text)">Attendance Analytics</span>
-            <span style="font-size:12px;color:var(--muted);margin-left:8px">Historical trends and faculty-level breakdown</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <label for="analyticsSemesterSelect" style="font-size:13px;color:var(--muted);white-space:nowrap">Semester:</label>
-            <select id="analyticsSemesterSelect" style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--text);cursor:pointer">
-              <option value="">Loading…</option>
-            </select>
-          </div>
+          <!-- Semester selector -->
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:18px">
+          <label for="analyticsSemesterSelect" style="font-size:13px;color:var(--muted);white-space:nowrap">Semester:</label>
+          <select id="analyticsSemesterSelect" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:var(--card);color:var(--text);cursor:pointer">
+            <option value="">Loading…</option>
+          </select>
         </div>
 
         <!-- Analytics KPI Cards -->
@@ -160,30 +161,30 @@
             </div>
           </div>
           <div class="kpi card" style="gap:14px">
-            <div class="icon" style="background:#d1fae5"><i class='bx bx-check-circle' style="color:#16a34a"></i></div>
+            <div class="icon eval"><i class='bx bx-check-circle'></i></div>
             <div>
-              <div class="title">Present Sessions</div>
+              <div class="title">Total Present</div>
               <div class="value" id="an-kpi-present">—</div>
             </div>
           </div>
           <div class="kpi card" style="gap:14px">
-            <div class="icon eval"><i class='bx bx-time'></i></div>
+            <div class="icon promo"><i class='bx bx-time'></i></div>
             <div>
-              <div class="title">Late Sessions</div>
+              <div class="title">Total Late</div>
               <div class="value" id="an-kpi-late">—</div>
             </div>
           </div>
           <div class="kpi card" style="gap:14px">
             <div class="icon att"><i class='bx bx-x-circle'></i></div>
             <div>
-              <div class="title">Absent Sessions</div>
+              <div class="title">Total Absent</div>
               <div class="value" id="an-kpi-absent">—</div>
             </div>
           </div>
           <div class="kpi card" style="gap:14px">
-            <div class="icon promo"><i class='bx bx-shield-check'></i></div>
+            <div class="icon" style="background:#ede9fe"><i class='bx bx-calendar-x' style="color:#7c3aed"></i></div>
             <div>
-              <div class="title">Excused Sessions</div>
+              <div class="title">Total Excused</div>
               <div class="value" id="an-kpi-excused">—</div>
             </div>
           </div>
@@ -194,8 +195,8 @@
 
           <!-- Trend Chart -->
           <div class="card" style="padding:14px">
-            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Attendance Trends Across Semesters</div>
-            <div style="position:relative;height:260px">
+            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Attendance Trends Across Weeks</div>
+            <div style="position:relative;height:340px">
               <canvas id="analyticsTrendChart"></canvas>
             </div>
           </div>
@@ -203,7 +204,7 @@
           <!-- Distribution Doughnut -->
           <div class="card" style="padding:14px;display:flex;flex-direction:column;align-items:center">
             <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;align-self:flex-start">Status Distribution</div>
-            <div style="position:relative;height:190px;width:100%">
+            <div style="position:relative;height:280px;width:100%">
               <canvas id="analyticsDistChart"></canvas>
             </div>
             <div id="analyticsDistLegend" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center"></div>
@@ -216,14 +217,13 @@
           <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Faculty Breakdown — Selected Semester</div>
 
           <!-- Search + Pagination -->
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;flex-wrap:wrap">
-            <input type="text" id="breakdownSearch" placeholder="Search by name, subject, or section…"
-              style="flex:1;min-width:200px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--text)">
-            <div class="hr-pagination-controls" style="margin:0">
-              <button id="breakdownPrev" class="hr-pagination-btn">‹</button>
-              <span id="breakdownPageInfo" style="font-size:12px;color:var(--muted)">0 records</span>
-              <button id="breakdownNext" class="hr-pagination-btn">›</button>
-            </div>
+          <div class="search-filter">
+            <input type="text" id="breakdownSearch" placeholder="Search by name, subject, or section…">
+          </div>
+          <div class="hr-pagination-controls">
+            <button id="breakdownPrev" class="hr-pagination-btn">‹</button>
+            <span id="breakdownPageInfo">0 records</span>
+            <button id="breakdownNext" class="hr-pagination-btn">›</button>
           </div>
 
           <div class="table">
@@ -250,7 +250,7 @@
 
       </div>
 
-      <!-- Reader Controls Container - Only visible on All Faculty Logs -->
+      <!-- Reader Controls - Only visible on All Faculty Logs -->
       <div id="readerControlsContainer">
         <div class="rfid-controls">
           <button class="rfid-btn" id="rfidBtn">
@@ -262,8 +262,6 @@
             <span id="statusText">Reader Offline</span>
           </div>
         </div>
-
-        <!-- Biometric Controls - Below RFID -->
         <div class="rfid-controls" style="margin-top: 10px;">
           <button class="rfid-btn" id="biometricBtn">
             <i class='bx bx-fingerprint'></i>
@@ -274,17 +272,21 @@
             <span id="biometricStatusText">Biometric Offline</span>
           </div>
         </div>
-
-        <!-- Edit Time Button - Only for All Faculty Logs -->
         <div class="rfid-controls" style="margin-top: 10px;">
           <button class="edit-time-btn" id="editTimeBtn" style="display: none;">
             <i class='bx bx-time'></i>
             <span id="editTimeBtnText">Edit Time In/Out</span>
           </button>
         </div>
+        <div class="rfid-controls" style="margin-top: 10px;">
+          <button class="edit-time-btn" id="openExcuseModalBtn" onclick="openExcuseModal()" style="background:#6b7280">
+            <i class='bx bx-calendar-x'></i>
+            Excuse Absence
+          </button>
+        </div>
       </div>
 
-      <!-- Edit Remarks for RFID Logs - Only visible on RFID Logs tab -->
+      <!-- Edit Remarks for RFID Logs -->
       <div id="rfidEditControlsContainer" style="display: none;">
         <div class="rfid-controls">
           <button class="edit-remarks-btn" id="editRemarksBtn">
@@ -294,7 +296,7 @@
         </div>
       </div>
 
-      <!-- Edit Remarks for Campus Entry - Only visible on Campus Entry tab -->
+      <!-- Edit Remarks for Campus Entry -->
       <div id="campusEntryEditControlsContainer" style="display: none;">
         <div class="rfid-controls">
           <button class="edit-remarks-btn" id="editBiometricRemarksBtn">
@@ -304,37 +306,44 @@
         </div>
       </div>
     </div>
+  </div>
+</section>
 
-    <!-- Right: Excuse Container -->
-    <div class="hr-attendance-sidebar">
-      <!-- Excuse Absence Container -->
-      <div class="chart-card card">
-        <div class="card-header"><i class='bx bx-calendar-x'></i>Excuse Absence</div>
-        <div class="excused-container">
-          <div class="excused-form-group">
-            <label for="facultySelect" class="excused-label">Select Faculty:</label>
-            <select id="facultySelect" class="excused-select">
-              <option value="">Loading faculty...</option>
-            </select>
-          </div>
-          
-          <div class="excused-form-group">
-            <label for="excuseDate" class="excused-label">Select Date:</label>
-            <input type="date" id="excuseDate" class="excused-input">
-          </div>
-          
-          <div class="excused-form-group">
-            <label for="reasonSelect" class="excused-label">Reason: <span style="color: #ef4444;">*</span></label>
-            <select id="reasonSelect" class="excused-select" required>
-              <option value="">Select reason...</option>
-              <option value="Official Business">Official Business</option>
-              <option value="Sick Leave">Sick Leave</option>
-              <option value="Emergency">Emergency</option>
-              <option value="Professional Development">Professional Development</option>
-              <option value="Other">Other</option>
-            </select>
-          </div>
-          
+<!-- RFID Tap Notification Container -->
+<div id="notificationContainer"></div>
+
+<!-- Excuse Absence Modal -->
+<div id="excuseAbsenceModal" class="emp-modal">
+  <div class="emp-modal-content" style="max-width:480px">
+    <div class="emp-modal-header">
+      <h2 style="font-size:1.1rem"><i class='bx bx-calendar-x' style="vertical-align:middle;margin-right:6px"></i>Excuse Absence</h2>
+      <span class="emp-close" onclick="closeExcuseModal()">&times;</span>
+    </div>
+    <div class="emp-modal-body">
+      <div class="excused-container">
+        <div class="excused-form-group">
+          <label for="facultySelect" class="excused-label">Select Faculty:</label>
+          <select id="facultySelect" class="excused-select">
+            <option value="">Loading faculty...</option>
+          </select>
+        </div>
+        <div class="excused-form-group">
+          <label for="excuseDate" class="excused-label">Select Date:</label>
+          <input type="date" id="excuseDate" class="excused-input">
+        </div>
+        <div class="excused-form-group">
+          <label for="reasonSelect" class="excused-label">Reason: <span style="color:#ef4444">*</span></label>
+          <select id="reasonSelect" class="excused-select" required>
+            <option value="">Select reason...</option>
+            <option value="Official Business">Official Business</option>
+            <option value="Sick Leave">Sick Leave</option>
+            <option value="Emergency">Emergency</option>
+            <option value="Professional Development">Professional Development</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="emp-form-actions" style="margin-top:16px">
+          <button type="button" class="emp-btn-cancel" onclick="closeExcuseModal()">Cancel</button>
           <button id="excuseBtn" class="excused-btn" disabled>
             <i class='bx bx-check-shield'></i>
             Approve Excuse
@@ -343,10 +352,27 @@
       </div>
     </div>
   </div>
-</section>
+</div>
 
-<!-- RFID Tap Notification Container -->
-<div id="notificationContainer"></div>
+<!-- Excuse Absence Confirmation Modal -->
+<div id="excuseConfirmModal" class="emp-modal">
+  <div class="emp-modal-content" style="max-width:480px">
+    <div class="emp-modal-header">
+      <h2 style="font-size:1.1rem"><i class='bx bx-calendar-x' style="vertical-align:middle;margin-right:6px"></i>Confirm Excuse Absence</h2>
+    </div>
+    <div class="emp-modal-body">
+      <p id="excuseConfirmMessage" style="margin-bottom:8px"></p>
+      <div class="emp-confirmation-actions">
+        <button type="button" class="emp-btn-cancel" id="excuseConfirmCancelBtn" onclick="closeExcuseConfirmModal()">Cancel</button>
+        <button type="button" class="emp-btn-confirm-icon" id="excuseConfirmApproveBtn" onclick="processExcuseAbsence()">
+          <i class='bx bx-check-shield'></i>
+          <span class="emp-button-text">Approve Excuse</span>
+          <div class="emp-loading-spinner" style="display:none"></div>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Per-Class Attendance Modal -->
 <div class="modal" id="classModal">
@@ -421,73 +447,115 @@
     updateExcuseButtonState();
   }
 
+  function openExcuseModal() {
+    fetchFacultyForExcuse();
+    document.getElementById('excuseAbsenceModal').style.display = 'block';
+  }
 
-  document.getElementById('excuseBtn').addEventListener('click', async function() {
+  function closeExcuseModal() {
+    document.getElementById('excuseAbsenceModal').style.display = 'none';
+    resetExcuseForm();
+  }
+
+  window.addEventListener('click', function(event) {
+    const excuseModal = document.getElementById('excuseAbsenceModal');
+    // Only allow outside-click close on the form modal, never on the confirmation modal
+    if (event.target === excuseModal) {
+      closeExcuseModal();
+    }
+  });
+
+  document.getElementById('excuseBtn').addEventListener('click', function() {
     const facultySelect = document.getElementById('facultySelect');
     const excuseDate = document.getElementById('excuseDate');
     const reasonSelect = document.getElementById('reasonSelect');
-    const excuseBtn = document.getElementById('excuseBtn');
-    
+
     const personnelId = facultySelect.value;
     const date = excuseDate.value;
     const reason = reasonSelect.value;
-    
+
     if (!personnelId || !date || !reason) {
-        showNotification('Please select faculty, date, and reason', 'error');
-        return;
+      showNotification('Please select faculty, date, and reason', 'error');
+      return;
     }
-    
+
     const faculty = facultyForExcuse.find(f => f.personnel_id == personnelId);
     const facultyName = faculty ? faculty.name : 'Selected Faculty';
-    
-    const confirmationMessage = `Are you sure you want to excuse all classes for ${facultyName} on ${date}?\n\nReason: ${reason}`;
-    
-    if (!confirm(confirmationMessage)) {
-        return;
-    }
-    
-    excuseBtn.disabled = true;
-    excuseBtn.innerHTML = '<i class="bx bx-loader-circle bx-spin"></i> Processing...';
-    
-    try {
-        const response = await fetch('/api/hr/excuse-absence-bulk', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                personnel_id: personnelId,
-                date: date,
-                reason: reason
-            })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showNotification(result.message, 'success');
-            await fetchFacultyAttendance();
-            resetExcuseForm();
-            
-        } else {
-            showNotification('Failed to excuse absence: ' + result.error, 'error');
-        }
-        
-    } catch (error) {
-        console.error('Error excusing absence:', error);
-        showNotification('Error excusing absence: ' + error.message, 'error');
-    } finally {
-        excuseBtn.innerHTML = '<i class="bx bx-check-shield"></i> Approve Excuse';
-        excuseBtn.disabled = true; 
-    }
+
+    const formattedDate = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    document.getElementById('excuseConfirmMessage').textContent =
+      `Are you sure you want to excuse all classes for ${facultyName} on ${formattedDate}?`;
+
+    document.getElementById('excuseAbsenceModal').style.display = 'none';
+    openExcuseConfirmModal();
   });
+
+  function openExcuseConfirmModal() {
+    // Reset confirm button to default state
+    const approveBtn = document.getElementById('excuseConfirmApproveBtn');
+    approveBtn.disabled = false;
+    approveBtn.querySelector('.emp-button-text').style.display = '';
+    approveBtn.querySelector('.emp-loading-spinner').style.display = 'none';
+    document.getElementById('excuseConfirmCancelBtn').disabled = false;
+    document.getElementById('excuseConfirmModal').style.display = 'block';
+  }
+
+  function closeExcuseConfirmModal() {
+    document.getElementById('excuseConfirmModal').style.display = 'none';
+    document.getElementById('excuseAbsenceModal').style.display = 'block';
+  }
+
+  async function processExcuseAbsence() {
+    const personnelId = document.getElementById('facultySelect').value;
+    const date = document.getElementById('excuseDate').value;
+    const reason = document.getElementById('reasonSelect').value;
+
+    const approveBtn = document.getElementById('excuseConfirmApproveBtn');
+    const cancelBtn = document.getElementById('excuseConfirmCancelBtn');
+
+    // Show loading state, disable both buttons
+    approveBtn.disabled = true;
+    cancelBtn.disabled = true;
+    approveBtn.querySelector('.emp-button-text').style.display = 'none';
+    approveBtn.querySelector('.emp-loading-spinner').style.display = 'block';
+
+    // Only the API call is inside try-catch so modal/refresh errors
+    // never pollute the "Error excusing absence" notification
+    let result = null;
+    try {
+      const response = await fetch('/api/hr/excuse-absence-bulk', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ personnel_id: personnelId, date: date, reason: reason })
+      });
+      result = await response.json();
+    } catch (error) {
+      console.error('Error excusing absence:', error);
+      showNotification('Error excusing absence: ' + error.message, 'error');
+      closeExcuseConfirmModal();
+      return;
+    }
+
+    // Handle result outside try-catch
+    if (result.success) {
+      closeExcuseConfirmModal();
+      closeExcuseModal();
+      showNotification(result.message, 'success');
+      fetchFacultyAttendance().catch(e => console.error('Refresh error:', e));
+    } else {
+      showNotification('Failed to excuse absence: ' + result.error, 'error');
+      closeExcuseConfirmModal();
+    }
+  }
 
   fetchFacultyForExcuse();
 
   let isEditingTime = false;
   let timeEditData = new Map();
 
-  document.querySelectorAll('.tab-btn').forEach(btn => {
+  document.querySelectorAll('.hr-attendance-main .tab').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.hr-attendance-main .tab').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       btn.classList.add('active');
       document.getElementById(btn.dataset.tab).classList.add('active');
@@ -521,7 +589,7 @@
       editBiometricRemarksBtn.querySelector('i').className = 'bx bx-edit-alt';
 
       if (btn.dataset.tab === 'logs') {
-        // All Faculty Logs - Show reader controls and Edit Time button
+        // All Faculty Logs - Show reader controls, Edit Time button, and Excuse Absence
         readerControlsContainer.style.display = 'block';
         rfidEditControlsContainer.style.display = 'none';
         campusEntryEditControlsContainer.style.display = 'none';
@@ -545,7 +613,7 @@
         campusEntryEditControlsContainer.style.display = 'block';
         renderCampusEntryLogs();
       } else if (btn.dataset.tab === 'analytics') {
-        // Analytics - Hide all controls, lazy-load analytics
+        // Analytics - Hide all controls
         readerControlsContainer.style.display = 'none';
         rfidEditControlsContainer.style.display = 'none';
         campusEntryEditControlsContainer.style.display = 'none';
@@ -885,25 +953,15 @@
   }
 
   function clearDisplays() {
-    document.getElementById('kpi-att').textContent = '0';
-    document.getElementById('kpi-fac').textContent = '0';
-    document.getElementById('kpi-eval').textContent = '0';
-    document.getElementById('kpi-promo').textContent = '0';
-
-    document.getElementById('logsBody').innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #6b7280;">No attendance data available</td></tr>';
-
+    document.getElementById('logsBody').innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem; color: #6b7280;">No attendance data available</td></tr>';
     if (window.breakdownChart) {
       window.breakdownChart.destroy();
     }
-
     updatePaginationControls(1, 1, 0);
   }
 
   function updateKPICards(kpis) {
-    document.getElementById('kpi-att').textContent = kpis.total_faculty || 0;
-    document.getElementById('kpi-fac').textContent = kpis.present_today || 0;
-    document.getElementById('kpi-eval').textContent = kpis.late_today || 0;
-    document.getElementById('kpi-promo').textContent = kpis.absent_today || 0;
+    // KPI cards removed — no-op kept for compatibility
   }
 
   function renderLogs() {
@@ -918,6 +976,7 @@
             f.name.toLowerCase().includes(search) ||
             f.date.includes(search) ||
             (f.class_name && f.class_name.toLowerCase().includes(search)) ||
+            (f.class_section && f.class_section.toLowerCase().includes(search)) ||
             (f.room && f.room.toLowerCase().includes(search));
         
         const filterMatch = !filter || f.status === filter;
@@ -935,7 +994,7 @@
         const message = filteredLogs.length === 0 && (search || filter) ? 
             'No records match your search criteria' : 
             'No attendance data available';
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #6b7280;">${message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 2rem; color: #6b7280;">${message}</td></tr>`;
     } else {
         currentPageRecords.forEach((log, index) => {
             const tr = document.createElement('tr');
@@ -950,19 +1009,20 @@
                         <td>${log.name}</td>
                         <td>${log.date}</td>
                         <td>${className}</td>
+                        <td>${log.class_section || 'N/A'}</td>
                         <td>${log.room || 'N/A'}</td>
                         <td class="time-cell">
-                            <input type="time" 
-                                  class="time-editable" 
-                                  value="" 
+                            <input type="time"
+                                  class="time-editable"
+                                  value=""
                                   data-log-key="${logKey}"
                                   data-field="timeIn"
                                   placeholder="--:--">
                         </td>
                         <td class="time-cell">
-                            <input type="time" 
-                                  class="time-editable" 
-                                  value="" 
+                            <input type="time"
+                                  class="time-editable"
+                                  value=""
                                   data-log-key="${logKey}"
                                   data-field="timeOut"
                                   placeholder="--:--">
@@ -977,18 +1037,19 @@
                         <td>${log.name}</td>
                         <td>${log.date}</td>
                         <td>${className}</td>
+                        <td>${log.class_section || 'N/A'}</td>
                         <td>${log.room || 'N/A'}</td>
                         <td class="time-cell">
-                            <input type="time" 
-                                  class="time-editable" 
-                                  value="${currentTimeIn}" 
+                            <input type="time"
+                                  class="time-editable"
+                                  value="${currentTimeIn}"
                                   data-log-key="${logKey}"
                                   data-field="timeIn">
                         </td>
                         <td class="time-cell">
-                            <input type="time" 
-                                  class="time-editable" 
-                                  value="${currentTimeOut}" 
+                            <input type="time"
+                                  class="time-editable"
+                                  value="${currentTimeOut}"
                                   data-log-key="${logKey}"
                                   data-field="timeOut">
                         </td>
@@ -1003,6 +1064,7 @@
                     <td>${log.name}</td>
                     <td>${log.date}</td>
                     <td>${className}</td>
+                    <td>${log.class_section || 'N/A'}</td>
                     <td>${log.room || 'N/A'}</td>
                     <td>${timeIn12Hour}</td>
                     <td>${timeOut12Hour}</td>
@@ -1481,7 +1543,9 @@
   let breakdownChart = null;
 
   function updateStatusChart() {
-      const statusCtx = document.getElementById('statusBreakdown').getContext('2d');
+      const statusCanvas = document.getElementById('statusBreakdown');
+      if (!statusCanvas) return;
+      const statusCtx = statusCanvas.getContext('2d');
       
       const totalRecords = statusBreakdown.present + statusBreakdown.late + statusBreakdown.absent;
       if (totalRecords === 0) {
@@ -2117,7 +2181,7 @@
     startNotificationListener();
 
     // Initialize button visibility based on active tab (default is 'logs')
-    const activeTab = document.querySelector('.tab-btn.active');
+    const activeTab = document.querySelector('.hr-attendance-main .tab.active');
     if (activeTab) {
       const readerControlsContainer = document.getElementById('readerControlsContainer');
       const rfidEditControlsContainer = document.getElementById('rfidEditControlsContainer');
@@ -2125,23 +2189,19 @@
       const editTimeBtn = document.getElementById('editTimeBtn');
 
       if (activeTab.dataset.tab === 'logs') {
-        // All Faculty Logs - Show reader controls and Edit Time button
         readerControlsContainer.style.display = 'block';
         rfidEditControlsContainer.style.display = 'none';
         campusEntryEditControlsContainer.style.display = 'none';
         editTimeBtn.style.display = 'flex';
       } else if (activeTab.dataset.tab === 'classes') {
-        // View Classes - No buttons
         readerControlsContainer.style.display = 'none';
         rfidEditControlsContainer.style.display = 'none';
         campusEntryEditControlsContainer.style.display = 'none';
       } else if (activeTab.dataset.tab === 'rfidlogs') {
-        // RFID Logs - Only Edit Remarks for RFID
         readerControlsContainer.style.display = 'none';
         rfidEditControlsContainer.style.display = 'block';
         campusEntryEditControlsContainer.style.display = 'none';
       } else if (activeTab.dataset.tab === 'campusentry') {
-        // Campus Entry - Only Edit Remarks for Biometric
         readerControlsContainer.style.display = 'none';
         rfidEditControlsContainer.style.display = 'none';
         campusEntryEditControlsContainer.style.display = 'block';
@@ -2264,6 +2324,16 @@
             yAxisID: 'yRate',
             pointRadius: 4,
             pointHoverRadius: 6
+          },
+          {
+            label: 'Present Sessions',
+            data: trends.map(t => t.total_present),
+            borderColor: '#10b981',
+            backgroundColor: 'transparent',
+            tension: 0.4,
+            yAxisID: 'yCounts',
+            pointRadius: 3,
+            borderDash: [5, 3]
           },
           {
             label: 'Late Sessions',
