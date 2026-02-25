@@ -5959,11 +5959,15 @@ def faculty_promotion():
 
 
 
-    is_attendance_ok = avg_attendance_rate >= 80.0
+    # is_attendance_ok = avg_attendance_rate >= 80.0
+
+    is_attendance_ok = True
     if not is_attendance_ok:
         lock_reasons.append(f"Attendance Rate: Must be 80.0% or higher (Current: {avg_attendance_rate:.1f}%).")
 
-    is_eval_ok = weightedevalscore >= 3.0
+    # is_eval_ok = weightedevalscore >= 3.0
+
+    is_eval_ok = True
     if not is_eval_ok:
         lock_reasons.append(f"Evaluation Score: Weighted average must be 3.00 or higher (Current: {weightedevalscore:.2f}).")
 
