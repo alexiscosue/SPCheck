@@ -7,6 +7,7 @@ import pg8000
 from pg8000 import dbapi
 from rfid_reader import RFIDReader
 from biometric_reader import BiometricReader
+from shared_serial import SharedSerialPort
 from datetime import timedelta, datetime
 from flask import Response
 import json
@@ -245,8 +246,9 @@ class ConnectionPool:
                 self.current_connections -= 1
 
 db_pool = ConnectionPool(min_connections=3, max_connections=15)
-rfid_reader = RFIDReader(db_pool)
-biometric_reader = BiometricReader(db_pool)
+shared_serial = SharedSerialPort()
+rfid_reader = RFIDReader(db_pool, shared_serial)
+biometric_reader = BiometricReader(db_pool, shared_serial)
 
 absence_checker_thread = None
 absence_checker_running = False
@@ -412,7 +414,7 @@ def check_and_record_absences():
                                 
                                 absences_recorded += 1
                                 
-                                print(f"ABSENCE RECORDED: {firstname} {lastname} - {subject_code} on {check_date}")
+                                print(f"ABSENCE RECORDED: {lastname}, {firstname} - {subject_code} on {check_date}")
 
                                 try:
                                     cursor.execute("""
@@ -751,7 +753,7 @@ def get_personnel_info(user_id):
         if result:
             firstname, lastname, honorifics, collegename, employee_no, rolename, email, position, employmentstatus, personnel_id, profilepic = result
             
-            full_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+            full_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             
             profile_image_base64 = None
             if profilepic:
@@ -1156,7 +1158,7 @@ def api_biometric_start():
                 started_by=started_by
             )
 
-            print(f"✅ Biometric Reader started by: {started_by}")
+            print(f"✅ Biometrics Reader started by: {started_by}")
 
         return result
 
@@ -1237,7 +1239,7 @@ def api_biometric_logs():
         for row in cursor.fetchall():
             firstname, lastname, honorifics = row[6], row[7], row[8]
             if firstname and lastname:
-                person_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+                person_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             else:
                 person_name = "Unknown"
             logs.append({
@@ -1267,7 +1269,7 @@ notification_queues = {}
 notification_lock = threading.Lock()
 
 def broadcast_notification(personnel_id, notification_data):
-    """Broadcast notification to specific personnel AND to HR"""
+    """Broadcast notification to specific personnel, HR, and VP/Pres"""
     with notification_lock:
         if personnel_id and personnel_id > 0 and personnel_id in notification_queues:
             for q in notification_queues[personnel_id]:
@@ -1275,7 +1277,7 @@ def broadcast_notification(personnel_id, notification_data):
                     q.put(notification_data)
                 except Exception as e:
                     print(f"Error putting notification in queue: {e}")
-        
+
         hr_key = 'hr_all_notifications'
         if hr_key in notification_queues:
             for q in notification_queues[hr_key]:
@@ -1285,6 +1287,15 @@ def broadcast_notification(personnel_id, notification_data):
                 except Exception as e:
                     print(f"Error putting notification in HR queue: {e}")
 
+        vp_key = 'vp_all_notifications'
+        if vp_key in notification_queues:
+            for q in notification_queues[vp_key]:
+                try:
+                    q.put(notification_data)
+                    print(f"✓ Sent notification to VP: {notification_data.get('action', 'unknown')}")
+                except Exception as e:
+                    print(f"Error putting notification in VP queue: {e}")
+
 def handle_rfid_notification(notification_data):
     """Handle RFID notifications from the reader"""
     personnel_id = notification_data.get('personnel_id')
@@ -1292,6 +1303,14 @@ def handle_rfid_notification(notification_data):
         broadcast_notification(personnel_id, notification_data)
 
 rfid_reader.add_notification_callback(handle_rfid_notification)
+
+def handle_biometric_notification(notification_data):
+    """Handle biometric notifications from the reader"""
+    notification_data['notification_type'] = 'biometric'
+    personnel_id = notification_data.get('personnel_id')  # None for unknown fingerprints
+    broadcast_notification(personnel_id, notification_data)
+
+biometric_reader.add_notification_callback(handle_biometric_notification)
 
 @app.route('/api/faculty/current-personnel')
 @require_auth([20001, 20002, 20003, 20004])
@@ -1409,6 +1428,56 @@ def api_hr_rfid_notifications_stream():
                     except Exception as e:
                         print(f"Error cleaning up HR SSE queue: {e}")
     
+    return Response(
+        event_stream(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive'
+        }
+    )
+
+@app.route('/api/vp/notifications')
+@require_auth([20004])
+def api_vp_notifications_stream():
+    """Server-Sent Events endpoint for VP/Pres to receive ALL notifications"""
+
+    def event_stream():
+        q = queue.Queue()
+        vp_key = 'vp_all_notifications'
+
+        with notification_lock:
+            if vp_key not in notification_queues:
+                notification_queues[vp_key] = []
+            notification_queues[vp_key].append(q)
+
+        print(f"VP SSE connection established - will receive all notifications")
+
+        try:
+            yield f"data: {json.dumps({'connected': True})}\n\n"
+
+            while True:
+                try:
+                    notification = q.get(timeout=30)
+                    if notification:
+                        print(f"VP Sending notification: {notification}")
+                        yield f"data: {json.dumps(notification)}\n\n"
+                except queue.Empty:
+                    yield ": keepalive\n\n"
+        except GeneratorExit:
+            print(f"VP SSE connection closed")
+        finally:
+            with notification_lock:
+                if vp_key in notification_queues:
+                    try:
+                        notification_queues[vp_key].remove(q)
+                        if not notification_queues[vp_key]:
+                            del notification_queues[vp_key]
+                        print(f"Cleaned up VP SSE queue")
+                    except Exception as e:
+                        print(f"Error cleaning up VP SSE queue: {e}")
+
     return Response(
         event_stream(),
         mimetype='text/event-stream',
@@ -1688,8 +1757,126 @@ def api_faculty_attendance_by_semester(semester_id):
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
 
+@app.route('/api/faculty/attendance-analytics')
+@require_auth([20001, 20002])
+def api_faculty_attendance_analytics():
+    """Attendance analytics for the logged-in faculty: monthly trends + distribution/KPIs for selected semester"""
+    try:
+        user_id = session['user_id']
+        semester_id = request.args.get('semester_id')
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        # Get personnel_id for this user
+        cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
+        p_row = cursor.fetchone()
+        if not p_row:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify({'success': False, 'error': 'Personnel not found'}), 404
+        personnel_id = p_row[0]
+
+        # Weekly trends (all history for this faculty, timein covers absent records at midnight)
+        cursor.execute("""
+            SELECT
+                DATE_TRUNC('week', a.timein AT TIME ZONE 'Asia/Manila') AS week,
+                COUNT(*) FILTER (WHERE a.attendancestatus = 'Present')  AS total_present,
+                COUNT(*) FILTER (WHERE a.attendancestatus = 'Late')     AS total_late,
+                COUNT(*) FILTER (WHERE a.attendancestatus = 'Absent')   AS total_absent,
+                COUNT(*) FILTER (WHERE a.attendancestatus = 'Excused')  AS total_excused,
+                COUNT(*) AS total
+            FROM attendance a
+            WHERE a.personnel_id = %s
+              AND a.timein IS NOT NULL
+            GROUP BY DATE_TRUNC('week', a.timein AT TIME ZONE 'Asia/Manila')
+            ORDER BY week ASC
+        """, (personnel_id,))
+        trend_rows = cursor.fetchall()
+        trends = []
+        for row in trend_rows:
+            (week, tot_p, tot_l, tot_a, tot_e, total) = row
+            tot_p = int(tot_p); tot_l = int(tot_l)
+            tot_a = int(tot_a); tot_e = int(tot_e); total = int(total)
+            avg_r = round(((tot_p + tot_e + tot_l * 0.75) / total) * 100, 2) if total > 0 else 0.0
+            label = week.strftime('%b %Y') if week else ''
+            trends.append({
+                'label': label,
+                'total_present': tot_p,
+                'total_late': tot_l,
+                'total_absent': tot_a,
+                'total_excused': tot_e,
+                'avg_rate': avg_r
+            })
+
+        # Resolve selected semester (fallback: current)
+        if not semester_id:
+            cursor.execute("""
+                SELECT acadcalendar_id FROM acadcalendar
+                WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                ORDER BY semesterstart DESC LIMIT 1
+            """)
+            result = cursor.fetchone()
+            if result:
+                semester_id = result[0]
+
+        distribution = {'present': 0, 'late': 0, 'absent': 0, 'excused': 0}
+        analytics_kpis = {
+            'avg_rate': 0.0, 'total_present': 0, 'total_late': 0,
+            'total_absent': 0, 'total_excused': 0
+        }
+
+        if semester_id:
+            cursor.execute("""
+                SELECT
+                    COALESCE(SUM(ar.presentcount), 0),
+                    COALESCE(SUM(ar.latecount), 0),
+                    COALESCE(SUM(ar.absentcount), 0),
+                    COALESCE(SUM(ar.excusedcount), 0),
+                    CASE
+                        WHEN COUNT(ar.attendancereport_id) > 0
+                        THEN ROUND(AVG(ar.attendancerate)::numeric, 2)
+                        ELSE 0
+                    END
+                FROM attendancereport ar
+                WHERE ar.acadcalendar_id = %s
+                  AND ar.personnel_id = %s
+            """, (semester_id, personnel_id))
+            dist_row = cursor.fetchone()
+            if dist_row:
+                (tot_p, tot_l, tot_a, tot_e, avg_r) = dist_row
+                distribution = {
+                    'present': int(tot_p), 'late': int(tot_l),
+                    'absent': int(tot_a), 'excused': int(tot_e)
+                }
+                analytics_kpis = {
+                    'avg_rate': float(avg_r),
+                    'total_present': int(tot_p),
+                    'total_late': int(tot_l),
+                    'total_absent': int(tot_a),
+                    'total_excused': int(tot_e)
+                }
+
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        return jsonify({
+            'success': True,
+            'trends': trends,
+            'distribution': distribution,
+            'analytics_kpis': analytics_kpis,
+            'selected_semester_id': int(semester_id) if semester_id else None
+        })
+
+    except Exception as e:
+        print(f"Error fetching faculty attendance analytics: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/hr/excuse-absence-bulk', methods=['POST'])
-@require_auth([20003])  
+@require_auth([20003])
 def api_excuse_absence_bulk():
     """Bulk excuse all absences for a faculty on a specific date - ONLY UPDATE EXISTING RECORDS"""
     try:
@@ -1881,7 +2068,7 @@ def api_get_attendance_report(personnel_id, class_id):
          firstname, lastname, honorifics, subjectcode, subjectname, 
          section, semester, acadyear) = result
         
-        faculty_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+        faculty_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
         
         return jsonify({
             'success': True,
@@ -2047,7 +2234,7 @@ def api_get_all_attendance_reports():
             (personnel_id, class_id, present, late, excused, absent, total, rate,
              firstname, lastname, honorifics, subjectcode, subjectname, section, classroom) = row
             
-            faculty_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+            faculty_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             
             reports.append({
                 'personnel_id': personnel_id,
@@ -2596,7 +2783,7 @@ def api_audit_logs():
              firstname, lastname, honorifics) = log
             
             if personnel_id and firstname and lastname:
-                personnel_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+                personnel_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             else:
                 personnel_name = "System"
             
@@ -3337,7 +3524,7 @@ def api_hr_faculty_attendance():
             (firstname, lastname, honorifics, status, timein, timeout, 
              classroom, subject_code, subject_name, class_section) = record
             
-            faculty_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+            faculty_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             class_name = f"{subject_code} - {subject_name}"
             
             date_str = "N/A"
@@ -3415,6 +3602,153 @@ def api_hr_faculty_attendance():
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
 
+@app.route('/api/hr/attendance-analytics')
+@require_auth([20003])
+def api_hr_attendance_analytics():
+    """Attendance analytics: trends across all semesters + distribution/breakdown for selected semester"""
+    try:
+        semester_id = request.args.get('semester_id')
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        # --- Trends: one row per week (all history) ---
+        cursor.execute("""
+            SELECT
+                DATE_TRUNC('week', a.timein AT TIME ZONE 'Asia/Manila') AS week,
+                COUNT(*) FILTER (WHERE a.attendancestatus = 'Present')  AS total_present,
+                COUNT(*) FILTER (WHERE a.attendancestatus = 'Late')     AS total_late,
+                COUNT(*) FILTER (WHERE a.attendancestatus = 'Absent')   AS total_absent,
+                COUNT(*) FILTER (WHERE a.attendancestatus = 'Excused')  AS total_excused,
+                COUNT(*)                                                 AS total
+            FROM attendance a
+            JOIN personnel p ON a.personnel_id = p.personnel_id
+            WHERE p.role_id IN (20001, 20002)
+              AND a.timein IS NOT NULL
+            GROUP BY DATE_TRUNC('week', a.timein AT TIME ZONE 'Asia/Manila')
+            ORDER BY week ASC
+        """)
+
+        trend_rows = cursor.fetchall()
+        trends = []
+        for row in trend_rows:
+            (week, tot_p, tot_l, tot_a, tot_e, total) = row
+            tot_p = int(tot_p); tot_l = int(tot_l)
+            tot_a = int(tot_a); tot_e = int(tot_e); total = int(total)
+            avg_r = round(((tot_p + tot_e + tot_l * 0.75) / total) * 100, 2) if total > 0 else 0.0
+            label = week.strftime('%b %Y') if week else ''
+            trends.append({
+                'label': label,
+                'total_present': tot_p,
+                'total_late': tot_l,
+                'total_absent': tot_a,
+                'total_excused': tot_e,
+                'avg_rate': avg_r
+            })
+
+        # --- Resolve selected semester (fallback: current, then latest) ---
+        if not semester_id:
+            cursor.execute("""
+                SELECT acadcalendar_id FROM acadcalendar
+                WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                ORDER BY semesterstart DESC LIMIT 1
+            """)
+            result = cursor.fetchone()
+            if result:
+                semester_id = result[0]
+            elif trends:
+                semester_id = trends[-1]['semester_id']
+
+        distribution = {'present': 0, 'late': 0, 'absent': 0, 'excused': 0}
+        analytics_kpis = {
+            'avg_rate': 0.0, 'total_present': 0, 'total_late': 0,
+            'total_absent': 0, 'total_excused': 0, 'faculty_count': 0
+        }
+        faculty_breakdown = []
+
+        if semester_id:
+            # Distribution totals for selected semester
+            cursor.execute("""
+                SELECT
+                    COALESCE(SUM(ar.presentcount), 0),
+                    COALESCE(SUM(ar.latecount), 0),
+                    COALESCE(SUM(ar.absentcount), 0),
+                    COALESCE(SUM(ar.excusedcount), 0),
+                    COUNT(DISTINCT ar.personnel_id),
+                    CASE
+                        WHEN COUNT(ar.attendancereport_id) > 0
+                        THEN ROUND(AVG(ar.attendancerate)::numeric, 2)
+                        ELSE 0
+                    END
+                FROM attendancereport ar
+                JOIN personnel p ON ar.personnel_id = p.personnel_id
+                WHERE ar.acadcalendar_id = %s
+                  AND p.role_id IN (20001, 20002)
+            """, (semester_id,))
+            dist_row = cursor.fetchone()
+            if dist_row:
+                (tot_p, tot_l, tot_a, tot_e, fac_cnt, avg_r) = dist_row
+                distribution = {
+                    'present': int(tot_p), 'late': int(tot_l),
+                    'absent': int(tot_a), 'excused': int(tot_e)
+                }
+                analytics_kpis = {
+                    'avg_rate': float(avg_r),
+                    'total_present': int(tot_p), 'total_late': int(tot_l),
+                    'total_absent': int(tot_a), 'total_excused': int(tot_e),
+                    'faculty_count': int(fac_cnt)
+                }
+
+            # Per-faculty breakdown sorted by attendance rate ascending
+            cursor.execute("""
+                SELECT
+                    p.firstname, p.lastname, p.honorifics,
+                    sub.subjectcode, sub.subjectname,
+                    sch.classsection,
+                    ar.presentcount, ar.latecount, ar.absentcount,
+                    ar.excusedcount, ar.totalclasses, ar.attendancerate
+                FROM attendancereport ar
+                JOIN personnel p  ON ar.personnel_id = p.personnel_id
+                JOIN schedule sch ON ar.class_id     = sch.class_id
+                JOIN subjects sub ON sch.subject_id  = sub.subject_id
+                WHERE ar.acadcalendar_id = %s
+                  AND p.role_id IN (20001, 20002)
+                ORDER BY ar.attendancerate ASC, p.lastname, p.firstname
+            """, (semester_id,))
+            for row in cursor.fetchall():
+                (fn, ln, hon, scode, sname, section, pres, late, absent, excused, total, rate) = row
+                name = f"{ln}, {fn}, {hon}" if hon else f"{ln}, {fn}"
+                faculty_breakdown.append({
+                    'faculty_name': name,
+                    'subject_code': scode,
+                    'subject_name': sname,
+                    'section': section or '—',
+                    'present': int(pres),
+                    'late': int(late),
+                    'absent': int(absent),
+                    'excused': int(excused),
+                    'total': int(total),
+                    'rate': round(float(rate), 2)
+                })
+
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        return jsonify({
+            'success': True,
+            'trends': trends,
+            'distribution': distribution,
+            'analytics_kpis': analytics_kpis,
+            'faculty_breakdown': faculty_breakdown,
+            'selected_semester_id': int(semester_id) if semester_id else None
+        })
+
+    except Exception as e:
+        print(f"Error fetching attendance analytics: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/hr/update-attendance-time', methods=['POST'])
 @require_auth([20003])
 def api_update_attendance_time():
@@ -3453,7 +3787,7 @@ def api_update_attendance_time():
                     firstname = name_parts[0]
                     lastname = name_parts[1].replace(',', '')
                     
-                    print(f"   Looking for: {firstname} {lastname}, date: {date}, class: {class_name}")
+                    print(f"   Looking for: {lastname}, {firstname}, date: {date}, class: {class_name}")
                     
                     date_obj = datetime.strptime(date, '%Y-%m-%d')
                     day_of_week = date_obj.strftime('%A')  
@@ -3982,7 +4316,7 @@ def api_hr_rfid_logs():
             (log_id, taptime, personnel_id, remarks, firstname, lastname, honorifics) = log
             
             if personnel_id and firstname and lastname:
-                personnel_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+                personnel_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             else:
                 personnel_name = "Unknown RFID"
             
@@ -4060,7 +4394,7 @@ def api_hr_faculty_list():
         for record in faculty_records:
             personnel_id, firstname, lastname, honorifics, role_id, collegename, total_units = record
             
-            faculty_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+            faculty_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             
             faculty_list.append({
                 'personnel_id': personnel_id,
@@ -4432,7 +4766,7 @@ def api_hr_employees_list():
             (personnel_id, firstname, lastname, honorifics, employee_no, 
              phone, collegename, rolename, position, employmentstatus, email) = emp
             
-            full_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+            full_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             
             phone_formatted = str(phone) if phone else "N/A"
             if phone_formatted.startswith('+63 ') and len(phone_formatted) > 4:
@@ -4569,7 +4903,7 @@ def api_hr_add_employee():
         
         cursor.close()
         
-        employee_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+        employee_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
         audit_details = f"HR added new employee: {employee_name}\nEmail: {email}\nRole: {role_name}\nEmployee Number: {employee_no}\nCollege: {college_name}\nEmployment Status: {employment_status}\nPosition: {position}"
         
         log_audit_action(
@@ -5391,7 +5725,7 @@ def api_hr_delete_schedule():
         (class_id, subjectcode, subjectname, classsection, classday_1, starttime_1, endtime_1,
          classday_2, starttime_2, endtime_2, firstname, lastname, honorifics) = schedule_result
         
-        faculty_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+        faculty_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
         
         cursor.execute("SELECT COUNT(*) FROM attendance WHERE class_id = %s", (class_id,))
         attendance_count = cursor.fetchone()[0]
@@ -5496,7 +5830,7 @@ def hr_employee_profile(personnel_id):
         if result:
             firstname, lastname, honorifics, collegename, employee_no, rolename, email, position, employmentstatus = result
             
-            full_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+            full_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             
             employee_info = {
                 'hr_name': hr_info['hr_name'],  
@@ -5559,7 +5893,7 @@ def faculty_employee_profile(personnel_id):
         if result:
             firstname, lastname, honorifics, collegename, employee_no, rolename, email, position, employmentstatus = result
             
-            full_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+            full_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             
             employee_info = {
                 'hr_name': hr_info['hr_name'],  
@@ -5623,7 +5957,7 @@ def vp_employee_profile(personnel_id):
         if result:
             firstname, lastname, honorifics, collegename, employee_no, rolename, email, position, employmentstatus = result
             
-            full_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+            full_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             
             employee_info = {
                 'hr_name': hr_info['hr_name'],  
@@ -5872,7 +6206,7 @@ def faculty_promotion():
     print(f"DEBUG: Employment Status = {employment_status}")
     
     # Build faculty name
-    faculty_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+    faculty_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
     
     # Convert profile pic to base64
     profile_image_base64 = ''
@@ -6438,7 +6772,7 @@ def api_hr_evaluations():
     query = """
         SELECT 
             p.personnel_id, 
-            CONCAT(p.firstname, ' ', p.lastname) as name,
+            CONCAT(p.lastname, ', ', p.firstname) as name,
             c.collegename,
             pr.position,
             
@@ -6572,7 +6906,7 @@ def api_hr_update_evaluation_score():
             if personnel_id and peer_score is not None:
                 # 1. Fetch current score and name for logging
                 cursor.execute("""
-                    SELECT fe.score, CONCAT(p.firstname, ' ', p.lastname)
+                    SELECT fe.score, CONCAT(p.lastname, ', ', p.firstname)
                     FROM personnel p
                     LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s AND fe.evaluator_type = 'peer'
                     WHERE p.personnel_id = %s
@@ -6663,7 +6997,7 @@ def api_hr_faculty_evaluation_report(personnel_id):
             return jsonify({'success': False, 'error': 'Faculty or Semester not found'}), 404
         
         firstname, lastname, honorifics, collegename, semester_name, acadyear = info_row
-        faculty_name = f"{firstname} {lastname}, {honorifics}" if honorifics else f"{firstname} {lastname}"
+        faculty_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
         semester_display = f"{semester_name}, AY {acadyear}"
 
         # 2. Fetch all evaluation scores AND qualitative feedback
@@ -7191,9 +7525,9 @@ def hr_promotions():
              hrmd_approval, vpa_approval, pres_approval) = promo
             
             if honorifics:
-                fullname = f"{honorifics} {firstname} {lastname}"
+                fullname = f"{lastname}, {firstname}, {honorifics}"
             else:
-                fullname = f"{firstname} {lastname}"
+                fullname = f"{lastname}, {firstname}"
             
             status_display = str(current_status).replace('_', ' ').title() if current_status else 'Pending HR Review'
             
@@ -7266,7 +7600,7 @@ def hr_promotions():
             (personnel_id, firstname, lastname, honorifics, hiredate, 
              college, rank, years, reg_status, date_initiated) = f
             
-            fullname = f"{honorifics} {firstname} {lastname}" if honorifics else f"{firstname} {lastname}"
+            fullname = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             
             if years >= 7:
                 eligible_for = "Tenured"
@@ -7397,9 +7731,9 @@ def vp_promotions():
              hrmd_approval, vpa_approval, pres_approval) = promo
             
             if honorifics:
-                fullname = f"{honorifics} {firstname} {lastname}"
+                fullname = f"{lastname}, {firstname}, {honorifics}"
             else:
-                fullname = f"{firstname} {lastname}"
+                fullname = f"{lastname}, {firstname}"
             
             status_display = str(current_status).replace('_', ' ').title() if current_status else 'Pending HR Review'
             
@@ -7446,7 +7780,7 @@ def vp_promotions():
             (personnel_id, firstname, lastname, honorifics, hiredate, 
              college, rank, years, reg_status, date_initiated, regularization_id) = f
             
-            fullname = f"{honorifics} {firstname} {lastname}" if honorifics else f"{firstname} {lastname}"
+            fullname = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             
             if years >= 7:
                 eligible_for = "Tenured"
@@ -8124,7 +8458,7 @@ def get_promotion_details(application_id):
          cover_data, resume_data, requested_rank, hrmd_remarks, vpa_remarks, 
          pres_remarks, rejection_reason) = row
         
-        fullname = f"{honorifics} {firstname} {lastname}" if honorifics else f"{firstname} {lastname}"
+        fullname = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
         
         # Get profile image
         profile_image_base64 = None
@@ -8568,7 +8902,7 @@ def get_eligible_faculty():
             (personnel_id, firstname, lastname, honorifics, hiredate, 
              college, rank, years) = f
             
-            fullname = f"{honorifics} {firstname} {lastname}" if honorifics else f"{firstname} {lastname}"
+            fullname = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             
             if years >= 7:
                 eligible_for = "Tenured"
