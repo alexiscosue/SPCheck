@@ -6232,7 +6232,7 @@ def faculty_promotion():
     attendance_record_count = attendance_result[1] if attendance_result else 0
     
 
-    print(f"DEBUG: Attendance Rate = {avg_attendance_rate:.1f}, Records = {attendance_record_count}, facullty id = {faculty_id}, term id = {current_term_id}")
+    #print(f"DEBUG: Attendance Rate = {avg_attendance_rate:.1f}, Records = {attendance_record_count}, facullty id = {faculty_id}, term id = {current_term_id}")
     
     # 2. Get weighted evaluation score (minimum 3.0) 
     cursor.execute('''
@@ -6293,13 +6293,13 @@ def faculty_promotion():
 
 
 
-    # is_attendance_ok = avg_attendance_rate >= 80.0
+    is_attendance_ok = avg_attendance_rate >= 80.0
 
     is_attendance_ok = True
     if not is_attendance_ok:
         lock_reasons.append(f"Attendance Rate: Must be 80.0% or higher (Current: {avg_attendance_rate:.1f}%).")
 
-    # is_eval_ok = weightedevalscore >= 3.0
+    is_eval_ok = weightedevalscore >= 3.0
 
     is_eval_ok = True
     if not is_eval_ok:
@@ -6337,13 +6337,14 @@ def faculty_promotion():
                 lock_reasons.append(f"Promotion Cooldown: Must wait 1 year after last promotion (Last promoted: {last_promotion_date.strftime('%B %d, %Y')}, {months_remaining} months remaining).")
 
     # Final eligibility determination
-    can_apply_for_promotion = is_tenure_ok and is_attendance_ok and is_eval_ok and is_cooldown_ok
+    can_apply_for_promotion = True                      #is_tenure_ok and is_attendance_ok and is_eval_ok and is_cooldown_ok
 
     print(f"DEBUG: Can Apply = {can_apply_for_promotion}")
     print(f"DEBUG: Lock Reasons = {lock_reasons}")
     
     # Define rank hierarchy
     rank_hierarchy = [
+        "Associate Instructor",
         "Instructor",
         "Assistant Professor",
         "Associate Professor",
@@ -6398,8 +6399,8 @@ def faculty_promotion():
     cursor.execute("""
         SELECT application_id, current_status, date_submitted, 
                hrmd_approval_date, vpa_approval_date, pres_approval_date, 
-               final_decision, resume, cover_letter, 
-               resume_filename, cover_letter_filename, requested_rank
+               final_decision, resume, cover_letter, resume_filename, cover_letter_filename, tor, tor_filename, diploma, diploma_filename,
+               requested_rank
         FROM promotion_application 
         WHERE faculty_id = %s 
           AND final_decision IS NULL
@@ -6503,7 +6504,11 @@ def faculty_promotion():
             'resume_filename': row[9],
             'cover_letter_filename': row[10],
             'requested_rank': row[11],
-            'upload_locked': row[1] in ['hrmd', 'vpa', 'pres']
+            'upload_locked': row[1] in ['hrmd', 'vpa', 'pres'],
+            'tor_filename': row[12],
+            'diploma_filename': row[14],
+            'has_tor': row[12] is not None,
+            'has_diploma': row[13] is not None
         })
     
     return render_template('faculty&dean/faculty-promotion.html', **template_data)
@@ -8257,16 +8262,32 @@ def promotion_document_upload():
         cursor.close()
         conn.close()
         return "Both Resume/CV and Cover Letter are required.", 400
-
+    
+    # 1. Capture the new files from the form
+    # Note: 'tor' and 'diploma' must match the 'name' attribute in your HTML <input>
+    tor_file = request.files.get('tor')
+    diploma_file = request.files.get('diploma')
+    
+    # capturing data and filenames
+    tor_data = tor_file.read() if tor_file and tor_file.filename else None
+    tor_name = tor_file.filename if tor_file and tor_file.filename else None
+    
+    diploma_data = diploma_file.read() if diploma_file and diploma_file.filename else None
+    diploma_name = diploma_file.filename if diploma_file and diploma_file.filename else None
+    
     # Insert new application row with requested_rank
     cursor.execute("""
         INSERT INTO promotion_application (
             faculty_id, cover_letter, resume, resume_filename, cover_letter_filename, 
-            requested_rank, date_submitted, current_status
-        ) VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s)
-        RETURNING application_id
-    """, (faculty_id, cover_letter_data, resume_cv_data, resume_cv_filename, 
-          cover_letter_filename, requested_rank, 'hrmd'))
+            requested_rank, date_submitted, current_status,
+            tor, tor_filename, diploma, diploma_filename
+        ) VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s)
+    """, (
+        faculty_id, 
+        cover_letter_data, resume_cv_data, resume_cv_filename, cover_letter_filename, 
+        requested_rank, 'hrmd',
+        tor_data, tor_name, diploma_data, diploma_name
+    ))
     
     # After promotion application inserted successfully
     log_audit(
@@ -8358,6 +8379,71 @@ def view_cover_letter():
         )
     else:
         return "Cover Letter not found", 404
+
+# NEW CODES TOR AND DIPLOMA
+@app.route('/faculty/promotion/view_tor')
+@require_auth([20001, 20002, 20003, 20004])
+def view_tor():
+    userid = session.get("user_id")
+    # If HR or VP is viewing a specific faculty, use that ID
+    viewing_id = session.get('viewing_personnel_id')
+    
+    conn = db_pool.get_connection()
+    cursor = conn.cursor()
+
+    # Get the correct personnel_id to query
+    if not viewing_id:
+        cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (userid,))
+        res = cursor.fetchone()
+        target_faculty_id = res[0] if res else None
+    else:
+        target_faculty_id = viewing_id
+
+    cursor.execute("""
+        SELECT tor, tor_filename FROM promotion_application
+        WHERE faculty_id = %s ORDER BY date_submitted DESC LIMIT 1
+    """, (target_faculty_id,))
+    
+    result = cursor.fetchone()
+    cursor.close()
+    db_pool.return_connection(conn)
+
+    if result and result[0]:
+        return Response(result[0], mimetype='application/pdf', 
+                        headers={"Content-Disposition": f"inline; filename={result[1]}"})
+    return "TOR not found", 404
+
+@app.route('/faculty/promotion/view_diploma')
+@require_auth([20001, 20002, 20003, 20004])
+def view_diploma():
+    userid = session.get("user_id")
+    viewing_id = session.get('viewing_personnel_id')
+    
+    conn = db_pool.get_connection()
+    cursor = conn.cursor()
+
+    if not viewing_id:
+        cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (userid,))
+        res = cursor.fetchone()
+        target_faculty_id = res[0] if res else None
+    else:
+        target_faculty_id = viewing_id
+
+    cursor.execute("""
+        SELECT diploma, diploma_filename FROM promotion_application
+        WHERE faculty_id = %s ORDER BY date_submitted DESC LIMIT 1
+    """, (target_faculty_id,))
+    
+    result = cursor.fetchone()
+    cursor.close()
+    db_pool.return_connection(conn)
+
+    if result and result[0]:
+        return Response(result[0], mimetype='application/pdf', 
+                        headers={"Content-Disposition": f"inline; filename={result[1]}"})
+    return "Diploma/Certificate not found", 404
+
+
 
     
 @app.route('/delete_submission', methods=['POST'])  # Changed route and added POST
@@ -9190,18 +9276,18 @@ def get_promotion_eligibility():
     
     # --- Determine Eligibility and Tenure Status ---
     
-    is_tenure_ok = False
+    is_tenure_ok = True
     
-    if employment_status in ["Regular", "Tenured"]:
-        is_tenure_ok = True
-    elif employment_status == "Probationary":
-        # Probationary requires 3 years of service minimum for promotion eligibility
-        is_tenure_ok = years_employed >= 3
-    else:
-        is_tenure_ok = years_employed >= 3
+                                                #if employment_status in ["Regular", "Tenured"]:
+                                                #    is_tenure_ok = True
+                                                #elif employment_status == "Probationary":
+                                                    # Probationary requires 3 years of service minimum for promotion eligibility
+                                                #    is_tenure_ok = years_employed >= 3
+                                                #else:
+                                                #   is_tenure_ok = years_employed >= 3
         
-    is_attendance_ok = avg_attendance_rate >= 80.0
-    is_eval_ok = weighted_eval_score >= 3.0
+    is_attendance_ok = True                     #avg_attendance_rate >= 80.0
+    is_eval_ok = True                           #weighted_eval_score >= 3.0
     can_apply = is_tenure_ok and is_attendance_ok and is_eval_ok and is_cooldown_ok
 
     # Determine tenure type (for display, prioritizing employment_status)
@@ -9431,7 +9517,79 @@ def get_audit_logs():
         print(f"Audit log fetch error: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/promotion/submit', methods=['POST'])
+@require_auth([20001, 20002]) # Faculty or Deans
+def api_promotion_submit():
+    try:
+        data = request.get_json()
+        faculty_id = session.get('personnel_id')
+        current_date = datetime.now()
+        
+        # RULE: Official Promotion Submission Period is June 1 to August 31 [cite: 79]
+        is_in_window = (6 <= current_date.month <= 8)
+        status = 'HRMD Review'
+        
+        if not is_in_window:
+            # RULE: Submissions after August must wait for next cycle or get special approval [cite: 100, 101]
+            status = 'Pending Special Approval'
+        
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+        
+        # RULE: Salary adjustments take effect upon submission of complete documents [cite: 93]
+        cursor.execute("""
+            INSERT INTO promotion_application 
+            (faculty_id, requested_rank, date_submitted, current_status, effectivity_date)
+            VALUES (%s, %s, CURRENT_TIMESTAMP, %s, CURRENT_DATE)
+        """, (faculty_id, data.get('requested_rank'), status))
+        
+        conn.commit()
+        cursor.close()
+        db_pool.return_connection(conn)
+        
+        msg = "Application submitted." if is_in_window else "Submitted outside window. Pending President approval."
+        return jsonify({'success': True, 'message': msg})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/regularization/check-status/<int:faculty_id>')
+def check_regularization_status(faculty_id):
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+        
+        # Check for aligned degree and hire date
+        cursor.execute("""
+            SELECT pr.has_aligned_master, p.hiredate, pr.employment_status
+            FROM profile pr 
+            JOIN personnel p ON pr.personnel_id = p.personnel_id
+            WHERE p.personnel_id = %s
+        """, (faculty_id,))
+        
+        res = cursor.fetchone()
+        has_master, hire_date, current_status = res
+
+        # RULE: Contractual does NOT count toward probation if no aligned Master's 
+        if not has_master:
+            return jsonify({
+                'eligible': False,
+                'category': 'Contractual',
+                'reason': 'Requires vertically aligned Master\'s Degree to begin probation.' [cite: 48]
+            })
+
+        # RULE: Probationary period is 6 consecutive semesters / 3 years [cite: 25, 48]
+        years_diff = (datetime.now().date() - hire_date).days / 365.25
+        if years_diff < 3:
+            return jsonify({
+                'eligible': False,
+                'category': 'Probationary',
+                'reason': f'Probation in progress ({round(years_diff, 1)}/3 years completed).' [cite: 48]
+            })
+
+        return jsonify({'eligible': True, 'category': 'Regular', 'reason': 'Ready for HRMD final review.'})
+    finally:
+        cursor.close()
+        db_pool.return_connection(conn)
 
 
 if __name__ == "__main__":
