@@ -6155,6 +6155,97 @@ def faculty_evaluations():
     faculty_info = get_faculty_info(session['user_id'])
     return render_template('faculty&dean/faculty-evaluations.html', **faculty_info)
 
+# --- Peer Evaluation Routes ---
+
+# Updated to allow both Faculty (20001) and Dean (20002) roles
+@app.route('/faculty/peer-evaluations')
+@require_auth([20001, 20002]) 
+def peer_evaluations_list():
+    user_id = session['user_id']
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Guidelines: HRMD assigns 2 peers per semester 
+    cur.execute("""
+        SELECT p.personnel_id, p.first_name, p.last_name, pa.status
+        FROM peer_assignments pa
+        JOIN personnel p ON pa.target_id = p.personnel_id
+        WHERE pa.evaluator_id = %s 
+        AND pa.status = 'Pending'
+    """, (user_id,))
+    assignments = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('faculty&dean/faculty-peer-list.html', assignments=assignments)
+
+@app.route('/faculty/evaluate/<int:target_id>', methods=['GET', 'POST'])
+@require_auth([20001, 20002])
+def submit_peer_eval(target_id):
+    user_id = session['user_id']
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    if request.method == 'POST':
+        try:
+            # Guidelines require a 4-point Likert scale (1-4) [cite: 31, 76-78]
+            # Capture the 20 criteria responses [cite: 80-81]
+            scores = [int(request.form.get(f'q{i}')) for i in range(1, 21)]
+            
+            # Category Calculation (5 questions each @ 25% per group) [cite: 40, 44, 48, 51]
+            cat1_avg = sum(scores[0:5]) / 5   # Dept Contribution
+            cat2_avg = sum(scores[5:10]) / 5  # Collegiality
+            cat3_avg = sum(scores[10:15]) / 5 # Institutional
+            cat4_avg = sum(scores[15:20]) / 5 # Reliability
+            
+            # Final score calculation based on equal category weighting [cite: 29]
+            final_score = (cat1_avg + cat2_avg + cat3_avg + cat4_avg) / 4
+            
+            # Qualitative Feedback as required by the form [cite: 82-85]
+            strengths = request.form.get('strengths')
+            growth = request.form.get('growth')
+            comments = request.form.get('comments')
+
+            # Insert into evaluation_raw_submissions
+            cur.execute("""
+                INSERT INTO evaluation_raw_submissions 
+                (evaluator_id, target_id, cat1_score, cat2_score, cat3_score, cat4_score, 
+                 final_score, strengths, growth, comments, date_submitted, eval_type)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), 'Peer')
+            """, (user_id, target_id, cat1_avg, cat2_avg, cat3_avg, cat4_avg, 
+                  final_score, strengths, growth, comments))
+            
+            # Mark assignment as complete so it disappears from the faculty dashboard
+            cur.execute("""
+                UPDATE peer_assignments 
+                SET status = 'Completed' 
+                WHERE evaluator_id = %s AND target_id = %s
+            """, (user_id, target_id))
+            
+            conn.commit()
+            return redirect(url_for('peer_evaluations_list'))
+            
+        except Exception as e:
+            conn.rollback()
+            print(f"Error submitting evaluation: {e}")
+            return "An error occurred during submission.", 500
+        finally:
+            cur.close()
+            conn.close()
+
+    # GET: Fetch target metadata for the form header [cite: 71]
+    cur.execute("SELECT first_name, last_name FROM personnel WHERE personnel_id = %s", (target_id,))
+    target = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if not target:
+        return "Target personnel not found", 404
+        
+    return render_template('faculty&dean/peer-eval-form.html', target=target, target_id=target_id)
+
 # EDITED BY CARDS - FIXED VERSION
 @app.route('/faculty_promotion')
 @require_auth([20001, 20002])
