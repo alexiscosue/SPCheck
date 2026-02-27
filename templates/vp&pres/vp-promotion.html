@@ -75,8 +75,6 @@
       <option value="">All Status</option>
       <option value="vpa">For VPAA Review</option>
       <option value="pres">For President Review</option>
-      <option value="approved">Approved</option>
-      <option value="rejected">Rejected</option>
     </select>
   </div>
 
@@ -620,7 +618,6 @@ document.getElementById('viewProfileBtn').addEventListener('click', () => {
 });
 
 // REJECT
-// REJECT (UPDATED)
 document.getElementById('rejectBtn').addEventListener('click', () => {
   if (!currentApplicationId) return alert('No application selected');
   
@@ -658,7 +655,6 @@ document.getElementById('rejectBtn').addEventListener('click', () => {
 
 
 // FORWARD/APPROVE
-// FORWARD/APPROVE (UPDATED)
 document.getElementById('forwardApproveBtn').addEventListener('click', () => {
   if (!currentApplicationId) return alert('No application selected');
   
