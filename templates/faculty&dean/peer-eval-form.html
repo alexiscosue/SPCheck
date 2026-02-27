@@ -1,117 +1,570 @@
 {% extends "faculty&dean/faculty-base.html" %}
 
+{% block title %}Peer-to-Peer Evaluation{% endblock %}
+{% block page_title %}Peer-to-Peer Evaluation{% endblock %}
+
 {% block content %}
-<div class="container-fluid py-4">
-    <div class="row justify-content-center">
-        <div class="col-lg-10 col-xl-8">
-            
-            <div class="card shadow-sm mb-4 border-0 border-start border-primary border-5">
-                <div class="card-body">
-                    <h2 class="h4 mb-1">Peer-to-Peer Evaluation Form</h2>
-                    <p class="text-muted mb-0">Evaluating: <strong>{{ target[0] }} {{ target[1] }}</strong></p>
-                    <small class="text-info"><i class="fas fa-info-circle me-1"></i> Ratings must be based solely on observable professional behaviors[cite: 38].</small>
-                </div>
-            </div>
+<style>
+  .pef-wrapper {
+    max-width: 860px;
+    margin: 0 auto;
+    padding-bottom: 120px;
+  }
 
-            <form action="{{ url_for('submit_peer_eval', target_id=target_id) }}" method="POST">
-                
-                {% set categories = [
-                    {'title': 'I. Departmental / Unit Contribution (25%)', 'id': 'cat1', 'start': 1, 'items': [
-                        'Actively participates in department/unit meetings. [cite: 80]',
-                        'Contributes meaningfully to discussions and collaborative activities. [cite: 80]',
-                        'Shares relevant information and resources with colleagues. [cite: 80]',
-                        'Demonstrates preparedness during collaborative engagements. [cite: 80]',
-                        'Supports implementation of departmental decisions and initiatives. [cite: 80]'
-                    ]},
-                    {'title': 'II. Collegiality and Professional Conduct (25%)', 'id': 'cat2', 'start': 6, 'items': [
-                        'Demonstrates respect toward colleagues in professional interactions. [cite: 80]',
-                        'Maintains constructive and professional communication within the unit. [cite: 80]',
-                        'Handles disagreements or differing opinions professionally. [cite: 80]',
-                        'Demonstrates fairness and objectivity in collaborative work. [cite: 80]',
-                        'Upholds ethical standards in relationships with colleagues. [cite: 80]'
-                    ]},
-                    {'title': 'III. Institutional Engagement (25%)', 'id': 'cat3', 'start': 11, 'items': [
-                        'Participates in institutional programs and school-wide activities. [cite: 80]',
-                        'Accepts committee assignments or institutional tasks responsibly. [cite: 80]',
-                        'Contributes to accreditation, documentation, or compliance efforts. [cite: 81]',
-                        'Demonstrates alignment with institutional mission, vision, and core values. [cite: 81]',
-                        'Supports initiatives that promote school improvement and development. [cite: 81]'
-                    ]},
-                    {'title': 'IV. Reliability and Accountability (25%)', 'id': 'cat4', 'start': 16, 'items': [
-                        'Meets deadlines in shared departmental or unit responsibilities. [cite: 81]',
-                        'Communicates proactively regarding collaborative tasks. [cite: 81]',
-                        'Fulfills assigned responsibilities consistently. [cite: 81]',
-                        'Demonstrates dependability in team-based activities. [cite: 81]',
-                        'Takes responsibility for assigned roles and commitments. [cite: 81]'
-                    ]}
-                ] %}
+  /* ── Letterhead ── */
+  .pef-letterhead {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 28px 32px 20px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    border-top: 5px solid var(--spc-maroon);
+  }
+  .pef-letterhead img {
+    width: 72px;
+    height: 72px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+  .pef-letterhead-text {
+    flex: 1;
+  }
+  .pef-letterhead-text .school-name {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--spc-maroon);
+    letter-spacing: 0.2px;
+    line-height: 1.2;
+  }
+  .pef-letterhead-text .school-address {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 3px;
+  }
+  .pef-letterhead-text .form-title {
+    margin-top: 10px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #111827;
+  }
+  .pef-letterhead-text .form-subtitle {
+    font-size: 12px;
+    color: var(--muted);
+  }
 
-                {% for cat in categories %}
-                <div class="card shadow-sm mb-4 border-0">
-                    <div class="card-header bg-light border-bottom">
-                        <h6 class="mb-0 text-primary">{{ cat.title }}</h6>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0">
-                                <thead class="small text-muted bg-faded">
-                                    <tr>
-                                        <th class="ps-4" style="width: 50%;">Performance Criteria</th>
-                                        <th class="text-center">1</th>
-                                        <th class="text-center">2</th>
-                                        <th class="text-center">3</th>
-                                        <th class="text-center">4</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for item in cat.items %}
-                                    <tr>
-                                        <td class="ps-4 small">{{ cat.start + loop.index0 }}. {{ item }}</td>
-                                        {% for i in range(1, 5) %}
-                                        <td class="text-center">
-                                            <input class="form-check-input" type="radio" name="q{{ cat.start + loop.index0 }}" value="{{ i }}" required>
-                                        </td>
-                                        {% endfor %}
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
+  /* ── Info Fields ── */
+  .pef-info-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px 24px;
+  }
+  .pef-info-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .pef-info-group label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+  }
+  .pef-info-group .pef-static-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: #111827;
+    padding: 8px 10px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+  }
 
-                <div class="card shadow-sm mb-4 border-0">
-                    <div class="card-header bg-dark text-white">
-                        <h6 class="mb-0">Qualitative Feedback</h6>
-                    </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold text-muted">1. MAJOR STRENGTHS OBSERVED[cite: 83]:</label>
-                            <textarea name="strengths" class="form-control" rows="3" required placeholder="Describe professional strengths..."></textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold text-muted">2. AREAS FOR PROFESSIONAL GROWTH[cite: 84]:</label>
-                            <textarea name="growth" class="form-control" rows="3" required placeholder="Suggest areas for improvement..."></textarea>
-                        </div>
-                        <div class="mb-0">
-                            <label class="form-label small fw-bold text-muted">3. ADDITIONAL COMMENTS[cite: 85]:</label>
-                            <textarea name="comments" class="form-control" rows="2" placeholder="Any other relevant observations..."></textarea>
-                        </div>
-                    </div>
-                </div>
+  /* ── Rating Scale Legend ── */
+  .pef-scale-card {
+    background: #fffbea;
+    border: 1px solid #f1c40f44;
+    border-left: 4px solid var(--spc-gold);
+    border-radius: var(--radius);
+    padding: 14px 20px;
+    margin-bottom: 20px;
+  }
+  .pef-scale-card .scale-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #92400e;
+    margin-bottom: 8px;
+  }
+  .pef-scale-pills {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .pef-scale-pill {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 999px;
+    padding: 4px 12px 4px 6px;
+    font-size: 12px;
+    color: #374151;
+  }
+  .pef-scale-pill .score-circle {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 13px;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .sc-4 { background: #10b981; }
+  .sc-3 { background: #3b82f6; }
+  .sc-2 { background: #f59e0b; }
+  .sc-1 { background: var(--spc-maroon); }
 
-                <div class="card shadow-lg border-0 sticky-bottom mb-5">
-                    <div class="card-body d-flex justify-content-between align-items-center">
-                        <span class="text-muted small"><i class="fas fa-lock me-1"></i> Form responses are strictly confidential[cite: 58].</span>
-                        <div>
-                            <a href="{{ url_for('faculty_evaluations') }}" class="btn btn-light me-2">Cancel</a>
-                            <button type="submit" class="btn btn-primary px-5">Submit Peer Evaluation</button>
-                        </div>
-                    </div>
-                </div>
-            </form>
-        </div>
+  /* ── Category Sections ── */
+  .pef-category {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .pef-category-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 13px 20px;
+    background: var(--spc-maroon);
+    color: #fff;
+  }
+  .pef-category-header .cat-title {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+  }
+  .pef-category-header .cat-weight {
+    font-size: 12px;
+    font-weight: 600;
+    background: rgba(255,255,255,0.18);
+    padding: 3px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+
+  /* Criteria table */
+  .pef-criteria-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .pef-criteria-table thead tr {
+    background: #f8fafc;
+    border-bottom: 2px solid #e5e7eb;
+  }
+  .pef-criteria-table th {
+    padding: 9px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--muted);
+    text-align: center;
+  }
+  .pef-criteria-table th:first-child {
+    text-align: left;
+    width: 55%;
+  }
+  .pef-criteria-table td {
+    padding: 11px 14px;
+    font-size: 13.5px;
+    color: #1f2937;
+    border-bottom: 1px solid #f1f3f7;
+    text-align: center;
+  }
+  .pef-criteria-table td:first-child {
+    text-align: left;
+  }
+  .pef-criteria-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .pef-criteria-table tbody tr:hover {
+    background: #fafafa;
+  }
+
+  /* Radio buttons styled */
+  .pef-radio-group {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  .pef-radio-group input[type="radio"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #d1d5db;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .pef-radio-group input[type="radio"]:checked {
+    border-color: var(--spc-maroon);
+    background: var(--spc-maroon);
+    box-shadow: 0 0 0 3px rgba(123,17,19,0.12);
+  }
+  .pef-radio-group input[type="radio"]:checked::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #fff;
+  }
+  .pef-radio-group input[type="radio"]:hover:not(:checked) {
+    border-color: #9ca3af;
+    background: #f9fafb;
+  }
+
+  /* Row number */
+  .criterion-num {
+    font-weight: 600;
+    color: var(--spc-maroon);
+    margin-right: 6px;
+  }
+
+  /* ── Qualitative Feedback ── */
+  .pef-feedback-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .pef-feedback-header {
+    padding: 13px 20px;
+    background: #1f2937;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .pef-feedback-body {
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .pef-feedback-group label {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .pef-feedback-group textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13.5px;
+    color: #1f2937;
+    resize: vertical;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    background: #fafafa;
+    outline: none;
+  }
+  .pef-feedback-group textarea:focus {
+    border-color: var(--spc-maroon);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(123,17,19,0.08);
+  }
+
+  /* ── Sticky Footer Actions ── */
+  .pef-sticky-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid #e5e7eb;
+    padding: 14px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .pef-confidential-note {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .pef-confidential-note i {
+    color: var(--spc-maroon);
+    font-size: 16px;
+  }
+  .pef-footer-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .btn-cancel {
+    padding: 9px 20px;
+    border-radius: 8px;
+    border: 1.5px solid #d1d5db;
+    background: #fff;
+    color: #374151;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .btn-cancel:hover {
+    border-color: #9ca3af;
+    background: #f9fafb;
+  }
+  .btn-submit {
+    padding: 9px 28px;
+    border-radius: 8px;
+    border: none;
+    background: var(--spc-maroon);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .btn-submit:hover {
+    background: var(--spc-maroon-dark);
+    transform: translateY(-1px);
+  }
+  .btn-submit:active { transform: translateY(0); }
+
+  @media (max-width: 640px) {
+    .pef-info-card { grid-template-columns: 1fr; }
+    .pef-letterhead { flex-direction: column; text-align: center; }
+    .pef-criteria-table th, .pef-criteria-table td { padding: 8px 8px; font-size: 12px; }
+    .pef-sticky-footer { flex-direction: column; gap: 10px; padding: 12px 16px; }
+  }
+</style>
+
+<div class="pef-wrapper">
+  <form action="{{ url_for('submit_peer_eval', evaluatee_id=evaluatee_id) }}" method="POST">
+
+    <!-- ── Letterhead ── -->
+    <div class="pef-letterhead">
+      <img src="{{ url_for('static', filename='images/spc-logo.png') }}" alt="SPC Logo" onerror="this.style.display='none'">
+      <div class="pef-letterhead-text">
+        <div class="school-name">St. Peter's College</div>
+        <div class="school-address">042 Sabayle St., Iligan City, 9200 · hrmd@spc.edu.ph</div>
+        <div class="form-title">Peer-to-Peer Evaluation Form</div>
+        <div class="form-subtitle">Faculty and Non-Teaching Personnel · Office of the Human Resource Management</div>
+      </div>
     </div>
+
+    <!-- ── Info Fields ── -->
+    <div class="pef-info-card">
+      <div class="pef-info-group">
+        <label>Employee Being Evaluated</label>
+        <div class="pef-static-value">
+          <i class='bx bx-user' style="color:var(--spc-maroon); margin-right:6px;"></i>{{ target_firstname }} {{ target_lastname }}
+        </div>
+      </div>
+      <div class="pef-info-group">
+        <label>Evaluation Period</label>
+        <div class="pef-static-value">
+          <i class='bx bx-calendar' style="color:var(--spc-maroon); margin-right:6px;"></i>{{ evaluation_period if evaluation_period else 'Current Semester' }}
+        </div>
+      </div>
+      <div class="pef-info-group">
+        <label>Evaluator's Name <span style="font-weight:400;text-transform:none;font-size:11px;">(Optional)</span></label>
+        <input type="text" name="evaluator_name" placeholder="Leave blank to remain anonymous"
+          style="padding:8px 10px; border:1.5px solid #e5e7eb; border-radius:8px; font-size:14px; font-family:inherit; background:#fafafa; outline:none; color:#1f2937;">
+      </div>
+      <div class="pef-info-group">
+        <label>Department / Unit</label>
+        <div class="pef-static-value">
+          <i class='bx bx-building-house' style="color:var(--spc-maroon); margin-right:6px;"></i>{{ target_department if target_department else 'Same Department' }}
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Rating Scale Legend ── -->
+    <div class="pef-scale-card">
+      <div class="scale-title"><i class='bx bx-info-circle'></i> Rating Scale — 4-Point Likert Scale</div>
+      <div class="pef-scale-pills">
+        <div class="pef-scale-pill"><div class="score-circle sc-4">4</div><span><strong>Very Satisfactory</strong> — Consistently demonstrated</span></div>
+        <div class="pef-scale-pill"><div class="score-circle sc-3">3</div><span><strong>Satisfactory</strong> — Frequently demonstrated</span></div>
+        <div class="pef-scale-pill"><div class="score-circle sc-2">2</div><span><strong>Needs Improvement</strong> — Occasionally demonstrated</span></div>
+        <div class="pef-scale-pill"><div class="score-circle sc-1">1</div><span><strong>Unsatisfactory</strong> — Rarely or not demonstrated</span></div>
+      </div>
+    </div>
+
+    <!-- ── Categories ── -->
+    {% set categories = [
+      {
+        'title': 'I. Departmental / Unit Contribution',
+        'weight': '30%',
+        'name': 'cat1',
+        'start': 1,
+        'items': [
+          'Actively participates in department/unit meetings.',
+          'Contributes meaningfully to discussions and collaborative activities.',
+          'Shares relevant information and resources with colleagues.',
+          'Demonstrates preparedness during collaborative engagements.',
+          'Supports implementation of departmental decisions and initiatives.'
+        ]
+      },
+      {
+        'title': 'II. Collegiality and Professional Conduct',
+        'weight': '30%',
+        'name': 'cat2',
+        'start': 6,
+        'items': [
+          'Demonstrates respect toward colleagues in professional interactions.',
+          'Maintains constructive and professional communication within the unit.',
+          'Handles disagreements or differing opinions professionally.',
+          'Demonstrates fairness and objectivity in collaborative work.',
+          'Upholds ethical standards in relationships with colleagues.'
+        ]
+      },
+      {
+        'title': 'III. Institutional Engagement',
+        'weight': '20%',
+        'name': 'cat3',
+        'start': 11,
+        'items': [
+          'Participates in institutional programs and school-wide activities.',
+          'Accepts committee assignments or institutional tasks responsibly.',
+          'Contributes to accreditation, documentation, or compliance efforts when required.',
+          'Demonstrates alignment with institutional mission, vision, and core values.',
+          'Supports initiatives that promote school improvement and development.'
+        ]
+      },
+      {
+        'title': 'IV. Reliability and Accountability',
+        'weight': '20%',
+        'name': 'cat4',
+        'start': 16,
+        'items': [
+          'Meets deadlines in shared departmental or unit responsibilities.',
+          'Communicates proactively regarding collaborative tasks.',
+          'Fulfills assigned responsibilities consistently.',
+          'Demonstrates dependability in team-based activities.',
+          'Takes responsibility for assigned roles and commitments.'
+        ]
+      }
+    ] %}
+
+    {% for cat in categories %}
+    <div class="pef-category">
+      <div class="pef-category-header">
+        <span class="cat-title"><i class='bx bx-list-check' style="margin-right:7px;"></i>{{ cat['title'] }}</span>
+        <span class="cat-weight">{{ cat['weight'] }}</span>
+      </div>
+      <table class="pef-criteria-table">
+        <thead>
+          <tr>
+            <th>Performance Criteria</th>
+            <th>1<br><span style="font-weight:400;text-transform:none;letter-spacing:0;">Unsatis.</span></th>
+            <th>2<br><span style="font-weight:400;text-transform:none;letter-spacing:0;">Needs Impr.</span></th>
+            <th>3<br><span style="font-weight:400;text-transform:none;letter-spacing:0;">Satisf.</span></th>
+            <th>4<br><span style="font-weight:400;text-transform:none;letter-spacing:0;">Very Satisf.</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in cat['items'] %}
+          {% set q_num = cat['start'] + loop.index0 %}
+          <tr>
+            <td><span class="criterion-num">{{ loop.index }}.</span>{{ item }}</td>
+            {% for score in [1, 2, 3, 4] %}
+            <td>
+              <div class="pef-radio-group">
+                <input type="radio" name="q{{ q_num }}" value="{{ score }}" required
+                  aria-label="Question {{ q_num }}, score {{ score }}">
+              </div>
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+
+    <!-- ── Open-Ended Feedback ── -->
+    <div class="pef-feedback-card">
+      <div class="pef-feedback-header">
+        <i class='bx bx-message-square-detail'></i>
+        Open-Ended Feedback
+      </div>
+      <div class="pef-feedback-body">
+        <div class="pef-feedback-group">
+          <label>1. Major Strengths Observed</label>
+          <textarea name="strengths" rows="3" required
+            placeholder="Describe the key professional strengths you have observed in this colleague..."></textarea>
+        </div>
+        <div class="pef-feedback-group">
+          <label>2. Areas for Professional Growth</label>
+          <textarea name="growth" rows="3" required
+            placeholder="Suggest areas where this colleague could further develop professionally..."></textarea>
+        </div>
+        <div class="pef-feedback-group">
+          <label>3. Additional Comments <span style="font-weight:400;text-transform:none;font-size:11px;">(Optional)</span></label>
+          <textarea name="comments" rows="2"
+            placeholder="Any other relevant observations or remarks..."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Sticky Footer ── -->
+    <div class="pef-sticky-footer">
+      <div class="pef-confidential-note">
+        <i class='bx bx-lock-alt'></i>
+        Responses are strictly confidential and accessible only to authorized HRMD personnel.
+      </div>
+      <div class="pef-footer-actions">
+        <a href="{{ url_for('faculty_evaluations') }}" class="btn-cancel">
+          <i class='bx bx-x' style="margin-right:4px;"></i>Cancel
+        </a>
+        <button type="submit" class="btn-submit">
+          <i class='bx bx-send'></i> Submit Peer Evaluation
+        </button>
+      </div>
+    </div>
+
+  </form>
 </div>
 {% endblock %}

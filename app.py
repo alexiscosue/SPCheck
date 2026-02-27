@@ -6155,9 +6155,102 @@ def faculty_evaluations():
     faculty_info = get_faculty_info(session['user_id'])
     return render_template('faculty&dean/faculty-evaluations.html', **faculty_info)
 
+def generate_peer_assignments(acadcalendar_id, department):
+    """
+    Implements the '2 and 2' rule: every faculty evaluates 2 peers 
+    and is evaluated by 2 peers within their department.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    try:
+        # Fetch all personnel in the department
+        cur.execute("SELECT personnel_id FROM personnel WHERE department = %s", (department,))
+        faculty_ids = [row[0] for row in cur.fetchall()]
+        
+        # Guidelines require at least 3 members for rotation
+        if len(faculty_ids) < 3:
+            return False, "At least 3 faculty members are required for peer rotation."
+
+        import random
+        random.shuffle(faculty_ids)
+        n = len(faculty_ids)
+
+        for i in range(n):
+            evaluator = faculty_ids[i]
+            # Use circular shift (i+1 and i+2) to pick 2 distinct peers
+            peer1 = faculty_ids[(i + 1) % n]
+            peer2 = faculty_ids[(i + 2) % n]
+            
+            # Insert assignments into the new table structure
+            cur.execute("""
+                INSERT INTO peer_assignments (evaluator_id, evaluatee_id, acadcalendar_id, is_completed)
+                VALUES (%s, %s, %s, FALSE), (%s, %s, %s, FALSE)
+            """, (evaluator, peer1, acadcalendar_id, evaluator, peer2, acadcalendar_id))
+
+        conn.commit()
+        return True, "Success"
+    except Exception as e:
+        conn.rollback()
+        return False, str(e)
+    finally:
+        cur.close()
+        conn.close()
+
 # --- Peer Evaluation Routes ---
 
-# Updated to allow both Faculty (20001) and Dean (20002) roles
+@app.route('/api/faculty/peer-assignments')
+@require_auth([20001, 20002])
+def api_faculty_peer_assignments():
+    """Returns the peer evaluation tasks assigned to the logged-in faculty member."""
+    try:
+        user_id = session['user_id']
+        personnel_info = get_personnel_info(user_id)
+        personnel_id = personnel_info.get('personnel_id')
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT 
+                pa.assignment_id,
+                pa.evaluatee_id,
+                p.firstname,
+                p.lastname,
+                col.collegename,
+                c.acadyear,
+                c.semester,
+                pa.is_completed
+            FROM peer_assignments pa
+            JOIN personnel p ON pa.evaluatee_id = p.personnel_id
+            JOIN college col ON p.college_id = col.college_id
+            JOIN acadcalendar c ON pa.acadcalendar_id = c.acadcalendar_id
+            WHERE pa.evaluator_id = %s
+            ORDER BY pa.is_completed ASC, c.semesterstart DESC
+        """, (personnel_id,))
+
+        rows = cursor.fetchall()
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        assignments = []
+        for row in rows:
+            assignment_id, evaluatee_id, firstname, lastname, college, acadyear, semester, is_completed = row
+            assignments.append({
+                'assignment_id': assignment_id,
+                'evaluatee_id': evaluatee_id,
+                'name': f"{firstname} {lastname}",
+                'college': college,
+                'period': f"AY {acadyear} — {semester}",
+                'is_completed': is_completed
+            })
+
+        return jsonify({'success': True, 'assignments': assignments})
+
+    except Exception as e:
+        print(f"Error fetching peer assignments: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/faculty/peer-evaluations')
 @require_auth([20001, 20002]) 
 def peer_evaluations_list():
@@ -6166,13 +6259,14 @@ def peer_evaluations_list():
     conn = get_db_connection()
     cur = conn.cursor()
     
-    # Guidelines: HRMD assigns 2 peers per semester 
     cur.execute("""
-        SELECT p.personnel_id, p.first_name, p.last_name, pa.status
+        SELECT p.personnel_id, p.firstname, p.lastname, col.collegename,
+               c.acadyear, c.semester, pa.is_completed
         FROM peer_assignments pa
-        JOIN personnel p ON pa.target_id = p.personnel_id
+        JOIN personnel p ON pa.evaluatee_id = p.personnel_id
+        JOIN college col ON p.college_id = col.college_id
+        JOIN acadcalendar c ON pa.acadcalendar_id = c.acadcalendar_id
         WHERE pa.evaluator_id = %s 
-        AND pa.status = 'Pending'
     """, (user_id,))
     assignments = cur.fetchall()
     
@@ -6181,70 +6275,79 @@ def peer_evaluations_list():
     
     return render_template('faculty&dean/faculty-peer-list.html', assignments=assignments)
 
-@app.route('/faculty/evaluate/<int:target_id>', methods=['GET', 'POST'])
+@app.route('/faculty/evaluate/<int:evaluatee_id>', methods=['GET', 'POST'])
 @require_auth([20001, 20002])
-def submit_peer_eval(target_id):
+def submit_peer_eval(evaluatee_id):
     user_id = session['user_id']
     conn = get_db_connection()
     cur = conn.cursor()
 
     if request.method == 'POST':
         try:
-            # Guidelines require a 4-point Likert scale (1-4) [cite: 31, 76-78]
-            # Capture the 20 criteria responses [cite: 80-81]
+            # Guidelines require a 4-point Likert scale (1-4)
             scores = [int(request.form.get(f'q{i}')) for i in range(1, 21)]
             
-            # Category Calculation (5 questions each @ 25% per group) [cite: 40, 44, 48, 51]
+            # Category Calculation (5 questions each @ 25% per group)
             cat1_avg = sum(scores[0:5]) / 5   # Dept Contribution
             cat2_avg = sum(scores[5:10]) / 5  # Collegiality
-            cat3_avg = sum(scores[10:15]) / 5 # Institutional
+            cat3_avg = sum(scores[10:15]) / 5 # Institutional Engagement
             cat4_avg = sum(scores[15:20]) / 5 # Reliability
             
-            # Final score calculation based on equal category weighting [cite: 29]
+            # Final score calculation based on equal category weighting
             final_score = (cat1_avg + cat2_avg + cat3_avg + cat4_avg) / 4
             
-            # Qualitative Feedback as required by the form [cite: 82-85]
+            # Mandatory Qualitative Feedback
             strengths = request.form.get('strengths')
             growth = request.form.get('growth')
             comments = request.form.get('comments')
 
-            # Insert into evaluation_raw_submissions
+            # Insert raw scores for record-keeping
             cur.execute("""
                 INSERT INTO evaluation_raw_submissions 
                 (evaluator_id, target_id, cat1_score, cat2_score, cat3_score, cat4_score, 
                  final_score, strengths, growth, comments, date_submitted, eval_type)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), 'Peer')
-            """, (user_id, target_id, cat1_avg, cat2_avg, cat3_avg, cat4_avg, 
+            """, (user_id, evaluatee_id, cat1_avg, cat2_avg, cat3_avg, cat4_avg, 
                   final_score, strengths, growth, comments))
             
-            # Mark assignment as complete so it disappears from the faculty dashboard
+            # Update the specific assignment record
             cur.execute("""
                 UPDATE peer_assignments 
-                SET status = 'Completed' 
-                WHERE evaluator_id = %s AND target_id = %s
-            """, (user_id, target_id))
+                SET is_completed = TRUE 
+                WHERE evaluator_id = %s AND evaluatee_id = %s
+            """, (user_id, evaluatee_id))
             
             conn.commit()
             return redirect(url_for('peer_evaluations_list'))
             
         except Exception as e:
             conn.rollback()
-            print(f"Error submitting evaluation: {e}")
-            return "An error occurred during submission.", 500
+            return f"An error occurred: {e}", 500
         finally:
             cur.close()
             conn.close()
 
-    # GET: Fetch target metadata for the form header [cite: 71]
-    cur.execute("SELECT first_name, last_name FROM personnel WHERE personnel_id = %s", (target_id,))
-    target = cur.fetchone()
+    # GET: Fetch evaluatee info with department
+    cur.execute("""
+        SELECT p.firstname, p.lastname, col.collegename
+        FROM personnel p
+        JOIN college col ON p.college_id = col.college_id
+        WHERE p.personnel_id = %s
+    """, (evaluatee_id,))
+    row = cur.fetchone()
     cur.close()
     conn.close()
-    
-    if not target:
-        return "Target personnel not found", 404
-        
-    return render_template('faculty&dean/peer-eval-form.html', target=target, target_id=target_id)
+
+    if row is None:
+        return f"Employee with ID {evaluatee_id} not found.", 404
+
+    return render_template(
+        'faculty&dean/peer-eval-form.html',
+        target_firstname=row[0],
+        target_lastname=row[1],
+        target_department=row[2],
+        evaluatee_id=evaluatee_id
+    )
 
 # EDITED BY CARDS - FIXED VERSION
 @app.route('/faculty_promotion')

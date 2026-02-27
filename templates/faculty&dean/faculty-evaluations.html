@@ -153,32 +153,45 @@
         initTrendChart(['Sem 1','Sem 2','Sem 3','Sem 4'], [4.1,4.3,4.2,4.4]);
       }
 
-      // 3. Peer Evaluation Tasks (Placeholder Injection)
-      const peerBody = document.getElementById('peer-evaluations-body');
-      if (peerBody) {
-          peerBody.innerHTML = `
-            <tr>
-              <td>Prof. Maria Santos</td>
-              <td>Computer Science</td>
-              <td>SY 2025-2026 Q3</td>
-              <td>
-                <button class="btn-action primary"><i class='bx bx-edit-alt'></i> Evaluate</button>
-              </td>
-            </tr>
-            <tr>
-              <td>Dr. Robert Chen</td>
-              <td>Information Technology</td>
-              <td>SY 2025-2026 Q3</td>
-              <td>
-                <span class="status completed"><i class='bx bx-check-circle'></i> Submitted</span>
-              </td>
-            </tr>
-          `;
-      }
+      // 3. Peer Evaluation Tasks — fetch from real API
+      await loadPeerAssignments();
     } catch (error) {
       console.error("Failed to load evaluation data:", error);
     }
   } // End of loadEvaluationData
+
+  async function loadPeerAssignments() {
+    const peerBody = document.getElementById('peer-evaluations-body');
+    if (!peerBody) return;
+
+    try {
+      const res = await fetch('/api/faculty/peer-assignments');
+      const data = await res.json();
+
+      if (!data.success || data.assignments.length === 0) {
+        peerBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:1.5rem; color:var(--muted);">No peer evaluations assigned for this term.</td></tr>`;
+        return;
+      }
+
+      peerBody.innerHTML = data.assignments.map(a => `
+        <tr>
+          <td>${a.name}</td>
+          <td>${a.college}</td>
+          <td>${a.period}</td>
+          <td>
+            ${a.is_completed
+              ? `<span class="status completed"><i class='bx bx-check-circle'></i> Submitted</span>`
+              : `<a href="/faculty/evaluate/${a.evaluatee_id}" class="btn-action primary"><i class='bx bx-edit-alt'></i> Evaluate</a>`
+            }
+          </td>
+        </tr>
+      `).join('');
+
+    } catch (err) {
+      console.error('Failed to load peer assignments:', err);
+      peerBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:1.5rem; color:var(--muted);">Failed to load peer assignments.</td></tr>`;
+    }
+  }
 
   function populateFeedback(feedbackList) {
       const tbody = document.getElementById('feedback-body');
