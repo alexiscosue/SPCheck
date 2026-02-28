@@ -6220,6 +6220,36 @@ def generate_peer_assignments(acadcalendar_id, department):
 
 # --- Peer Evaluation Routes ---
 
+@app.route('/api/hr/generate-peer-assignments', methods=['POST'])
+@require_auth([20003]) # HR only
+def api_generate_peer_assignments():
+    try:
+        data = request.get_json()
+        acadcalendar_id = data.get('acadcalendar_id')
+        department = data.get('collegename')
+
+        if not acadcalendar_id or not department:
+            return jsonify(success=False, message="Missing Academic Term or Department."), 400
+
+        # Call the existing helper function in app.py
+        success, message = generate_peer_assignments(acadcalendar_id, department)
+        
+        if success:
+            # Optional: Log the action for audit
+            hr_info = get_personnel_info(session['user_id'])
+            log_audit_action(
+                hr_info.get('personnel_id'),
+                "Generated Peer Assignments",
+                f"Generated randomized peer evaluations for {department}."
+            )
+            return jsonify(success=True, message=message)
+        else:
+            return jsonify(success=False, message=message), 400
+
+    except Exception as e:
+        print(f"Error in peer assignment route: {str(e)}")
+        return jsonify(success=False, message="Internal Server Error"), 500
+
 @app.route('/api/faculty/peer-assignments')
 @require_auth([20001, 20002])
 def api_faculty_peer_assignments():
