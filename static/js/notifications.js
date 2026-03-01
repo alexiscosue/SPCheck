@@ -52,6 +52,9 @@ const NotifSystem = (function () {
     _render();
     _updateBadge();
 
+    // Load persisted notifications from the server (cross-session / cross-device)
+    _syncFromServer();
+
     if (cfg.sseUrl) {
       _startSSE(cfg.sseUrl);
     }
@@ -89,6 +92,8 @@ const NotifSystem = (function () {
     _save([]);
     _render();
     _updateBadge();
+    // Sync clear to server so other sessions reflect it
+    fetch('/api/notifications/clear', { method: 'POST' }).catch(function () {});
   }
 
   /* ------------------------------------------------------------------ */
@@ -123,8 +128,16 @@ const NotifSystem = (function () {
     if (!data || !data.tap_time) return;
 
     var notifs = _load();
+
+    // Use the DB-assigned notif_id when available so we can deduplicate on reload
+    var itemId = data.notif_id ? 'db_' + data.notif_id
+                               : (Date.now() + '_' + Math.random().toString(36).slice(2));
+
+    // Skip if this DB record is already in localStorage (e.g. loaded by _syncFromServer)
+    if (data.notif_id && notifs.some(function (n) { return n.id === itemId; })) return;
+
     var item = {
-      id            : Date.now() + '_' + Math.random().toString(36).slice(2),
+      id            : itemId,
       // sensor type
       type          : data.notification_type || 'rfid',
       // identity
@@ -176,6 +189,54 @@ const NotifSystem = (function () {
     _updateBadge();
     document.querySelectorAll('.notif-unread-dot').forEach(function (d) { d.style.display = 'none'; });
     document.querySelectorAll('.notif-item.unread').forEach(function (el) { el.classList.remove('unread'); });
+    // Sync read state to server so other devices see it
+    fetch('/api/notifications/mark-read', { method: 'POST' }).catch(function () {});
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Server sync — load persisted notifications on page load           */
+  /* ------------------------------------------------------------------ */
+
+  function _syncFromServer() {
+    fetch('/api/notifications/history')
+      .then(function (r) { return r.json(); })
+      .then(function (resp) {
+        if (!resp.success || !Array.isArray(resp.notifications)) return;
+
+        // Map DB rows to the local notification shape
+        var serverNotifs = resp.notifications.map(function (n) {
+          return {
+            id            : 'db_' + n.notif_id,
+            type          : n.notification_type || 'rfid',
+            person_name   : n.person_name  || 'Unknown',
+            personnel_id  : n.personnel_id || null,
+            rfid_uid      : n.rfid_uid     || null,
+            biometric_uid : n.biometric_uid || null,
+            biometric_id  : n.biometric_id  || null,
+            action        : n.action  || '',
+            status        : n.status  || '',
+            message       : n.message || '',
+            subject_code  : n.subject_code  || null,
+            subject_name  : n.subject_name  || null,
+            class_section : n.class_section || null,
+            classroom     : n.classroom     || null,
+            tap_time      : n.tap_time,
+            read          : n.is_read,
+            ts            : n.created_at ? new Date(n.created_at).getTime() : Date.now()
+          };
+        });
+
+        // Keep any local-only items (no db_ prefix) that arrived via SSE before sync completed
+        var localOnly = _load().filter(function (n) { return n.id.indexOf('db_') !== 0; });
+        var merged = serverNotifs.concat(localOnly);
+        merged.sort(function (a, b) { return b.ts - a.ts; });
+        if (merged.length > MAX_STORED) { merged = merged.slice(0, MAX_STORED); }
+
+        _save(merged);
+        _render();
+        _updateBadge();
+      })
+      .catch(function () { /* silently fall back to localStorage */ });
   }
 
   function _updateBadge() {

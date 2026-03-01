@@ -25,10 +25,10 @@
   </select>
   <select id="statusFilter">
     <option value="all">All Status</option>
-    <option value="Active">Active</option>
-    <option value="Probationary">Probationary</option>
+    <option value="Full-Time">Full-Time</option>
+    <option value="Part-Time">Part-Time</option>
     <option value="Regular">Regular</option>
-    <option value="Tenured">Tenured</option>
+    <option value="Probationary">Probationary</option>
   </select>
   
   <!-- Add Button with Dropdown -->
@@ -37,6 +37,7 @@
     <div class="emp-add-dropdown">
       <a href="#" onclick="openAddEmployeeModal()">Add Employee</a>
       <a href="#" onclick="openAddScheduleModal()">Add Schedule</a>
+      <a href="#" onclick="openImportCSVModal()">Import Schedule CSV</a>
       <!-- NEW OPTIONS -->
       <a href="#" onclick="openDeleteEmployeeModal()">Delete Employee</a>
       <a href="#" onclick="openDeleteScheduleModal()">Delete Schedule</a>
@@ -211,18 +212,48 @@
               <label for="semester_id">Semester *</label>
               <select id="semester_id" name="semester_id" required>
                 <option value="">Select Semester</option>
-                <!-- Semesters will be populated dynamically -->
               </select>
               <div class="emp-error-message" id="semesterError"></div>
             </div>
-            <div class="emp-form-group">
-              <label for="personnel_id">Faculty *</label>
-              <select id="personnel_id" name="personnel_id" required>
-                <option value="">Select Faculty/Dean</option>
-                <!-- Faculty/Dean will be populated dynamically -->
+          </div>
+          <!-- Faculty search section -->
+          <div style="margin-bottom:16px">
+            <label style="display:block;margin-bottom:6px;color:#374151;font-weight:500;font-size:13px">Faculty *</label>
+            <input type="hidden" id="personnel_id" name="personnel_id">
+            <!-- Search + filters row -->
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+              <div class="emp-form-group" style="flex:2;min-width:160px;position:relative">
+                <input type="text" id="facultySearchInput" placeholder="Search faculty by name..." autocomplete="off">
+                <div id="facultySearchResults" style="display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;z-index:300;background:#fff;border:1px solid #d1d5db;border-radius:6px;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.12)"></div>
+              </div>
+              <select id="schedCollegeFilter" style="flex:1;min-width:120px">
+                <option value="">All Colleges</option>
               </select>
-              <div class="emp-error-message" id="personnelError"></div>
+              <select id="schedPositionFilter" style="flex:1;min-width:120px">
+                <option value="">All Positions</option>
+                <option>Instructor</option>
+                <option>Assistant Professor</option>
+                <option>Associate Professor</option>
+                <option>Professor</option>
+                <option>Dean</option>
+                <option>HR Staff</option>
+                <option>Vice President</option>
+                <option>President</option>
+              </select>
+              <select id="schedEmploymentFilter" style="flex:1;min-width:120px">
+                <option value="">All Employment</option>
+                <option>Full-Time</option>
+                <option>Part-Time</option>
+                <option>Regular</option>
+                <option>Probationary</option>
+              </select>
             </div>
+            <!-- Selected faculty chip -->
+            <div id="selectedFacultyDisplay" style="display:none;padding:6px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;font-size:13px;align-items:center;gap:8px;margin-bottom:4px">
+              <span id="selectedFacultyName" style="flex:1;font-weight:500;color:#1d4ed8"></span>
+              <button type="button" onclick="clearFacultySelection()" style="background:none;border:none;cursor:pointer;color:#6b7280;font-size:18px;line-height:1;padding:0">×</button>
+            </div>
+            <div class="emp-error-message" id="personnelError"></div>
           </div>
           <div class="emp-form-row">
             <div class="emp-form-group">
@@ -240,7 +271,6 @@
                 <option value="1">1 Unit</option>
                 <option value="2">2 Units</option>
                 <option value="3">3 Units</option>
-                <option value="4">4 Units</option>
               </select>
               <div class="emp-error-message" id="unitsError"></div>
             </div>
@@ -260,6 +290,7 @@
                 <option value="Thursday">Thursday</option>
                 <option value="Friday">Friday</option>
                 <option value="Saturday">Saturday</option>
+                <option value="Sunday">Sunday</option>
               </select>
               <div class="emp-error-message" id="classday1Error"></div>
             </div>
@@ -293,6 +324,7 @@
                 <option value="Thursday">Thursday</option>
                 <option value="Friday">Friday</option>
                 <option value="Saturday">Saturday</option>
+                <option value="Sunday">Sunday</option>
               </select>
             </div>
             <div class="emp-form-group">
@@ -332,6 +364,104 @@
           <button type="submit" class="emp-btn-submit">Add Schedule</button>
         </div>
       </form>
+    </div>
+  </div>
+</div>
+
+<!-- Import Schedule CSV Modal -->
+<div id="importCSVModal" class="emp-modal">
+  <div class="emp-modal-content" style="max-width:860px;width:95%;">
+    <div class="emp-modal-header">
+      <h2>Import Schedule via CSV</h2>
+      <span class="emp-close" onclick="closeImportCSVModal()">&times;</span>
+    </div>
+    <div class="emp-modal-body">
+
+      <!-- Step 1: Upload -->
+      <div id="csvStep1">
+        <div class="emp-form-section">
+          <h3>Step 1: Select Semester</h3>
+          <div class="emp-form-row">
+            <div class="emp-form-group">
+              <label for="csvSemesterId">Semester *</label>
+              <select id="csvSemesterId" required>
+                <option value="">Select Semester</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="emp-form-section">
+          <h3>Step 2: Download Template &amp; Fill In Data</h3>
+          <p style="font-size:13px;color:#6b7280;margin-bottom:12px;">
+            Download the CSV template, fill in the faculty's name and schedule, then upload it below.<br>
+            <strong>One file = one faculty.</strong> Enter the faculty's <em>Last Name</em> and <em>First Name</em> at the top, then list each class on a separate row.<br>
+            <strong>Required per class:</strong> Subject Code, Day 1, Start Time 1, End Time 1, Room, Section<br>
+            <strong>Optional per class:</strong> Day 2, Start Time 2, End Time 2 (for classes that meet twice a week)<br>
+            <strong>Time format:</strong> HH:MM (e.g. 07:30, 13:00)
+          </p>
+          <button type="button" class="emp-btn-cancel" onclick="downloadScheduleTemplate()" style="display:inline-flex;align-items:center;gap:6px;">
+            <i class="bx bx-download"></i> Download Template
+          </button>
+        </div>
+
+        <div class="emp-form-section">
+          <h3>Step 3: Upload Filled CSV</h3>
+          <div id="csvDropZone" style="border:2px dashed #d1d5db;border-radius:10px;padding:32px;text-align:center;cursor:pointer;background:#f9fafb;transition:border-color .2s;"
+               onclick="document.getElementById('csvFileInput').click()"
+               ondragover="event.preventDefault();this.style.borderColor='#6366f1'"
+               ondragleave="this.style.borderColor='#d1d5db'"
+               ondrop="handleCSVDrop(event)">
+            <i class="bx bx-cloud-upload" style="font-size:40px;color:#9ca3af;display:block;margin-bottom:8px;"></i>
+            <p style="margin:0;color:#374151;font-weight:500;">Drag &amp; drop a CSV file here, or click to browse</p>
+            <p id="csvFileName" style="margin:8px 0 0;font-size:12px;color:#6b7280;"></p>
+          </div>
+          <input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="handleCSVFileSelect(event)">
+        </div>
+
+        <div class="emp-form-actions">
+          <button type="button" class="emp-btn-cancel" onclick="closeImportCSVModal()">Cancel</button>
+          <button type="button" class="emp-btn-submit" id="csvValidateBtn" onclick="handleCSVValidate()" disabled
+                  style="display:inline-flex;align-items:center;gap:6px;">
+            <i class="bx bx-check-shield"></i> <span id="csvValidateBtnText">Validate &amp; Preview</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 2: Results -->
+      <div id="csvResults" style="display:none;">
+        <div id="csvResultsSummary" style="margin-bottom:14px;"></div>
+        <div style="overflow:auto;max-height:380px;border:1px solid #e5e7eb;border-radius:8px;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:780px;">
+            <thead>
+              <tr style="background:#f3f4f6;position:sticky;top:0;z-index:1;">
+                <th style="padding:8px;border:1px solid #e5e7eb;white-space:nowrap;">Row</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;white-space:nowrap;">Status</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;white-space:nowrap;">Faculty</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;white-space:nowrap;">Subject</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;white-space:nowrap;">Day 1</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;white-space:nowrap;">Time 1</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;white-space:nowrap;">Day 2</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;white-space:nowrap;">Time 2</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;white-space:nowrap;">Room</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;white-space:nowrap;">Section</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;white-space:nowrap;min-width:180px;">Issues</th>
+              </tr>
+            </thead>
+            <tbody id="csvResultsBody"></tbody>
+          </table>
+        </div>
+        <div class="emp-form-actions" style="margin-top:14px;">
+          <button type="button" class="emp-btn-cancel" onclick="resetCSVImport()">
+            <i class="bx bx-arrow-back"></i> Back
+          </button>
+          <button type="button" class="emp-btn-submit" id="csvImportBtn" onclick="handleCSVImport()"
+                  style="display:none;align-items:center;gap:6px;">
+            <i class="bx bx-cloud-upload"></i> <span id="csvImportBtnText">Confirm Import</span>
+          </button>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -509,17 +639,17 @@ let pendingDeleteEmployeeData = null;
 let pendingDeleteScheduleData = null;
 
 const timeSlots = [];
-for (let hour = 7; hour <= 20; hour++) { 
-  for (let minute = 0; minute < 60; minute += 15) {
-    const period = hour >= 12 ? 'PM' : 'AM';
-    const displayHour = hour > 12 ? hour - 12 : hour;
-    const displayMinute = minute.toString().padStart(2, '0');
-    
-    const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`;
-    const displayString = `${displayHour}:${displayMinute} ${period}`;
-    
-    timeSlots.push({ value: timeString, display: displayString });
-  }
+for (let totalMinutes = 7 * 60 + 30; totalMinutes <= 21 * 60; totalMinutes += 30) {
+  const hour = Math.floor(totalMinutes / 60);
+  const minute = totalMinutes % 60;
+  const period = hour >= 12 ? 'PM' : 'AM';
+  const displayHour = hour > 12 ? hour - 12 : hour;
+  const displayMinute = minute.toString().padStart(2, '0');
+
+  const timeString = `${hour.toString().padStart(2, '0')}:${displayMinute}:00`;
+  const displayString = `${displayHour}:${displayMinute} ${period}`;
+
+  timeSlots.push({ value: timeString, display: displayString });
 }
 
 function togglePasswordVisibility(fieldId) {
@@ -701,16 +831,33 @@ async function openAddScheduleModal() {
   document.getElementById('addScheduleForm').reset();
   clearErrorMessages();
   resetScheduleForm();
-  
+  clearFacultySelection();
+
+  document.getElementById('schedCollegeFilter').value = '';
+  document.getElementById('schedPositionFilter').value = '';
+  document.getElementById('schedEmploymentFilter').value = '';
+
   await populateSemesterDropdown();
   await populateFacultyDropdown();
-  
-  const subjectSelect = document.getElementById('subject_id');
-  subjectSelect.innerHTML = '<option value="">Select Faculty First</option>';
-  subjectSelect.disabled = true;
-  
+
+  // Populate college filter from DB
+  try {
+    const res   = await fetch('/api/hr/colleges-list');
+    const cdata = await res.json();
+    if (cdata.success) {
+      const sel = document.getElementById('schedCollegeFilter');
+      sel.innerHTML = '<option value="">All Colleges</option>';
+      (cdata.colleges || []).forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.collegename;
+        opt.textContent = c.collegename;
+        sel.appendChild(opt);
+      });
+    }
+  } catch (e) { /* non-critical */ }
+
   populateTimeSlots();
-  
+
   document.getElementById('addScheduleModal').style.display = 'block';
 }
 
@@ -964,42 +1111,123 @@ async function populateSemesterDropdown() {
   try {
     const response = await fetch('/api/faculty/semesters');
     const data = await response.json();
-    
+
     if (data.success) {
       const semesterSelect = document.getElementById('semester_id');
       semesterSelect.innerHTML = '<option value="">Select Semester</option>';
-      
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
       data.semesters.forEach(semester => {
         const option = document.createElement('option');
         option.value = semester.id;
-        option.textContent = semester.text;
+        const isPast = !semester.is_current && new Date(semester.end_date) < today;
+        if (isPast) {
+          option.textContent = semester.text + ' (Past)';
+          option.disabled = true;
+          option.style.color = '#9ca3af';
+        } else {
+          option.textContent = semester.text;
+        }
         semesterSelect.appendChild(option);
       });
+
+      // Auto-select current semester
+      if (data.current_semester_id) {
+        semesterSelect.value = data.current_semester_id;
+      }
     }
   } catch (error) {
     console.error('Error fetching semesters:', error);
   }
 }
 
+let allFacultyList = [];
+
 async function populateFacultyDropdown() {
   try {
     const response = await fetch('/api/hr/faculty-list');
     const data = await response.json();
-    
     if (data.success) {
-      const facultySelect = document.getElementById('personnel_id');
-      facultySelect.innerHTML = '<option value="">Select Faculty</option>';
-      
-      data.faculty_list.forEach(faculty => {
-        const option = document.createElement('option');
-        option.value = faculty.personnel_id;
-        option.textContent = faculty.name;
-        facultySelect.appendChild(option);
-      });
+      allFacultyList = data.faculty_list || [];
     }
   } catch (error) {
     console.error('Error fetching faculty list:', error);
   }
+}
+
+function getFacultyFiltered() {
+  const q   = (document.getElementById('facultySearchInput').value || '').toLowerCase();
+  const col = document.getElementById('schedCollegeFilter').value;
+  const pos = document.getElementById('schedPositionFilter').value;
+  const emp = document.getElementById('schedEmploymentFilter').value;
+  return allFacultyList.filter(f => {
+    if (q   && !f.name.toLowerCase().includes(q)) return false;
+    if (col && f.college !== col)                  return false;
+    if (pos && f.position !== pos)                 return false;
+    if (emp && f.employment_status !== emp)        return false;
+    return true;
+  });
+}
+
+function showFacultyDropdown() {
+  const results = getFacultyFiltered();
+  const container = document.getElementById('facultySearchResults');
+  container.innerHTML = '';
+  if (results.length === 0) {
+    container.innerHTML = '<div style="padding:10px 12px;color:#6b7280;font-size:13px">No faculty found</div>';
+  } else {
+    results.forEach(f => {
+      const div = document.createElement('div');
+      div.style.cssText = 'padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f3f4f6;';
+      const nameLine = document.createElement('div');
+      nameLine.textContent = f.name;
+      div.appendChild(nameLine);
+      const subParts = [f.college, f.position, f.employment_status].filter(v => v && v !== 'N/A');
+      if (subParts.length) {
+        const sub = document.createElement('div');
+        sub.style.cssText = 'font-size:11px;color:#6b7280;margin-top:2px';
+        sub.textContent = subParts.join(' · ');
+        div.appendChild(sub);
+      }
+      div.addEventListener('mouseover', () => div.style.background = '#f0f9ff');
+      div.addEventListener('mouseout',  () => div.style.background = '');
+      div.addEventListener('mousedown', e => {
+        e.preventDefault();
+        selectFaculty(f.personnel_id, f.name);
+      });
+      container.appendChild(div);
+    });
+  }
+  container.style.display = 'block';
+}
+
+function hideFacultyDropdown() {
+  document.getElementById('facultySearchResults').style.display = 'none';
+}
+
+function selectFaculty(id, name) {
+  document.getElementById('personnel_id').value = id;
+  document.getElementById('facultySearchInput').value = '';
+  hideFacultyDropdown();
+  const display = document.getElementById('selectedFacultyDisplay');
+  document.getElementById('selectedFacultyName').textContent = name;
+  display.style.display = 'flex';
+  document.getElementById('personnelError').textContent = '';
+  const subjectSelect = document.getElementById('subject_id');
+  subjectSelect.disabled = false;
+  populateSubjectsDropdown(id);
+}
+
+function clearFacultySelection() {
+  document.getElementById('personnel_id').value = '';
+  document.getElementById('facultySearchInput').value = '';
+  document.getElementById('selectedFacultyDisplay').style.display = 'none';
+  hideFacultyDropdown();
+  const subjectSelect = document.getElementById('subject_id');
+  subjectSelect.disabled = true;
+  subjectSelect.innerHTML = '<option value="">Select Faculty First</option>';
 }
 
 async function populateSubjectsDropdown(personnelId = null) {
@@ -1054,7 +1282,7 @@ function calculateEndTimeOptions(startTime, units) {
   if (!startTime || !units) return [];
   
   const start = new Date(`2000-01-01T${startTime}`);
-  const maxEndTime = new Date(`2000-01-01T21:00:00`); 
+  const maxEndTime = new Date(`2000-01-01T21:30:00`);
   
   const options = [];
   
@@ -1108,27 +1336,6 @@ function calculateEndTimeOptions(startTime, units) {
         options.push({
           value: end3_2.toTimeString().slice(0, 8),
           display: formatTimeForDisplay(end3_2.toTimeString().slice(0, 8)),
-          remainingHours: 0
-        });
-      }
-      break;
-      
-    case 4:
-      // 4 units: 2 hours (enable day 2) or 4 hours (disable day 2)
-      const end4_1 = new Date(start.getTime() + 120 * 60000);
-      if (end4_1 <= maxEndTime) {
-        options.push({
-          value: end4_1.toTimeString().slice(0, 8),
-          display: formatTimeForDisplay(end4_1.toTimeString().slice(0, 8)),
-          remainingHours: 2
-        });
-      }
-      
-      const end4_2 = new Date(start.getTime() + 240 * 60000);
-      if (end4_2 <= maxEndTime) {
-        options.push({
-          value: end4_2.toTimeString().slice(0, 8),
-          display: formatTimeForDisplay(end4_2.toTimeString().slice(0, 8)),
           remainingHours: 0
         });
       }
@@ -1231,7 +1438,7 @@ function updateDay2EndTime() {
   const remainingHours = selectedOption ? parseFloat(selectedOption.getAttribute('data-remaining-hours')) : 0;
   
   const endTime2Select = document.getElementById('endtime_2');
-  const maxEndTime = new Date(`2000-01-01T21:00:00`); 
+  const maxEndTime = new Date(`2000-01-01T21:30:00`);
   
   if (startTime2 && remainingHours > 0) {
     const start = new Date(`2000-01-01T${startTime2}`);
@@ -1242,7 +1449,7 @@ function updateDay2EndTime() {
       const endTime = end.toTimeString().slice(0, 8);
       endTime2Select.innerHTML = `<option value="${endTime}">${formatTimeForDisplay(endTime)}</option>`;
     } else {
-      endTime2Select.innerHTML = '<option value="">Time exceeds 9 PM limit</option>';
+      endTime2Select.innerHTML = '<option value="">Time exceeds 9:30 PM limit</option>';
     }
   } else {
     endTime2Select.innerHTML = '<option value="">Calculated End Time</option>';
@@ -1734,27 +1941,13 @@ document.getElementById('starttime_1').addEventListener('change', updateEndTimes
 document.getElementById('endtime_1').addEventListener('change', handleEndTime1Change);
 document.getElementById('starttime_2').addEventListener('change', updateDay2EndTime);
 
-document.getElementById('personnel_id').addEventListener('change', function() {
-  const selectedFacultyId = this.value;
-  if (selectedFacultyId) {
-    populateSubjectsDropdown(selectedFacultyId);
-  } else {
-    populateSubjectsDropdown(); 
-  }
-});
-
-document.getElementById('personnel_id').addEventListener('change', function() {
-  const selectedFacultyId = this.value;
-  const subjectSelect = document.getElementById('subject_id');
-  
-  if (selectedFacultyId) {
-    subjectSelect.disabled = false;
-    populateSubjectsDropdown(selectedFacultyId);
-  } else {
-    subjectSelect.disabled = true;
-    subjectSelect.innerHTML = '<option value="">Select Faculty First</option>';
-  }
-});
+// Faculty search & filter listeners
+document.getElementById('facultySearchInput').addEventListener('input',  showFacultyDropdown);
+document.getElementById('facultySearchInput').addEventListener('focus',  showFacultyDropdown);
+document.getElementById('facultySearchInput').addEventListener('blur',   () => setTimeout(hideFacultyDropdown, 150));
+document.getElementById('schedCollegeFilter').addEventListener('change', showFacultyDropdown);
+document.getElementById('schedPositionFilter').addEventListener('change', showFacultyDropdown);
+document.getElementById('schedEmploymentFilter').addEventListener('change', showFacultyDropdown);
 
 document.getElementById('subject_id').addEventListener('change', function() {
   const selectedOption = this.options[this.selectedIndex];
@@ -2048,5 +2241,204 @@ document.addEventListener('DOMContentLoaded', async () => {
   await populateTable();
   setupFilters();
 });
+
+/* ===== CSV Schedule Import ===== */
+let csvSelectedFile = null;
+let csvValidatedRows = [];
+
+async function openImportCSVModal() {
+  resetCSVImport();
+  // Fetch semesters directly so the dropdown works even if Add Schedule was never opened
+  const dst = document.getElementById('csvSemesterId');
+  dst.innerHTML = '<option value="">Select Semester</option>';
+  try {
+    const response = await fetch('/api/faculty/semesters');
+    const data = await response.json();
+    if (data.success) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      data.semesters.forEach(semester => {
+        const option = document.createElement('option');
+        option.value = semester.id;
+        const isPast = !semester.is_current && new Date(semester.end_date) < today;
+        if (isPast) {
+          option.textContent = semester.text + ' (Past)';
+          option.disabled = true;
+          option.style.color = '#9ca3af';
+        } else {
+          option.textContent = semester.text;
+        }
+        dst.appendChild(option);
+      });
+      if (data.current_semester_id) {
+        dst.value = data.current_semester_id;
+      }
+    }
+  } catch (e) {
+    console.error('Error fetching semesters for CSV import:', e);
+  }
+  document.getElementById('importCSVModal').style.display = 'block';
+}
+
+function closeImportCSVModal() {
+  document.getElementById('importCSVModal').style.display = 'none';
+  resetCSVImport();
+}
+
+function resetCSVImport() {
+  csvSelectedFile = null;
+  csvValidatedRows = [];
+  document.getElementById('csvStep1').style.display = 'block';
+  document.getElementById('csvResults').style.display = 'none';
+  document.getElementById('csvFileInput').value = '';
+  document.getElementById('csvFileName').textContent = '';
+  document.getElementById('csvValidateBtn').disabled = true;
+  document.getElementById('csvValidateBtnText').textContent = 'Validate & Preview';
+  document.getElementById('csvImportBtn').style.display = 'none';
+  document.getElementById('csvImportBtnText').textContent = 'Confirm Import';
+  document.getElementById('csvResultsBody').innerHTML = '';
+  document.getElementById('csvResultsSummary').innerHTML = '';
+  document.getElementById('csvDropZone').style.borderColor = '#d1d5db';
+}
+
+function downloadScheduleTemplate() {
+  window.location.href = '/api/hr/import-schedule-csv/template';
+}
+
+function handleCSVFileSelect(event) {
+  const file = event.target.files[0];
+  if (file) {
+    csvSelectedFile = file;
+    document.getElementById('csvFileName').textContent = `📄 ${file.name}`;
+    document.getElementById('csvValidateBtn').disabled = false;
+  }
+}
+
+function handleCSVDrop(event) {
+  event.preventDefault();
+  document.getElementById('csvDropZone').style.borderColor = '#d1d5db';
+  const file = event.dataTransfer.files[0];
+  if (file && file.name.toLowerCase().endsWith('.csv')) {
+    csvSelectedFile = file;
+    document.getElementById('csvFileName').textContent = `📄 ${file.name}`;
+    document.getElementById('csvValidateBtn').disabled = false;
+  } else {
+    showNotification('Please drop a .csv file.', 'error');
+  }
+}
+
+async function handleCSVValidate() {
+  const semesterId = document.getElementById('csvSemesterId').value;
+  if (!semesterId) { showNotification('Please select a semester first.', 'error'); return; }
+  if (!csvSelectedFile) { showNotification('Please select a CSV file first.', 'error'); return; }
+
+  const btn = document.getElementById('csvValidateBtn');
+  btn.disabled = true;
+  document.getElementById('csvValidateBtnText').textContent = 'Validating…';
+
+  const formData = new FormData();
+  formData.append('semester_id', semesterId);
+  formData.append('csv_file', csvSelectedFile);
+
+  try {
+    const res = await fetch('/api/hr/validate-schedule-csv', { method: 'POST', body: formData });
+    const result = await res.json();
+
+    if (!result.success) {
+      showNotification(result.error, 'error');
+      btn.disabled = false;
+      document.getElementById('csvValidateBtnText').textContent = 'Validate & Preview';
+      return;
+    }
+
+    csvValidatedRows = result.rows.filter(r => r.status === 'valid').map(r => r.import_data);
+    renderCSVResults(result);
+
+  } catch (e) {
+    showNotification('Validation request failed: ' + e.message, 'error');
+    btn.disabled = false;
+    document.getElementById('csvValidateBtnText').textContent = 'Validate & Preview';
+  }
+}
+
+function renderCSVResults(result) {
+  document.getElementById('csvStep1').style.display = 'none';
+  document.getElementById('csvResults').style.display = 'block';
+
+  const summary = document.getElementById('csvResultsSummary');
+  const facultyLabel = result.faculty_name ? `<strong>${result.faculty_name}</strong> — ` : '';
+  if (result.all_valid) {
+    summary.innerHTML = `
+      <div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:8px;padding:12px 16px;color:#065f46;display:flex;align-items:center;gap:8px;">
+        <i class="bx bx-check-circle" style="font-size:20px;"></i>
+        <span>${facultyLabel}All <strong>${result.total}</strong> schedule row(s) passed validation and are ready to import.</span>
+      </div>`;
+    const importBtn = document.getElementById('csvImportBtn');
+    importBtn.style.display = 'inline-flex';
+  } else {
+    summary.innerHTML = `
+      <div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:12px 16px;color:#991b1b;display:flex;align-items:center;gap:8px;">
+        <i class="bx bx-error-circle" style="font-size:20px;"></i>
+        <span>${facultyLabel}<strong>${result.error_count}</strong> row(s) have errors. Fix the CSV and re-upload. No schedules will be imported until all rows are valid.</span>
+      </div>`;
+    document.getElementById('csvImportBtn').style.display = 'none';
+  }
+
+  const tbody = document.getElementById('csvResultsBody');
+  tbody.innerHTML = '';
+  result.rows.forEach(row => {
+    const isErr = row.status === 'error';
+    const tr = document.createElement('tr');
+    tr.style.background = isErr ? '#fff1f2' : '#f0fdf4';
+    tr.innerHTML = `
+      <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:center;">${row.row_num}</td>
+      <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:center;">
+        <span style="background:${isErr ? '#ef4444' : '#22c55e'};color:#fff;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;">
+          ${isErr ? 'Error' : 'Valid'}
+        </span>
+      </td>
+      <td style="padding:6px 10px;border:1px solid #e5e7eb;">${result.faculty_name || '—'}</td>
+      <td style="padding:6px 10px;border:1px solid #e5e7eb;">${row.subject_name || row.subject_code}</td>
+      <td style="padding:6px 10px;border:1px solid #e5e7eb;">${row.classday_1}</td>
+      <td style="padding:6px 10px;border:1px solid #e5e7eb;">${row.starttime_1} – ${row.endtime_1}</td>
+      <td style="padding:6px 10px;border:1px solid #e5e7eb;">${row.classday_2 || '—'}</td>
+      <td style="padding:6px 10px;border:1px solid #e5e7eb;">${row.starttime_2 && row.endtime_2 ? row.starttime_2 + ' – ' + row.endtime_2 : '—'}</td>
+      <td style="padding:6px 10px;border:1px solid #e5e7eb;">${row.classroom}</td>
+      <td style="padding:6px 10px;border:1px solid #e5e7eb;">${row.classsection}</td>
+      <td style="padding:6px 10px;border:1px solid #e5e7eb;color:#dc2626;font-size:11px;">${isErr ? row.errors.join('<br>') : '—'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+async function handleCSVImport() {
+  const semesterId = document.getElementById('csvSemesterId').value;
+  const btn = document.getElementById('csvImportBtn');
+  btn.disabled = true;
+  document.getElementById('csvImportBtnText').textContent = 'Importing…';
+
+  try {
+    const res = await fetch('/api/hr/import-schedule-csv', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ semester_id: parseInt(semesterId), rows: csvValidatedRows }),
+    });
+    const result = await res.json();
+
+    if (result.success) {
+      showNotification(`Successfully imported ${result.count} schedule(s)!`, 'success');
+      closeImportCSVModal();
+      fetchFacultyData && fetchFacultyData();
+    } else {
+      showNotification('Import failed: ' + result.error, 'error');
+      btn.disabled = false;
+      document.getElementById('csvImportBtnText').textContent = 'Confirm Import';
+    }
+  } catch (e) {
+    showNotification('Import request failed: ' + e.message, 'error');
+    btn.disabled = false;
+    document.getElementById('csvImportBtnText').textContent = 'Confirm Import';
+  }
+}
 </script>
 {% endblock %}

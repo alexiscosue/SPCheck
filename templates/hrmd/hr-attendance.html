@@ -22,11 +22,31 @@
       <div id="logs" class="tab-content active">
         <div class="search-filter">
           <input type="text" id="logSearch" placeholder="Search by name, date, class, or room...">
-          <select id="logFilter">
+          <select id="logCollegeFilter"><option value="">All Colleges</option></select>
+          <select id="logPositionFilter">
+            <option value="">All Positions</option>
+            <option>Instructor</option>
+            <option>Assistant Professor</option>
+            <option>Associate Professor</option>
+            <option>Professor</option>
+            <option>Dean</option>
+            <option>HR Staff</option>
+            <option>Vice President</option>
+            <option>President</option>
+          </select>
+          <select id="logEmploymentFilter">
+            <option value="">All Employment</option>
+            <option>Full-Time</option>
+            <option>Part-Time</option>
+            <option>Regular</option>
+            <option>Probationary</option>
+          </select>
+          <select id="logFilter" style="margin-left:auto">
             <option value="">All Status</option>
             <option>Present</option>
             <option>Late</option>
             <option>Absent</option>
+            <option>Excused</option>
           </select>
         </div>
         <div class="hr-pagination-controls">
@@ -59,6 +79,25 @@
       <div id="classes" class="tab-content">
         <div class="search-filter">
           <input type="text" id="facultySearch" placeholder="Search faculty...">
+          <select id="classesCollegeFilter"><option value="">All Colleges</option></select>
+          <select id="classesPositionFilter">
+            <option value="">All Positions</option>
+            <option>Instructor</option>
+            <option>Assistant Professor</option>
+            <option>Associate Professor</option>
+            <option>Professor</option>
+            <option>Dean</option>
+            <option>HR Staff</option>
+            <option>Vice President</option>
+            <option>President</option>
+          </select>
+          <select id="classesEmploymentFilter">
+            <option value="">All Employment</option>
+            <option>Full-Time</option>
+            <option>Part-Time</option>
+            <option>Regular</option>
+            <option>Probationary</option>
+          </select>
         </div>
         <div class="hr-pagination-controls">
           <button id="prevPageClasses" class="hr-pagination-btn">‹</button>
@@ -89,7 +128,26 @@
       <!-- View RFID Logs Tab -->
       <div id="rfidlogs" class="tab-content">
         <div class="search-filter">
-            <input type="text" id="rfidLogSearch" placeholder="Search by name, remarks, or date...">
+          <input type="text" id="rfidLogSearch" placeholder="Search by name, remarks, or date...">
+          <select id="rfidCollegeFilter"><option value="">All Colleges</option></select>
+          <select id="rfidPositionFilter">
+            <option value="">All Positions</option>
+            <option>Instructor</option>
+            <option>Assistant Professor</option>
+            <option>Associate Professor</option>
+            <option>Professor</option>
+            <option>Dean</option>
+            <option>HR Staff</option>
+            <option>Vice President</option>
+            <option>President</option>
+          </select>
+          <select id="rfidEmploymentFilter">
+            <option value="">All Employment</option>
+            <option>Full-Time</option>
+            <option>Part-Time</option>
+            <option>Regular</option>
+            <option>Probationary</option>
+          </select>
         </div>
         <div class="hr-pagination-controls">
             <button id="prevPageRfidLogs" class="hr-pagination-btn">‹</button>
@@ -116,7 +174,26 @@
       <!-- Campus Entry Tab (Biometric Logs) -->
       <div id="campusentry" class="tab-content">
         <div class="search-filter">
-            <input type="text" id="campusEntrySearch" placeholder="Search by name, remarks, or date...">
+          <input type="text" id="campusEntrySearch" placeholder="Search by name, remarks, or date...">
+          <select id="campusCollegeFilter"><option value="">All Colleges</option></select>
+          <select id="campusPositionFilter">
+            <option value="">All Positions</option>
+            <option>Instructor</option>
+            <option>Assistant Professor</option>
+            <option>Associate Professor</option>
+            <option>Professor</option>
+            <option>Dean</option>
+            <option>HR Staff</option>
+            <option>Vice President</option>
+            <option>President</option>
+          </select>
+          <select id="campusEmploymentFilter">
+            <option value="">All Employment</option>
+            <option>Full-Time</option>
+            <option>Part-Time</option>
+            <option>Regular</option>
+            <option>Probationary</option>
+          </select>
         </div>
         <div class="hr-pagination-controls">
             <button id="prevPageCampusEntry" class="hr-pagination-btn">‹</button>
@@ -219,6 +296,25 @@
           <!-- Search + Pagination -->
           <div class="search-filter">
             <input type="text" id="breakdownSearch" placeholder="Search by name, subject, or section…">
+            <select id="bdCollegeFilter"><option value="">All Colleges</option></select>
+            <select id="bdPositionFilter">
+              <option value="">All Positions</option>
+              <option>Instructor</option>
+              <option>Assistant Professor</option>
+              <option>Associate Professor</option>
+              <option>Professor</option>
+              <option>Dean</option>
+              <option>HR Staff</option>
+              <option>Vice President</option>
+              <option>President</option>
+            </select>
+            <select id="bdEmploymentFilter">
+              <option value="">All Employment</option>
+              <option>Full Time</option>
+              <option>Part Time</option>
+              <option>Regular</option>
+              <option>Probationary</option>
+            </select>
           </div>
           <div class="hr-pagination-controls">
             <button id="breakdownPrev" class="hr-pagination-btn">‹</button>
@@ -871,6 +967,52 @@
   let statusBreakdown = { present: 0, late: 0, absent: 0 };
   let currentPageClasses = 1;
   let filteredFaculty = [];
+
+  const COLLEGE_FILTER_IDS = [
+    'logCollegeFilter', 'classesCollegeFilter',
+    'rfidCollegeFilter', 'campusCollegeFilter', 'bdCollegeFilter'
+  ];
+
+  async function fetchAndPopulateAllColleges() {
+    try {
+      const res = await fetch('/api/hr/colleges-list');
+      const data = await res.json();
+      if (!data.success) return;
+      const colleges = data.colleges || [];
+      COLLEGE_FILTER_IDS.forEach(id => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        const current = sel.value;
+        sel.innerHTML = '<option value="">All Colleges</option>';
+        colleges.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.collegename;
+          opt.textContent = c.collegename;
+          sel.appendChild(opt);
+        });
+        if ([...sel.options].some(o => o.value === current)) sel.value = current;
+      });
+    } catch (e) {
+      console.error('Error fetching colleges list:', e);
+    }
+  }
+
+  function populateFilterOptions(selectId, data, field) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    const current = select.value;
+    const firstOption = select.options[0];
+    select.innerHTML = '';
+    select.appendChild(firstOption);
+    const values = [...new Set(data.map(r => r[field]).filter(v => v && v !== 'N/A'))].sort();
+    values.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v;
+      select.appendChild(opt);
+    });
+    if ([...select.options].some(o => o.value === current)) select.value = current;
+  }
   function startNotificationListener() {
     // SSE is handled by the base template (NotifSystem).
     // This page only listens for the dispatched custom event.
@@ -912,9 +1054,7 @@
         if (data.success) {
             facultyLogs = sortAttendanceByClassTime(data.attendance_logs || []);
             statusBreakdown = data.status_breakdown || { present: 0, late: 0, absent: 0 };
-            
-            //console.log(`✅ Loaded ${facultyLogs.length} attendance records sorted by class time`);
-            
+
             currentPage = 1;
             renderLogs();
             updateStatusChart();
@@ -970,18 +1110,22 @@
     
     let search = document.getElementById('logSearch').value.toLowerCase();
     let filter = document.getElementById('logFilter').value;
-    
+    let collegeFilter = document.getElementById('logCollegeFilter').value;
+    let positionFilter = document.getElementById('logPositionFilter').value;
+    let employmentFilter = document.getElementById('logEmploymentFilter').value;
+
     filteredLogs = facultyLogs.filter(f => {
-        const searchMatch = !search || 
+        const searchMatch = !search ||
             f.name.toLowerCase().includes(search) ||
             f.date.includes(search) ||
             (f.class_name && f.class_name.toLowerCase().includes(search)) ||
             (f.class_section && f.class_section.toLowerCase().includes(search)) ||
             (f.room && f.room.toLowerCase().includes(search));
-        
         const filterMatch = !filter || f.status === filter;
-        
-        return searchMatch && filterMatch;
+        const collegeMatch = !collegeFilter || f.college === collegeFilter;
+        const positionMatch = !positionFilter || f.position === positionFilter;
+        const employmentMatch = !employmentFilter || f.employment_status === employmentFilter;
+        return searchMatch && filterMatch && collegeMatch && positionMatch && employmentMatch;
     });
     
     const totalRecords = filteredLogs.length;
@@ -1272,11 +1416,19 @@
       return;
     }
     
-    filteredFaculty = facultyList.filter(f => 
-      !search || 
-      f.name.toLowerCase().includes(search) || 
-      (f.college && f.college.toLowerCase().includes(search))
-    );
+    let classesCollegeFilter = document.getElementById('classesCollegeFilter').value;
+    let classesPositionFilter = document.getElementById('classesPositionFilter').value;
+    let classesEmploymentFilter = document.getElementById('classesEmploymentFilter').value;
+
+    filteredFaculty = facultyList.filter(f => {
+      const searchMatch = !search ||
+        f.name.toLowerCase().includes(search) ||
+        (f.college && f.college.toLowerCase().includes(search));
+      const collegeMatch = !classesCollegeFilter || f.college === classesCollegeFilter;
+      const positionMatch = !classesPositionFilter || f.position === classesPositionFilter;
+      const employmentMatch = !classesEmploymentFilter || f.employment_status === classesEmploymentFilter;
+      return searchMatch && collegeMatch && positionMatch && employmentMatch;
+    });
     
     const totalRecordsClasses = filteredFaculty.length;
     const totalPagesClasses = Math.ceil(totalRecordsClasses / recordsPerPage);
@@ -1415,15 +1567,15 @@
         semesterDisplay = `${semesterInfo.name} Semester, ${semesterInfo.year}`;
     }
     
-    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
     const timeSlots = [];
-    for (let hour = 7; hour <= 20; hour++) { 
+    for (let hour = 7; hour <= 21; hour++) {
         const displayHour = hour > 12 ? hour - 12 : hour;
         const period = hour >= 12 ? 'PM' : 'AM';
         const nextHour = hour + 1 > 12 ? (hour + 1) - 12 : hour + 1;
         const nextPeriod = (hour + 1) >= 12 ? 'PM' : 'AM';
-        
+
         timeSlots.push({
             label: `${displayHour}:00 ${period} - ${nextHour}:00 ${nextPeriod}`,
             startMinutes: (hour - 7) * 60,
@@ -1790,6 +1942,7 @@
           
           if (data.success) {
               rfidLogs = data.rfid_logs || [];
+
               currentPageRfidLogs = 1;
               renderRFIDLogs();
           } else {
@@ -1808,14 +1961,20 @@
     
     let search = document.getElementById('rfidLogSearch').value.toLowerCase();
     
+    let rfidCollegeFilter = document.getElementById('rfidCollegeFilter').value;
+    let rfidPositionFilter = document.getElementById('rfidPositionFilter').value;
+    let rfidEmploymentFilter = document.getElementById('rfidEmploymentFilter').value;
+
     filteredRfidLogs = rfidLogs.filter(log => {
-        const searchMatch = !search || 
+        const searchMatch = !search ||
             log.personnel_name.toLowerCase().includes(search) ||
             log.remarks.toLowerCase().includes(search) ||
             log.date.includes(search) ||
             log.tap_time.includes(search);
-        
-        return searchMatch;
+        const collegeMatch = !rfidCollegeFilter || log.college === rfidCollegeFilter;
+        const positionMatch = !rfidPositionFilter || log.position === rfidPositionFilter;
+        const employmentMatch = !rfidEmploymentFilter || log.employment_status === rfidEmploymentFilter;
+        return searchMatch && collegeMatch && positionMatch && employmentMatch;
     });
     
     const totalRecords = filteredRfidLogs.length;
@@ -1940,6 +2099,7 @@
                       personnel_name: log.person_name || 'Unknown'
                   };
               });
+
               currentPageCampusEntry = 1;
               renderCampusEntryLogs();
           } else {
@@ -1958,14 +2118,20 @@
 
     let search = document.getElementById('campusEntrySearch').value.toLowerCase();
 
+    let campusCollegeFilter = document.getElementById('campusCollegeFilter').value;
+    let campusPositionFilter = document.getElementById('campusPositionFilter').value;
+    let campusEmploymentFilter = document.getElementById('campusEmploymentFilter').value;
+
     filteredBiometricLogs = biometricLogs.filter(log => {
         const searchMatch = !search ||
             log.personnel_name.toLowerCase().includes(search) ||
             log.remarks.toLowerCase().includes(search) ||
             log.date.includes(search) ||
             log.time.includes(search);
-
-        return searchMatch;
+        const collegeMatch = !campusCollegeFilter || log.college === campusCollegeFilter;
+        const positionMatch = !campusPositionFilter || log.position === campusPositionFilter;
+        const employmentMatch = !campusEmploymentFilter || log.employment_status === campusEmploymentFilter;
+        return searchMatch && collegeMatch && positionMatch && employmentMatch;
     });
 
     const totalRecords = filteredBiometricLogs.length;
@@ -2179,6 +2345,27 @@
     fetchRFIDLogs();
     fetchBiometricLogs();
     startNotificationListener();
+    fetchAndPopulateAllColleges();
+
+    // Filter listeners — Faculty Logs tab
+    ['logCollegeFilter','logPositionFilter','logEmploymentFilter'].forEach(id => {
+      document.getElementById(id)?.addEventListener('change', () => { currentPage = 1; renderLogs(); });
+    });
+
+    // Filter listeners — View Classes tab
+    ['classesCollegeFilter','classesPositionFilter','classesEmploymentFilter'].forEach(id => {
+      document.getElementById(id)?.addEventListener('change', () => { currentPageClasses = 1; renderFacultyList(); });
+    });
+
+    // Filter listeners — RFID Logs tab
+    ['rfidCollegeFilter','rfidPositionFilter','rfidEmploymentFilter'].forEach(id => {
+      document.getElementById(id)?.addEventListener('change', () => { currentPageRfidLogs = 1; renderRFIDLogs(); });
+    });
+
+    // Filter listeners — Campus Entry tab
+    ['campusCollegeFilter','campusPositionFilter','campusEmploymentFilter'].forEach(id => {
+      document.getElementById(id)?.addEventListener('change', () => { currentPageCampusEntry = 1; renderCampusEntryLogs(); });
+    });
 
     // Initialize button visibility based on active tab (default is 'logs')
     const activeTab = document.querySelector('.hr-attendance-main .tab.active');
@@ -2446,12 +2633,19 @@
 
   function applyBreakdownFilters() {
     const q = document.getElementById('breakdownSearch').value.toLowerCase();
+    const bdCollege = document.getElementById('bdCollegeFilter').value;
+    const bdPosition = document.getElementById('bdPositionFilter').value;
+    const bdEmployment = document.getElementById('bdEmploymentFilter').value;
     bdFiltered = bdAllData.filter(function (f) {
-      return !q ||
+      const searchMatch = !q ||
         f.faculty_name.toLowerCase().includes(q) ||
         f.subject_code.toLowerCase().includes(q) ||
         f.subject_name.toLowerCase().includes(q) ||
         f.section.toLowerCase().includes(q);
+      const collegeMatch = !bdCollege || f.college === bdCollege;
+      const positionMatch = !bdPosition || f.position === bdPosition;
+      const employmentMatch = !bdEmployment || f.employment_status === bdEmployment;
+      return searchMatch && collegeMatch && positionMatch && employmentMatch;
     });
 
     // Sort
@@ -2549,6 +2743,14 @@
         bdPage = 1;
         applyBreakdownFilters();
         updateBdSortIcons();
+      });
+    });
+
+    // Filter listeners — Analytics Breakdown tab
+    ['bdCollegeFilter','bdPositionFilter','bdEmploymentFilter'].forEach(function (id) {
+      document.getElementById(id)?.addEventListener('change', function () {
+        bdPage = 1;
+        applyBreakdownFilters();
       });
     });
   });
