@@ -280,15 +280,15 @@ function displaySchedule(data) {
   document.getElementById('prev-semester-btn').disabled = currentSemesterIndex <= 0;
   document.getElementById('next-semester-btn').disabled = currentSemesterIndex >= allSemesters.length - 1;
   
-  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
   const timeSlots = [];
-  for (let hour = 7; hour <= 20; hour++) { 
+  for (let hour = 7; hour <= 21; hour++) {
     const displayHour = hour > 12 ? hour - 12 : hour;
     const period = hour >= 12 ? 'PM' : 'AM';
     const nextHour = hour + 1 > 12 ? (hour + 1) - 12 : hour + 1;
     const nextPeriod = (hour + 1) >= 12 ? 'PM' : 'AM';
-    
+
     timeSlots.push({
       label: `${displayHour}:00 ${period} - ${nextHour}:00 ${nextPeriod}`,
       startMinutes: (hour - 7) * 60,
@@ -314,11 +314,12 @@ function displaySchedule(data) {
           table-layout: fixed;
           width: 100%;
         }
-        .timetable th, .timetable td {
-          width: calc(100% / 7); /* Equal width for all 7 columns (time + 6 days) */
+        .timetable th:not(.time-header), .timetable td.day-cell {
+          width: calc((100% - 160px) / 7);
         }
-        .time-header {
-          width: calc(100% / 7) !important;
+        .timetable th.time-header, .timetable td.time-cell {
+          width: 160px !important;
+          min-width: 160px !important;
         }
         .class-block {
           cursor: default !important; /* REMOVE QUESTION MARK CURSOR */

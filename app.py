@@ -246,6 +246,79 @@ class ConnectionPool:
                 self.current_connections -= 1
 
 db_pool = ConnectionPool(min_connections=3, max_connections=15)
+
+
+def ensure_notifications_table():
+    """Create notifications table if it doesn't exist."""
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notifications (
+                notif_id SERIAL PRIMARY KEY,
+                target_audience VARCHAR(20) NOT NULL,
+                target_personnel_id INTEGER,
+                notification_type VARCHAR(20),
+                person_name VARCHAR(255),
+                tapped_personnel_id INTEGER,
+                rfid_uid VARCHAR(100),
+                biometric_uid VARCHAR(100),
+                biometric_id INTEGER,
+                action VARCHAR(50),
+                status VARCHAR(50),
+                message TEXT,
+                subject_code VARCHAR(50),
+                subject_name VARCHAR(255),
+                class_section VARCHAR(100),
+                classroom VARCHAR(100),
+                tap_time VARCHAR(100),
+                is_read BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        cursor.close()
+        db_pool.return_connection(conn)
+        print("Notifications table ready.")
+    except Exception as e:
+        print(f"Error ensuring notifications table: {e}")
+
+
+def save_notification_to_db(target_audience, target_personnel_id, data):
+    """Insert one notification row and return its notif_id (or None on error)."""
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO notifications (
+                target_audience, target_personnel_id, notification_type,
+                person_name, tapped_personnel_id,
+                rfid_uid, biometric_uid, biometric_id,
+                action, status, message,
+                subject_code, subject_name, class_section, classroom, tap_time
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            RETURNING notif_id
+        """, (
+            target_audience, target_personnel_id,
+            data.get('notification_type', 'rfid'),
+            data.get('person_name'), data.get('personnel_id'),
+            data.get('rfid_uid'), data.get('biometric_uid'), data.get('biometric_id'),
+            data.get('action'), data.get('status'), data.get('message'),
+            data.get('subject_code'), data.get('subject_name'),
+            data.get('class_section'), data.get('classroom'),
+            data.get('tap_time')
+        ))
+        notif_id = cursor.fetchone()[0]
+        conn.commit()
+        cursor.close()
+        db_pool.return_connection(conn)
+        return notif_id
+    except Exception as e:
+        print(f"Error saving notification to DB: {e}")
+        return None
+
+
+ensure_notifications_table()
 shared_serial = SharedSerialPort()
 rfid_reader = RFIDReader(db_pool, shared_serial)
 biometric_reader = BiometricReader(db_pool, shared_serial)
@@ -1327,10 +1400,15 @@ def api_biometric_logs():
                 b.biometric_uid,
                 p.firstname,
                 p.lastname,
-                p.honorifics
+                p.honorifics,
+                c.collegename,
+                pr.position,
+                pr.employmentstatus
             FROM biometriclogs bl
             LEFT JOIN biometric b ON bl.biometric_id = b.biometric_id
             LEFT JOIN personnel p ON b.personnel_id = p.personnel_id
+            LEFT JOIN college c ON p.college_id = c.college_id
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
             ORDER BY bl.taptime DESC
             LIMIT 500
         """)
@@ -1338,6 +1416,7 @@ def api_biometric_logs():
         logs = []
         for row in cursor.fetchall():
             firstname, lastname, honorifics = row[6], row[7], row[8]
+            collegename, position, employmentstatus = row[9], row[10], row[11]
             if firstname and lastname:
                 person_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             else:
@@ -1349,7 +1428,10 @@ def api_biometric_logs():
                 'status': row[3],
                 'remarks': row[4],
                 'biometric_uid': row[5],
-                'person_name': person_name
+                'person_name': person_name,
+                'college': collegename or 'N/A',
+                'position': position or 'N/A',
+                'employment_status': employmentstatus or 'N/A'
             })
 
         return {'success': True, 'biometric_logs': logs}
@@ -1369,29 +1451,39 @@ notification_queues = {}
 notification_lock = threading.Lock()
 
 def broadcast_notification(personnel_id, notification_data):
-    """Broadcast notification to specific personnel, HR, and VP/Pres"""
+    """Broadcast notification to specific personnel, HR, and VP/Pres, and persist to DB."""
+    # Persist to DB first so each audience row gets its own notif_id
+    faculty_notif_id = None
+    if personnel_id and personnel_id > 0:
+        faculty_notif_id = save_notification_to_db('faculty', personnel_id, notification_data)
+    hr_notif_id = save_notification_to_db('hr', None, notification_data)
+    vp_notif_id = save_notification_to_db('vp', None, notification_data)
+
     with notification_lock:
         if personnel_id and personnel_id > 0 and personnel_id in notification_queues:
+            fac_data = dict(notification_data, notif_id=faculty_notif_id)
             for q in notification_queues[personnel_id]:
                 try:
-                    q.put(notification_data)
+                    q.put(fac_data)
                 except Exception as e:
                     print(f"Error putting notification in queue: {e}")
 
         hr_key = 'hr_all_notifications'
         if hr_key in notification_queues:
+            hr_data = dict(notification_data, notif_id=hr_notif_id)
             for q in notification_queues[hr_key]:
                 try:
-                    q.put(notification_data)
+                    q.put(hr_data)
                     print(f"✓ Sent notification to HR: {notification_data.get('action', 'unknown')}")
                 except Exception as e:
                     print(f"Error putting notification in HR queue: {e}")
 
         vp_key = 'vp_all_notifications'
         if vp_key in notification_queues:
+            vp_data = dict(notification_data, notif_id=vp_notif_id)
             for q in notification_queues[vp_key]:
                 try:
-                    q.put(notification_data)
+                    q.put(vp_data)
                     print(f"✓ Sent notification to VP: {notification_data.get('action', 'unknown')}")
                 except Exception as e:
                     print(f"Error putting notification in VP queue: {e}")
@@ -1608,6 +1700,144 @@ def api_vp_notifications_stream():
             'Connection': 'keep-alive'
         }
     )
+
+@app.route('/api/notifications/history')
+@require_auth([20001, 20002, 20003, 20004])
+def api_notifications_history():
+    """Return up to 100 persisted notifications for the current user."""
+    try:
+        user_id = session['user_id']
+        role_id = session.get('user_role')
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        if role_id in [20001, 20002]:
+            personnel_info = get_personnel_info(user_id)
+            personnel_id = personnel_info.get('personnel_id')
+            cursor.execute("""
+                SELECT notif_id, target_audience, target_personnel_id, notification_type,
+                       person_name, tapped_personnel_id, rfid_uid, biometric_uid, biometric_id,
+                       action, status, message, subject_code, subject_name,
+                       class_section, classroom, tap_time, is_read, created_at
+                FROM notifications
+                WHERE target_audience = 'faculty' AND target_personnel_id = %s
+                ORDER BY created_at DESC
+                LIMIT 100
+            """, (personnel_id,))
+        elif role_id == 20003:
+            cursor.execute("""
+                SELECT notif_id, target_audience, target_personnel_id, notification_type,
+                       person_name, tapped_personnel_id, rfid_uid, biometric_uid, biometric_id,
+                       action, status, message, subject_code, subject_name,
+                       class_section, classroom, tap_time, is_read, created_at
+                FROM notifications
+                WHERE target_audience = 'hr'
+                ORDER BY created_at DESC
+                LIMIT 100
+            """)
+        elif role_id == 20004:
+            cursor.execute("""
+                SELECT notif_id, target_audience, target_personnel_id, notification_type,
+                       person_name, tapped_personnel_id, rfid_uid, biometric_uid, biometric_id,
+                       action, status, message, subject_code, subject_name,
+                       class_section, classroom, tap_time, is_read, created_at
+                FROM notifications
+                WHERE target_audience = 'vp'
+                ORDER BY created_at DESC
+                LIMIT 100
+            """)
+        else:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify({'success': False, 'error': 'Unknown role'}), 403
+
+        rows = cursor.fetchall()
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        columns = [
+            'notif_id', 'target_audience', 'target_personnel_id', 'notification_type',
+            'person_name', 'personnel_id', 'rfid_uid', 'biometric_uid', 'biometric_id',
+            'action', 'status', 'message', 'subject_code', 'subject_name',
+            'class_section', 'classroom', 'tap_time', 'is_read', 'created_at'
+        ]
+        notifications = []
+        for row in rows:
+            n = dict(zip(columns, row))
+            if n['created_at']:
+                n['created_at'] = n['created_at'].isoformat()
+            notifications.append(n)
+
+        return jsonify({'success': True, 'notifications': notifications})
+    except Exception as e:
+        print(f"Error fetching notification history: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/notifications/mark-read', methods=['POST'])
+@require_auth([20001, 20002, 20003, 20004])
+def api_notifications_mark_read():
+    """Mark all notifications as read for the current user."""
+    try:
+        user_id = session['user_id']
+        role_id = session.get('user_role')
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        if role_id in [20001, 20002]:
+            personnel_info = get_personnel_info(user_id)
+            personnel_id = personnel_info.get('personnel_id')
+            cursor.execute("""
+                UPDATE notifications SET is_read = TRUE
+                WHERE target_audience = 'faculty' AND target_personnel_id = %s
+            """, (personnel_id,))
+        elif role_id == 20003:
+            cursor.execute("UPDATE notifications SET is_read = TRUE WHERE target_audience = 'hr'")
+        elif role_id == 20004:
+            cursor.execute("UPDATE notifications SET is_read = TRUE WHERE target_audience = 'vp'")
+
+        conn.commit()
+        cursor.close()
+        db_pool.return_connection(conn)
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Error marking notifications read: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/notifications/clear', methods=['POST'])
+@require_auth([20001, 20002, 20003, 20004])
+def api_notifications_clear():
+    """Delete all notifications for the current user."""
+    try:
+        user_id = session['user_id']
+        role_id = session.get('user_role')
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        if role_id in [20001, 20002]:
+            personnel_info = get_personnel_info(user_id)
+            personnel_id = personnel_info.get('personnel_id')
+            cursor.execute("""
+                DELETE FROM notifications
+                WHERE target_audience = 'faculty' AND target_personnel_id = %s
+            """, (personnel_id,))
+        elif role_id == 20003:
+            cursor.execute("DELETE FROM notifications WHERE target_audience = 'hr'")
+        elif role_id == 20004:
+            cursor.execute("DELETE FROM notifications WHERE target_audience = 'vp'")
+
+        conn.commit()
+        cursor.close()
+        db_pool.return_connection(conn)
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Error clearing notifications: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/faculty/semesters')
 @require_auth([20001, 20002, 20003])
@@ -3698,7 +3928,7 @@ def api_hr_faculty_attendance():
         today = datetime.now(philippines_tz).date()
         
         cursor.execute("""
-            SELECT 
+            SELECT
                 p.firstname,
                 p.lastname,
                 p.honorifics,
@@ -3708,11 +3938,16 @@ def api_hr_faculty_attendance():
                 sch.classroom,
                 sub.subjectcode,
                 sub.subjectname,
-                sch.classsection
+                sch.classsection,
+                c.collegename,
+                pr.position,
+                pr.employmentstatus
             FROM attendance a
             JOIN personnel p ON a.personnel_id = p.personnel_id
             JOIN schedule sch ON a.class_id = sch.class_id
             JOIN subjects sub ON sch.subject_id = sub.subject_id
+            LEFT JOIN college c ON p.college_id = c.college_id
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
             WHERE p.role_id IN (20001, 20002)
             ORDER BY a.timein DESC, p.lastname, p.firstname
         """)
@@ -3732,8 +3967,9 @@ def api_hr_faculty_attendance():
         seen_records = set()
         
         for record in attendance_records:
-            (firstname, lastname, honorifics, status, timein, timeout, 
-             classroom, subject_code, subject_name, class_section) = record
+            (firstname, lastname, honorifics, status, timein, timeout,
+             classroom, subject_code, subject_name, class_section,
+             collegename, position, employmentstatus) = record
             
             faculty_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             class_name = f"{subject_code} - {subject_name}"
@@ -3777,7 +4013,10 @@ def api_hr_faculty_attendance():
                     'room': classroom or 'N/A',
                     'time_in': time_in_str,
                     'time_out': time_out_str,
-                    'status': status.capitalize()
+                    'status': status.capitalize(),
+                    'college': collegename or 'N/A',
+                    'position': position or 'N/A',
+                    'employment_status': employmentstatus or 'N/A'
                 }
                 attendance_logs.append(log_entry)
                 status_lower = status.lower()
@@ -3917,17 +4156,21 @@ def api_hr_attendance_analytics():
                     sub.subjectcode, sub.subjectname,
                     sch.classsection,
                     ar.presentcount, ar.latecount, ar.absentcount,
-                    ar.excusedcount, ar.totalclasses, ar.attendancerate
+                    ar.excusedcount, ar.totalclasses, ar.attendancerate,
+                    c.collegename, pr.position, pr.employmentstatus
                 FROM attendancereport ar
                 JOIN personnel p  ON ar.personnel_id = p.personnel_id
                 JOIN schedule sch ON ar.class_id     = sch.class_id
                 JOIN subjects sub ON sch.subject_id  = sub.subject_id
+                LEFT JOIN college c ON p.college_id = c.college_id
+                LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
                 WHERE ar.acadcalendar_id = %s
                   AND p.role_id IN (20001, 20002)
                 ORDER BY ar.attendancerate ASC, p.lastname, p.firstname
             """, (semester_id,))
             for row in cursor.fetchall():
-                (fn, ln, hon, scode, sname, section, pres, late, absent, excused, total, rate) = row
+                (fn, ln, hon, scode, sname, section, pres, late, absent, excused, total, rate,
+                 collegename, position, employmentstatus) = row
                 name = f"{ln}, {fn}, {hon}" if hon else f"{ln}, {fn}"
                 faculty_breakdown.append({
                     'faculty_name': name,
@@ -3939,7 +4182,10 @@ def api_hr_attendance_analytics():
                     'absent': int(absent),
                     'excused': int(excused),
                     'total': int(total),
-                    'rate': round(float(rate), 2)
+                    'rate': round(float(rate), 2),
+                    'college': collegename or 'N/A',
+                    'position': position or 'N/A',
+                    'employment_status': employmentstatus or 'N/A'
                 })
 
         cursor.close()
@@ -4505,16 +4751,21 @@ def api_hr_rfid_logs():
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT 
+            SELECT
                 rl.log_id,
                 rl.taptime,
                 rl.personnel_id,
                 rl.remarks,
                 p.firstname,
                 p.lastname,
-                p.honorifics
+                p.honorifics,
+                c.collegename,
+                pr.position,
+                pr.employmentstatus
             FROM rfidlogs rl
             LEFT JOIN personnel p ON rl.personnel_id = p.personnel_id
+            LEFT JOIN college c ON p.college_id = c.college_id
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
             ORDER BY rl.taptime DESC
         """)
         
@@ -4524,27 +4775,31 @@ def api_hr_rfid_logs():
         
         rfid_logs = []
         for log in logs:
-            (log_id, taptime, personnel_id, remarks, firstname, lastname, honorifics) = log
-            
+            (log_id, taptime, personnel_id, remarks, firstname, lastname, honorifics,
+             collegename, position, employmentstatus) = log
+
             if personnel_id and firstname and lastname:
                 personnel_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             else:
                 personnel_name = "Unknown RFID"
-            
+
             if taptime:
                 tap_datetime = taptime.astimezone(pytz.timezone('Asia/Manila'))
                 date_str = tap_datetime.strftime('%Y-%m-%d')
-                time_str = tap_datetime.strftime('%H:%M:%S.%f')[:12] 
+                time_str = tap_datetime.strftime('%H:%M:%S.%f')[:12]
             else:
                 date_str = "N/A"
                 time_str = "N/A"
-            
+
             rfid_logs.append({
                 'log_id': log_id,
                 'personnel_name': personnel_name,
                 'date': date_str,
                 'tap_time': time_str,
-                'remarks': remarks or ""
+                'remarks': remarks or "",
+                'college': collegename or 'N/A',
+                'position': position or 'N/A',
+                'employment_status': employmentstatus or 'N/A'
             })
         
         return {
@@ -4579,21 +4834,24 @@ def api_hr_faculty_list():
                 ORDER BY semesterstart DESC
                 LIMIT 1
             )
-            SELECT 
+            SELECT
                 p.personnel_id,
                 p.firstname,
                 p.lastname,
                 p.honorifics,
                 p.role_id,
                 c.collegename,
-                COALESCE(SUM(sub.units), 0) as total_units
+                COALESCE(SUM(sub.units), 0) as total_units,
+                pr.position,
+                pr.employmentstatus
             FROM personnel p
             LEFT JOIN college c ON p.college_id = c.college_id
-            LEFT JOIN schedule sch ON p.personnel_id = sch.personnel_id 
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            LEFT JOIN schedule sch ON p.personnel_id = sch.personnel_id
                 AND sch.acadcalendar_id = (SELECT acadcalendar_id FROM current_calendar)
             LEFT JOIN subjects sub ON sch.subject_id = sub.subject_id
             WHERE p.role_id IN (20001, 20002)
-            GROUP BY p.personnel_id, p.firstname, p.lastname, p.honorifics, p.role_id, c.collegename
+            GROUP BY p.personnel_id, p.firstname, p.lastname, p.honorifics, p.role_id, c.collegename, pr.position, pr.employmentstatus
             ORDER BY p.lastname, p.firstname
         """)
         
@@ -4603,16 +4861,18 @@ def api_hr_faculty_list():
         
         faculty_list = []
         for record in faculty_records:
-            personnel_id, firstname, lastname, honorifics, role_id, collegename, total_units = record
-            
+            personnel_id, firstname, lastname, honorifics, role_id, collegename, total_units, position, employmentstatus = record
+
             faculty_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
-            
+
             faculty_list.append({
                 'personnel_id': personnel_id,
                 'name': faculty_name,
                 'college': collegename or 'N/A',
                 'teaching_load': int(total_units),
-                'role_id': role_id
+                'role_id': role_id,
+                'position': position or 'N/A',
+                'employment_status': employmentstatus or 'N/A'
             })
         
         result = {
@@ -5803,9 +6063,415 @@ def api_hr_add_schedule():
             db_pool.return_connection(conn)
         return {'success': False, 'error': str(e)}
 
-@app.route('/api/hr/delete-schedule/classes/<int:personnel_id>') 
+@app.route('/api/hr/import-schedule-csv/template', methods=['GET'])
 @require_auth([20003])
-def api_hr_delete_schedule_classes(personnel_id): 
+def api_hr_download_schedule_template():
+    """Return a per-faculty CSV template for schedule import"""
+    import csv as csv_module
+    import io
+    output = io.StringIO()
+    writer = csv_module.writer(output)
+    # Faculty header section
+    writer.writerow(['Last Name', 'Dela Cruz'])
+    writer.writerow(['First Name', 'Juan'])
+    writer.writerow([])   # blank separator
+    # Schedule table
+    writer.writerow(['Subject Code', 'Day 1', 'Start Time 1', 'End Time 1',
+                     'Day 2', 'Start Time 2', 'End Time 2', 'Room', 'Section'])
+    writer.writerow(['CS101', 'Monday',  '07:30', '09:00', 'Wednesday', '07:30', '09:00', 'Room 101', 'CS3A-1'])
+    writer.writerow(['CS102', 'Tuesday', '10:00', '11:30', '',          '',      '',      'Lab A',    'CS3B-1'])
+    output.seek(0)
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=schedule_import_template.csv'}
+    )
+
+
+@app.route('/api/hr/validate-schedule-csv', methods=['POST'])
+@require_auth([20003])
+def api_hr_validate_schedule_csv():
+    """
+    Validate a per-faculty CSV for schedule import.
+    Format:
+        Last Name,<value>
+        First Name,<value>
+        (blank row)
+        Subject Code,Day 1,Start Time 1,End Time 1,Day 2,Start Time 2,End Time 2,Room,Section
+        <data rows...>
+    """
+    import csv as csv_module
+    import io as io_module
+    conn = None
+    try:
+        semester_id = request.form.get('semester_id')
+        file = request.files.get('csv_file')
+
+        if not semester_id:
+            return jsonify({'success': False, 'error': 'Semester is required'})
+        if not file or file.filename == '':
+            return jsonify({'success': False, 'error': 'No CSV file uploaded'})
+        if not file.filename.lower().endswith('.csv'):
+            return jsonify({'success': False, 'error': 'File must be a .csv file'})
+
+        content = file.read().decode('utf-8-sig')
+        all_raw = list(csv_module.reader(io_module.StringIO(content)))
+
+        # ── Parse faculty header (Last Name / First Name) ──────────────────
+        last_name = first_name = ''
+        header_row_index = None  # index of the "Subject Code,..." row
+
+        SCHED_HEADER = ['subject code', 'day 1', 'start time 1', 'end time 1']
+
+        for i, row in enumerate(all_raw):
+            if not row:
+                continue
+            first_cell = row[0].strip().lower().rstrip(':')
+            if first_cell == 'last name' and len(row) >= 2:
+                last_name = row[1].strip()
+            elif first_cell == 'first name' and len(row) >= 2:
+                first_name = row[1].strip()
+            elif [c.strip().lower() for c in row[:4]] == SCHED_HEADER:
+                header_row_index = i
+                break
+
+        if not last_name or not first_name:
+            return jsonify({'success': False,
+                            'error': 'Could not find "Last Name" and "First Name" rows in the file.'})
+        if header_row_index is None:
+            return jsonify({'success': False,
+                            'error': 'Could not find the schedule header row '
+                                     '("Subject Code, Day 1, Start Time 1, End Time 1, …").'})
+
+        # ── Schedule data rows ──────────────────────────────────────────────
+        data_rows = [r for r in all_raw[header_row_index + 1:] if any(c.strip() for c in r)]
+        if not data_rows:
+            return jsonify({'success': False, 'error': 'No schedule rows found below the header.'})
+
+        # ── Helpers ─────────────────────────────────────────────────────────
+        valid_days = {'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'}
+
+        def parse_time(t):
+            if not t or not t.strip():
+                return None, None
+            t = t.strip()
+            try:
+                parts = t.split(':')
+                if len(parts) == 2:
+                    h, m = int(parts[0]), int(parts[1])
+                    if 0 <= h <= 23 and 0 <= m <= 59:
+                        return f'{h:02d}:{m:02d}:00', None
+                return None, f"Invalid time '{t}' — use HH:MM (e.g. 07:30)"
+            except Exception:
+                return None, f"Invalid time '{t}' — use HH:MM (e.g. 07:30)"
+
+        def to_minutes(t):
+            if not t:
+                return 0
+            try:
+                parts = t.split('+')[0].split(':')
+                return int(parts[0]) * 60 + int(parts[1])
+            except Exception:
+                return 0
+
+        def overlaps(d_a, s_a, e_a, d_b, s_b, e_b):
+            return (d_a and d_b and d_a == d_b and s_a and e_a and s_b and e_b and
+                    to_minutes(s_a) < to_minutes(e_b) and to_minutes(e_a) > to_minutes(s_b))
+
+        # ── DB lookup: faculty by name ───────────────────────────────────────
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT personnel_id, firstname || ' ' || lastname "
+            "FROM personnel WHERE LOWER(lastname) = LOWER(%s) AND LOWER(firstname) = LOWER(%s)",
+            (last_name, first_name))
+        person = cursor.fetchone()
+        if not person:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify({'success': False,
+                            'error': f'Faculty "{first_name} {last_name}" was not found in the system. '
+                                     f'Check the spelling of the name.'})
+        personnel_id = person[0]
+        faculty_display = person[1]
+
+        # ── Subject cache ────────────────────────────────────────────────────
+        subject_cache = {}
+
+        def lookup_subject(code):
+            if code in subject_cache:
+                return subject_cache[code]
+            cursor.execute(
+                "SELECT subject_id, units, subjectname FROM subjects WHERE subjectcode = %s",
+                (code,))
+            row = cursor.fetchone()
+            subject_cache[code] = row  # may be None
+            return row
+
+        # ── Validate each schedule row ───────────────────────────────────────
+        result_rows = []
+        all_valid = True
+        csv_schedules = []  # (display_row, day1, s1, e1, day2, s2, e2)
+
+        for idx, raw in enumerate(data_rows):
+            # Pad short rows to avoid index errors
+            while len(raw) < 9:
+                raw.append('')
+            (subject_code_r, classday_1_r, starttime_1_r, endtime_1_r,
+             classday_2_r, starttime_2_r, endtime_2_r,
+             classroom_r, classsection_r) = [c.strip() for c in raw[:9]]
+
+            display_row = header_row_index + 2 + idx  # 1-based row number in file
+            errors = []
+
+            subject_code  = subject_code_r
+            classday_1    = classday_1_r
+            starttime_1_r = starttime_1_r
+            endtime_1_r   = endtime_1_r
+            classday_2    = classday_2_r or None
+            starttime_2_r = starttime_2_r or None
+            endtime_2_r   = endtime_2_r or None
+            classroom     = classroom_r
+            classsection  = classsection_r
+
+            # Required fields
+            if not subject_code:  errors.append('Subject Code is required')
+            if not classday_1:    errors.append('Day 1 is required')
+            if not starttime_1_r: errors.append('Start Time 1 is required')
+            if not endtime_1_r:   errors.append('End Time 1 is required')
+            if not classroom:     errors.append('Room is required')
+            if not classsection:  errors.append('Section is required')
+
+            # Day name validation
+            if classday_1 and classday_1 not in valid_days:
+                errors.append(f"Day 1 '{classday_1}' is not valid — use Monday, Tuesday, … Sunday")
+            if classday_2 and classday_2 not in valid_days:
+                errors.append(f"Day 2 '{classday_2}' is not valid — use Monday, Tuesday, … Sunday")
+
+            # Time parsing
+            starttime_1, t_err = parse_time(starttime_1_r)
+            if t_err: errors.append(f'Start Time 1: {t_err}')
+            endtime_1, t_err = parse_time(endtime_1_r)
+            if t_err: errors.append(f'End Time 1: {t_err}')
+
+            starttime_2 = endtime_2 = None
+            has_day2 = classday_2 or starttime_2_r or endtime_2_r
+            if has_day2:
+                if not classday_2:    errors.append('Day 2 is required when Day 2 times are filled')
+                if not starttime_2_r: errors.append('Start Time 2 is required when Day 2 is filled')
+                if not endtime_2_r:   errors.append('End Time 2 is required when Day 2 is filled')
+                if starttime_2_r:
+                    starttime_2, t_err = parse_time(starttime_2_r)
+                    if t_err: errors.append(f'Start Time 2: {t_err}')
+                if endtime_2_r:
+                    endtime_2, t_err = parse_time(endtime_2_r)
+                    if t_err: errors.append(f'End Time 2: {t_err}')
+
+            if starttime_1 and endtime_1 and to_minutes(starttime_1) >= to_minutes(endtime_1):
+                errors.append('Start Time 1 must be earlier than End Time 1')
+            if starttime_2 and endtime_2 and to_minutes(starttime_2) >= to_minutes(endtime_2):
+                errors.append('Start Time 2 must be earlier than End Time 2')
+
+            # Subject lookup
+            subject_id = None
+            subject_name = subject_code
+            if subject_code:
+                subj = lookup_subject(subject_code)
+                if subj:
+                    subject_id = subj[0]
+                    subject_name = subj[2]
+                else:
+                    errors.append(f'Subject code "{subject_code}" was not found in the system')
+
+            # Internal conflict: day1 == day2 overlapping
+            if (not errors and classday_1 and classday_2 and classday_1 == classday_2
+                    and starttime_1 and endtime_1 and starttime_2 and endtime_2):
+                s1, e1, s2, e2 = to_minutes(starttime_1), to_minutes(endtime_1), to_minutes(starttime_2), to_minutes(endtime_2)
+                if (s1 < e2 and e1 > s2) or (s2 < e1 and e2 > s1):
+                    errors.append(f'Day 1 and Day 2 are both {classday_1} with overlapping times')
+
+            # DB conflict check (against existing saved schedules)
+            if not errors and starttime_1 and endtime_1:
+                cursor.execute("""
+                    SELECT sub.subjectcode, s.classday_1, s.starttime_1, s.endtime_1, s.classsection
+                    FROM schedule s JOIN subjects sub ON s.subject_id = sub.subject_id
+                    WHERE s.personnel_id = %s AND s.acadcalendar_id = %s
+                      AND s.classday_1 = %s AND s.starttime_1 < %s AND s.endtime_1 > %s
+                """, (personnel_id, semester_id, classday_1, endtime_1, starttime_1))
+                for c in cursor.fetchall():
+                    errors.append(f'Conflicts with existing schedule: {c[0]} on {c[1]} {c[2]}–{c[3]} (Section {c[4]})')
+
+                cursor.execute("""
+                    SELECT sub.subjectcode, s.classday_2, s.starttime_2, s.endtime_2, s.classsection
+                    FROM schedule s JOIN subjects sub ON s.subject_id = sub.subject_id
+                    WHERE s.personnel_id = %s AND s.acadcalendar_id = %s
+                      AND s.classday_2 = %s AND s.starttime_2 < %s AND s.endtime_2 > %s
+                """, (personnel_id, semester_id, classday_1, endtime_1, starttime_1))
+                for c in cursor.fetchall():
+                    errors.append(f'Conflicts with existing schedule: {c[0]} on {c[1]} {c[2]}–{c[3]} (Section {c[4]})')
+
+                if classday_2 and starttime_2 and endtime_2:
+                    cursor.execute("""
+                        SELECT sub.subjectcode, s.classday_1, s.starttime_1, s.endtime_1, s.classsection
+                        FROM schedule s JOIN subjects sub ON s.subject_id = sub.subject_id
+                        WHERE s.personnel_id = %s AND s.acadcalendar_id = %s
+                          AND s.classday_1 = %s AND s.starttime_1 < %s AND s.endtime_1 > %s
+                    """, (personnel_id, semester_id, classday_2, endtime_2, starttime_2))
+                    for c in cursor.fetchall():
+                        errors.append(f'Conflicts with existing schedule: {c[0]} on {c[1]} {c[2]}–{c[3]} (Section {c[4]})')
+
+                    cursor.execute("""
+                        SELECT sub.subjectcode, s.classday_2, s.starttime_2, s.endtime_2, s.classsection
+                        FROM schedule s JOIN subjects sub ON s.subject_id = sub.subject_id
+                        WHERE s.personnel_id = %s AND s.acadcalendar_id = %s
+                          AND s.classday_2 = %s AND s.starttime_2 < %s AND s.endtime_2 > %s
+                    """, (personnel_id, semester_id, classday_2, endtime_2, starttime_2))
+                    for c in cursor.fetchall():
+                        errors.append(f'Conflicts with existing schedule: {c[0]} on {c[1]} {c[2]}–{c[3]} (Section {c[4]})')
+
+            # Inter-row conflict (within this file)
+            if not errors and starttime_1 and endtime_1:
+                for (prev_rn, prev_d1, prev_s1, prev_e1, prev_d2, prev_s2, prev_e2) in csv_schedules:
+                    if overlaps(classday_1, starttime_1, endtime_1, prev_d1, prev_s1, prev_e1):
+                        errors.append(f'Conflicts with Row {prev_rn} in this file (same day and overlapping time)')
+                    if overlaps(classday_1, starttime_1, endtime_1, prev_d2, prev_s2, prev_e2):
+                        errors.append(f'Conflicts with Row {prev_rn} in this file (same day and overlapping time)')
+                    if classday_2 and starttime_2 and endtime_2:
+                        if overlaps(classday_2, starttime_2, endtime_2, prev_d1, prev_s1, prev_e1):
+                            errors.append(f'Conflicts with Row {prev_rn} in this file (same day and overlapping time)')
+                        if overlaps(classday_2, starttime_2, endtime_2, prev_d2, prev_s2, prev_e2):
+                            errors.append(f'Conflicts with Row {prev_rn} in this file (same day and overlapping time)')
+
+            status = 'error' if errors else 'valid'
+            if errors:
+                all_valid = False
+
+            result_row = {
+                'row_num': display_row,
+                'status': status,
+                'errors': errors,
+                'subject_code': subject_code,
+                'subject_name': subject_name,
+                'classday_1': classday_1,
+                'starttime_1': starttime_1_r or '',
+                'endtime_1': endtime_1_r or '',
+                'classday_2': classday_2 or '',
+                'starttime_2': starttime_2_r or '',
+                'endtime_2': endtime_2_r or '',
+                'classroom': classroom,
+                'classsection': classsection,
+            }
+
+            if status == 'valid':
+                result_row['import_data'] = {
+                    'personnel_id': personnel_id,
+                    'subject_id': subject_id,
+                    'classday_1': classday_1,
+                    'starttime_1': starttime_1,
+                    'endtime_1': endtime_1,
+                    'classday_2': classday_2,
+                    'starttime_2': starttime_2,
+                    'endtime_2': endtime_2,
+                    'classroom': classroom,
+                    'classsection': classsection,
+                }
+                csv_schedules.append((display_row, classday_1, starttime_1, endtime_1,
+                                      classday_2, starttime_2, endtime_2))
+
+            result_rows.append(result_row)
+
+        cursor.close()
+        db_pool.return_connection(conn)
+        conn = None
+
+        valid_count = sum(1 for r in result_rows if r['status'] == 'valid')
+        error_count = sum(1 for r in result_rows if r['status'] == 'error')
+        return jsonify({
+            'success': True,
+            'faculty_name': faculty_display,
+            'all_valid': all_valid,
+            'rows': result_rows,
+            'total': len(result_rows),
+            'valid_count': valid_count,
+            'error_count': error_count,
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        if conn:
+            db_pool.return_connection(conn)
+        return jsonify({'success': False, 'error': f'Error processing CSV: {str(e)}'})
+
+
+@app.route('/api/hr/import-schedule-csv', methods=['POST'])
+@require_auth([20003])
+def api_hr_import_schedule_csv():
+    """Import pre-validated schedule rows from the CSV flow (all-or-nothing transaction)."""
+    conn = None
+    try:
+        data = request.get_json()
+        semester_id = data.get('semester_id')
+        rows = data.get('rows', [])
+
+        if not semester_id:
+            return jsonify({'success': False, 'error': 'Semester is required'})
+        if not rows:
+            return jsonify({'success': False, 'error': 'No rows to import'})
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT COALESCE(MAX(class_id), 60000) FROM schedule")
+        base_id = cursor.fetchone()[0]
+
+        for i, row in enumerate(rows):
+            cursor.execute("""
+                INSERT INTO schedule (
+                    class_id, personnel_id, subject_id,
+                    classday_1, starttime_1, endtime_1,
+                    classday_2, starttime_2, endtime_2,
+                    classroom, acadcalendar_id, classsection
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                base_id + 1 + i,
+                row['personnel_id'], row['subject_id'],
+                row['classday_1'], row['starttime_1'], row['endtime_1'],
+                row.get('classday_2'), row.get('starttime_2'), row.get('endtime_2'),
+                row['classroom'], semester_id, row['classsection'],
+            ))
+
+        conn.commit()
+
+        hr_user_id = session['user_id']
+        hr_info = get_personnel_info(hr_user_id)
+        log_audit_action(
+            hr_info.get('personnel_id'),
+            'Bulk schedule import',
+            f"HR imported {len(rows)} schedule(s) via CSV for semester {semester_id}"
+        )
+
+        cursor.close()
+        db_pool.return_connection(conn)
+        conn = None
+        return jsonify({'success': True, 'message': f'Successfully imported {len(rows)} schedule(s)', 'count': len(rows)})
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            db_pool.return_connection(conn)
+        return jsonify({'success': False, 'error': f'Import failed: {str(e)}'})
+
+
+@app.route('/api/hr/delete-schedule/classes/<int:personnel_id>')
+@require_auth([20003])
+def api_hr_delete_schedule_classes(personnel_id):
     """Get all schedule classes for a faculty member for deletion dropdown"""
     try:
         conn = db_pool.get_connection()

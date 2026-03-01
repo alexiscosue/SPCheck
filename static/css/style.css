@@ -617,9 +617,10 @@ th {
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 
-.search-filter { display:flex; justify-content:space-between; margin-bottom:10px; margin-top: 10px; gap:8px; }
+.search-filter { display:flex; align-items:center; flex-wrap:wrap; margin-bottom:10px; margin-top: 10px; gap:8px; }
 .search-filter input, .search-filter select { padding:6px; border:1px solid #ccc; border-radius:6px; }
-.search-filter input {  flex: 1; }
+.search-filter input { flex: 1; min-width: 160px; }
+.search-filter select { width: 150px; flex-shrink: 0; padding-right: 20px; }
 
 .calendar { display:grid; grid-template-columns: repeat(7,1fr); gap:5px; text-align:center; }
 .calendar div { padding:10px; border:1px solid #ddd; border-radius:6px; }
@@ -2215,7 +2216,7 @@ to { opacity: 1; }
   text-align: center;
 }
 
-/* Timetable Styles - 15-Minute Grid System */
+/* Timetable Styles - 30-Minute Grid System */
 .timetable-container {
   overflow-x: auto;
   margin-top: 20px;
@@ -2256,12 +2257,12 @@ to { opacity: 1; }
 }
 
 .timetable th.time-header {
-  width: 140px;
-  min-width: 140px;
+  width: 160px;
+  min-width: 160px;
 }
 
 .timetable th:not(.time-header) {
-  width: calc((100% - 140px) / 6);
+  width: calc((100% - 160px) / 7);
   min-width: 0;
 }
 
@@ -2271,8 +2272,8 @@ to { opacity: 1; }
   color: #6b7280;
   font-size: 12px;
   padding: 8px;
-  width: 140px;
-  min-width: 140px;
+  width: 160px;
+  min-width: 160px;
   text-align: center;
   border: 1px solid #e5e7eb;
   vertical-align: middle;
@@ -2287,8 +2288,8 @@ to { opacity: 1; }
   border: 1px solid #e5e7eb;
   vertical-align: top;
   position: relative;
-  height: 45px; 
-  width: calc((100% - 140px) / 6); 
+  height: 45px;
+  width: calc((100% - 160px) / 7);
 }
 
 .class-container {
@@ -2530,7 +2531,7 @@ to { opacity: 1; }
 }
 
 
-/* HR Timetable Styles - 15-Minute Grid System */
+/* HR Timetable Styles - 30-Minute Grid System */
 .hr-timetable-container {
   overflow-x: auto;
   margin-top: 15px;
@@ -2572,12 +2573,12 @@ to { opacity: 1; }
 }
 
 .hr-timetable th.hr-time-header {
-  width: 120px;
-  min-width: 120px;
+  width: 160px;
+  min-width: 160px;
 }
 
 .hr-timetable th:not(.hr-time-header) {
-  width: calc((100% - 120px) / 6);
+  width: calc((100% - 160px) / 7);
   min-width: 0;
 }
 
@@ -2587,8 +2588,8 @@ to { opacity: 1; }
   color: #6b7280;
   font-size: 12px;
   padding: 8px;
-  width: 120px;
-  min-width: 120px;
+  width: 160px;
+  min-width: 160px;
   text-align: center;
   border: 1px solid #e5e7eb;
   vertical-align: middle;
@@ -2603,8 +2604,8 @@ to { opacity: 1; }
   border: 1px solid #e5e7eb;
   vertical-align: top;
   position: relative;
-  height: 45px; 
-  width: calc((100% - 120px) / 6); 
+  height: 45px;
+  width: calc((100% - 160px) / 7);
 }
 
 .hr-class-container {
@@ -3731,6 +3732,10 @@ table:has(#campusEntryBody) thead th:nth-child(4) {
   max-height: 80vh;
   overflow-y: auto;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+#addScheduleModal .emp-modal-content {
+  max-width: 960px;
 }
 
 .emp-modal-header {
