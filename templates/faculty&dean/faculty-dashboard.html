@@ -56,6 +56,21 @@
       <div style="font-weight:700;margin-bottom:6px">Evaluation Breakdown</div>
       <canvas id="myEvalChart" height="170"></canvas>
     </div>
+
+    <div id="license-status-card" style="display:none;">
+      <div class="card" style="padding:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <i class='bx bx-id-card' style="font-size:18px;color:var(--primary);"></i>
+            <span style="font-weight:700;font-size:14px;">License Status</span>
+          </div>
+          <a href="/faculty_settings" style="font-size:12px;color:var(--primary);text-decoration:none;">
+            Manage <i class='bx bx-chevron-right'></i>
+          </a>
+        </div>
+        <div id="license-status-list"></div>
+      </div>
+    </div>
   </div>
 
   <div class="chart-side">
@@ -396,10 +411,59 @@
     });
   }
 
+  function loadLicenseStatusCard() {
+    fetch('/api/faculty/license-alerts')
+      .then(r => r.json())
+      .then(data => {
+        if (!data.success || !data.licenses || data.licenses.length === 0) return;
+
+        const card = document.getElementById('license-status-card');
+        const list = document.getElementById('license-status-list');
+
+        const statusMeta = {
+          expired:      { bg: '#fee2e2', color: '#dc2626', badge: 'Expired',        icon: 'bx-error-circle' },
+          expiring_30:  { bg: '#ffedd5', color: '#ea580c', badge: null,             icon: 'bx-error' },
+          expiring_60:  { bg: '#fef9c3', color: '#d97706', badge: null,             icon: 'bx-time' },
+          expiring_90:  { bg: '#fef9c3', color: '#ca8a04', badge: null,             icon: 'bx-time' },
+          valid:        { bg: '#dcfce7', color: '#16a34a', badge: 'Valid',          icon: 'bx-check-circle' },
+          unknown:      { bg: '#f3f4f6', color: '#6b7280', badge: 'No expiry set',  icon: 'bx-id-card' },
+        };
+
+        list.innerHTML = data.licenses.map(lic => {
+          const m = statusMeta[lic.status] || statusMeta.unknown;
+          const badgeLabel = m.badge || `Exp. in ${lic.days_until_expiry}d`;
+          const typeName = lic.license_type || 'License';
+          return `
+            <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;
+                        border-radius:8px;border-left:4px solid ${m.color};
+                        background:${m.bg}22;margin-bottom:8px;">
+              <i class='bx ${m.icon}' style="font-size:20px;color:${m.color};flex-shrink:0;"></i>
+              <div style="flex:1;min-width:0;">
+                <div style="font-weight:600;font-size:13px;color:var(--text);">${typeName}</div>
+                <div style="font-size:12px;color:var(--muted);margin-top:2px;">
+                  ${lic.license_number ? `No. ${lic.license_number}` : ''}
+                  ${lic.license_number && lic.expiration_date ? ' &bull; ' : ''}
+                  ${lic.expiration_date ? `Expires ${lic.expiration_date}` : ''}
+                </div>
+              </div>
+              <span style="flex-shrink:0;padding:3px 10px;border-radius:999px;font-size:11px;
+                           font-weight:700;background:${m.bg};color:${m.color};border:1px solid ${m.color}33;">
+                ${badgeLabel}
+              </span>
+            </div>
+          `;
+        }).join('');
+
+        card.style.display = 'block';
+      })
+      .catch(() => {});
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
     fetchDashboardData();
-    
-    setInterval(fetchDashboardData, 5 * 60 * 1000); 
+    loadLicenseStatusCard();
+
+    setInterval(fetchDashboardData, 5 * 60 * 1000);
   });
 </script>
 {% endblock %}

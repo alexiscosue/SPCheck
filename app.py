@@ -522,6 +522,106 @@ def stop_absence_checker():
 start_absence_checker()
 atexit.register(stop_absence_checker)
 
+# ========== LICENSE EXPIRY CHECKER ==========
+license_expiry_checker_running = False
+license_expiry_checker_thread = None
+
+def check_license_expiry():
+    """Background thread: runs daily and broadcasts alerts for expiring/expired licenses."""
+    global license_expiry_checker_running
+    philippines_tz = pytz.timezone('Asia/Manila')
+
+    while license_expiry_checker_running:
+        conn = None
+        cursor = None
+        try:
+            today = datetime.now(philippines_tz).date()
+
+            conn = db_pool.get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT lt.tracker_id, lt.personnel_id, lt.license_type, lt.license_number,
+                       lt.expiration_date, pe.firstname, pe.lastname
+                FROM faculty_license_tracker lt
+                JOIN personnel pe ON lt.personnel_id = pe.personnel_id
+                WHERE lt.expiration_date IS NOT NULL
+                  AND lt.expiration_date <= CURRENT_DATE + INTERVAL '90 days'
+            """)
+            rows = cursor.fetchall()
+            cursor.close()
+            db_pool.return_connection(conn)
+            conn = None
+
+            for row in rows:
+                _, personnel_id, license_type, license_number, expiration_date, firstname, lastname = row
+                days = (expiration_date - today).days
+
+                if days < 0:
+                    action = 'expired'
+                    msg = (f'Your {license_type or "License"} license'
+                           f'{" (No. " + license_number + ")" if license_number else ""}'
+                           f' expired on {expiration_date}.')
+                elif days <= 30:
+                    action = 'expiring_30'
+                    msg = (f'Your {license_type or "License"} license'
+                           f'{" (No. " + license_number + ")" if license_number else ""}'
+                           f' expires in {days} day(s) on {expiration_date}.')
+                elif days <= 60:
+                    action = 'expiring_60'
+                    msg = (f'Your {license_type or "License"} license'
+                           f'{" (No. " + license_number + ")" if license_number else ""}'
+                           f' expires in {days} day(s) on {expiration_date}.')
+                else:
+                    action = 'expiring_90'
+                    msg = (f'Your {license_type or "License"} license'
+                           f'{" (No. " + license_number + ")" if license_number else ""}'
+                           f' expires in {days} day(s) on {expiration_date}.')
+
+                broadcast_notification(personnel_id, {
+                    'notification_type': 'license',
+                    'action': action,
+                    'personnel_id': personnel_id,
+                    'person_name': f'{firstname} {lastname}',
+                    'license_type': license_type or '',
+                    'license_number': license_number or '',
+                    'expiration_date': str(expiration_date),
+                    'days_until_expiry': days,
+                    'message': msg,
+                    'tap_time': datetime.now(philippines_tz).strftime('%A, %B %d, %Y %I:%M %p'),
+                })
+                print(f"🔔 License expiry alert sent → personnel {personnel_id}: {msg}")
+
+        except Exception as e:
+            print(f"Error in license expiry checker: {e}")
+            if conn:
+                try:
+                    cursor.close()
+                    db_pool.return_connection(conn)
+                except:
+                    pass
+
+        time.sleep(86400)  # re-check once every 24 hours
+
+
+def start_license_expiry_checker():
+    global license_expiry_checker_thread, license_expiry_checker_running
+    if license_expiry_checker_running:
+        return
+    license_expiry_checker_running = True
+    license_expiry_checker_thread = threading.Thread(target=check_license_expiry, daemon=True)
+    license_expiry_checker_thread.start()
+    print("🔔 License expiry checker started (runs every 24 hours)")
+
+
+def stop_license_expiry_checker():
+    global license_expiry_checker_running
+    license_expiry_checker_running = False
+
+
+start_license_expiry_checker()
+atexit.register(stop_license_expiry_checker)
+
 def get_db_connection():
     return db_pool.get_connection()
 
@@ -2982,10 +3082,28 @@ def api_get_faculty_profile():
             doc_array = locals()[doc_type]
             if doc_array and len(doc_array) > 0:
                 profile_data[doc_type] = [base64.b64encode(bytes(doc)).decode('utf-8') for doc in doc_array]
-        
+
+        cursor.execute("""
+            SELECT tracker_id, license_type, license_number, expiration_date, date_uploaded
+            FROM faculty_license_tracker
+            WHERE personnel_id = %s
+            ORDER BY date_uploaded ASC
+        """, (personnel_id,))
+        tracker_rows = cursor.fetchall()
+        profile_data['licenses_tracker'] = [
+            {
+                'tracker_id': row[0],
+                'license_type': str(row[1]) if row[1] else '',
+                'license_number': str(row[2]) if row[2] else '',
+                'expiration_date': str(row[3]) if row[3] else '',
+                'date_uploaded': str(row[4]) if row[4] else ''
+            }
+            for row in tracker_rows
+        ]
+
         cursor.close()
         db_pool.return_connection(conn)
-        
+
         return {'success': True, 'profile': profile_data}
         
     except Exception as e:
@@ -2993,6 +3111,66 @@ def api_get_faculty_profile():
         import traceback
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
+
+@app.route('/api/faculty/license-alerts')
+@require_auth([20001, 20002, 20003, 20004])
+def api_faculty_license_alerts():
+    """Return all license_tracker records for the logged-in faculty with computed expiry status."""
+    try:
+        personnel_info = get_personnel_info(session['user_id'])
+        personnel_id = personnel_info.get('personnel_id')
+        if not personnel_id:
+            return {'success': False, 'error': 'Personnel record not found'}, 401
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT tracker_id, license_type, license_number, expiration_date, date_uploaded
+            FROM faculty_license_tracker
+            WHERE personnel_id = %s
+            ORDER BY expiration_date ASC NULLS LAST
+        """, (personnel_id,))
+        rows = cursor.fetchall()
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        from datetime import date as _date
+        today = _date.today()
+        licenses = []
+        for row in rows:
+            tracker_id, license_type, license_number, expiration_date, date_uploaded = row
+            days = None
+            if expiration_date:
+                days = (expiration_date - today).days
+                if days < 0:
+                    status = 'expired'
+                elif days <= 30:
+                    status = 'expiring_30'
+                elif days <= 60:
+                    status = 'expiring_60'
+                elif days <= 90:
+                    status = 'expiring_90'
+                else:
+                    status = 'valid'
+            else:
+                status = 'unknown'
+
+            licenses.append({
+                'tracker_id': tracker_id,
+                'license_type': str(license_type) if license_type else '',
+                'license_number': str(license_number) if license_number else '',
+                'expiration_date': str(expiration_date) if expiration_date else '',
+                'date_uploaded': str(date_uploaded) if date_uploaded else '',
+                'status': status,
+                'days_until_expiry': days,
+            })
+
+        return {'success': True, 'licenses': licenses}
+
+    except Exception as e:
+        print(f"Error in api_faculty_license_alerts: {e}")
+        return {'success': False, 'error': str(e)}, 500
+
 
 @app.route('/api/faculty/profile/stats')
 @require_auth([20001, 20002, 20003, 20004])
@@ -3280,49 +3458,61 @@ def api_update_documents():
             'awards': 'awardsname'
         }
         
+        license_type = request.form.get('license_type', '').strip()
+        license_number = request.form.get('license_number', '').strip()
+        license_expiration_date = request.form.get('license_expiration_date', '').strip() or None
+
         for doc_type in ['licenses', 'degrees', 'certificates', 'publications', 'awards']:
             files = request.files.getlist(doc_type)
-            
+
             if files and any(f.filename for f in files):
                 filename_col = column_mapping[doc_type]
                 cursor.execute(f"""
                     SELECT {doc_type}, {filename_col}
-                    FROM profile 
+                    FROM profile
                     WHERE personnel_id = %s
                 """, (personnel_id,))
                 existing_result = cursor.fetchone()
-                
+
                 existing_docs = list(existing_result[0]) if existing_result and existing_result[0] else []
                 existing_filenames = list(existing_result[1]) if existing_result and existing_result[1] else []
-                
+
                 new_docs = []
                 new_filenames = []
-                
+
                 for f in files:
                     if f.filename:
                         file_data = f.read()
                         new_docs.append(file_data)
                         new_filenames.append(f.filename)
                         uploaded_docs.append(f"{doc_type}: {f.filename}")
-                
+
                 if new_docs:
                     before_filenames = existing_filenames if existing_filenames else ["None"]
-                    
+
                     combined_docs = existing_docs + new_docs
                     combined_filenames = existing_filenames + new_filenames
-                    
+
                     after_filenames = combined_filenames if combined_filenames else ["None"]
-                    
+
                     cursor.execute(f"""
-                        UPDATE profile 
-                        SET {doc_type} = %s, {filename_col} = %s 
+                        UPDATE profile
+                        SET {doc_type} = %s, {filename_col} = %s
                         WHERE personnel_id = %s
                     """, (combined_docs, combined_filenames, personnel_id))
                     conn.commit()
-                    
+
+                    if doc_type == 'licenses':
+                        for _ in new_docs:
+                            cursor.execute("""
+                                INSERT INTO faculty_license_tracker (personnel_id, license_type, license_number, expiration_date, date_uploaded)
+                                VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
+                            """, (personnel_id, license_type or None, license_number or None, license_expiration_date))
+                        conn.commit()
+
                     before_text = ", ".join(before_filenames) if before_filenames != ["None"] else "None"
                     after_text = ", ".join(after_filenames) if after_filenames != ["None"] else "None"
-                    
+
                     log_audit_action(
                         personnel_id,
                         f"{doc_type.capitalize()} uploaded",

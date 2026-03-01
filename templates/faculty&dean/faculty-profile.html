@@ -164,8 +164,16 @@
       <h3 id="modal-title">Document Viewer</h3>
       <span class="close" onclick="closeDocumentModal()">&times;</span>
     </div>
+    <div id="license-details-panel" style="display:none;background:#f0f4ff;padding:12px 18px;border-bottom:1px solid #d0d8ef;">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;font-size:13px;">
+        <div><span style="color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:2px;">Type</span><strong id="modal-license-type">—</strong></div>
+        <div><span style="color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:2px;">License No.</span><strong id="modal-license-number">—</strong></div>
+        <div><span style="color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:2px;">Expiration</span><strong id="modal-expiration-date">—</strong></div>
+        <div><span style="color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:2px;">Uploaded</span><strong id="modal-date-uploaded">—</strong></div>
+      </div>
+    </div>
     <div class="modal-body">
-      <div id="document-container" style="width:100%;height:75vh;overflow:auto;background:#f5f5f5;border-radius:8px;">
+      <div id="document-container" style="width:100%;height:70vh;overflow:auto;background:#f5f5f5;border-radius:8px;">
         <iframe id="document-viewer" style="width:100%;height:100%;border:none;display:none;"></iframe>
         <img id="image-viewer" style="max-width:100%;height:auto;display:none;margin:0 auto;">
       </div>
@@ -403,7 +411,7 @@ function displayProfile() {
       `<i class='bx bx-phone'></i><strong> Contact:</strong> ${currentProfile.phone}`;
   }
   
-  displayDocuments('licenses', currentProfile.licenses || [], currentProfile.licenses_filename || []);
+  displayDocuments('licenses', currentProfile.licenses || [], currentProfile.licenses_filename || [], currentProfile.licenses_tracker || []);
   displayDocuments('degrees', currentProfile.degrees || [], currentProfile.degrees_filename || []);
   displayDocuments('certificates', currentProfile.certificates || [], currentProfile.certificates_filename || []);
   displayDocuments('publications', currentProfile.publications || [], currentProfile.publications_filename || []);
@@ -425,21 +433,33 @@ function displayProfileStats(stats) {
   document.getElementById('attendance-rating').textContent = `${attendanceRating}%`;
 }
 
-function displayDocuments(docType, documents, filenames) {
+function getExpiryBadge(expirationDate) {
+  if (!expirationDate) return '';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const exp = new Date(expirationDate);
+  const days = Math.ceil((exp - today) / 86400000);
+  if (days < 0)        return `<span style="display:inline-block;margin-top:5px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;background:#fee2e2;color:#dc2626;"><i class="fas fa-times-circle" style="margin-right:3px;"></i>Expired</span>`;
+  if (days <= 30)      return `<span style="display:inline-block;margin-top:5px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;background:#ffedd5;color:#ea580c;"><i class="fas fa-exclamation-circle" style="margin-right:3px;"></i>Exp. in ${days}d</span>`;
+  if (days <= 90)      return `<span style="display:inline-block;margin-top:5px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;background:#fef9c3;color:#ca8a04;"><i class="fas fa-clock" style="margin-right:3px;"></i>Exp. in ${days}d</span>`;
+  return `<span style="display:inline-block;margin-top:5px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;background:#dcfce7;color:#16a34a;"><i class="fas fa-check-circle" style="margin-right:3px;"></i>Valid</span>`;
+}
+
+function displayDocuments(docType, documents, filenames, trackerData) {
   const displayElement = document.getElementById(docType + '-display');
   if (!displayElement) return;
-  
+
   if (!documents || documents.length === 0) {
     displayElement.innerHTML = `<p style="color:var(--muted);">No ${docType} uploaded yet.</p>`;
     return;
   }
-  
+
   displayElement.innerHTML = '';
-  
+
   documents.forEach((doc, index) => {
     const filename = filenames[index] || `${docType}_${index + 1}`;
     const ext = filename.split('.').pop().toLowerCase();
-    
+    const tracker = (docType === 'licenses' && trackerData && trackerData[index]) ? trackerData[index] : null;
+
     let icon = 'fa-file';
     if (['pdf'].includes(ext)) {
       icon = 'fa-file-pdf';
@@ -448,32 +468,51 @@ function displayDocuments(docType, documents, filenames) {
     } else if (['doc', 'docx'].includes(ext)) {
       icon = 'fa-file-word';
     }
-    
+
     const card = document.createElement('div');
     card.className = 'document-card';
-    card.onclick = () => viewDocument(doc, filename, ext);
-    
+    card.onclick = () => viewDocument(doc, filename, ext, tracker);
+
+    const metaHtml = tracker ? `
+      ${tracker.license_number ? `<div style="font-size:11px;color:#555;margin-top:4px;"><i class="fas fa-id-badge" style="margin-right:3px;"></i>No. ${tracker.license_number}</div>` : ''}
+      ${tracker.expiration_date ? `<div style="font-size:11px;color:#888;margin-top:2px;"><i class="fas fa-calendar-alt" style="margin-right:3px;"></i>Exp: ${tracker.expiration_date}</div>` : ''}
+      ${tracker.expiration_date ? getExpiryBadge(tracker.expiration_date) : ''}
+    ` : '';
+
     card.innerHTML = `
       <i class="fas ${icon} document-icon"></i>
       <div class="document-name">${filename}</div>
+      ${metaHtml}
     `;
-    
+
     displayElement.appendChild(card);
   });
 }
 
-function viewDocument(docBase64, filename, ext) {
+function viewDocument(docBase64, filename, ext, trackerInfo) {
   const modal = document.getElementById('document-modal');
   const title = document.getElementById('modal-title');
   const iframe = document.getElementById('document-viewer');
   const img = document.getElementById('image-viewer');
   const container = document.getElementById('document-container');
-  
+  const detailsPanel = document.getElementById('license-details-panel');
+
   title.textContent = filename;
   iframe.style.display = 'none';
   img.style.display = 'none';
   iframe.src = '';
   img.src = '';
+
+  if (trackerInfo) {
+    detailsPanel.style.display = 'block';
+    document.getElementById('modal-license-type').textContent = trackerInfo.license_type || '—';
+    document.getElementById('modal-license-number').textContent = trackerInfo.license_number || '—';
+    document.getElementById('modal-expiration-date').textContent = trackerInfo.expiration_date || '—';
+    const uploaded = trackerInfo.date_uploaded ? trackerInfo.date_uploaded.split(' ')[0] : '—';
+    document.getElementById('modal-date-uploaded').textContent = uploaded;
+  } else {
+    detailsPanel.style.display = 'none';
+  }
   
   if (['jpg', 'jpeg', 'png', 'gif'].includes(ext.toLowerCase())) {
     img.style.display = 'block';
@@ -550,7 +589,7 @@ function closeDocumentModal() {
   const iframe = document.getElementById('document-viewer');
   const img = document.getElementById('image-viewer');
   const container = document.getElementById('document-container');
-  
+
   modal.style.display = 'none';
   iframe.src = '';
   img.src = '';
@@ -558,6 +597,7 @@ function closeDocumentModal() {
   img.style.display = 'none';
   container.style.overflow = 'auto';
   container.style.padding = '0';
+  document.getElementById('license-details-panel').style.display = 'none';
 }
 
 window.onclick = function(event) {
