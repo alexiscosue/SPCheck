@@ -559,22 +559,22 @@ def check_license_expiry():
 
                 if days < 0:
                     action = 'expired'
-                    msg = (f'Your {license_type or "License"} license'
+                    msg = (f'{license_type or "License"} license'
                            f'{" (No. " + license_number + ")" if license_number else ""}'
                            f' expired on {expiration_date}.')
                 elif days <= 30:
                     action = 'expiring_30'
-                    msg = (f'Your {license_type or "License"} license'
+                    msg = (f'{license_type or "License"} license'
                            f'{" (No. " + license_number + ")" if license_number else ""}'
                            f' expires in {days} day(s) on {expiration_date}.')
                 elif days <= 60:
                     action = 'expiring_60'
-                    msg = (f'Your {license_type or "License"} license'
+                    msg = (f'{license_type or "License"} license'
                            f'{" (No. " + license_number + ")" if license_number else ""}'
                            f' expires in {days} day(s) on {expiration_date}.')
                 else:
                     action = 'expiring_90'
-                    msg = (f'Your {license_type or "License"} license'
+                    msg = (f'{license_type or "License"} license'
                            f'{" (No. " + license_number + ")" if license_number else ""}'
                            f' expires in {days} day(s) on {expiration_date}.')
 
