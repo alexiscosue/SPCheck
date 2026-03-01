@@ -236,43 +236,73 @@
   {% if not upload_locked %}
   
   <!-- Document Upload Cards -->
-  <div style="margin-bottom:20px;">
-    <h4 style="margin:0 0 12px 0; font-size:14px; color:#374151; font-weight:600;">Required Documents</h4>
-    
-    <!-- Resume/CV Upload Card -->
-    <div style="border:2px dashed #d1d5db; border-radius:12px; padding:20px; margin-bottom:12px; background:#fafafa; transition:all 0.3s;" onmouseover="this.style.borderColor='#7b1113'; this.style.background='#fef2f2';" onmouseout="this.style.borderColor='#d1d5db'; this.style.background='#fafafa';">
-      <input id="resume_cv" type="file" name="resume_cv" style="display:none;" required accept=".pdf,.doc,.docx" />
-      <label for="resume_cv" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-        <div style="display:flex; align-items:center; gap:12px;">
-          <div style="width:48px; height:48px; background:#7b1113; border-radius:12px; display:flex; align-items:center; justify-content:center;">
-            <i class='bx bx-file' style="font-size:24px; color:#fff;"></i>
-          </div>
-          <div>
-            <p style="margin:0; font-size:14px; font-weight:600; color:#111827;">Resume / CV</p>
-            <p style="margin:2px 0 0 0; font-size:12px; color:#6b7280;">PDF, DOC, or DOCX format</p>
-          </div>
+<div style="margin-bottom:20px;">
+  <h4 style="margin:0 0 12px 0; font-size:14px; color:#374151; font-weight:600;">Required Documents</h4>
+  
+  <div style="border:2px dashed #d1d5db; border-radius:12px; padding:20px; margin-bottom:12px; background:#fafafa; transition:all 0.3s;" onmouseover="this.style.borderColor='#7b1113'; this.style.background='#fef2f2';" onmouseout="this.style.borderColor='#d1d5db'; this.style.background='#fafafa';">
+    <input id="resume_cv" type="file" name="resume_cv" style="display:none;" required accept=".pdf,.doc,.docx" />
+    <label for="resume_cv" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div style="width:48px; height:48px; background:#7b1113; border-radius:12px; display:flex; align-items:center; justify-content:center;">
+          <i class='bx bx-file' style="font-size:24px; color:#fff;"></i>
         </div>
-        <span class="status nu" id="resume_cv_status" style="font-size:12px;">Not Uploaded</span>
-      </label>
-    </div>
-
-    <!-- Cover Letter Upload Card -->
-    <div style="border:2px dashed #d1d5db; border-radius:12px; padding:20px; background:#fafafa; transition:all 0.3s;" onmouseover="this.style.borderColor='#7b1113'; this.style.background='#fef2f2';" onmouseout="this.style.borderColor='#d1d5db'; this.style.background='#fafafa';">
-      <input id="cover_letter" type="file" name="cover_letter" style="display:none;" required accept=".pdf,.doc,.docx" />
-      <label for="cover_letter" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-        <div style="display:flex; align-items:center; gap:12px;">
-          <div style="width:48px; height:48px; background:#991b1b; border-radius:12px; display:flex; align-items:center; justify-content:center;">
-            <i class='bx bx-envelope' style="font-size:24px; color:#fff;"></i>
-          </div>
-          <div>
-            <p style="margin:0; font-size:14px; font-weight:600; color:#111827;">Cover Letter</p>
-            <p style="margin:2px 0 0 0; font-size:12px; color:#6b7280;">PDF, DOC, or DOCX format</p>
-          </div>
+        <div>
+          <p style="margin:0; font-size:14px; font-weight:600; color:#111827;">Updated Curriculum Vitae (CV)</p>
+          <p style="margin:2px 0 0 0; font-size:12px; color:#6b7280;">PDF, DOC, or DOCX format</p>
         </div>
-        <span class="status nu" id="cover_letter_status" style="font-size:12px;">Not Uploaded</span>
-      </label>
-    </div>
+      </div>
+      <span class="status nu" id="resume_cv_status" style="font-size:12px;">Not Uploaded</span>
+    </label>
   </div>
+
+  <div style="border:2px dashed #d1d5db; border-radius:12px; padding:20px; margin-bottom:12px; background:#fafafa; transition:all 0.3s;" onmouseover="this.style.borderColor='#7b1113'; this.style.background='#fef2f2';" onmouseout="this.style.borderColor='#d1d5db'; this.style.background='#fafafa';">
+    <input id="tor" type="file" name="tor" style="display:none;" required accept=".pdf" />
+    <label for="tor" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div style="width:48px; height:48px; background:#0ea5e9; border-radius:12px; display:flex; align-items:center; justify-content:center;">
+          <i class='bx bxs-graduation' style="font-size:24px; color:#fff;"></i>
+        </div>
+        <div>
+          <p style="margin:0; font-size:14px; font-weight:600; color:#111827;">Official Transcript of Records (TOR)</p>
+          <p style="margin:2px 0 0 0; font-size:12px; color:#6b7280;">PDF format only</p>
+        </div>
+      </div>
+      <span class="status nu" id="tor_status" style="font-size:12px;">Not Uploaded</span>
+    </label>
+  </div>
+
+  <div style="border:2px dashed #d1d5db; border-radius:12px; padding:20px; margin-bottom:12px; background:#fafafa; transition:all 0.3s;" onmouseover="this.style.borderColor='#7b1113'; this.style.background='#fef2f2';" onmouseout="this.style.borderColor='#d1d5db'; this.style.background='#fafafa';">
+    <input id="diploma" type="file" name="diploma" style="display:none;" required accept=".pdf" />
+    <label for="diploma" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div style="width:48px; height:48px; background:#8b5cf6; border-radius:12px; display:flex; align-items:center; justify-content:center;">
+          <i class='bx bx-award' style="font-size:24px; color:#fff;"></i>
+        </div>
+        <div>
+          <p style="margin:0; font-size:14px; font-weight:600; color:#111827;">Diploma / Certificate of Graduation</p>
+          <p style="margin:2px 0 0 0; font-size:12px; color:#6b7280;">PDF format only</p>
+        </div>
+      </div>
+      <span class="status nu" id="diploma_status" style="font-size:12px;">Not Uploaded</span>
+    </label>
+  </div>
+
+  <div style="border:2px dashed #d1d5db; border-radius:12px; padding:20px; background:#fafafa; transition:all 0.3s;" onmouseover="this.style.borderColor='#7b1113'; this.style.background='#fef2f2';" onmouseout="this.style.borderColor='#d1d5db'; this.style.background='#fafafa';">
+    <input id="cover_letter" type="file" name="cover_letter" style="display:none;" required accept=".pdf,.doc,.docx" />
+    <label for="cover_letter" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div style="width:48px; height:48px; background:#991b1b; border-radius:12px; display:flex; align-items:center; justify-content:center;">
+          <i class='bx bx-envelope' style="font-size:24px; color:#fff;"></i>
+        </div>
+        <div>
+          <p style="margin:0; font-size:14px; font-weight:600; color:#111827;">Cover Letter</p>
+          <p style="margin:2px 0 0 0; font-size:12px; color:#6b7280;">PDF, DOC, or DOCX format</p>
+        </div>
+      </div>
+      <span class="status nu" id="cover_letter_status" style="font-size:12px;">Not Uploaded</span>
+    </label>
+  </div>
+</div>
 
   <!-- Submit Button -->
   <button class="btn-primary" style="width:100%; padding:14px; font-size:16px; font-weight:600; border-radius:10px; background:linear-gradient(135deg, #7b1113 0%, #991b1b 100%); border:none; box-shadow:0 4px 12px rgba(123, 17, 19, 0.4); transition:all 0.3s;" type="submit" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(123, 17, 19, 0.5)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(123, 17, 19, 0.4)';">
@@ -304,7 +334,7 @@
     </div>
 
     <!-- Cover Letter Submitted Card -->
-    <div style="border:1px solid #fca5a5; border-radius:12px; padding:16px; background:#fef2f2; margin-bottom:16px;">
+    <div style="border:1px solid #fca5a5; border-radius:12px; padding:16px; background:#fef2f2; margin-bottom:12px;">
       <div style="display:flex; align-items:center; justify-content:space-between;">
         <div style="display:flex; align-items:center; gap:12px;">
           <div style="width:40px; height:40px; background:#7b1113; border-radius:10px; display:flex; align-items:center; justify-content:center;">
@@ -320,6 +350,40 @@
         </button>
       </div>
     </div>
+
+    <div style="border:1px solid #fca5a5; border-radius:12px; padding:16px; margin-bottom:12px; background:#fef2f2;">
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div style="width:40px; height:40px; background:#7b1113; border-radius:10px; display:flex; align-items:center; justify-content:center;">
+          <i class='bx bx-check' style="font-size:20px; color:#fff;"></i>
+        </div>
+        <div>
+          <p style="margin:0; font-size:13px; font-weight:600; color:#7f1d1d;">Transcript of Records</p>
+          <p style="margin:2px 0 0 0; font-size:11px; color:#991b1b;">{{ tor_filename }}</p>
+        </div>
+      </div>
+      <button id="showTorBtn" type="button" class="btn-view-small" style="padding:8px 16px; background:#fff; color:#7b1113; border:1px solid #7b1113; border-radius:8px; cursor:pointer; font-size:12px; font-weight:500;">
+        <i class='bx bx-show'></i> View
+      </button>
+    </div>
+  </div>
+
+  <div style="border:1px solid #fca5a5; border-radius:12px; padding:16px; margin-bottom:12px; background:#fef2f2; margin-bottom:16px;">
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div style="width:40px; height:40px; background:#7b1113; border-radius:10px; display:flex; align-items:center; justify-content:center;">
+          <i class='bx bx-check' style="font-size:20px; color:#fff;"></i>
+        </div>
+        <div>
+          <p style="margin:0; font-size:13px; font-weight:600; color:#7f1d1d;">Diploma / Certificate</p>
+          <p style="margin:2px 0 0 0; font-size:11px; color:#991b1b;">{{ diploma_filename }}</p>
+        </div>
+      </div>
+      <button id="showDiplomaBtn" type="button" class="btn-view-small" style="padding:8px 16px; background:#fff; color:#7b1113; border:1px solid #7b1113; border-radius:8px; cursor:pointer; font-size:12px; font-weight:500;">
+        <i class='bx bx-show'></i> View
+      </button>
+    </div>
+  </div>
   </div>
 
   <!-- Warning + Delete Button -->
@@ -427,20 +491,17 @@
                 </td>
                 <td>
                   <button class="btn-view-history" 
-                    data-date="{{ app.date_submitted.strftime('%B %d, %Y') if app.date_submitted else 'N/A' }}"
-                    data-status="{{ app.current_status }}"
-                    data-decision="{{ app.final_decision }}"
-                    {% if 'rejected' in app.final_decision|lower %}
-                      data-remarks="{{ app.rejection_reason or '' }}"
-                    {% else %}
+                      data-date="{{ app.date_submitted.strftime('%B %d, %Y') if app.date_submitted else 'N/A' }}"
+                      data-status="{{ app.current_status|lower }}"
+                      data-decision="{{ app.current_status|lower }}"
                       data-remarks="{{ app.remarks or 'No remarks' }}"
-                    {% endif %}
-                    data-hrmd-date="{{ app.hrmd_approval_date.strftime('%B %d, %Y') if app.hrmd_approval_date else 'Not yet approved' }}"
-                    data-vpa-date="{{ app.vpa_approval_date.strftime('%B %d, %Y') if app.vpa_approval_date else 'Not yet approved' }}"
-                    data-pres-date="{{ app.pres_approval_date.strftime('%B %d, %Y') if app.pres_approval_date else 'Not yet approved' }}"
-                    data-requested-pos="{{ app.requested_position or 'Not specified' }}"
-                    style="padding:6px 12px; background:#7b1113; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:12px; font-weight:500;">
-                    <i class='bx bx-show'></i> View
+                      data-requested-pos="{{ app.requested_position or 'Not specified' }}"
+  
+                      data-hrmd-date="{{ app.hrmd_date or '' }}"
+                      data-vpa-date="{{ app.vpa_date or '' }}"
+                      data-pres-date="{{ app.pres_date or '' }}"
+                      style="padding:6px 12px; background:#7b1113; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:12px; font-weight:500;">
+                      <i class='bx bx-show'></i> View
                   </button>
                 </td>
               </tr>
@@ -610,37 +671,31 @@
 {% block extra_scripts %}
 <script>
 // FILE UPLOADING - with null checks
-const resumeInput = document.getElementById('resume_cv');
-if (resumeInput) {
-  resumeInput.addEventListener('change', function(event) {
-    var statusSpan = document.getElementById('resume_cv_status');
-    var fileName = event.target.files.length ? event.target.files[0].name : 'Not Uploaded';
-    statusSpan.textContent = fileName;
-    if (event.target.files.length) {
-      statusSpan.classList.add('ok');
-      statusSpan.classList.remove('nu');
-    } else {
-      statusSpan.classList.remove('ok');
-      statusSpan.classList.add('nu');
+// Function to handle status updates for all inputs
+function setupFileInput(inputId, statusId) {
+    const input = document.getElementById(inputId);
+    if (input) {
+        input.addEventListener('change', function(event) {
+            const statusSpan = document.getElementById(statusId);
+            // Ensure we are getting the [0].name and NOT the file content
+            if (event.target.files && event.target.files.length > 0) {
+                const fileName = event.target.files[0].name; 
+                statusSpan.textContent = fileName; // This displays "document.pdf"
+                statusSpan.classList.add('ok');
+                statusSpan.classList.remove('nu');
+            } else {
+                statusSpan.textContent = 'Not Uploaded';
+                statusSpan.classList.remove('ok');
+                statusSpan.classList.add('nu');
+            }
+        });
     }
-  });
 }
-
-const coverInput = document.getElementById('cover_letter');
-if (coverInput) {
-  coverInput.addEventListener('change', function(event) {
-    var statusSpan = document.getElementById('cover_letter_status');
-    var fileName = event.target.files.length ? event.target.files[0].name : 'Not Uploaded';
-    statusSpan.textContent = fileName;
-    if (event.target.files.length) {
-      statusSpan.classList.add('ok');
-      statusSpan.classList.remove('nu');
-    } else {
-      statusSpan.classList.remove('ok');
-      statusSpan.classList.add('nu');
-    }
-  });
-}
+// Setup the 4 inputs
+setupFileInput('resume_cv', 'resume_cv_status');
+setupFileInput('tor', 'tor_status');
+setupFileInput('diploma', 'diploma_status');
+setupFileInput('cover_letter', 'cover_letter_status');
 
 const promotionForm = document.getElementById('promotion-doc-upload-form');
 if (promotionForm) {
@@ -665,6 +720,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const modalTitle = document.getElementById('modal-title');
     const btnResume = document.getElementById('showResumeBtn');
     const btnCoverLetter = document.getElementById('showCoverLetterBtn');
+    const btnTor = document.getElementById('showTorBtn');
+    const btnDiploma = document.getElementById('showDiplomaBtn');
 
     function openModal(src, title) {
       modalEmbed.src = src;
@@ -684,6 +741,17 @@ document.addEventListener('DOMContentLoaded', function () {
       });
     }
 
+    if ("{{ application_id }}" != "None" && btnTor) {
+      btnTor.addEventListener('click', () => {
+        openModal("{{ url_for('view_tor') }}", "Transcript of Records");
+      });
+    }
+    
+    if ("{{ application_id }}" != "None" && btnDiploma) {
+      btnDiploma.addEventListener('click', () => {
+        openModal("{{ url_for('view_diploma') }}", "Diploma / Certificate");
+      });
+    }
     modalClose.addEventListener('click', () => {
       modal.style.display = 'none';
       modalEmbed.src = '';
@@ -738,58 +806,58 @@ if (deleteBtn) {
 
 // APPLICATION HISTORY MODAL
 document.addEventListener('DOMContentLoaded', function() {
-  const historyModal = document.getElementById('historyModal');
-  const closeBtn = document.getElementById('closeHistoryModal');
-  
-  // View buttons
-document.querySelectorAll('.btn-view-history').forEach(btn => {
-  btn.addEventListener('click', function() {
-    const date = this.getAttribute('data-date');
-    const status = this.getAttribute('data-status');
-    const decision = this.getAttribute('data-decision');
-    const remarks = this.getAttribute('data-remarks');
-    const rejectionReason = this.getAttribute('data-rejection-reason');
-    const hrmdDate = this.getAttribute('data-hrmd-date');
-    const vpaDate = this.getAttribute('data-vpa-date');
-    const presDate = this.getAttribute('data-pres-date');
-    const requestedPos = this.getAttribute('data-requested-pos');
-
-    // Populate modal
-    document.getElementById('modalDate').textContent = date;
-    document.getElementById('modalCurrentStatus').textContent = status || 'Pending';
-    document.getElementById('modalStatus').textContent = status || 'Pending';
-    const modalRemarksEl = document.getElementById('modalRemarks');
-    console.log('Rejection Reason:', rejectionReason);
-    console.log('Remarks:', remarks);
-    if (rejectionReason && rejectionReason.trim() !== '') {
-      modalRemarksEl.textContent = rejectionReason;
-    } else {
-      modalRemarksEl.textContent = remarks;
-    }
-    document.getElementById('modalRequestedPos').textContent = requestedPos;
-    document.getElementById('modalHrmdDate').textContent = hrmdDate;
-    document.getElementById('modalVpaDate').textContent = vpaDate;
-    document.getElementById('modalPresDate').textContent = presDate;
-
-    // Update decision badge
-    const badge = document.getElementById('modalDecisionBadge');
-    if (decision && decision.toLowerCase() === 'approved') {
-      badge.textContent = '✓ Approved';
-      badge.style.background = '#d1fae5';
-      badge.style.color = '#065f46';
-    } else if (decision && decision.toLowerCase() === 'rejected') {
-      badge.textContent = '✗ Rejected';
-      badge.style.background = '#fee2e2';
-      badge.style.color = '#991b1b';
-    } else {
-      badge.textContent = '⏳ Pending';
-      badge.style.background = '#fef3c7';
-      badge.style.color = '#92400e';
-    }
+    const historyModal = document.getElementById('historyModal');
+    const closeBtn = document.getElementById('closeHistoryModal');
     
-    // Show modal
-    historyModal.style.display = 'flex';
-  });
+document.querySelectorAll('.btn-view-history').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const decision = this.getAttribute('data-decision').toLowerCase(); 
+        const currentStage = this.getAttribute('data-status').toLowerCase(); 
+        
+        const timelineSteps = [
+            { id: 'modalHrmdDate', key: 'hrmd', date: this.getAttribute('data-hrmd-date') },
+            { id: 'modalVpaDate', key: 'vpa', date: this.getAttribute('data-vpa-date') },
+            { id: 'modalPresDate', key: 'pres', date: this.getAttribute('data-pres-date') }
+        ];
+
+        timelineSteps.forEach(step => {
+            const labelEl = document.getElementById(step.id);
+            const container = labelEl.parentElement;
+            const icon = container.querySelector('i');
+
+            // 1. Check if the stage was APPROVED
+            if (step.date && step.date !== '') {
+                icon.className = 'bx bx-check-circle';
+                labelEl.textContent = `Approved ${step.date}`;
+                container.style.color = '#166534'; // Green
+            } 
+            // 2. Check if the stage was the REJECTION POINT
+            else if (decision === 'rejected' && currentStage === step.key) {
+                icon.className = 'bx bx-x-circle';
+                labelEl.textContent = 'Rejected at this stage';
+                container.style.color = '#7b1113'; // Maroon Red
+            } 
+            // 3. Default to PENDING
+            else {
+                icon.className = 'bx bx-circle';
+                labelEl.textContent = 'Pending';
+                container.style.color = '#64748b'; // Grey
+            }
+        });
+
+        // Basic info populate
+        document.getElementById('modalDate').textContent = this.getAttribute('data-date');
+        document.getElementById('modalRequestedPos').textContent = this.getAttribute('data-requested-pos');
+        document.getElementById('modalRemarks').textContent = this.getAttribute('data-remarks');
+        
+        // Decision Badge
+        const badge = document.getElementById('modalDecisionBadge');
+        badge.textContent = decision.toUpperCase();
+        badge.style.background = decision === 'approved' ? '#d1fae5' : (decision === 'rejected' ? '#fee2e2' : '#fef3c7');
+        badge.style.color = decision === 'approved' ? '#065f46' : (decision === 'rejected' ? '#991b1b' : '#92400e');
+
+        document.getElementById('historyModal').style.display = 'flex';
+    });
 });
 
   

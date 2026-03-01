@@ -4595,3 +4595,34 @@ table:has(#campusEntryBody) thead th:nth-child(4) {
   text-align: center;
   flex-shrink: 0;
 }
+
+
+.license-meta-info {
+    margin-top: 10px;
+    font-size: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #eee;
+}
+.badge-active { background: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 10px; }
+.badge-expired { background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 10px; }
+.badge-warning { background: #fef9c3; color: #854d0e; padding: 2px 8px; border-radius: 10px; }
+
+.near-milestone {
+    background-color: #fff7ed !important; /* Soft Orange/Cream */
+    border-left: 4px solid #f97316 !important; /* Orange Indicator */
+}
+
+.near-milestone:hover {
+    background-color: #ffedd5 !important;
+}
+
+.milestone-badge {
+    font-size: 10px;
+    background: #f97316;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 5px;
+    font-weight: bold;
+    text-transform: uppercase;
+}

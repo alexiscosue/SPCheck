@@ -14,17 +14,31 @@
     </div>
 
     <div class="chart-large">
-      <!-- <div class="chart-card-f  card">
-        <div class="card-header"><i class='bx bx-list-ul'></i><span>Faculty Evaluations</span></div>
+      <div class="chart-card-f  card">
+        <div class="card-header">
+          <i class='bx bx-list-ul'></i>
+          <span>Peer Evaluation Tasks</span>
+        </div>
         <div class="table">
-          <table aria-label="Peer and Admin Evaluations for my performance">
-            <thead><tr><th>Evaluator</th><th>Subject/Context</th><th>Status</th><th>Action</th></tr></thead>
-            <tbody id="my-evaluations-body">
-              <tr><td colspan="4" style="text-align:center; padding:1.5rem; color:var(--muted);">Loading evaluation tasks...</td></tr>
+          <table aria-label="Peers I need to evaluate">
+            <thead>
+              <tr>
+                <th>Faculty Member</th>
+                <th>Department</th>
+                <th>Evaluation Period</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="peer-evaluations-body">
+              <tr>
+                <td colspan="4" style="text-align:center; padding:1.5rem; color:var(--muted);">
+                  Retrieving assigned peer reviews...
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
-      </div> -->
+      </div>
 
       <div class="card chart-large">
         <div class="tabs">
@@ -73,11 +87,8 @@
   let breakdownChartInstance = null;
 
   // --- Chart Initialization Functions ---
-
-  // Chart: Evaluation trend
   function initTrendChart(labels, data) {
     if (trendChartInstance) trendChartInstance.destroy();
-
     const trendCtx = document.getElementById('trendChart').getContext('2d');
     trendChartInstance = new Chart(trendCtx, {
       type: 'line',
@@ -94,44 +105,24 @@
           pointBackgroundColor: '#7b1113'
         }]
       },
-      options: { 
-        responsive: true, 
-        plugins:{ legend:{ display:false } }, 
-        scales:{ 
-          y:{ 
-            min:3.5, 
-            max:5, 
-            ticks:{ stepSize:0.5 } 
-          } 
-        } 
-      }
+      options: { responsive: true, plugins:{ legend:{ display:false } }, scales:{ y:{ min:3.5, max:5, ticks:{ stepSize:0.5 } } } }
     });
   }
 
-  // Chart: Evaluator breakdown (Doughnut)
   function initBreakdownChart(labels, data) {
     if (breakdownChartInstance) breakdownChartInstance.destroy();
-
     const breakdownCtx = document.getElementById('breakdownChart').getContext('2d');
     breakdownChartInstance = new Chart(breakdownCtx, {
       type: 'doughnut',
       data: {
         labels: labels,
-        datasets:[{ 
-          data: data, 
-          backgroundColor:['#3b82f6','#7b1113','#f1c40f'],
-          hoverOffset: 6
-        }]
+        datasets:[{ data: data, backgroundColor:['#3b82f6','#7b1113','#f1c40f'], hoverOffset: 6 }]
       },
-      options:{ 
-        cutout:'70%', 
-        plugins:{ legend:{ position:'bottom' } } 
-      }
+      options:{ cutout:'70%', plugins:{ legend:{ position:'bottom' } } }
     });
   }
   
   // --- Data Loading Function ---
-
   async function loadEvaluationData() {
     const apiURL = '/api/faculty/evaluations-data';
     
@@ -142,189 +133,107 @@
         if (el) el.textContent = '...';
     });
     
-    const comparisonWrapper = document.getElementById('comparison-wrapper');
-    if (comparisonWrapper) {
-        comparisonWrapper.innerHTML = '<div style="text-align:center; color:var(--muted); padding:20px;">Loading comparison...</div>';
-    }
-    
-    const breakdownError = document.getElementById('breakdown-error');
-    if (breakdownError) {
-        breakdownError.style.display = 'none';
-    }
-    
-    const feedbackBody = document.getElementById('feedback-body');
-    if (feedbackBody) {
-        feedbackBody.innerHTML = '<tr><td style="text-align:center; padding:1.5rem; color:var(--muted);">Loading student feedback...</td></tr>';
-    }
-
-
     try {
       const response = await fetch(apiURL);
       const data = await response.json();
       
-      if (!data.success) {
-        console.error("API Error:", data.error);
-        kpiElements.forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.textContent = 'Error';
-        });
+      if (data.success) {
+        const { kpis, breakdown_chart, comparison, recent_feedback } = data; 
         
-        if (comparisonWrapper) {
-            comparisonWrapper.innerHTML = `<div style="text-align:center; color:#dc2626; padding:20px;">${data.error || "Failed to load comparison data."}</div>`;
-        }
-        if (feedbackBody) {
-             feedbackBody.innerHTML = '<tr><td style="text-align:center; padding:1.5rem; color:#dc2626;">Error loading feedback.</td></tr>';
-        }
-        return;
-      }
-      
-      const { kpis, breakdown_chart, comparison, recent_feedback } = data; 
-      
-      // 1. Update KPIs
-      document.getElementById('kpi-overall').textContent = kpis.overall_average > 0 ? kpis.overall_average.toFixed(2) : 'N/A';
-      document.getElementById('kpi-student').textContent = kpis.student_score > 0 ? kpis.student_score.toFixed(2) : 'N/A';
-      document.getElementById('kpi-peer').textContent = kpis.peer_score > 0 ? kpis.peer_score.toFixed(2) : 'N/A';
-      document.getElementById('kpi-supervisor').textContent = kpis.supervisor_score > 0 ? kpis.supervisor_score.toFixed(2) : 'N/A';
+        // 1. Update KPIs
+        document.getElementById('kpi-overall').textContent = kpis.overall_average > 0 ? kpis.overall_average.toFixed(2) : 'N/A';
+        document.getElementById('kpi-student').textContent = kpis.student_score > 0 ? kpis.student_score.toFixed(2) : 'N/A';
+        document.getElementById('kpi-peer').textContent = kpis.peer_score > 0 ? kpis.peer_score.toFixed(2) : 'N/A';
+        document.getElementById('kpi-supervisor').textContent = kpis.supervisor_score > 0 ? kpis.supervisor_score.toFixed(2) : 'N/A';
 
-      // 2. Initialize Breakdown Chart (Doughnut)
-      if (breakdown_chart.data && breakdown_chart.data.reduce((a, b) => a + b, 0) > 0) {
-        initBreakdownChart(breakdown_chart.labels, breakdown_chart.data);
-      } else {
-        const breakdownError = document.getElementById('breakdown-error');
-        if (breakdownError) {
-             breakdownError.style.display = 'block';
-        }
-        if (breakdownChartInstance) breakdownChartInstance.destroy();
+        // 2. Charts & Feedback
+        if (breakdown_chart.data) initBreakdownChart(breakdown_chart.labels, breakdown_chart.data);
+        populateComparison(comparison);
+        populateFeedback(recent_feedback);
+        initTrendChart(['Sem 1','Sem 2','Sem 3','Sem 4'], [4.1,4.3,4.2,4.4]);
       }
 
-      // 3. Populate Comparison Block
-      if (comparisonWrapper) {
-          populateComparison(comparison);
-      }
-      
-      // 4. Populate Student Feedback
-      if (feedbackBody) {
-          populateFeedback(recent_feedback); 
-      }
-
-      // --- Placeholder: Load other tabs/tables ---
-      initTrendChart(['Sem 1','Sem 2','Sem 3','Sem 4'], [4.1,4.3,4.2,4.4]);
-      const evaluationsBody = document.getElementById('my-evaluations-body');
-      if (evaluationsBody) {
-           evaluationsBody.innerHTML = `
-            <tr><td>Dean Ayson</td><td>IT 201 - Advanced DB</td><td><span class="status completed">Completed</span></td><td><button class="btn-action"><i class='bx bx-show'></i></button></td></tr>
-            <tr><td>Peer Prof. Smith</td><td>Observation (Q4)</td><td><span class="status completed">Completed</span></td><td><button class="btn-action"><i class='bx bx-show'></i></button></td></tr>
-            <tr><td>HR Dept</td><td>Annual Review</td><td><span class="status pending">Pending</span></td><td><button class="btn-action"><i class='bx bx-edit'></i></button></td></tr>
-          `;
-      }
-
-
+      // 3. Peer Evaluation Tasks — fetch from real API
+      await loadPeerAssignments();
     } catch (error) {
       console.error("Failed to load evaluation data:", error);
-      kpiElements.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = 'Error';
-      });
-      if (comparisonWrapper) {
-           comparisonWrapper.innerHTML = '<div style="text-align:center; color:#dc2626; padding:20px;">Failed to load comparison data.</div>';
+    }
+  } // End of loadEvaluationData
+
+  async function loadPeerAssignments() {
+    const peerBody = document.getElementById('peer-evaluations-body');
+    if (!peerBody) return;
+
+    try {
+      const res = await fetch('/api/faculty/peer-assignments');
+      const data = await res.json();
+
+      if (!data.success || data.assignments.length === 0) {
+        peerBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:1.5rem; color:var(--muted);">No peer evaluations assigned for this term.</td></tr>`;
+        return;
       }
-      if (feedbackBody) {
-           feedbackBody.innerHTML = '<tr><td style="text-align:center; padding:1.5rem; color:#dc2626;">Failed to load feedback data.</td></tr>';
-      }
+
+      peerBody.innerHTML = data.assignments.map(a => `
+        <tr>
+          <td>${a.name}</td>
+          <td>${a.college}</td>
+          <td>${a.period}</td>
+          <td>
+            ${a.is_completed
+              ? `<span class="status completed"><i class='bx bx-check-circle'></i> Submitted</span>`
+              : `<a href="/faculty/evaluate/${a.evaluatee_id}" class="btn-action primary"><i class='bx bx-edit-alt'></i> Evaluate</a>`
+            }
+          </td>
+        </tr>
+      `).join('');
+
+    } catch (err) {
+      console.error('Failed to load peer assignments:', err);
+      peerBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:1.5rem; color:var(--muted);">Failed to load peer assignments.</td></tr>`;
     }
   }
-  
+
   function populateFeedback(feedbackList) {
       const tbody = document.getElementById('feedback-body');
-      if (!tbody) return
-      
+      if (!tbody) return;
       tbody.innerHTML = '';
-      
-      const studentComments = [];
-
-      if (Array.isArray(feedbackList)) {
-        feedbackList.forEach(item => {
-          if (item.evaluator_type && item.evaluator_type.toLowerCase() === 'student' && item.qualitative_feedback) {
-            
-            // 1. Replace the '---' delimiter with a newline to normalize the separators
-            let combinedFeedback = item.qualitative_feedback.replace(/---/g, '\n'); 
-            
-            // 2. Split by newline and process each segment
-            combinedFeedback.split('\n').forEach(comment => {
-              const cleanComment = comment.trim();
-              if (cleanComment) {
-                studentComments.push(cleanComment);
-              }
-            });
-          }
-        });
-      }
-
-      if (studentComments.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:1.5rem; color:var(--muted);">No student feedback available for this period.</td></tr>';
+      if (!feedbackList || feedbackList.length === 0) {
+          tbody.innerHTML = '<tr><td>No student feedback available.</td></tr>';
           return;
       }
-      
-      // Display ALL available student feedback comments
-      studentComments.forEach(comment => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-              <td style="font-style: italic;">- ${comment}</td>
-          `;
-          tbody.appendChild(tr);
+      feedbackList.forEach(item => {
+          if (item.evaluator_type?.toLowerCase() === 'student' && item.qualitative_feedback) {
+              item.qualitative_feedback.split('---').forEach(comment => {
+                  if (comment.trim()) {
+                      const tr = document.createElement('tr');
+                      tr.innerHTML = `<td style="font-style: italic;">- ${comment.trim()}</td>`;
+                      tbody.appendChild(tr);
+                  }
+              });
+          }
       });
   }
 
   function populateComparison(comparison) {
     const wrapper = document.getElementById('comparison-wrapper');
-    if (!wrapper) return; // Added check
-    
+    if (!wrapper || !comparison) return;
     const { your_avg, dept_avg, college_avg, college_name } = comparison;
-
-    // Helper to calculate width and format score
-    const getMaxScore = 5.0;
-    const formatScore = (score) => score.toFixed(2);
-    const getWidth = (score) => Math.min(100, (score / getMaxScore) * 100);
-
+    const getWidth = (score) => Math.min(100, (score / 5.0) * 100);
     wrapper.innerHTML = `
-      <div class="comparison-row">
-        <span class="label">Your avg:</span>
-        <div class="comparison-bar">
-          <div class="comparison-fill you" style="width:${getWidth(your_avg)}%">${formatScore(your_avg)}</div>
-        </div>
-      </div>
-      <div class="comparison-row">
-        <span class="label">${college_name} avg:</span>
-        <div class="comparison-bar">
-          <div class="comparison-fill dept" style="width:${getWidth(dept_avg)}%">${formatScore(dept_avg)}</div>
-        </div>
-      </div>
-      <div class="comparison-row">
-        <span class="label">College avg:</span>
-        <div class="comparison-bar">
-          <div class="comparison-fill college" style="width:${getWidth(college_avg)}%">${formatScore(college_avg)}</div>
-        </div>
-      </div>
-    `;
+      <div class="comparison-row"><span class="label">Your avg:</span><div class="comparison-bar"><div class="comparison-fill you" style="width:${getWidth(your_avg)}%">${your_avg.toFixed(2)}</div></div></div>
+      <div class="comparison-row"><span class="label">${college_name} avg:</span><div class="comparison-bar"><div class="comparison-fill dept" style="width:${getWidth(dept_avg)}%">${dept_avg.toFixed(2)}</div></div></div>
+      <div class="comparison-row"><span class="label">College avg:</span><div class="comparison-bar"><div class="comparison-fill college" style="width:${getWidth(college_avg)}%">${college_avg.toFixed(2)}</div></div></div>`;
   }
 
-  // --- Tab Logic 
-  const tabBtns = document.querySelectorAll(".tab-btn");
-  const tabContents = document.querySelectorAll(".tab-content");
-
-  tabBtns.forEach(btn => {
+  // Tab Logic
+  document.querySelectorAll(".tab-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-      // reset active
-      tabBtns.forEach(b => b.classList.remove("active"));
-      tabContents.forEach(c => c.classList.remove("active"));
-
-      // activate clicked
+      document.querySelectorAll(".tab-btn, .tab-content").forEach(el => el.classList.remove("active"));
       btn.classList.add("active");
       document.getElementById(btn.dataset.tab).classList.add("active");
     });
   });
 
-  // --- DOM Ready ---
   document.addEventListener('DOMContentLoaded', loadEvaluationData);
 </script>
 {% endblock %}

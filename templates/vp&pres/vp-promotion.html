@@ -75,8 +75,6 @@
       <option value="">All Status</option>
       <option value="vpa">For VPAA Review</option>
       <option value="pres">For President Review</option>
-      <option value="approved">Approved</option>
-      <option value="rejected">Rejected</option>
     </select>
   </div>
 
@@ -218,12 +216,22 @@
       </div>
     </div>
 
-    <div class="hr-documents">
-      <h3>Uploaded Documents</h3>
-      <div class="hr-stats" id="documentLinks">
-        <div class="hr-stat-card"><a href="#" id="coverLetterLink"><i class='bx bx-file'></i> Cover Letter</a></div>
-        <div class="hr-stat-card"><a href="#" id="resumeLink"><i class='bx bx-file'></i> Resume</a></div>
-      </div>
+    <div class="hr-documents" style="margin-top: 20px;">
+        <h3>Review Documents</h3>
+        <div class="hr-stats" id="documentLinks" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+            <div class="hr-stat-card" id="resumeContainer">
+                <a href="#" id="resumeLink"><i class='bx bx-file'></i> <span id="labelResume">Resume</span></a>
+            </div>
+            <div class="hr-stat-card" id="torContainer">
+                <a href="#" id="torLink"><i class='bx bxs-graduation'></i> <span id="labelTor">TOR</span></a>
+            </div>
+            <div class="hr-stat-card" id="diplomaContainer">
+                <a href="#" id="diplomaLink"><i class='bx bx-award'></i> <span id="labelDiploma">Diploma</span></a>
+            </div>
+            <div class="hr-stat-card" id="coverLetterContainer">
+                <a href="#" id="coverLetterLink"><i class='bx bx-envelope'></i> <span id="labelCoverLetter">Cover Letter</span></a>
+            </div>
+        </div>
 
       <div id="pdfViewer" style="margin-top:20px;display:none;">
         <h4 id="pdfTitle">Document Preview</h4>
@@ -251,7 +259,6 @@
       <button id="closeModal" class="btn close" style="font-size: 18px;">Close</button>
     </div>
   </div>
-</div>
 
 <div id="modal-loading" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:10000;">
   <div style="background:rgba(0,0,0,0.8); padding:40px 50px; border-radius:16px; text-align:center;">
@@ -564,38 +571,38 @@ function loadPromotionDetails(applicationId) {
 }
 
 function setupDocumentLinks(applicationId, data) {
-  const coverLetterLink = document.getElementById('coverLetterLink');
-  const resumeLink = document.getElementById('resumeLink');
-  
-  if (data.has_cover_letter) {
-    coverLetterLink.onclick = (e) => {
-      e.preventDefault();
-      viewDocument(applicationId, 'cover_letter', data.cover_letter_filename);
-    };
-    coverLetterLink.style.opacity = '1';
-    coverLetterLink.style.pointerEvents = 'auto';
-  } else {
-    coverLetterLink.style.opacity = '0.5';
-    coverLetterLink.style.pointerEvents = 'none';
-  }
-  
-  if (data.has_resume) {
-    resumeLink.onclick = (e) => {
-      e.preventDefault();
-      viewDocument(applicationId, 'resume', data.resume_filename);
-    };
-    resumeLink.style.opacity = '1';
-    resumeLink.style.pointerEvents = 'auto';
-  } else {
-    resumeLink.style.opacity = '0.5';
-    resumeLink.style.pointerEvents = 'none';
-  }
-}
+    const docs = [
+        { id: 'resumeLink', labelId: 'labelResume', key: 'resume', hasKey: 'has_resume', default: 'Resume' },
+        { id: 'torLink', labelId: 'labelTor', key: 'tor', hasKey: 'has_tor', default: 'TOR' },
+        { id: 'diplomaLink', labelId: 'labelDiploma', key: 'diploma', hasKey: 'has_diploma', default: 'Diploma' },
+        { id: 'coverLetterLink', labelId: 'labelCoverLetter', key: 'cover_letter', hasKey: 'has_cover_letter', default: 'Cover Letter' }
+    ];
 
-function viewDocument(applicationId, docType, filename) {
-  pdfFrame.src = `/api/promotion/document/${applicationId}/${docType}`;
-  document.getElementById('pdfTitle').textContent = `Preview: ${filename || docType}`;
-  pdfViewer.style.display = 'block';
+    docs.forEach(doc => {
+        const linkEl = document.getElementById(doc.id);
+        const labelEl = document.getElementById(doc.labelId);
+        const container = linkEl.parentElement;
+        
+        labelEl.textContent = doc.default;
+        
+        if (data[doc.hasKey]) {
+            linkEl.onclick = (e) => {
+                e.preventDefault();
+                // Opens PDF in a new browser tab (Pop-out)
+                window.open(`/api/promotion/document/${applicationId}/${doc.key}`, '_blank');
+            };
+            linkEl.style.opacity = '1';
+            linkEl.style.pointerEvents = 'auto';
+            container.style.border = "1px solid #22c55e"; // Institutional Success Green
+            container.style.background = "#f0fdf4";
+        } else {
+            linkEl.style.opacity = '0.4';
+            linkEl.style.pointerEvents = 'none';
+            labelEl.textContent = `${doc.default} (None)`;
+            container.style.border = "1px solid #fca5a5"; // Warning Red
+            container.style.background = "#fef2f2";
+        }
+    });
 }
 
 // UPDATE closeModal event
@@ -620,7 +627,6 @@ document.getElementById('viewProfileBtn').addEventListener('click', () => {
 });
 
 // REJECT
-// REJECT (UPDATED)
 document.getElementById('rejectBtn').addEventListener('click', () => {
   if (!currentApplicationId) return alert('No application selected');
   
@@ -658,7 +664,6 @@ document.getElementById('rejectBtn').addEventListener('click', () => {
 
 
 // FORWARD/APPROVE
-// FORWARD/APPROVE (UPDATED)
 document.getElementById('forwardApproveBtn').addEventListener('click', () => {
   if (!currentApplicationId) return alert('No application selected');
   

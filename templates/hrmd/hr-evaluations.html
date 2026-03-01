@@ -39,6 +39,17 @@
 
       <div style="grid-column:1 / -1; margin-top:8px;">
         <div class="controls">
+            <div class="right">
+            <button class="btn primary" onclick="openPeerAssignmentModal()">
+                <i class='bx bx-git-merge'></i> Manage Peer Assignments
+            </button>
+            <button class="btn primary" id="update-eval-btn" >
+              Update Evaluation Records
+            </button>
+            <button class="btn primary" id="newCycleBtn">
+              <i class='bx bx-refresh'></i>&nbsp; New Evaluation Cycle
+            </button>
+          </div>
           <div class="left">
             <div class="search-filter">
               <input type="text" id="evalSearch" placeholder="Search Faculty Name...">
@@ -64,14 +75,7 @@
               </select>
               </div>
           </div>
-          <div class="right">
-            <button class="btn primary" id="update-eval-btn" >
-              Update Evaluation Records
-            </button>
-            <button class="btn primary" id="newCycleBtn">
-              <i class='bx bx-refresh'></i>&nbsp; New Evaluation Cycle
-            </button>
-          </div>
+          
         </div>
       </div>
 
@@ -125,6 +129,45 @@
         </div>
       </div>
     </section>
+
+    <div id="peerAssignmentModal" class="hr-modal-wrapper" style="display: none;">
+        <div class="hr-modal-content" style="max-width: 500px;">
+            <div class="emp-modal-header" style="background: var(--spc-maroon);">
+                <h2 style="color: white; font-size: 1.2rem;"><i class='bx bx-git-merge' style="margin-right: 8px;"></i>Manage Peer Assignments</h2>
+                <span class="emp-close" onclick="closePeerModal()" style="color: white;">&times;</span>
+            </div>
+            <div class="emp-modal-body">
+                <p style="margin-bottom: 15px; color: #555;">Generate randomized assignments where each faculty member evaluates 2 peers within their department.</p>
+
+                <label for="assignment-dept">Target Department</label>
+                <div class="input-with-icon">
+                    <i class='bx bx-buildings'></i>
+                    <select id="assignment-dept" class="form-control">
+                        <option value="" disabled selected>Loading departments...</option>
+                    </select>
+                </div>
+
+                <label for="assignment-acad-id">Academic Term</label>
+                <div class="input-with-icon">
+                    <i class='bx bx-calendar'></i>
+                    <select id="assignment-acad-id" class="form-control">
+                        <option value="" disabled selected>Loading terms...</option>
+                    </select>
+                </div>
+
+                <div id="assignment-status" style="display: none; margin-top: 15px; color: #f59e0b; font-weight: 500;">
+                    <i class='bx bx-loader-alt bx-spin'></i> Randomizing assignments...
+                </div>
+
+                <button class="btn primary" onclick="runAssignmentLogic()" style="width: 100%; margin-top: 15px;">
+                    <i class='bx bx-git-merge'></i>&nbsp; Generate Assignments
+                </button>
+                <button class="btn secondary emp-btn-cancel" onclick="closePeerModal()" style="width: 100%; margin-top: 8px;">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
 
     <div id="evaluationModal" class="hr-modal-wrapper" style="display: none;">
       <div class="hr-modal-content" style="max-width: 800px; padding: 0;">
@@ -1285,5 +1328,95 @@ $(document).ready(function() {
     // 9. Initial data load (Starts with fetching semesters)
     fetchSemestersAndPopulate();
 });
+
+function openPeerAssignmentModal() {
+    document.getElementById('peerAssignmentModal').style.display = 'flex';
+    populatePeerModalDropdowns();
+}
+
+function closePeerModal() {
+    document.getElementById('peerAssignmentModal').style.display = 'none';
+}
+
+async function populatePeerModalDropdowns() {
+    const deptSelect = document.getElementById('assignment-dept');
+    const termSelect = document.getElementById('assignment-acad-id');
+
+    // Fetch departments and academic terms in parallel
+    try {
+        const [deptRes, termRes] = await Promise.all([
+            fetch('/api/hr/colleges-list'),
+            fetch('/api/hr/acadcalendar')
+        ]);
+
+        const deptData = await deptRes.json();
+        const termData = await termRes.json();
+
+        // Populate departments
+        if (deptData.success && deptData.colleges.length > 0) {
+            deptSelect.innerHTML = '<option value="" disabled selected>Select Department</option>';
+            deptData.colleges.forEach(college => {
+                const opt = document.createElement('option');
+                opt.value = college.collegename;
+                opt.textContent = college.collegename;
+                deptSelect.appendChild(opt);
+            });
+        } else {
+            deptSelect.innerHTML = '<option value="" disabled selected>No departments found</option>';
+        }
+
+        // Populate academic terms
+        if (termData.success && termData.calendar_records.length > 0) {
+            termSelect.innerHTML = '<option value="" disabled selected>Select Academic Term</option>';
+            termData.calendar_records.forEach(term => {
+                const opt = document.createElement('option');
+                opt.value = term.id;
+                opt.textContent = `${term.year} — ${term.semester}`;
+                if (term.is_current) opt.textContent += ' (Current)';
+                termSelect.appendChild(opt);
+            });
+        } else {
+            termSelect.innerHTML = '<option value="" disabled selected>No terms found</option>';
+        }
+    } catch (err) {
+        console.error('Failed to load peer modal data:', err);
+        deptSelect.innerHTML = '<option value="" disabled selected>Error loading departments</option>';
+        termSelect.innerHTML = '<option value="" disabled selected>Error loading terms</option>';
+    }
+}
+
+async function runAssignmentLogic() {
+    const dept = document.getElementById('assignment-dept').value;
+    const acadId = document.getElementById('assignment-acad-id').value;
+    const statusDiv = document.getElementById('assignment-status');
+
+    if (!dept || !acadId) {
+        alert("Please select both a department and a term.");
+        return;
+    }
+
+    statusDiv.style.display = 'block';
+
+    try {
+        const response = await fetch('/api/hr/generate-peer-assignments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ acadcalendar_id: acadId, collegename: dept })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            alert("Peer assignments successfully generated.");
+            closePeerModal();
+            location.reload();
+        } else {
+            alert("Error: " + result.message);
+        }
+    } catch (error) {
+        alert("Failed to connect to server.");
+    } finally {
+        statusDiv.style.display = 'none';
+    }
+}
 </script>
 {% endblock %}

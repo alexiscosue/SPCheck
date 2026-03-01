@@ -110,7 +110,7 @@
             {% for promo in promotions %}
             <tr data-status="{{ promo.status }}" data-dept="{{ promo.department }}" data-faculty-id="{{ promo.faculty_id }}">
               <td style="display:flex;gap:10px;align-items:center">
-                <img class="faculty-photo" data-personnel-id="{{ promo.faculty_id }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#f0f0f0;" alt="Loading...">
+                <!-- <img class="faculty-photo" data-personnel-id="{{ promo.faculty_id }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#f0f0f0;" alt="Loading..."> -->
                 {{ promo.name }}
               </td>
               <td>{{ promo.department }}</td>
@@ -151,6 +151,7 @@
           <thead>
             <tr>
               <th>Faculty</th>
+              <th>Profile</th>
               <th>Department</th>
               <th>Current Rank</th>
               <th>Current Tenure</th>
@@ -159,38 +160,57 @@
               <th>Action</th>
             </tr>
           </thead>
-          <tbody id="regularizationsBody">
-            {% for reg in regularizations %}
-            <tr data-dept="{{ reg.department }}" data-tenure="{{ reg.eligible_for }}" data-status="{{ reg.reg_status }}">
-              <td style="display:flex;gap:10px;align-items:center">
-                <img class="faculty-photo" data-personnel-id="{{ reg.personnel_id }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#f0f0f0;" alt="Loading...">
-                {{ reg.name }}
-              </td>
-              <td>{{ reg.department }}</td>
-              <td>{{ reg.current_rank }}</td>
-              <td><span class="status pending">{{ reg.current_tenure }}</span></td>
-              <td>{{ reg.years_of_service }} years</td>
-              <td><span class="status ok">{{ reg.eligible_for }}</span></td>
-              <td>
-                {% if reg.has_application %}
-                  <span class="status {{ reg.status_class }}">{{ reg.status }}</span>
-                {% else %}
-                  <button class="btn-action initiate-reg-btn" 
-                          style="background:#22c55e;color:#fff" 
-                          data-personnel-id="{{ reg.personnel_id }}"
-                          data-faculty-name="{{ reg.name }}"
-                          data-eligible-for="{{ reg.eligible_for }}">
-                    Initiate
-                  </button>
-                {% endif %}
-              </td>
-            </tr>
-            {% else %}
-            <tr>
-              <td colspan="7" style="text-align:center">No eligible faculty found</td>
-            </tr>
-            {% endfor %}
-          </tbody>
+            <tbody id="regularizationsBody">
+              {% for reg in regularizations %}
+              {% set is_near_regular = reg.years_of_service >= 2.9 and reg.current_tenure == 'Probationary' %}
+              
+              <tr class="{% if is_near_regular %}near-milestone{% endif %}" 
+                  data-dept="{{ reg.department }}" 
+                  data-tenure="{{ reg.eligible_for }}" 
+                  data-status="{{ reg.reg_status }}">
+                  
+                <td style="display:flex;gap:10px;align-items:center">
+                  <!-- <img class="faculty-photo" data-personnel-id="{{ reg.personnel_id }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#f0f0f0;" alt="Loading..."> -->
+                  <div>
+                      {{ reg.name }}
+                      {% if is_near_regular %}
+                      <span class="milestone-badge">Due for Regularization</span>
+                      {% endif %}
+                  </div>
+                </td>
+                <td>                 
+                  <a href="/hr_employee_profile/{{ reg.personnel_id }}" 
+                    class="btn-action" 
+                    style="background: #fff; color: #7b1113; border: 1px solid #7b1113; text-decoration: none; padding: 6px 12px; display: inline-flex; align-items: center; justify-content: center;"
+                    title="View detailed faculty profile">
+                    <i class='bx bx-user' style="margin-right: 4px;"></i> Profile
+                  </a>
+                </td>
+                <td>{{ reg.department }}</td>
+                <td>{{ reg.current_rank }}</td>
+                <td><span class="status pending">{{ reg.current_tenure }}</span></td>
+                <td><strong>{{ reg.years_of_service }} years</strong></td>
+                <td><span class="status ok">{{ reg.eligible_for }}</span></td>
+                <td>
+                  {% if reg.has_application %}
+                    <span class="status {{ reg.status_class }}">{{ reg.status }}</span>
+                  {% else %}
+                    <button class="btn-action initiate-reg-btn" 
+                            style="background:#7b1113; color:#fff" 
+                            data-personnel-id="{{ reg.personnel_id }}"
+                            data-faculty-name="{{ reg.name }}"
+                            data-eligible-for="{{ reg.eligible_for }}">
+                      Initiate
+                    </button>
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="8" style="text-align:center">No eligible faculty found</td>
+              </tr>
+              {% endfor %}
+            </tbody>
         </table>
       </div>
     </div>
@@ -243,9 +263,19 @@
     
     <div class="hr-documents">
       <h3>Uploaded Documents</h3>
-      <div class="hr-stats" id="documentLinks">
-        <div class="hr-stat-card"><a href="#" id="coverLetterLink"><i class='bx bx-file'></i> Cover Letter</a></div>
-        <div class="hr-stat-card"><a href="#" id="resumeLink"><i class='bx bx-file'></i> Resume</a></div>
+      <div class="hr-stats" id="documentLinks" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+        <div class="hr-stat-card" id="resumeContainer">
+            <a href="#" id="resumeLink"><i class='bx bx-file'></i> <span id="labelResume">Resume / CV</span></a>
+        </div>
+        <div class="hr-stat-card" id="torContainer">
+            <a href="#" id="torLink"><i class='bx bxs-graduation'></i> <span id="labelTor">Official TOR</span></a>
+        </div>
+        <div class="hr-stat-card" id="diplomaContainer">
+            <a href="#" id="diplomaLink"><i class='bx bx-award'></i> <span id="labelDiploma">Diploma / Cert</span></a>
+        </div>
+        <div class="hr-stat-card" id="coverLetterContainer">
+            <a href="#" id="coverLetterLink"><i class='bx bx-envelope'></i> <span id="labelCoverLetter">Cover Letter</span></a>
+        </div>
       </div>
       
       <div id="pdfViewer" style="margin-top:20px;display:none;">
@@ -620,38 +650,47 @@ function loadPromotionDetails(applicationId) {
 
 
 function setupDocumentLinks(applicationId, data) {
-  const coverLetterLink = document.getElementById('coverLetterLink');
-  const resumeLink = document.getElementById('resumeLink');
-  
-  if (data.has_cover_letter) {
-    coverLetterLink.onclick = (e) => {
-      e.preventDefault();
-      viewDocument(applicationId, 'cover_letter', data.cover_letter_filename);
-    };
-    coverLetterLink.style.opacity = '1';
-    coverLetterLink.style.pointerEvents = 'auto';
-  } else {
-    coverLetterLink.style.opacity = '0.5';
-    coverLetterLink.style.pointerEvents = 'none';
-  }
-  
-  if (data.has_resume) {
-    resumeLink.onclick = (e) => {
-      e.preventDefault();
-      viewDocument(applicationId, 'resume', data.resume_filename);
-    };
-    resumeLink.style.opacity = '1';
-    resumeLink.style.pointerEvents = 'auto';
-  } else {
-    resumeLink.style.opacity = '0.5';
-    resumeLink.style.pointerEvents = 'none';
-  }
+    const docs = [
+        { id: 'resumeLink', labelId: 'labelResume', key: 'resume', hasKey: 'has_resume', default: 'Resume' },
+        { id: 'torLink', labelId: 'labelTor', key: 'tor', hasKey: 'has_tor', default: 'TOR' },
+        { id: 'diplomaLink', labelId: 'labelDiploma', key: 'diploma', hasKey: 'has_diploma', default: 'Diploma' },
+        { id: 'coverLetterLink', labelId: 'labelCoverLetter', key: 'cover_letter', hasKey: 'has_cover_letter', default: 'Cover Letter' }
+    ];
+
+    docs.forEach(doc => {
+        const linkEl = document.getElementById(doc.id);
+        const labelEl = document.getElementById(doc.labelId);
+        const container = linkEl.parentElement;
+        
+        // Use clean, simplified labels
+        labelEl.textContent = doc.default;
+        
+        if (data[doc.hasKey]) {
+            linkEl.onclick = (e) => {
+                e.preventDefault();
+                // Open in a new tab (Pop-out)
+                const url = `/api/promotion/document/${applicationId}/${doc.key}`;
+                window.open(url, '_blank');
+            };
+            linkEl.style.opacity = '1';
+            linkEl.style.pointerEvents = 'auto';
+            container.style.border = "1px solid #22c55e"; // Green border for found files
+            container.style.background = "#f0fdf4";
+        } else {
+            linkEl.style.opacity = '0.4';
+            linkEl.style.pointerEvents = 'none';
+            labelEl.textContent = `${doc.default} (Missing)`;
+            container.style.border = "1px solid #fca5a5"; // Red border for missing files
+            container.style.background = "#fef2f2";
+        }
+    });
 }
 
 function viewDocument(applicationId, docType, filename) {
-  pdfFrame.src = `/api/promotion/document/${applicationId}/${docType}`;
-  document.getElementById('pdfTitle').textContent = `Preview: ${filename || docType}`;
-  pdfViewer.style.display = 'block';
+    // This matches the @app.route('/api/promotion/document/<int:application_id>/<doc_type>')
+    pdfFrame.src = `/api/promotion/document/${applicationId}/${docType}`;
+    document.getElementById('pdfTitle').textContent = `Preview: ${filename || docType}`;
+    pdfViewer.style.display = 'block';
 }
 
 closeModal.addEventListener('click', () => {
