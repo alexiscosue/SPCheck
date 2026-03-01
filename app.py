@@ -6185,8 +6185,15 @@ def generate_peer_assignments(acadcalendar_id, department):
     cur = conn.cursor()
     
     try:
-        # Fetch all personnel in the department
-        cur.execute("SELECT personnel_id FROM personnel WHERE department = %s", (department,))
+        # Resolve collegename -> college_id
+        cur.execute("SELECT college_id FROM college WHERE collegename = %s", (department,))
+        college_row = cur.fetchone()
+        if college_row is None:
+            return False, f"College '{department}' not found."
+        college_id = college_row[0]
+
+        # Fetch all faculty in that college (faculty role only, not deans)
+        cur.execute("SELECT personnel_id FROM personnel WHERE college_id = %s AND role_id = 20001", (college_id,))
         faculty_ids = [row[0] for row in cur.fetchall()]
         
         # Guidelines require at least 3 members for rotation
