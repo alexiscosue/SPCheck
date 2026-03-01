@@ -6375,8 +6375,15 @@ def generate_peer_assignments(acadcalendar_id, department):
     cur = conn.cursor()
     
     try:
-        # Fetch all personnel in the department
-        cur.execute("SELECT personnel_id FROM personnel WHERE department = %s", (department,))
+        # Resolve collegename -> college_id
+        cur.execute("SELECT college_id FROM college WHERE collegename = %s", (department,))
+        college_row = cur.fetchone()
+        if college_row is None:
+            return False, f"College '{department}' not found."
+        college_id = college_row[0]
+
+        # Fetch all faculty in that college (faculty role only, not deans)
+        cur.execute("SELECT personnel_id FROM personnel WHERE college_id = %s AND role_id = 20001", (college_id,))
         faculty_ids = [row[0] for row in cur.fetchall()]
         
         # Guidelines require at least 3 members for rotation
@@ -6409,6 +6416,36 @@ def generate_peer_assignments(acadcalendar_id, department):
         conn.close()
 
 # --- Peer Evaluation Routes ---
+
+@app.route('/api/hr/generate-peer-assignments', methods=['POST'])
+@require_auth([20003]) # HR only
+def api_generate_peer_assignments():
+    try:
+        data = request.get_json()
+        acadcalendar_id = data.get('acadcalendar_id')
+        department = data.get('collegename')
+
+        if not acadcalendar_id or not department:
+            return jsonify(success=False, message="Missing Academic Term or Department."), 400
+
+        # Call the existing helper function in app.py
+        success, message = generate_peer_assignments(acadcalendar_id, department)
+        
+        if success:
+            # Optional: Log the action for audit
+            hr_info = get_personnel_info(session['user_id'])
+            log_audit_action(
+                hr_info.get('personnel_id'),
+                "Generated Peer Assignments",
+                f"Generated randomized peer evaluations for {department}."
+            )
+            return jsonify(success=True, message=message)
+        else:
+            return jsonify(success=False, message=message), 400
+
+    except Exception as e:
+        print(f"Error in peer assignment route: {str(e)}")
+        return jsonify(success=False, message="Internal Server Error"), 500
 
 @app.route('/api/faculty/peer-assignments')
 @require_auth([20001, 20002])

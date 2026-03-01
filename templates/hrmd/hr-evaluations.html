@@ -1401,7 +1401,7 @@ async function runAssignmentLogic() {
         const response = await fetch('/api/hr/generate-peer-assignments', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ acadcalendar_id: acadId, department: dept })
+            body: JSON.stringify({ acadcalendar_id: acadId, collegename: dept })
         });
 
         const result = await response.json();
