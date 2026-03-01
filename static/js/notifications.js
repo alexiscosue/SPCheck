@@ -120,12 +120,13 @@ const NotifSystem = (function () {
   /* ------------------------------------------------------------------ */
 
   function _store(data) {
-    if (!data || !data.tap_time) return;
+    if (!data) return;
+    if (!data.tap_time && data.notification_type !== 'license') return;
 
     var notifs = _load();
     var item = {
       id            : Date.now() + '_' + Math.random().toString(36).slice(2),
-      // sensor type
+      // sensor / alert type
       type          : data.notification_type || 'rfid',
       // identity
       person_name   : data.person_name  || 'Unknown',
@@ -142,8 +143,13 @@ const NotifSystem = (function () {
       subject_name  : data.subject_name  || null,
       class_section : data.class_section || null,
       classroom     : data.classroom     || null,
+      // license details
+      license_type       : data.license_type        || null,
+      license_number     : data.license_number      || null,
+      expiration_date    : data.expiration_date      || null,
+      days_until_expiry  : data.days_until_expiry != null ? data.days_until_expiry : null,
       // timestamp
-      tap_time      : data.tap_time,
+      tap_time      : data.tap_time || new Date().toLocaleString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric', hour:'numeric', minute:'2-digit', hour12:true }),
       // panel state
       read          : false,
       ts            : Date.now()
@@ -237,6 +243,20 @@ const NotifSystem = (function () {
     return { title: title, icon: icon, color: color };
   }
 
+  function _licenseMeta(n) {
+    var title, icon, color;
+    if (n.action === 'expired') {
+      title = 'License Expired';       icon = 'bx-error-circle'; color = '#dc2626';
+    } else if (n.action === 'expiring_30') {
+      title = 'License Expiring Soon'; icon = 'bx-error';        color = '#ea580c';
+    } else if (n.action === 'expiring_60') {
+      title = 'License Expiring';      icon = 'bx-bell';         color = '#d97706';
+    } else {
+      title = 'License Reminder';      icon = 'bx-bell';         color = '#ca8a04';
+    }
+    return { title: title, icon: icon, color: color };
+  }
+
   /* ------------------------------------------------------------------ */
   /*  Timestamp formatter                                                 */
   /* ------------------------------------------------------------------ */
@@ -278,13 +298,14 @@ const NotifSystem = (function () {
     }
 
     var html = notifs.map(function (n) {
-      var isBio = (n.type === 'biometric');
-      var meta  = isBio ? _bioMeta(n) : _rfidMeta(n);
+      var isBio     = (n.type === 'biometric');
+      var isLicense = (n.type === 'license');
+      var meta      = isLicense ? _licenseMeta(n) : (isBio ? _bioMeta(n) : _rfidMeta(n));
 
       // Type tag styling
-      var tagBg    = isBio ? '#dcfce7'  : '#dbeafe';
-      var tagColor = isBio ? '#166534'  : '#1e40af';
-      var tagLabel = isBio ? 'Biometric' : 'RFID';
+      var tagBg    = isLicense ? '#fef3c7' : (isBio ? '#dcfce7'  : '#dbeafe');
+      var tagColor = isLicense ? '#92400e' : (isBio ? '#166534'  : '#1e40af');
+      var tagLabel = isLicense ? 'License' : (isBio ? 'Biometric' : 'RFID');
 
       // Icon background tinted from action colour
       var iconBg = meta.color + '18'; // 9% opacity hex
@@ -347,6 +368,18 @@ const NotifSystem = (function () {
           'Direction: <span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:' +
           bDir.bg + ';color:' + bDir.text + '">' + bDir.label + '</span>' +
         '</div>';
+      }
+
+      // License-specific detail rows
+      if (isLicense) {
+        if (n.license_type)   details += '<div class="notif-item-detail"><span class="notif-detail-label">Type</span>' + _esc(n.license_type) + '</div>';
+        if (n.license_number) details += '<div class="notif-item-detail"><span class="notif-detail-label">No.</span>' + _esc(n.license_number) + '</div>';
+        if (n.expiration_date) {
+          var dLabel = n.days_until_expiry != null
+            ? (n.days_until_expiry < 0 ? ' (Expired)' : ' (' + n.days_until_expiry + ' day(s) left)')
+            : '';
+          details += '<div class="notif-item-detail"><span class="notif-detail-label">Expires</span>' + _esc(n.expiration_date) + dLabel + '</div>';
+        }
       }
 
       // Message (always shown)
