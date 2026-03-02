@@ -27,8 +27,11 @@
       </div>
     </div>
     <nav class="menu">
-      <a href="{{ url_for('vp_promotions') }}" {% if request.endpoint == 'vp_promotions' %}class="active"{% endif %}>
-        <i class='bx bx-award'></i><span>Promotions</span>
+      <a href="{{ url_for('vp_promotions') }}" {% if request.endpoint == 'vp_promotions' %}class="active"{% endif %} style="display:flex;align-items:center;gap:8px">
+        <i class='bx bx-award'></i><span style="flex:1">Promotions</span>
+        {% if pending_vp_promo_count %}
+        <span style="background:#c0392b;color:#fff;border-radius:10px;font-size:10px;font-weight:700;padding:1px 7px;line-height:16px;flex-shrink:0">{{ pending_vp_promo_count }}</span>
+        {% endif %}
       </a>
       <a href="{{ url_for('vp_profile') }}" {% if request.endpoint == 'vp_profile' %}class="active"{% endif %}>
         <i class='bx bx-user'></i><span>My Profile</span>
@@ -97,6 +100,9 @@
 
   <!-- Base JavaScript -->
   <script>
+    // Resolved server-side so notification filtering works immediately on load
+    var VP_USER_TYPE = '{{ "vpaa" if is_vpaa else "president" }}';
+
     const sidebar = document.getElementById('sidebar');
     const btnToggle = document.getElementById('btnToggle');
 
@@ -132,16 +138,12 @@
               })
               .catch(error => console.error('Error loading profile image:', error));
 
-            // Determine sub-role: President if position contains 'President',
-            // otherwise treat as VPAA.
-            var pos = (data.position || '').toLowerCase();
-            var vpUserType = pos.indexOf('president') !== -1 ? 'president' : 'vpaa';
-
             // Init notification system (VP/Pres receives scans + forwarded promotions)
+            // VP_USER_TYPE is set server-side above — no need to re-derive from position
             NotifSystem.init({
               storageKey: 'spcheck_notifs_vp_' + data.personnel_id,
               sseUrl: '/api/vp/notifications',
-              userType: vpUserType
+              userType: VP_USER_TYPE
             });
           }
         })

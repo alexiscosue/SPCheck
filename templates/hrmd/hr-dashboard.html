@@ -40,6 +40,14 @@
             <div class="value" id="kpi-promo">Loading...</div>
           </div>
         </div>
+
+        <div class="kpi card" style="gap:14px">
+          <div class="icon eval"><i class='bx bx-user-check'></i></div>
+          <div>
+            <div class="title">Pending Regularization</div>
+            <div class="value" id="kpi-reg">Loading...</div>
+          </div>
+        </div>
       </div>
 
       <div class="chart-large">
@@ -235,6 +243,15 @@
         document.getElementById('kpi-promo').textContent = promoRequestsData.data.length || 0;
       } else {
         document.getElementById('kpi-promo').textContent = 'Error';
+      }
+
+      // Pending regularization count: faculty eligible but not yet processed
+      try {
+        const regResponse = await fetch('/api/regularization/eligible-faculty');
+        const regData = await regResponse.json();
+        document.getElementById('kpi-reg').textContent = regData.success ? (regData.eligible_faculty ? regData.eligible_faculty.length : 0) : '—';
+      } catch (_) {
+        document.getElementById('kpi-reg').textContent = '—';
       }
 
 
