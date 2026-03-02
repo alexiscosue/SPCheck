@@ -1944,6 +1944,8 @@ to { opacity: 1; }
 .calendar-grid .day .status-dot.present { background-color: #10b981; }
 .calendar-grid .day .status-dot.late { background-color: #f59e0b; }
 .calendar-grid .day .status-dot.absent { background-color: #ef4444; }
+.calendar-grid .day .status-dot.excused { background-color: #3b82f6; }
+.calendar-grid .day .status-dot.scheduled { background-color: #9ca3af; }
 .calendar-grid .empty { background: transparent; border: none; }
 
 .calendar-legend {
@@ -1965,8 +1967,10 @@ to { opacity: 1; }
 
 .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
 .legend-dot.present { background-color: #10b981; }
-.legend-dot.late {background-color: #f59e0b;}
-.legend-dot.absent { background-color: #ef4444;}
+.legend-dot.late { background-color: #f59e0b; }
+.legend-dot.absent { background-color: #ef4444; }
+.legend-dot.excused { background-color: #3b82f6; }
+.legend-dot.scheduled { background-color: #9ca3af; }
 
 .pagination-controls {
   display: flex;
@@ -3735,7 +3739,10 @@ table:has(#campusEntryBody) thead th:nth-child(4) {
 }
 
 #addScheduleModal .emp-modal-content,
-#importCSVModal .emp-modal-content {
+#importCSVModal .emp-modal-content,
+#addEmployeeModal .emp-modal-content,
+#deleteEmployeeModal .emp-modal-content,
+#deleteScheduleModal .emp-modal-content {
   max-width: 960px;
 }
 

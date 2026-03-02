@@ -101,21 +101,6 @@
           <h3>Personal Information</h3>
           <div class="emp-form-row">
             <div class="emp-form-group">
-              <label for="employee_no">Employee Number *</label>
-              <input type="text" id="employee_no" name="employee_no" required 
-                    placeholder="e.g., 10-1223" maxlength="7"
-                    oninput="formatEmployeeNumber(this)">
-              <div class="emp-error-message" id="employeeNoError"></div>
-            </div>
-            <div class="emp-form-group">
-              <label for="hire_date">Hire Date *</label>
-              <input type="date" id="hire_date" name="hire_date" required 
-                    max="{{ today_date }}" 
-                    pattern="\d{4}-\d{2}-\d{2}">
-            </div>
-          </div>
-          <div class="emp-form-row">
-            <div class="emp-form-group">
               <label for="firstname">First Name *</label>
               <input type="text" id="firstname" name="firstname" required>
             </div>
@@ -123,11 +108,24 @@
               <label for="lastname">Last Name *</label>
               <input type="text" id="lastname" name="lastname" required>
             </div>
-          </div>
-          <div class="emp-form-row">
             <div class="emp-form-group">
               <label for="honorifics">Honorifics</label>
               <input type="text" id="honorifics" name="honorifics" placeholder="e.g., Ph.D., M.A.">
+            </div>
+          </div>
+          <div class="emp-form-row">
+            <div class="emp-form-group">
+              <label for="employee_no">Employee Number *</label>
+              <input type="text" id="employee_no" name="employee_no" required
+                    placeholder="e.g., 10-1223" maxlength="7"
+                    oninput="formatEmployeeNumber(this)">
+              <div class="emp-error-message" id="employeeNoError"></div>
+            </div>
+            <div class="emp-form-group">
+              <label for="hire_date">Hire Date *</label>
+              <input type="date" id="hire_date" name="hire_date" required
+                    max="{{ today_date }}"
+                    pattern="\d{4}-\d{2}-\d{2}">
             </div>
             <div class="emp-form-group">
               <label for="phone">Contact Number *</label>
@@ -157,8 +155,6 @@
                 <option value="20004">VP/President</option>
               </select>
             </div>
-          </div>
-          <div class="emp-form-row">
             <div class="emp-form-group">
               <label for="employment_status">Employment Status *</label>
               <select id="employment_status" name="employment_status" required>
@@ -506,14 +502,14 @@
               <option value="Probationary">Probationary</option>
             </select>
           </div>
-          <div style="max-height:300px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px;">
+          <div style="max-height:360px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px;">
             <table style="width:100%;border-collapse:collapse;font-size:13px;">
               <thead>
                 <tr style="background:#f3f4f6;position:sticky;top:0;z-index:1;">
-                  <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e5e7eb;">Name</th>
-                  <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e5e7eb;">College</th>
-                  <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e5e7eb;">Position</th>
-                  <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e5e7eb;">Status</th>
+                  <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Name</th>
+                  <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">College</th>
+                  <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Position</th>
+                  <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Status</th>
                 </tr>
               </thead>
               <tbody id="deleteEmpTableBody"></tbody>
@@ -569,14 +565,14 @@
               <option value="Probationary">Probationary</option>
             </select>
           </div>
-          <div style="max-height:240px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px;margin-bottom:12px;">
+          <div style="max-height:280px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px;margin-bottom:12px;">
             <table style="width:100%;border-collapse:collapse;font-size:13px;">
               <thead>
                 <tr style="background:#f3f4f6;position:sticky;top:0;z-index:1;">
-                  <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e5e7eb;">Name</th>
-                  <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e5e7eb;">College</th>
-                  <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e5e7eb;">Position</th>
-                  <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e5e7eb;">Status</th>
+                  <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Name</th>
+                  <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">College</th>
+                  <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Position</th>
+                  <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Status</th>
                 </tr>
               </thead>
               <tbody id="deleteSchedFacultyTableBody"></tbody>
@@ -590,18 +586,18 @@
               <div style="font-size:13px;font-weight:600;color:#374151;">Class Schedules *</div>
               <span id="deleteSchedSelectedCount" style="font-size:12px;color:#6b7280;"></span>
             </div>
-            <div style="max-height:240px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px;">
+            <div style="max-height:280px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px;">
               <table style="width:100%;border-collapse:collapse;font-size:13px;">
                 <thead>
                   <tr style="background:#f3f4f6;position:sticky;top:0;z-index:1;">
-                    <th style="padding:8px 10px;width:36px;border-bottom:1px solid #e5e7eb;">
+                    <th style="padding:10px 14px;width:36px;border-bottom:1px solid #e5e7eb;">
                       <input type="checkbox" id="deleteSchedSelectAll" title="Select all" onchange="toggleSelectAllSchedules(this)">
                     </th>
-                    <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e5e7eb;">Subject</th>
-                    <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e5e7eb;">Section</th>
-                    <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e5e7eb;">Day 1</th>
-                    <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e5e7eb;">Day 2</th>
-                    <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e5e7eb;">Room</th>
+                    <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Subject</th>
+                    <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Section</th>
+                    <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Day 1</th>
+                    <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Day 2</th>
+                    <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Room</th>
                   </tr>
                 </thead>
                 <tbody id="deleteSchedClassTableBody">

@@ -272,7 +272,7 @@
 
           <!-- Trend Chart -->
           <div class="card" style="padding:14px">
-            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Attendance Trends Across Weeks</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Attendance Trends by Week</div>
             <div style="position:relative;height:340px">
               <canvas id="analyticsTrendChart"></canvas>
             </div>
@@ -335,10 +335,11 @@
                   <th style="text-align:center;cursor:pointer" data-sort-bd="excused">Excused <span class="bd-sort-icon">↕</span></th>
                   <th style="text-align:center;cursor:pointer" data-sort-bd="total">Total <span class="bd-sort-icon">↕</span></th>
                   <th style="text-align:center;cursor:pointer" data-sort-bd="rate">Rate <span class="bd-sort-icon">↕</span></th>
+                  <th style="text-align:center"></th>
                 </tr>
               </thead>
               <tbody id="analyticsBreakdownBody">
-                <tr><td colspan="9" style="text-align:center;padding:2rem;color:#6b7280">Select a semester to view breakdown</td></tr>
+                <tr><td colspan="10" style="text-align:center;padding:2rem;color:#6b7280">Select a semester to view breakdown</td></tr>
               </tbody>
             </table>
           </div>
@@ -2446,14 +2447,14 @@
         const opt = document.createElement('option');
         opt.value = sem.id;
         opt.textContent = sem.text;
-        if (sem.is_current) opt.selected = true;
         sel.appendChild(opt);
       });
 
-      // If nothing pre-selected (no current semester), pick first
-      if (!sel.value && semesters.length > 0) {
-        sel.value = semesters[0].id;
-      }
+      // Default to the calendar-active semester (today between start/end), fallback to first
+      const calCurrentId = data.current_semester_id ? String(data.current_semester_id) : null;
+      sel.value = (calCurrentId && sel.querySelector('option[value="' + calCurrentId + '"]'))
+        ? calCurrentId
+        : (semesters.length > 0 ? String(semesters[0].id) : '');
 
       fetchAnalytics(sel.value);
 
@@ -2672,14 +2673,16 @@
     const slice = bdFiltered.slice(start, start + bdPerPage);
 
     if (slice.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:2rem;color:#6b7280">' +
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:2rem;color:#6b7280">' +
         (bdAllData.length === 0 ? 'No data for this semester' : 'No records match your search') +
         '</td></tr>';
     } else {
+      const semesterId = document.getElementById('analyticsSemesterSelect').value || '';
       tbody.innerHTML = slice.map(function (f) {
         const rate     = f.rate;
         const rateColor = rate >= 80 ? '#16a34a' : rate >= 60 ? '#92400e' : '#b91c1c';
         const rateBg    = rate >= 80 ? '#d1fae5' : rate >= 60 ? '#fef3c7' : '#fee2e2';
+        const semParam  = semesterId ? '?semester_id=' + semesterId : '';
         return '<tr>' +
           '<td>' + f.faculty_name + '</td>' +
           '<td>' + f.subject_code + ' — ' + f.subject_name + '</td>' +
@@ -2692,6 +2695,12 @@
           '<td style="text-align:center">' +
             '<span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;background:' +
             rateBg + ';color:' + rateColor + '">' + rate.toFixed(1) + '%</span>' +
+          '</td>' +
+          '<td style="text-align:center">' +
+            '<button onclick="downloadClassAttendanceReport(' + f.personnel_id + ',' + f.class_id + ',\'' + semesterId + '\')" ' +
+            'title="Download PDF" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:#7b1113;font-size:16px;vertical-align:middle;">' +
+            '<i class=\'bx bx-download\'></i>' +
+            '</button>' +
           '</td>' +
         '</tr>';
       }).join('');
@@ -2716,6 +2725,11 @@
         icon.textContent = '↕';
       }
     });
+  }
+
+  function downloadClassAttendanceReport(personnelId, classId, semesterId) {
+    const semParam = semesterId ? '?semester_id=' + semesterId : '';
+    window.open('/api/hr/faculty-class-attendance-pdf/' + personnelId + '/' + classId + semParam, '_blank');
   }
 
   // Wire up breakdown controls once DOM is ready
