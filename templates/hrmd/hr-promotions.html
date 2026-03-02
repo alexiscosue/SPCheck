@@ -98,49 +98,77 @@
           <thead>
             <tr>
               <th>Faculty</th>
-              <th>Department</th>
-              <th>Current Rank</th>
-              <th>Requested</th>
+              <th>Rank Change</th>
               <th>Status</th>
               <th>Submitted</th>
               <th>Action</th>
             </tr>
           </thead>
           <tbody id="promotionsBody">
-            {# Render rows needing HR action first, then the rest #}
-            {% set needs_action = promotions | selectattr('status', 'equalto', 'For HRMD Approval') | list %}
-            {% set others       = promotions | rejectattr('status', 'equalto', 'For HRMD Approval') | list %}
-            {% for promo in needs_action + others %}
+            {# Action-required rows first #}
+            {% set ns = namespace(action_rows=[], other_rows=[]) %}
+            {% for promo in promotions %}
+              {% if 'hrmd' in promo.status|lower %}
+                {% set ns.action_rows = ns.action_rows + [promo] %}
+              {% else %}
+                {% set ns.other_rows = ns.other_rows + [promo] %}
+              {% endif %}
+            {% endfor %}
+            {% for promo in ns.action_rows + ns.other_rows %}
+            {% set is_action = 'hrmd' in promo.status|lower %}
             <tr data-status="{{ promo.status }}" data-dept="{{ promo.department }}" data-faculty-id="{{ promo.faculty_id }}"
-                {% if 'hrmd' in promo.status|lower %}style="border-left:3px solid #7b1113; background:#fff5f5;"{% endif %}>
-              <td style="display:flex;gap:10px;align-items:center">
-                {{ promo.name }}
-                {% if 'hrmd' in promo.status|lower %}<span style="font-size:10px;background:#7b1113;color:#fff;border-radius:10px;padding:1px 6px;margin-left:6px;font-weight:600;">Action Required</span>{% endif %}
+                style="{% if is_action %}border-left:3px solid #7b1113;background:#fff8f8;{% endif %}">
+              <td>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div style="width:34px;height:34px;border-radius:50%;background:#7b1113;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">
+                    {{ promo.name[0] | upper if promo.name else '?' }}
+                  </div>
+                  <div>
+                    <div style="font-weight:600;font-size:13px;line-height:1.3">{{ promo.name }}</div>
+                    <div style="font-size:11px;color:#6b7280">{{ promo.department }}</div>
+                  </div>
+                  {% if is_action %}
+                  <span style="font-size:10px;background:#7b1113;color:#fff;border-radius:8px;padding:1px 7px;font-weight:700;white-space:nowrap;margin-left:4px">Action Required</span>
+                  {% endif %}
+                </div>
               </td>
-              <td>{{ promo.department }}</td>
-              <td>{{ promo.currentrank }}</td>
-              <td><strong>{{ promo.requestedrank }}</strong></td>
+              <td>
+                <div style="font-size:12px;color:#6b7280">{{ promo.currentrank }}</div>
+                <div style="font-size:11px;color:#9ca3af;line-height:1">↓</div>
+                <div style="font-weight:600;font-size:13px;color:#166534">{{ promo.requestedrank }}</div>
+              </td>
               <td>
                 {% if 'hrmd' in promo.status|lower %}
-                <span class="status pending">For HRMD Approval</span>
+                <span class="status pending">HR Review</span>
                 {% elif 'vpa' in promo.status|lower %}
-                <span class="status warn">For VPAA Approval</span>
+                <span class="status warn">VPAA Review</span>
                 {% elif 'pres' in promo.status|lower %}
-                <span class="status warn">For President Approval</span>
+                <span class="status warn">President Review</span>
                 {% elif 'approved' in promo.status|lower %}
-                <span class="status ok">Approved</span>
+                <span class="status ok">✓ Approved</span>
                 {% elif 'rejected' in promo.status|lower %}
-                <span class="status nu">Rejected</span>
+                <span class="status nu">✗ Rejected</span>
                 {% else %}
-                <span class="status pending">{{ promo.status|title }}</span>
+                <span class="status pending">{{ promo.status }}</span>
                 {% endif %}
               </td>
-              <td>{{ promo.submitteddate }}</td>
-              <td><button class="btn-action review-promotion-btn" style="background:#f1c40f;color:#111" data-application-id="{{ promo.application_id }}">Review</button></td>
+              <td style="font-size:12px;color:#6b7280;white-space:nowrap">
+                <i class='bx bx-calendar' style="vertical-align:middle;margin-right:3px"></i>{{ promo.submitteddate }}
+              </td>
+              <td>
+                <button class="btn-action review-promotion-btn"
+                        style="{% if is_action %}background:#7b1113;color:#fff;{% else %}background:#f1c40f;color:#111;{% endif %}"
+                        data-application-id="{{ promo.application_id }}">
+                  {% if is_action %}<i class='bx bx-check-circle'></i> Review Now{% else %}<i class='bx bx-show'></i> View{% endif %}
+                </button>
+              </td>
             </tr>
             {% else %}
             <tr>
-              <td colspan="7" style="text-align:center">No promotion requests found</td>
+              <td colspan="5" style="text-align:center;padding:2rem;color:#6b7280">
+                <i class='bx bx-inbox' style="font-size:32px;display:block;margin-bottom:8px"></i>
+                No promotion requests found
+              </td>
             </tr>
             {% endfor %}
           </tbody>
@@ -155,66 +183,68 @@
           <thead>
             <tr>
               <th>Faculty</th>
-              <th>Profile</th>
-              <th>Department</th>
-              <th>Current Rank</th>
-              <th>Current Tenure</th>
-              <th>Years of Service</th>
+              <th>Rank &amp; Tenure</th>
+              <th>Service Progress</th>
               <th>Eligible For</th>
               <th>Action</th>
             </tr>
           </thead>
-            <tbody id="regularizationsBody">
-              {% for reg in regularizations %}
-              {% set is_near_regular = reg.years_of_service >= 2.9 and reg.current_tenure == 'Probationary' %}
-              
-              <tr class="{% if is_near_regular %}near-milestone{% endif %}" 
-                  data-dept="{{ reg.department }}" 
-                  data-tenure="{{ reg.eligible_for }}" 
-                  data-status="{{ reg.reg_status }}">
-                  
-                <td style="display:flex;gap:10px;align-items:center">
-                  <!-- <img class="faculty-photo" data-personnel-id="{{ reg.personnel_id }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#f0f0f0;" alt="Loading..."> -->
-                  <div>
-                      {{ reg.name }}
-                      {% if is_near_regular %}
-                      <span class="milestone-badge">Due for Regularization</span>
-                      {% endif %}
+          <tbody id="regularizationsBody">
+            {% for reg in regularizations %}
+            {% set threshold = 7 if reg.eligible_for == 'Tenured' else 3 %}
+            {% set pct = [[(reg.years_of_service / threshold * 100) | round(0) | int, 0] | max, 100] | min %}
+            <tr data-dept="{{ reg.department }}" data-tenure="{{ reg.eligible_for }}" data-status="{{ reg.reg_status }}">
+              <td>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div style="width:34px;height:34px;border-radius:50%;background:#1e40af;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">
+                    {{ reg.name[0] | upper if reg.name else '?' }}
                   </div>
-                </td>
-                <td>                 
-                  <a href="/hr_employee_profile/{{ reg.personnel_id }}" 
-                    class="btn-action" 
-                    style="background: #fff; color: #7b1113; border: 1px solid #7b1113; text-decoration: none; padding: 6px 12px; display: inline-flex; align-items: center; justify-content: center;"
-                    title="View detailed faculty profile">
-                    <i class='bx bx-user' style="margin-right: 4px;"></i> Profile
-                  </a>
-                </td>
-                <td>{{ reg.department }}</td>
-                <td>{{ reg.current_rank }}</td>
-                <td><span class="status pending">{{ reg.current_tenure }}</span></td>
-                <td><strong>{{ reg.years_of_service }} years</strong></td>
-                <td><span class="status ok">{{ reg.eligible_for }}</span></td>
-                <td>
-                  {% if reg.has_application %}
-                    <span class="status {{ reg.status_class }}">{{ reg.status }}</span>
-                  {% else %}
-                    <button class="btn-action initiate-reg-btn" 
-                            style="background:#7b1113; color:#fff" 
-                            data-personnel-id="{{ reg.personnel_id }}"
-                            data-faculty-name="{{ reg.name }}"
-                            data-eligible-for="{{ reg.eligible_for }}">
-                      Initiate
-                    </button>
-                  {% endif %}
-                </td>
-              </tr>
-              {% else %}
-              <tr>
-                <td colspan="8" style="text-align:center">No eligible faculty found</td>
-              </tr>
-              {% endfor %}
-            </tbody>
+                  <div>
+                    <div style="font-weight:600;font-size:13px;line-height:1.3">
+                      {{ reg.name }}
+                    </div>
+                    <div style="font-size:11px;color:#6b7280">{{ reg.department }}</div>
+                    <a href="/hr_employee_profile/{{ reg.personnel_id }}" style="font-size:10px;color:#7b1113;text-decoration:none;font-weight:600">
+                      <i class='bx bx-link-external'></i> View Profile
+                    </a>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div style="font-weight:600;font-size:13px">{{ reg.current_rank }}</div>
+                <span class="status pending" style="font-size:10px;padding:1px 6px">{{ reg.current_tenure }}</span>
+              </td>
+              <td style="min-width:130px">
+                <div style="font-size:12px;font-weight:600;margin-bottom:4px">{{ reg.years_of_service }} / {{ threshold }} yrs</div>
+                <div style="height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden">
+                  <div style="height:100%;width:{{ pct }}%;background:{% if pct >= 100 %}#16a34a{% elif pct >= 75 %}#d97706{% else %}#3b82f6{% endif %};border-radius:3px;transition:width .3s"></div>
+                </div>
+                <div style="font-size:10px;color:#6b7280;margin-top:2px">{{ pct }}% complete</div>
+              </td>
+              <td><span class="status ok" style="font-weight:700">{{ reg.eligible_for }}</span></td>
+              <td>
+                {% if reg.has_application %}
+                  <span class="status {{ reg.status_class }}">{{ reg.status }}</span>
+                {% else %}
+                  <button class="btn-action initiate-reg-btn"
+                          style="background:#7b1113;color:#fff"
+                          data-personnel-id="{{ reg.personnel_id }}"
+                          data-faculty-name="{{ reg.name }}"
+                          data-eligible-for="{{ reg.eligible_for }}">
+                    <i class='bx bx-plus-circle'></i> Initiate
+                  </button>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="5" style="text-align:center;padding:2rem;color:#6b7280">
+                <i class='bx bx-user-check' style="font-size:32px;display:block;margin-bottom:8px"></i>
+                No eligible faculty found
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
         </table>
       </div>
     </div>

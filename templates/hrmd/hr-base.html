@@ -39,8 +39,11 @@
       <a href="{{ url_for('hr_attendance') }}" {% if request.endpoint == 'hr_attendance' %}class="active"{% endif %}>
         <i class='bx bx-calendar-check'></i><span>Attendance</span>
       </a>
-      <a href="{{ url_for('hr_promotions') }}" {% if request.endpoint == 'hr_promotions' %}class="active"{% endif %}>
-        <i class='bx bx-award'></i><span>Promotions</span>
+      <a href="{{ url_for('hr_promotions') }}" {% if request.endpoint == 'hr_promotions' %}class="active"{% endif %} style="display:flex;align-items:center;gap:8px">
+        <i class='bx bx-award'></i><span style="flex:1">Promotions</span>
+        {% if pending_hr_promo_count %}
+        <span style="background:#c0392b;color:#fff;border-radius:10px;font-size:10px;font-weight:700;padding:1px 7px;line-height:16px;flex-shrink:0">{{ pending_hr_promo_count }}</span>
+        {% endif %}
       </a>
       <a href="{{ url_for('hr_profile') }}" {% if request.endpoint == 'hr_profile' %}class="active"{% endif %}>
         <i class='bx bx-user-circle'></i><span>My Profile</span>

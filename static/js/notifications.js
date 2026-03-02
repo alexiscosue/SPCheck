@@ -245,6 +245,17 @@ const NotifSystem = (function () {
           };
         });
 
+        // Apply the same promotion role filter as _store() so server-loaded history
+        // also respects the user's role (VPAA vs President vs HR).
+        serverNotifs = serverNotifs.filter(function (n) {
+          if (n.type !== 'promotion') return true;
+          var act = n.action || '';
+          if (_userType === 'hr'        && act !== 'new_application')     return false;
+          if (_userType === 'vpaa'      && act !== 'forwarded_vpaa')      return false;
+          if (_userType === 'president' && act !== 'forwarded_president') return false;
+          return true;
+        });
+
         // Keep any local-only items (no db_ prefix) that arrived via SSE before sync completed
         var localOnly = _load().filter(function (n) { return n.id.indexOf('db_') !== 0; });
         var merged = serverNotifs.concat(localOnly);
