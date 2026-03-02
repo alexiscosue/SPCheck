@@ -107,11 +107,15 @@
             </tr>
           </thead>
           <tbody id="promotionsBody">
-            {% for promo in promotions %}
-            <tr data-status="{{ promo.status }}" data-dept="{{ promo.department }}" data-faculty-id="{{ promo.faculty_id }}">
+            {# Render rows needing HR action first, then the rest #}
+            {% set needs_action = promotions | selectattr('status', 'equalto', 'For HRMD Approval') | list %}
+            {% set others       = promotions | rejectattr('status', 'equalto', 'For HRMD Approval') | list %}
+            {% for promo in needs_action + others %}
+            <tr data-status="{{ promo.status }}" data-dept="{{ promo.department }}" data-faculty-id="{{ promo.faculty_id }}"
+                {% if 'hrmd' in promo.status|lower %}style="border-left:3px solid #7b1113; background:#fff5f5;"{% endif %}>
               <td style="display:flex;gap:10px;align-items:center">
-                <!-- <img class="faculty-photo" data-personnel-id="{{ promo.faculty_id }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#f0f0f0;" alt="Loading..."> -->
                 {{ promo.name }}
+                {% if 'hrmd' in promo.status|lower %}<span style="font-size:10px;background:#7b1113;color:#fff;border-radius:10px;padding:1px 6px;margin-left:6px;font-weight:600;">Action Required</span>{% endif %}
               </td>
               <td>{{ promo.department }}</td>
               <td>{{ promo.currentrank }}</td>
@@ -686,13 +690,6 @@ function setupDocumentLinks(applicationId, data) {
     });
 }
 
-function viewDocument(applicationId, docType, filename) {
-    // This matches the @app.route('/api/promotion/document/<int:application_id>/<doc_type>')
-    pdfFrame.src = `/api/promotion/document/${applicationId}/${docType}`;
-    document.getElementById('pdfTitle').textContent = `Preview: ${filename || docType}`;
-    pdfViewer.style.display = 'block';
-}
-
 closeModal.addEventListener('click', () => {
   reviewModal.style.display = 'none';
   pdfViewer.style.display = 'none';
@@ -778,19 +775,6 @@ document.querySelectorAll('.initiate-reg-btn').forEach(btn => {
   });
 });
 
-const profileImg = document.getElementById('modalProfileImage');
-profileImg.src = "/static/img/logo.png"; // default image
-
-fetch(`/api/profile/image-base64/${facultyId}`)
-  .then(r => r.json())
-  .then(res => {
-    if (res.success && res.image) {
-      profileImg.src = res.image;
-    }
-    // If not, logo.png remains as src
-  });
-
-  
 function loadAuditLogs() {
   const tbody = document.getElementById('auditLogsBody');
   tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:#6b7280; font-style:italic;">Loading audit logs...</td></tr>';

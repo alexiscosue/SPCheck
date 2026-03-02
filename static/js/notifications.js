@@ -16,6 +16,7 @@ const NotifSystem = (function () {
   const MAX_STORED = 100;
   let _storageKey = '';
   let _filter = 'all';
+  let _userType = '';   // 'hr' | 'vpaa' | 'president'
   let _es = null;
 
   // DOM refs
@@ -27,6 +28,7 @@ const NotifSystem = (function () {
 
   function init(cfg) {
     _storageKey = cfg.storageKey;
+    _userType   = cfg.userType || '';
 
     elPanel   = document.getElementById('notifPanel');
     elOverlay = document.getElementById('notifOverlay');
@@ -127,6 +129,17 @@ const NotifSystem = (function () {
   function _store(data) {
     if (!data) return;
     if (!data.tap_time && data.notification_type !== 'license') return;
+
+    // Role-based filtering for promotion notifications:
+    //   HR      → only 'new_application'
+    //   VPAA    → only 'forwarded_vpaa'
+    //   President → only 'forwarded_president'
+    if (data.notification_type === 'promotion') {
+      var act = data.action || '';
+      if (_userType === 'hr'        && act !== 'new_application')     return;
+      if (_userType === 'vpaa'      && act !== 'forwarded_vpaa')      return;
+      if (_userType === 'president' && act !== 'forwarded_president') return;
+    }
 
     var notifs = _load();
 
@@ -318,6 +331,20 @@ const NotifSystem = (function () {
     return { title: title, icon: icon, color: color };
   }
 
+  function _promotionMeta(n) {
+    var title, icon, color;
+    if (n.action === 'new_application') {
+      title = 'New Promotion Application'; icon = 'bx-file';          color = '#7b1113';
+    } else if (n.action === 'forwarded_vpaa') {
+      title = 'Promotion Forwarded to You'; icon = 'bx-send';         color = '#b45309';
+    } else if (n.action === 'forwarded_president') {
+      title = 'Promotion Forwarded to You'; icon = 'bx-send';         color = '#1d4ed8';
+    } else {
+      title = 'Promotion Update';           icon = 'bx-award';        color = '#7b1113';
+    }
+    return { title: title, icon: icon, color: color };
+  }
+
   /* ------------------------------------------------------------------ */
   /*  Timestamp formatter                                                 */
   /* ------------------------------------------------------------------ */
@@ -359,14 +386,18 @@ const NotifSystem = (function () {
     }
 
     var html = notifs.map(function (n) {
-      var isBio     = (n.type === 'biometric');
-      var isLicense = (n.type === 'license');
-      var meta      = isLicense ? _licenseMeta(n) : (isBio ? _bioMeta(n) : _rfidMeta(n));
+      var isBio       = (n.type === 'biometric');
+      var isLicense   = (n.type === 'license');
+      var isPromotion = (n.type === 'promotion');
+      var meta = isPromotion ? _promotionMeta(n)
+               : isLicense   ? _licenseMeta(n)
+               : isBio        ? _bioMeta(n)
+               :                _rfidMeta(n);
 
       // Type tag styling
-      var tagBg    = isLicense ? '#fef3c7' : (isBio ? '#dcfce7'  : '#dbeafe');
-      var tagColor = isLicense ? '#92400e' : (isBio ? '#166534'  : '#1e40af');
-      var tagLabel = isLicense ? 'License' : (isBio ? 'Biometric' : 'RFID');
+      var tagBg    = isPromotion ? '#fce7f3' : isLicense ? '#fef3c7' : (isBio ? '#dcfce7'  : '#dbeafe');
+      var tagColor = isPromotion ? '#9d174d' : isLicense ? '#92400e' : (isBio ? '#166534'  : '#1e40af');
+      var tagLabel = isPromotion ? 'Promotion' : isLicense ? 'License' : (isBio ? 'Biometric' : 'RFID');
 
       // Icon background tinted from action colour
       var iconBg = meta.color + '18'; // 9% opacity hex
@@ -443,8 +474,15 @@ const NotifSystem = (function () {
         }
       }
 
-      // Message (always shown)
-      if (n.message) {
+      // Promotion-specific detail rows
+      if (isPromotion) {
+        if (n.message) {
+          details += '<div class="notif-item-msg">' + _esc(n.message) + '</div>';
+        }
+      }
+
+      // Message (non-promotion — already handled above for promotion)
+      if (!isPromotion && n.message) {
         details += '<div class="notif-item-msg">' + _esc(n.message) + '</div>';
       }
 

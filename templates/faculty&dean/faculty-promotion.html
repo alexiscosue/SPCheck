@@ -174,7 +174,20 @@
     <span>Promotion Section</span>
   </div>
       
-      {% if not can_apply_for_promotion %}
+      {% if at_highest_rank %}
+      <!-- USER HAS REACHED HIGHEST RANK -->
+      <div style="text-align:center; padding:40px 20px;">
+        <div style="background:#f0fdf4; border:2px solid #86efac; border-radius:12px; padding:30px; margin-bottom:20px;">
+          <i class='bx bx-trophy' style="font-size:64px; color:#22c55e; display:block; margin-bottom:15px;"></i>
+          <h3 style="margin:0 0 10px 0; color:#166534; font-size:20px;">Congratulations!</h3>
+          <p style="margin:0; color:#15803d; font-size:15px; line-height:1.6;">
+            You have reached the highest academic rank: <strong>{{ current_rank }}</strong>.
+            No further promotion is available.
+          </p>
+        </div>
+      </div>
+
+      {% elif not can_apply_for_promotion %}
       <!-- USER CANNOT APPLY - MODERN MAROON THEME -->
       <div style="padding:30px 20px;">
         
@@ -402,26 +415,6 @@
 </form>
 
 
-      {% else %}
-      <!-- USER HAS REACHED HIGHEST RANK -->
-      <div style="text-align:center; padding:40px 20px;">
-        <div style="background:#f0fdf4; border:2px solid #86efac; border-radius:12px; padding:30px; margin-bottom:20px;">
-          <i class='bx bx-trophy' style="font-size:64px; color:#22c55e; display:block; margin-bottom:15px;"></i>
-          <h3 style="margin:0 0 10px 0; color:#166534; font-size:20px;">Congratulations!</h3>
-          <p style="margin:0; color:#15803d; font-size:15px; line-height:1.6;">
-            You have reached the highest academic rank: <strong>{{ current_rank }}</strong>
-          </p>
-        </div>
-        
-        <div style="padding:16px; background:#fffbeb; border-left:4px solid #fbbf24; border-radius:6px; text-align:left;">
-          <p style="margin:0 0 8px 0; font-size:13px; color:#92400e; font-weight:600;">
-            <i class='bx bx-info-circle'></i> No Further Promotions Available
-          </p>
-          <p style="margin:0; font-size:13px; color:#78350f; line-height:1.5;">
-            As a Professor, you hold the highest academic rank in the university. Continue your excellent work in teaching, research, and service to the institution.
-          </p>
-        </div>
-      </div>
       {% endif %}
 
     </div>
@@ -481,22 +474,22 @@
                 <td>{{ app.date_submitted.strftime('%b %d, %Y') if app.date_submitted else 'N/A' }}</td>
                 <td><strong>{{ app.requested_position or 'Not specified' }}</strong></td>
                 <td>
-                  {% if 'approved' in app.final_decision|lower %}
+                  {% if app.final_decision == 'Approved' %}
                     <span class="status ok">✓ Approved</span>
-                  {% elif 'rejected' in app.final_decision|lower %}
+                  {% elif app.final_decision == 'Rejected' %}
                     <span class="status rejected">✗ Rejected</span>
                   {% else %}
-                    <span class="status pending">⏳ {{ app.current_status|title }}</span>
+                    <span class="status pending">⏳ {{ app.stage_label }}</span>
                   {% endif %}
                 </td>
                 <td>
-                  <button class="btn-view-history" 
+                  <button class="btn-view-history"
                       data-date="{{ app.date_submitted.strftime('%B %d, %Y') if app.date_submitted else 'N/A' }}"
                       data-status="{{ app.current_status|lower }}"
-                      data-decision="{{ app.current_status|lower }}"
+                      data-decision="{{ app.final_decision|lower }}"
+                      data-rejected-stage="{{ app.rejected_at_stage }}"
                       data-remarks="{{ app.remarks or 'No remarks' }}"
                       data-requested-pos="{{ app.requested_position or 'Not specified' }}"
-  
                       data-hrmd-date="{{ app.hrmd_date or '' }}"
                       data-vpa-date="{{ app.vpa_date or '' }}"
                       data-pres-date="{{ app.pres_date or '' }}"
@@ -811,37 +804,37 @@ document.addEventListener('DOMContentLoaded', function() {
     
 document.querySelectorAll('.btn-view-history').forEach(btn => {
     btn.addEventListener('click', function() {
-        const decision = this.getAttribute('data-decision').toLowerCase(); 
-        const currentStage = this.getAttribute('data-status').toLowerCase(); 
-        
+        const decision     = this.getAttribute('data-decision').toLowerCase();
+        const rejectedStage = this.getAttribute('data-rejected-stage').toLowerCase();
+
         const timelineSteps = [
             { id: 'modalHrmdDate', key: 'hrmd', date: this.getAttribute('data-hrmd-date') },
-            { id: 'modalVpaDate', key: 'vpa', date: this.getAttribute('data-vpa-date') },
+            { id: 'modalVpaDate',  key: 'vpa',  date: this.getAttribute('data-vpa-date')  },
             { id: 'modalPresDate', key: 'pres', date: this.getAttribute('data-pres-date') }
         ];
 
         timelineSteps.forEach(step => {
-            const labelEl = document.getElementById(step.id);
+            const labelEl  = document.getElementById(step.id);
             const container = labelEl.parentElement;
-            const icon = container.querySelector('i');
+            const icon      = container.querySelector('i');
 
-            // 1. Check if the stage was APPROVED
+            // 1. Stage was passed/approved — a timestamp exists
             if (step.date && step.date !== '') {
                 icon.className = 'bx bx-check-circle';
                 labelEl.textContent = `Approved ${step.date}`;
-                container.style.color = '#166534'; // Green
-            } 
-            // 2. Check if the stage was the REJECTION POINT
-            else if (decision === 'rejected' && currentStage === step.key) {
+                container.style.color = '#166534';
+            }
+            // 2. This is the stage where the application was rejected
+            else if (decision === 'rejected' && step.key === rejectedStage) {
                 icon.className = 'bx bx-x-circle';
                 labelEl.textContent = 'Rejected at this stage';
-                container.style.color = '#7b1113'; // Maroon Red
-            } 
-            // 3. Default to PENDING
+                container.style.color = '#7b1113';
+            }
+            // 3. Stage not yet reached
             else {
                 icon.className = 'bx bx-circle';
                 labelEl.textContent = 'Pending';
-                container.style.color = '#64748b'; // Grey
+                container.style.color = '#64748b';
             }
         });
 
@@ -849,12 +842,12 @@ document.querySelectorAll('.btn-view-history').forEach(btn => {
         document.getElementById('modalDate').textContent = this.getAttribute('data-date');
         document.getElementById('modalRequestedPos').textContent = this.getAttribute('data-requested-pos');
         document.getElementById('modalRemarks').textContent = this.getAttribute('data-remarks');
-        
-        // Decision Badge
+
+        // Decision badge
         const badge = document.getElementById('modalDecisionBadge');
         badge.textContent = decision.toUpperCase();
         badge.style.background = decision === 'approved' ? '#d1fae5' : (decision === 'rejected' ? '#fee2e2' : '#fef3c7');
-        badge.style.color = decision === 'approved' ? '#065f46' : (decision === 'rejected' ? '#991b1b' : '#92400e');
+        badge.style.color      = decision === 'approved' ? '#065f46' : (decision === 'rejected' ? '#991b1b' : '#92400e');
 
         document.getElementById('historyModal').style.display = 'flex';
     });

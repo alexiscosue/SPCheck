@@ -318,7 +318,26 @@ def save_notification_to_db(target_audience, target_personnel_id, data):
         return None
 
 
+def ensure_schema_updates():
+    """Apply any required schema migrations at startup."""
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+        # Add probationary_start_date so regularization countdown starts from
+        # when the faculty actually entered probationary status (not hire date).
+        cursor.execute("""
+            ALTER TABLE profile
+            ADD COLUMN IF NOT EXISTS probationary_start_date DATE DEFAULT NULL
+        """)
+        conn.commit()
+        cursor.close()
+        db_pool.return_connection(conn)
+        print("Schema up to date.")
+    except Exception as e:
+        print(f"Schema update error: {e}")
+
 ensure_notifications_table()
+ensure_schema_updates()
 shared_serial = SharedSerialPort()
 rfid_reader = RFIDReader(db_pool, shared_serial)
 biometric_reader = BiometricReader(db_pool, shared_serial)
@@ -651,19 +670,7 @@ def check_license_expiry():
                            f'{" (No. " + license_number + ")" if license_number else ""}'
                            f' expires in {days} day(s) on {expiration_date}.')
 
-                broadcast_notification(personnel_id, {
-                    'notification_type': 'license',
-                    'action': action,
-                    'personnel_id': personnel_id,
-                    'person_name': f'{firstname} {lastname}',
-                    'license_type': license_type or '',
-                    'license_number': license_number or '',
-                    'expiration_date': str(expiration_date),
-                    'days_until_expiry': days,
-                    'message': msg,
-                    'tap_time': datetime.now(philippines_tz).strftime('%A, %B %d, %Y %I:%M %p'),
-                })
-                print(f"🔔 License expiry alert sent → personnel {personnel_id}: {msg}")
+                print(f"🔔 License expiry logged → personnel {personnel_id}: {msg}")
 
         except Exception as e:
             print(f"Error in license expiry checker: {e}")
@@ -1504,26 +1511,67 @@ def handle_biometric_notification(notification_data):
 
 biometric_reader.add_notification_callback(handle_biometric_notification)
 
+def _push_to_queue(queue_key, data):
+    """Push a notification to a single named queue without broadcasting to others."""
+    if isinstance(queue_key, int):
+        notif_id = save_notification_to_db('faculty', queue_key, data)
+    elif queue_key == 'hr_all_notifications':
+        notif_id = save_notification_to_db('hr', None, data)
+    elif queue_key == 'vp_all_notifications':
+        notif_id = save_notification_to_db('vp', None, data)
+    else:
+        notif_id = None
+    with notification_lock:
+        if queue_key in notification_queues:
+            payload = dict(data, notif_id=notif_id)
+            for q in notification_queues[queue_key]:
+                try:
+                    q.put(payload)
+                except Exception as e:
+                    print(f"Error pushing to queue {queue_key}: {e}")
+
 def trigger_promotion_notification(faculty_id, faculty_name, requested_rank):
-    """
-    Trigger a real-time notification for a new promotion application.
-    Broadcasts to the HR and VP queues.
-    """
+    """Notify HR of a new promotion application (HR queue only)."""
+    philippines_tz = pytz.timezone('Asia/Manila')
     notification_data = {
         'notification_type': 'promotion',
-        'action': 'NEW_APPLICATION',
+        'action': 'new_application',
         'personnel_id': faculty_id,
-        'faculty_name': faculty_name,
+        'person_name': faculty_name,
         'requested_rank': requested_rank,
-        'message': f"New promotion application from {faculty_name} for {requested_rank}",
-        'timestamp': datetime.now(pytz.timezone('Asia/Manila')).isoformat(),
-        'icon': 'bx-award',
-        'color': '#7b1113' # SPC Maroon
+        'message': f"{faculty_name} submitted a promotion application for {requested_rank}.",
+        'tap_time': datetime.now(philippines_tz).strftime('%A, %B %d, %Y %I:%M %p'),
     }
-    
-    # Broadcast to HR and VP (Personnel ID is None because this goes to the global 'hr_all' and 'vp_all' keys)
-    broadcast_notification(None, notification_data)
-    print(f"📣 Promotion notification broadcasted for {faculty_name}")
+    _push_to_queue('hr_all_notifications', notification_data)
+    print(f"📣 Promotion notification sent to HR for {faculty_name}")
+
+def trigger_promotion_forwarded_vpaa(faculty_name, requested_rank):
+    """Notify VP/Pres when HR forwards a promotion to VPAA."""
+    philippines_tz = pytz.timezone('Asia/Manila')
+    notification_data = {
+        'notification_type': 'promotion',
+        'action': 'forwarded_vpaa',
+        'person_name': faculty_name,
+        'requested_rank': requested_rank,
+        'message': f"{faculty_name}'s promotion application has been forwarded to VPAA for review.",
+        'tap_time': datetime.now(philippines_tz).strftime('%A, %B %d, %Y %I:%M %p'),
+    }
+    _push_to_queue('vp_all_notifications', notification_data)
+    print(f"📣 Promotion forwarded-to-VPAA notification sent for {faculty_name}")
+
+def trigger_promotion_forwarded_president(faculty_name, requested_rank):
+    """Notify VP/Pres when VPAA forwards a promotion to President."""
+    philippines_tz = pytz.timezone('Asia/Manila')
+    notification_data = {
+        'notification_type': 'promotion',
+        'action': 'forwarded_president',
+        'person_name': faculty_name,
+        'requested_rank': requested_rank,
+        'message': f"{faculty_name}'s promotion application has been forwarded to the President for approval.",
+        'tap_time': datetime.now(philippines_tz).strftime('%A, %B %d, %Y %I:%M %p'),
+    }
+    _push_to_queue('vp_all_notifications', notification_data)
+    print(f"📣 Promotion forwarded-to-President notification sent for {faculty_name}")
 
 @app.route('/api/faculty/current-personnel')
 @require_auth([20001, 20002, 20003, 20004])
@@ -1539,7 +1587,8 @@ def api_current_personnel():
         
         return {
             'success': True,
-            'personnel_id': personnel_id
+            'personnel_id': personnel_id,
+            'position': personnel_info.get('position', '')
         }
     except Exception as e:
         print(f"Error getting current personnel: {e}")
@@ -7274,47 +7323,47 @@ def faculty_promotion():
     conn = db_pool.get_connection()
     cursor = conn.cursor()
     
-    # 1. Fetch Faculty Info
+    # 1. Fetch Faculty Info (includes probationary_start_date for accurate countdown)
     cursor.execute("""
-        SELECT 
+        SELECT
             p.personnel_id, p.hiredate, pr.position, p.firstname, p.lastname,
             p.honorifics, c.collegename, pr.profilepic, pr.employmentstatus,
-            (SELECT acadcalendar_id FROM acadcalendar 
-             WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend 
+            (SELECT acadcalendar_id FROM acadcalendar
+             WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
              ORDER BY semesterstart DESC LIMIT 1),
-            pr.highest_degree_level, pr.has_doctorate, pr.has_aligned_master
+            pr.highest_degree_level, pr.has_doctorate, pr.has_aligned_master,
+            pr.probationary_start_date
         FROM personnel p
         LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
         LEFT JOIN college c ON p.college_id = c.college_id
         WHERE p.user_id = %s
     """, (user_id,))
-    
+
     result = cursor.fetchone()
     if not result:
         cursor.close()
         db_pool.return_connection(conn)
         return "Faculty record not found", 400
-    
-    (faculty_id, hire_date, current_rank, firstname, lastname, 
-     honorifics, college, profilepic, employment_status, current_term_id, 
-     highest_degree_level, has_doctorate, has_aligned_master) = result
 
-    # 2. ACCURATE SERVICE CALCULATION (Daily Precision)
+    (faculty_id, hire_date, current_rank, firstname, lastname,
+     honorifics, college, profilepic, employment_status, current_term_id,
+     highest_degree_level, has_doctorate, has_aligned_master,
+     probationary_start_date) = result
+
+    # 2. SERVICE CALCULATION
     from datetime import date
     today = date.today()
     total_days = 0
     years_decimal = 0
-    
+
     if hire_date:
-        # Direct subtraction for maximum accuracy
         delta = today - hire_date
         total_days = max(0, delta.days)
-        years_decimal = total_days / 365.25  # Precise decimal years
-    
-    # Qualified years for promotion (Only counts if they have the Master's)
-    qualified_years = years_decimal if has_aligned_master else 0
+        years_decimal = total_days / 365.25
 
     # 3. SPC REGULARIZATION LOGIC
+    # Countdown uses probationary_start_date if set, else falls back to hire_date.
+    # A faculty member only enters probation once they hold an aligned Master's.
     reg_percent = 0
     reg_status_label = employment_status or "Contractual"
     reg_message = ""
@@ -7325,68 +7374,76 @@ def faculty_promotion():
     elif not has_aligned_master:
         reg_status_label = "Contractual"
         reg_percent = 0
-        reg_message = "Status: Contractual. Aligned Master's required to begin 3-year probation."
+        reg_message = "Status: Contractual. An aligned Master's Degree is required to begin the 3-year probationary period."
     else:
         reg_status_label = "Probationary"
-        # 1095 days = 3 years
-        reg_percent = min(round((total_days / 1095) * 100, 1), 100)
-        reg_message = f"Probationary Progress: {total_days} days completed ({reg_percent}%)."
+        prob_start = probationary_start_date if probationary_start_date else hire_date
+        prob_days = max(0, (today - prob_start).days) if prob_start else 0
+        reg_percent = min(round((prob_days / 1095) * 100, 1), 100)  # 1095 = 3 years
+        reg_message = f"Probationary Progress: {prob_days} days completed out of 1,095 ({reg_percent}%)."
 
-    # 4. RANK ELIGIBILITY & PERFORMANCE CHECKS
+    # 4. RANK ELIGIBILITY (SPC Promotion Table)
+    # Associate Instructor : Bachelor's + 3 yrs
+    # Instructor           : Master's   + 4 yrs
+    # Assistant Professor  : Master's   + 5 yrs
+    # Associate Professor  : Doctorate  + 9 yrs
+    # Professor            : Doctorate  + 10 yrs
+    RANK_ORDER = ["Associate Instructor", "Instructor", "Assistant Professor", "Associate Professor", "Professor"]
+    YEAR_REQS  = {"Associate Instructor": 3, "Instructor": 4, "Assistant Professor": 5,
+                  "Associate Professor": 9, "Professor": 10}
+    DEGREE_REQS = {
+        "Associate Instructor": "bachelor",
+        "Instructor": "master",
+        "Assistant Professor": "master",
+        "Associate Professor": "doctorate",
+        "Professor": "doctorate",
+    }
+
     lock_reasons = []
-    
-    # # A. Performance Stats
-    # cursor.execute("SELECT COALESCE(AVG(attendancerate), 0) FROM attendancereport WHERE personnel_id = %s AND acadcalendar_id = %s", (faculty_id, current_term_id))
-    # avg_attendance_rate = float(cursor.fetchone()[0] or 0)
-    # if avg_attendance_rate < 80.0:
-    #     lock_reasons.append(f"Attendance Rate: {avg_attendance_rate:.1f}% (Min 80% required).")
+    available_ranks = []
 
-    # cursor.execute('''
-    #     SELECT COALESCE(SUM(CASE WHEN evaluator_type = 'student' THEN score * 0.55 ELSE 0 END) +
-    #                     SUM(CASE WHEN evaluator_type = 'supervisor' THEN score * 0.35 ELSE 0 END) +
-    #                     SUM(CASE WHEN evaluator_type = 'peer' THEN score * 0.10 ELSE 0 END), 0)
-    #     FROM faculty_evaluations WHERE personnel_id = %s AND acadcalendar_id = %s
-    # ''', (faculty_id, current_term_id))
-    # weightedevalscore = float(cursor.fetchone()[0] or 0)
-    # if weightedevalscore < 3.0:
-    #     lock_reasons.append(f"Evaluation Score: {weightedevalscore:.2f} (Min 3.00 required).")
+    # Promotion window: June 1 – August 31
+    if not (6 <= today.month <= 8):
+        lock_reasons.append(
+            f"Submission window closed. Promotion applications are only accepted June 1 – August 31 each year."
+        )
 
-    # # B. Status and Cooldown Checks
-    # if employment_status not in ["Regular", "Tenured"]:
-    #     lock_reasons.append("Tenure: Must be Regular or Tenured to apply for promotion.")
+    # Active application check
+    cursor.execute(
+        "SELECT COUNT(*) FROM promotion_application WHERE faculty_id = %s AND final_decision IS NULL",
+        (faculty_id,)
+    )
+    has_active_app = cursor.fetchone()[0] > 0
+    if has_active_app:
+        lock_reasons.append("You already have an active promotion application under review.")
 
-    # cursor.execute("SELECT pres_approval_date FROM promotion_application WHERE faculty_id = %s AND final_decision = 1 ORDER BY pres_approval_date DESC LIMIT 1", (faculty_id,))
-    # last_promo = cursor.fetchone()
-    # if last_promo and last_promo[0]:
-    #     # Using .date() to ensure comparison with date objects
-    #     days_since_promo = (today - last_promo[0].date()).days
-    #     if days_since_promo < 365:
-    #         lock_reasons.append(f"Cooldown: Only {days_since_promo} days since last promotion (1 year required).")
+    # Target rank determination
+    target_idx = RANK_ORDER.index(current_rank) + 1 if current_rank in RANK_ORDER else 0
+    if target_idx >= len(RANK_ORDER):
+        pass  # Already at highest rank — available_ranks stays empty
+    else:
+        target_rank = RANK_ORDER[target_idx]
+        req_years  = YEAR_REQS[target_rank]
+        req_degree = DEGREE_REQS[target_rank]
 
-    # # C. Target Rank Logic (using years_decimal for accuracy)
-    # RANK_ORDER = ["Associate Instructor", "Instructor", "Assistant Professor", "Associate Professor", "Professor"]
-    # YEAR_REQS = {"Associate Instructor": 3, "Instructor": 4, "Assistant Professor": 5, "Associate Professor": 9, "Professor": 10}
-    
-    # target_idx = RANK_ORDER.index(current_rank) + 1 if current_rank in RANK_ORDER else 0
-    # available_ranks = []
-    
-    # if target_idx < len(RANK_ORDER):
-    #     target_rank = RANK_ORDER[target_idx]
-    #     req_years = YEAR_REQS.get(target_rank, 0)
-        
-    #     # Academic Hurdles
-    #     if target_rank in ["Associate Professor", "Professor"] and not has_doctorate:
-    #         lock_reasons.append(f"Academic: {target_rank} requires a Doctorate Degree.")
-    #     if target_rank in ["Instructor", "Assistant Professor"] and not has_aligned_master:
-    #         lock_reasons.append(f"Academic: {target_rank} requires an aligned Master's Degree.")
-        
-    #     # Experience hurdle using precise qualified_years
-    #     if qualified_years < req_years:
-    #         lock_reasons.append(f"Experience: {target_rank} requires {req_years} years (Current qualified: {qualified_years:.1f} yrs).")
-        
-    #     if not lock_reasons:
-    #         available_ranks = [target_rank]
-    available_ranks = ["Associate Instructor", "Instructor", "Assistant Professor", "Associate Professor", "Professor"]
+        rank_lock_reasons = []
+
+        # Degree check
+        if req_degree == "doctorate" and not has_doctorate:
+            rank_lock_reasons.append(f"{target_rank} requires a Doctorate Degree.")
+        elif req_degree == "master" and not has_aligned_master:
+            rank_lock_reasons.append(f"{target_rank} requires an aligned Master's Degree.")
+
+        # Experience check (years from hire date)
+        if years_decimal < req_years:
+            rank_lock_reasons.append(
+                f"{target_rank} requires {req_years} years of teaching "
+                f"(current: {years_decimal:.1f} yrs)."
+            )
+
+        lock_reasons.extend(rank_lock_reasons)
+        if not rank_lock_reasons and not has_active_app:
+            available_ranks = [target_rank]
     # 5. Fetch Active Application and History
     cursor.execute("""
         SELECT application_id, current_status, date_submitted, hrmd_approval_date, vpa_approval_date, pres_approval_date, 
@@ -7415,23 +7472,54 @@ def faculty_promotion():
         ORDER BY date_submitted DESC
     """, (faculty_id,))
 
+    _STAGE_LABELS = {
+        'hrmd': 'Under HR Review',
+        'vpa': 'Under VPAA Review',
+        'pres': 'Awaiting Presidential Approval',
+    }
     application_history = []
     for h in cursor.fetchall():
+        _status  = (h[1] or '').lower()
+        _decision = h[2]
+        # Treat current_status='rejected' as a fallback for legacy rows
+        # where final_decision was not set to 0.
+        if _decision == 1 or _status == 'approved':
+            display_final = 'Approved'
+        elif _decision == 0 or _status == 'rejected':
+            display_final = 'Rejected'
+        else:
+            display_final = 'Pending'
+
+        # Identify which stage the rejection occurred at by checking
+        # which approval timestamps are still NULL.
+        if display_final == 'Rejected':
+            if not h[3]:       # hrmd_approval_date is NULL → rejected at HR stage
+                rejected_at = 'hrmd'
+            elif not h[4]:     # vpa_approval_date is NULL → rejected at VPA stage
+                rejected_at = 'vpa'
+            else:              # both set → rejected at President stage
+                rejected_at = 'pres'
+        else:
+            rejected_at = ''
+
         application_history.append({
             'date_submitted': h[0],
-            'current_status': h[1].lower() if h[1] else '', 
-            'final_decision': 'Approved' if h[2]==1 else 'Rejected' if h[2]==0 else 'Pending',
+            'current_status': _status,
+            'stage_label': _STAGE_LABELS.get(_status, _status.title() if _status else 'Processing'),
+            'final_decision': display_final,
+            'rejected_at_stage': rejected_at,
             'hrmd_date': h[3].strftime('%Y-%m-%d') if h[3] else None,
             'vpa_date': h[4].strftime('%Y-%m-%d') if h[4] else None,
             'pres_date': h[5].strftime('%Y-%m-%d') if h[5] else None,
             'requested_position': h[6],
-            'remarks': h[7] if h[2]==0 else 'Application under review'
+            'remarks': h[7] if display_final == 'Rejected' else 'Application under review'
         })
 
     # 6. Prepare Final Template Data
     import base64
     profile_img = f"data:image/jpeg;base64,{base64.b64encode(bytes(profilepic)).decode('utf-8')}" if profilepic else ''
     
+    at_highest_rank = current_rank == 'Professor'
     template_data = {
         'faculty_name': f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}",
         'college': college or 'College of Computer Studies',
@@ -7440,14 +7528,13 @@ def faculty_promotion():
         'regularization_status': reg_status_label,
         'regularization_message': reg_message,
         'tenure_type': reg_status_label,
-        'years_employed': round(years_decimal, 1), # Simplified for UI
+        'years_employed': round(years_decimal, 1),
         'hire_date': hire_date,
         'current_rank': current_rank,
         'available_ranks': available_ranks,
         'application_history': application_history,
-        'avg_attendance_rate': 90, #f"{avg_attendance_rate:.1f}",
-        'weighted_eval_score': 4, #f"{weightedevalscore:.2f}",
         'lock_reasons': lock_reasons,
+        'at_highest_rank': at_highest_rank,
         'can_apply_for_promotion': len(lock_reasons) == 0 and len(available_ranks) > 0,
         'application_id': row[0] if row else None,
         'regularization_status_data': {
@@ -8509,65 +8596,69 @@ def hr_promotions():
             })
         
         # === FETCH ELIGIBLE FACULTY + ACTIVE REGULARIZATIONS ===
+        # Only faculty with an aligned Master's are eligible (Contractual faculty are not).
+        # Probationary countdown starts from probationary_start_date (or hiredate as fallback).
         cursor.execute("""
-            SELECT 
+            SELECT
                 p.personnel_id,
                 p.firstname,
                 p.lastname,
                 p.honorifics,
-                p.hiredate,
+                COALESCE(pr.probationary_start_date, p.hiredate) AS prob_start,
                 c.collegename,
                 pr.position as current_rank,
-                EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.hiredate)) + 
-                EXTRACT(MONTH FROM AGE(CURRENT_DATE, p.hiredate)) / 12.0 as years_of_service,
-                NULL as reg_status,
-                NULL as date_initiated
+                (CURRENT_DATE - COALESCE(pr.probationary_start_date, p.hiredate))::float / 365.25
+                    AS years_of_service,
+                NULL::text as reg_status,
+                NULL::timestamp as date_initiated
             FROM personnel p
             LEFT JOIN college c ON p.college_id = c.college_id
             LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
-            WHERE 
-                p.hiredate IS NOT NULL
-                AND EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.hiredate)) >= 3
+            WHERE
+                pr.has_aligned_master = TRUE
+                AND COALESCE(pr.probationary_start_date, p.hiredate) IS NOT NULL
+                AND (CURRENT_DATE - COALESCE(pr.probationary_start_date, p.hiredate)) >= 1095
                 AND p.personnel_id NOT IN (
-                    SELECT faculty_id 
-                    FROM regularization_application 
+                    SELECT faculty_id
+                    FROM regularization_application
                     WHERE final_decision IS NULL
                 )
-            
+
             UNION ALL
-            
-            SELECT 
+
+            SELECT
                 p.personnel_id,
                 p.firstname,
                 p.lastname,
                 p.honorifics,
-                p.hiredate,
+                COALESCE(pr.probationary_start_date, p.hiredate) AS prob_start,
                 c.collegename,
                 pr.position as current_rank,
                 ra.years_of_service,
-                ra.current_status as reg_status,
+                ra.current_status::text as reg_status,
                 ra.date_initiated
             FROM regularization_application ra
             JOIN personnel p ON ra.faculty_id = p.personnel_id
             LEFT JOIN college c ON p.college_id = c.college_id
             LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
             WHERE ra.final_decision IS NULL
-            
-            ORDER BY hiredate ASC
+
+            ORDER BY prob_start ASC
         """)
-        
+
         all_faculty = cursor.fetchall()
         cursor.close()
         db_pool.return_connection(conn)
-        
+
         # Format regularization data
         regularizations_list = []
         for f in all_faculty:
-            (personnel_id, firstname, lastname, honorifics, hiredate, 
+            (personnel_id, firstname, lastname, honorifics, prob_start,
              college, rank, years, reg_status, date_initiated) = f
-            
+
             fullname = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
-            
+            years = float(years) if years else 0
+
             if years >= 7:
                 eligible_for = "Tenured"
                 current_tenure = "Regular"
@@ -8576,7 +8667,7 @@ def hr_promotions():
                 current_tenure = "Probationary"
             else:
                 continue
-            
+
             # Determine status display
             if reg_status:
                 if reg_status == 'vpa':
@@ -8597,15 +8688,15 @@ def hr_promotions():
             else:
                 status_display = "Eligible"
                 status_class = "ok"
-            
+
             regularizations_list.append({
                 'personnel_id': personnel_id,
                 'name': fullname,
                 'department': college or 'N/A',
                 'current_rank': rank or 'Instructor',
                 'current_tenure': current_tenure,
-                'years_of_service': round(float(years), 2) if years else 0,
-                'hiredate': hiredate.strftime('%Y-%m-%d') if hiredate else 'N/A',
+                'years_of_service': round(years, 2),
+                'hiredate': prob_start.strftime('%Y-%m-%d') if prob_start else 'N/A',
                 'eligible_for': eligible_for,
                 'status': status_display,
                 'status_class': status_class,
@@ -8722,9 +8813,11 @@ def vp_promotions():
         
         # === FETCH ACTIVE REGULARIZATIONS ===
         # (This part remains as you have it, but you can add the same logic if needed)
+        # Use probationary_start_date (or hiredate) as the service start for regularization.
         cursor.execute("""
-            SELECT 
-                p.personnel_id, p.firstname, p.lastname, p.honorifics, p.hiredate,
+            SELECT
+                p.personnel_id, p.firstname, p.lastname, p.honorifics,
+                COALESCE(pr.probationary_start_date, p.hiredate) AS prob_start,
                 c.collegename, pr.position as current_rank,
                 ra.years_of_service, ra.current_status as reg_status,
                 ra.date_initiated, ra.regularization_id
@@ -8735,21 +8828,21 @@ def vp_promotions():
             WHERE ra.final_decision IS NULL
             ORDER BY ra.date_initiated DESC
         """)
-        
+
         active_regs = cursor.fetchall()
-        
+
         from datetime import date
         today = date.today()
 
         regularizations_list = []
         for f in active_regs:
-            (personnel_id, firstname, lastname, honorifics, hiredate, 
+            (personnel_id, firstname, lastname, honorifics, prob_start,
              college, rank, years, reg_status, date_initiated, regularization_id) = f
-            
-            # Accurate decimal year calculation as per SPC 6-semester requirement
-            actual_years = (today - hiredate).days / 365.25 if hiredate else 0
+
+            # Years from probationary start (not hire date)
+            actual_years = (today - prob_start).days / 365.25 if prob_start else float(years or 0)
             fullname = f"{lastname}, {firstname}" + (f", {honorifics}" if honorifics else "")
-            
+
             if actual_years >= 7:
                 eligible_for = "Tenured"
                 current_tenure = "Regular"
@@ -8758,7 +8851,7 @@ def vp_promotions():
                 current_tenure = "Probationary"
             else:
                 continue
-            
+
             regularizations_list.append({
                 'regularization_id': regularization_id,
                 'personnel_id': personnel_id,
@@ -8766,8 +8859,8 @@ def vp_promotions():
                 'department': college or 'N/A',
                 'current_rank': rank or 'Instructor',
                 'current_tenure': current_tenure,
-                'years_of_service': round(float(actual_years), 1),
-                'hiredate': hiredate.strftime('%Y-%m-%d') if hiredate else 'N/A',
+                'years_of_service': round(actual_years, 1),
+                'hiredate': prob_start.strftime('%Y-%m-%d') if prob_start else 'N/A',
                 'eligible_for': eligible_for,
                 'status': str(reg_status).replace('_', ' ').title(),
                 'reg_status': reg_status,
@@ -8823,33 +8916,29 @@ def forward_to_president():
             ('pres', current_time, vpa_remarks if vpa_remarks else None, application_id)
         )
         
+        # Fetch faculty name for notification before releasing connection
+        cursor.execute(
+            "SELECT p.firstname, p.lastname, pa.requested_rank "
+            "FROM promotion_application pa JOIN personnel p ON pa.faculty_id = p.personnel_id "
+            "WHERE pa.application_id = %s", (application_id,)
+        )
+        fac_row = cursor.fetchone()
+
         conn.commit()
-        
-        # Audit log
-        user_id = session.get('user_id')
-        personnel_info = get_personnel_info(user_id)
-        vp_personnel_id = personnel_info.get('personnel_id')
-        
-        if vp_personnel_id:
-            log_audit_action(
-                vp_personnel_id,
-                'Promotion forwarded',
-                f'VPAA forwarded promotion application ID {application_id} to President',
-                before_value='Status: VPAA Review',
-                after_value='Status: President Review'
-            )
-        
-        # After updating status to 'pres'
+
         log_audit(
             action='PROMOTION_FORWARD_PRESIDENT',
             details=f'VPAA forwarded promotion application (ID: {application_id}) to President',
             personnel_id=session.get('user_id')
         )
 
-        
         cursor.close()
         db_pool.return_connection(conn)
-        
+
+        if fac_row:
+            fac_name = f"{fac_row[1]}, {fac_row[0]}"
+            trigger_promotion_forwarded_president(fac_name, fac_row[2])
+
         return jsonify(success=True, message='Application forwarded to President successfully')
         
     except Exception as e:
@@ -9154,6 +9243,15 @@ def promotion_document_upload():
     if not userid:
         return "Unauthorized", 401
 
+    # Enforce the official promotion submission window: June 1 – August 31
+    from datetime import date as _date
+    _today = _date.today()
+    if not (6 <= _today.month <= 8):
+        return (
+            "Promotion applications are only accepted between June 1 and August 31 each year. "
+            "Please resubmit during the official submission period."
+        ), 403
+
     conn = db_pool.get_connection()
     cursor = conn.cursor()
 
@@ -9164,17 +9262,17 @@ def promotion_document_upload():
     result = cursor.fetchone()
     if not result:
         cursor.close()
-        conn.close()
+        db_pool.return_connection(conn)
         return "Faculty record not found for the current user.", 400
 
     faculty_id = result[0]
 
     # Get requested rank from form
     requested_rank = request.form.get('requested_rank')
-    
+
     if not requested_rank:
         cursor.close()
-        conn.close()
+        db_pool.return_connection(conn)
         return "Please select a rank to apply for.", 400
 
     resume_cv_data = None
@@ -9265,7 +9363,7 @@ def view_resume():
     res = cursor.fetchone()
     if not res:
         cursor.close()
-        conn.close()
+        db_pool.return_connection(conn)
         return "Faculty record not found", 400
 
     faculty_id = res[0]
@@ -9278,7 +9376,7 @@ def view_resume():
     """, (faculty_id,))
     result = cursor.fetchone()
     cursor.close()
-    conn.close()
+    db_pool.return_connection(conn)
 
     if result and result[0]:
         return Response(result[0], mimetype='application/pdf', headers={"Content-Disposition": "inline; filename=resume.pdf"})
@@ -9301,7 +9399,7 @@ def view_cover_letter():
     result = cursor.fetchone()
     if not result:
         cursor.close()
-        conn.close()
+        db_pool.return_connection(conn)
         return "Faculty record not found", 400
 
     faculty_id = result[0]
@@ -9315,7 +9413,7 @@ def view_cover_letter():
 
     cover_letter = cursor.fetchone()
     cursor.close()
-    conn.close()
+    db_pool.return_connection(conn)
 
     if cover_letter and cover_letter[0]:
         return Response(
@@ -9676,23 +9774,16 @@ def forward_to_vpaa():
             ('vpa', current_time, hrmd_remarks if hrmd_remarks else None, application_id)
         )
         
-        conn.commit()
-        
-        # Audit log
-        user_id = session.get('user_id')
-        personnel_info = get_personnel_info(user_id)
-        hr_personnel_id = personnel_info.get('personnel_id')
-        
-        if hr_personnel_id:
-            log_audit_action(
-                hr_personnel_id,
-                'Promotion forwarded',
-                f'HR forwarded promotion application ID {application_id} to VPAA',
-                before_value='Status: HRMD Review',
-                after_value='Status: VPAA Review'
-            )
+        # Fetch faculty name for notification before releasing connection
+        cursor.execute(
+            "SELECT p.firstname, p.lastname, pa.requested_rank "
+            "FROM promotion_application pa JOIN personnel p ON pa.faculty_id = p.personnel_id "
+            "WHERE pa.application_id = %s", (application_id,)
+        )
+        fac_row = cursor.fetchone()
 
-        # After updating status to 'vpa'
+        conn.commit()
+
         log_audit(
             action='PROMOTION_FORWARD_VPAA',
             details=f'HRMD forwarded promotion application (ID: {application_id}) to VPAA',
@@ -9701,7 +9792,11 @@ def forward_to_vpaa():
 
         cursor.close()
         db_pool.return_connection(conn)
-        
+
+        if fac_row:
+            fac_name = f"{fac_row[1]}, {fac_row[0]}"
+            trigger_promotion_forwarded_vpaa(fac_name, fac_row[2])
+
         return jsonify(success=True, message='Application forwarded to VPAA successfully')
         
     except Exception as e:
@@ -9979,31 +10074,41 @@ def initiate_regularization():
         conn = db_pool.get_connection()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT hiredate FROM personnel WHERE personnel_id = %s", (faculty_id,))
+        # Fetch hire date, aligned master flag, and probationary start date
+        cursor.execute("""
+            SELECT p.hiredate, pr.has_aligned_master,
+                   COALESCE(pr.probationary_start_date, p.hiredate) AS prob_start
+            FROM personnel p
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            WHERE p.personnel_id = %s
+        """, (faculty_id,))
         result = cursor.fetchone()
-        
+
         if not result or not result[0]:
             cursor.close()
             db_pool.return_connection(conn)
             return jsonify({'success': False, 'error': 'Faculty not found or no hire date'}), 400
-        
-        hire_date = result[0]
-        
+
+        hire_date, has_aligned_master, prob_start = result
+
+        if not has_aligned_master:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify({
+                'success': False,
+                'error': 'Faculty is not eligible. An aligned Master\'s Degree is required to begin the probationary period.'
+            }), 400
+
         from datetime import date
         today = date.today()
-        years = today.year - hire_date.year
-        months = today.month - hire_date.month
-        if months < 0:
-            years -= 1
-            months += 12
-        years_of_service = years + (months / 12.0)
-        
+        years_of_service = (today - prob_start).days / 365.25 if prob_start else 0
+
         if years_of_service < 3:
             cursor.close()
             db_pool.return_connection(conn)
             return jsonify({
-                'success': False, 
-                'error': f'Faculty not eligible. Only {years_of_service:.1f} years of service.'
+                'success': False,
+                'error': f'Faculty not eligible. Only {years_of_service:.1f} probationary years completed (3 required).'
             }), 400
         
         cursor.execute("""
@@ -10508,32 +10613,32 @@ def check_regularization_status(faculty_id):
         conn = db_pool.get_connection()
         cursor = conn.cursor()
         
-        # Check for aligned degree and hire date
         cursor.execute("""
-            SELECT pr.has_aligned_master, p.hiredate, pr.employment_status
-            FROM profile pr 
+            SELECT pr.has_aligned_master,
+                   COALESCE(pr.probationary_start_date, p.hiredate) AS prob_start,
+                   pr.employmentstatus
+            FROM profile pr
             JOIN personnel p ON pr.personnel_id = p.personnel_id
             WHERE p.personnel_id = %s
         """, (faculty_id,))
-        
-        res = cursor.fetchone()
-        has_master, hire_date, current_status = res
 
-        # RULE: Contractual does NOT count toward probation if no aligned Master's 
+        res = cursor.fetchone()
+        has_master, prob_start, current_status = res
+
         if not has_master:
             return jsonify({
                 'eligible': False,
                 'category': 'Contractual',
-                'reason': 'Requires vertically aligned Master\'s Degree to begin probation.' [cite: 48]
+                'reason': 'Requires a vertically aligned Master\'s Degree to begin the probationary period.'
             })
 
-        # RULE: Probationary period is 6 consecutive semesters / 3 years [cite: 25, 48]
-        years_diff = (datetime.now().date() - hire_date).days / 365.25
+        # Countdown starts from probationary_start_date, not hire date
+        years_diff = (datetime.now().date() - prob_start).days / 365.25 if prob_start else 0
         if years_diff < 3:
             return jsonify({
                 'eligible': False,
                 'category': 'Probationary',
-                'reason': f'Probation in progress ({round(years_diff, 1)}/3 years completed).' [cite: 48]
+                'reason': f'Probation in progress ({round(years_diff, 1)}/3 years completed from probationary start).'
             })
 
         return jsonify({'eligible': True, 'category': 'Regular', 'reason': 'Ready for HRMD final review.'})

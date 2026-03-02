@@ -101,6 +101,7 @@
       <button class="notif-filter-btn active" data-filter="all">All</button>
       <button class="notif-filter-btn" data-filter="rfid">RFID</button>
       <button class="notif-filter-btn" data-filter="biometric">Biometric</button>
+      <button class="notif-filter-btn" data-filter="promotion">Promotion</button>
     </div>
     <div class="notif-list" id="notifList"></div>
     <div class="notif-panel-footer">Up to 100 notifications stored locally</div>
@@ -158,10 +159,11 @@
             })
             .catch(error => console.error('Error loading profile image:', error));
 
-          // Init notification system (HR receives all scans)
+          // Init notification system (HR receives all scans + promotion submissions)
           NotifSystem.init({
             storageKey: 'spcheck_notifs_hr_' + data.personnel_id,
-            sseUrl: '/api/hr/rfid-notifications'
+            sseUrl: '/api/hr/rfid-notifications',
+            userType: 'hr'
           });
         }
       })

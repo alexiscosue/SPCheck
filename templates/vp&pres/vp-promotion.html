@@ -101,11 +101,29 @@
             </tr>
           </thead>
           <tbody id="promotionsBody">
+            {# Which status key means "needs my action": VPAA sees 'vpa', President sees 'pres' #}
+            {% if user_role == 20004 %}
+              {% set my_status_key = 'vpa' %}
+            {% else %}
+              {% set my_status_key = 'pres' %}
+            {% endif %}
+            {# Split into action-required vs the rest, then render action-required first #}
+            {% set ns = namespace(action_rows=[], other_rows=[]) %}
             {% for promo in promotions %}
-            <tr data-status="{{ promo.status }}" data-dept="{{ promo.department }}" data-faculty-id="{{ promo.faculty_id }}">
+              {% if my_status_key in promo.status|lower %}
+                {% set ns.action_rows = ns.action_rows + [promo] %}
+              {% else %}
+                {% set ns.other_rows = ns.other_rows + [promo] %}
+              {% endif %}
+            {% endfor %}
+            {% for promo in ns.action_rows + ns.other_rows %}
+            {% set is_my_turn = my_status_key in promo.status|lower %}
+            <tr data-status="{{ promo.status }}" data-dept="{{ promo.department }}" data-faculty-id="{{ promo.faculty_id }}"
+                {% if is_my_turn %}style="border-left:3px solid #7b1113; background:#fff5f5;"{% endif %}>
               <td style="display:flex;gap:10px;align-items:center">
                 <img class="faculty-photo" data-personnel-id="{{ promo.faculty_id }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#f0f0f0;" alt="Loading...">
                 {{ promo.name }}
+                {% if is_my_turn %}<span style="font-size:10px;background:#7b1113;color:#fff;border-radius:10px;padding:1px 6px;margin-left:6px;font-weight:600;">Action Required</span>{% endif %}
               </td>
               <td>{{ promo.department }}</td>
               <td>{{ promo.currentrank }}</td>
@@ -537,7 +555,8 @@ function loadPromotionDetails(applicationId) {
         
         const rejectBtn = document.getElementById('rejectBtn');
         const forwardApproveBtn = document.getElementById('forwardApproveBtn');
-        
+        const notesInputSection = document.getElementById('notesInputSection');
+
         if (data.status.toLowerCase() === 'vpa') {
           rejectBtn.style.display = 'inline-block';
           forwardApproveBtn.style.display = 'inline-block';
