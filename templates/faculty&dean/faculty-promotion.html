@@ -11,32 +11,36 @@
   <div class="card" style="grid-column:1 / -1; padding:20px">
     <h3>Promotion Application Progress</h3>
     <div class="stepper">
-      <div class="step active {% if resume_cv and cover_letter %}done{% endif %}">
+      <div class="step {% if date_submitted %}done{% else %}active{% endif %}">
         <div class="circle">1</div>
         Submitted
-        <small>{{ date_submitted.strftime("%Y-%m-%d") if date_submitted else '' }}</small>
+        <small>{{ date_submitted.strftime("%b %d, %Y") if date_submitted else 'Pending' }}</small>
       </div>
-      <div class="step {% if current_status == 'hrmd' %}active{% elif hrmd_approval_date %}done{% endif %}">
+      <div class="step {% if current_status == 'hrmd' %}active{% elif hrmd_approval_date or current_status in ['vpa', 'pres'] %}done{% endif %}">
         <div class="circle">2</div>
         HRMD Review
         <small>
           {% if current_status == 'hrmd' %}
             In Progress
           {% elif hrmd_approval_date %}
-            Approved {{ hrmd_approval_date.strftime("%Y-%m-%d") if hrmd_approval_date else '' }}
+            {{ hrmd_approval_date.strftime("%b %d, %Y") }}
+          {% elif current_status in ['vpa', 'pres'] %}
+            Forwarded
           {% else %}
             Not yet
           {% endif %}
         </small>
       </div>
-      <div class="step {% if current_status == 'vpa' %}active{% elif vpa_approval_date %}done{% endif %}">
+      <div class="step {% if current_status == 'vpa' %}active{% elif vpa_approval_date or current_status == 'pres' %}done{% endif %}">
         <div class="circle">3</div>
         VP Admin Review
         <small>
           {% if current_status == 'vpa' %}
             In Progress
           {% elif vpa_approval_date %}
-            Approved {{ vpa_approval_date.strftime("%Y-%m-%d") if vpa_approval_date else '' }}
+            {{ vpa_approval_date.strftime("%b %d, %Y") }}
+          {% elif current_status == 'pres' %}
+            Forwarded
           {% else %}
             Not yet
           {% endif %}
@@ -49,7 +53,7 @@
           {% if current_status == 'pres' %}
             In Progress
           {% elif pres_approval_date %}
-            Approved {{ pres_approval_date.strftime("%Y-%m-%d") if pres_approval_date else '' }}
+            {{ pres_approval_date.strftime("%b %d, %Y") }}
           {% else %}
             Not yet
           {% endif %}
@@ -245,6 +249,24 @@
 
   <!-- Hidden input to submit the rank automatically -->
   <input type="hidden" name="requested_rank" value="{{ available_ranks[0] if available_ranks and available_ranks|length > 0 else '' }}">
+
+  <!-- Eligibility snapshot -->
+  {% if attendance_rate is not none or eval_score is not none %}
+  <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:10px;">
+    {% if attendance_rate is not none %}
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 11px;border-radius:20px;{% if attendance_rate >= 80 %}background:#d1fae5;color:#065f46;{% else %}background:#fef2f2;color:#7b1113;{% endif %}">
+      <i class='bx {% if attendance_rate >= 80 %}bx-check-circle{% else %}bx-x-circle{% endif %}'></i>
+      Attendance {{ "%.1f"|format(attendance_rate) }}% / 80% min
+    </div>
+    {% endif %}
+    {% if eval_score is not none %}
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 11px;border-radius:20px;{% if eval_score >= 3 %}background:#d1fae5;color:#065f46;{% else %}background:#fef2f2;color:#7b1113;{% endif %}">
+      <i class='bx {% if eval_score >= 3 %}bx-check-circle{% else %}bx-x-circle{% endif %}'></i>
+      Eval Score {{ "%.2f"|format(eval_score) }} / 3.0 min
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
 
   {% if not upload_locked %}
   

@@ -884,7 +884,9 @@ transition: transform .15s ease, box-shadow .15s ease;
   background:#e5e7eb; color:#6b7280;
 }
 .step.active .circle { background: var(--spc-maroon); color:#fff; }
-.step.done .circle { background: var(--spc-gold); color:#111; }
+.step.done .circle { background: var(--spc-maroon); color:#fff; font-size:0; }
+.step.done .circle::after { content:'✓'; font-size:15px; font-weight:700; }
+.step.done:not(:last-child)::after { background: var(--spc-maroon); }
 .step small { font-size:12px; color: var(--muted); display:block; }
 
 .btn-primary {
