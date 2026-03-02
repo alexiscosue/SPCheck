@@ -1024,11 +1024,11 @@ def require_auth(allowed_roles):
         def wrapper(*args, **kwargs):
             if 'user_id' not in session:
                 return redirect(url_for('login'))
-            
+
             user_role = session.get('user_role')
             if user_role not in allowed_roles:
                 return redirect(url_for('login'))
-            
+
             return func(*args, **kwargs)
         wrapper.__name__ = func.__name__
         return wrapper
@@ -6162,8 +6162,8 @@ def api_hr_download_schedule_template():
     # Schedule table
     writer.writerow(['Subject Code', 'Day 1', 'Start Time 1', 'End Time 1',
                      'Day 2', 'Start Time 2', 'End Time 2', 'Room', 'Section'])
-    writer.writerow(['CS101', 'Monday',  '07:30', '09:00', 'Wednesday', '07:30', '09:00', 'Room 101', 'CS3A-1'])
-    writer.writerow(['CS102', 'Tuesday', '10:00', '11:30', '',          '',      '',      'Lab A',    'CS3B-1'])
+    writer.writerow(['ELS 100', 'Monday',    '07:30', '09:00', 'Wednesday', '07:30', '09:00', 'LR1',  '51001'])
+    writer.writerow(['ELS 102', 'Tuesday',   '10:00', '13:00', '',          '',      '',      'LR2',  '51002'])
     output.seek(0)
     return Response(
         output.getvalue(),
@@ -6235,6 +6235,47 @@ def api_hr_validate_schedule_csv():
         # ── Helpers ─────────────────────────────────────────────────────────
         valid_days = {'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'}
 
+        # ── Valid section ranges by college ──────────────────────────────────
+        VALID_SECTION_RANGES = [
+            (51000, 51200),   # College of Arts and Sciences
+            (31000, 31160),   # College of Business Administration
+            (83000, 83100),   # College of Computer Studies
+            (45000, 45100),   # College of Criminology
+            (72000, 72100),   # College of Education
+            (21000, 26000),   # College of Engineering
+        ]
+
+        def is_valid_section(s):
+            try:
+                n = int(s)
+                return any(lo <= n <= hi for lo, hi in VALID_SECTION_RANGES)
+            except (ValueError, TypeError):
+                return False
+
+        # ── Valid rooms by group ─────────────────────────────────────────────
+        def _expand_rooms():
+            rooms = set()
+            # CAS / CBA / CCS / COD shared rooms
+            for i in range(1, 33):   rooms.add(f'VR{i}')
+            for i in range(1, 6):    rooms.add(f'LR{i}')
+            for i in range(1, 4):    rooms.add(f'A20{i}')
+            for i in range(1, 6):    rooms.add(f'E10{i}')
+            for i in range(1, 7):    rooms.add(f'E20{i}')
+            for i in range(1, 7):    rooms.add(f'E30{i}')
+            for i in range(1, 3):    rooms.add(f'X10{i}')
+            for i in range(1, 5):    rooms.add(f'HS20{i}')
+            rooms.update({'SPEECHLAB', 'HL-RM'})
+            # COC rooms
+            rooms.update({'C-CL', 'C-AVR', 'C-MC', 'C-LWA',
+                          'CRIM 1-1', 'CRIM 1-2', 'CRIM 1-3',
+                          'CRIM 2-1', 'CRIM 2-2',
+                          'Chem Lab', 'KR'})
+            # COE (Engineering) rooms
+            rooms.update({'ALAB', 'EL1', 'EL2', 'EL3', 'SHOP'})
+            return rooms
+
+        VALID_ROOMS = _expand_rooms()
+
         def parse_time(t):
             if not t or not t.strip():
                 return None, None
@@ -6267,8 +6308,10 @@ def api_hr_validate_schedule_csv():
         cursor = conn.cursor()
 
         cursor.execute(
-            "SELECT personnel_id, firstname || ' ' || lastname "
-            "FROM personnel WHERE LOWER(lastname) = LOWER(%s) AND LOWER(firstname) = LOWER(%s)",
+            "SELECT p.personnel_id, p.firstname || ' ' || p.lastname, "
+            "p.college_id, c.collegename "
+            "FROM personnel p LEFT JOIN college c ON p.college_id = c.college_id "
+            "WHERE LOWER(p.lastname) = LOWER(%s) AND LOWER(p.firstname) = LOWER(%s)",
             (last_name, first_name))
         person = cursor.fetchone()
         if not person:
@@ -6279,6 +6322,8 @@ def api_hr_validate_schedule_csv():
                                      f'Check the spelling of the name.'})
         personnel_id = person[0]
         faculty_display = person[1]
+        faculty_college_id = person[2]
+        faculty_college_name = person[3] or 'Unknown College'
 
         # ── Subject cache ────────────────────────────────────────────────────
         subject_cache = {}
@@ -6287,7 +6332,9 @@ def api_hr_validate_schedule_csv():
             if code in subject_cache:
                 return subject_cache[code]
             cursor.execute(
-                "SELECT subject_id, units, subjectname FROM subjects WHERE subjectcode = %s",
+                "SELECT s.subject_id, s.units, s.subjectname, s.college_id, c.collegename "
+                "FROM subjects s LEFT JOIN college c ON s.college_id = c.college_id "
+                "WHERE s.subjectcode = %s",
                 (code,))
             row = cursor.fetchone()
             subject_cache[code] = row  # may be None
@@ -6327,6 +6374,22 @@ def api_hr_validate_schedule_csv():
             if not classroom:     errors.append('Room is required')
             if not classsection:  errors.append('Section is required')
 
+            # Section validation
+            if classsection and not is_valid_section(classsection):
+                errors.append(
+                    f"Section '{classsection}' is not a valid section number. "
+                    "Must be a numeric code within a recognised college range "
+                    "(e.g. 51001 for CAS, 31001 for CBA, 83001 for CCS, "
+                    "45001 for COC, 72001 for COEd, 21001 for COE)."
+                )
+
+            # Room validation
+            if classroom and classroom not in VALID_ROOMS:
+                errors.append(
+                    f"Room '{classroom}' is not in the official room list. "
+                    "Please check the room name (e.g. LR1, VR5, E101, SPEECHLAB, CRIM 1-1, ALAB)."
+                )
+
             # Day name validation
             if classday_1 and classday_1 not in valid_days:
                 errors.append(f"Day 1 '{classday_1}' is not valid — use Monday, Tuesday, … Sunday")
@@ -6357,16 +6420,54 @@ def api_hr_validate_schedule_csv():
             if starttime_2 and endtime_2 and to_minutes(starttime_2) >= to_minutes(endtime_2):
                 errors.append('Start Time 2 must be earlier than End Time 2')
 
+            # 30-minute boundary check (no 15-minute intervals)
+            for t_val, label in [(starttime_1, 'Start Time 1'), (endtime_1, 'End Time 1'),
+                                  (starttime_2, 'Start Time 2'), (endtime_2, 'End Time 2')]:
+                if t_val:
+                    t_min = int(t_val.split(':')[1])
+                    if t_min not in (0, 30):
+                        errors.append(
+                            f'{label}: Times must be on the hour or half-hour (e.g. 07:00, 07:30) '
+                            f'— :{t_min:02d} is not a valid interval'
+                        )
+
             # Subject lookup
             subject_id = None
             subject_name = subject_code
+            subject_units = None
             if subject_code:
                 subj = lookup_subject(subject_code)
                 if subj:
                     subject_id = subj[0]
+                    subject_units = subj[1]
                     subject_name = subj[2]
+                    subject_college_id = subj[3]
+                    subject_college_name = subj[4] or 'Unknown College'
+                    # College mismatch check
+                    if faculty_college_id and subject_college_id and faculty_college_id != subject_college_id:
+                        errors.append(
+                            f'Subject "{subject_code}" belongs to {subject_college_name} but '
+                            f'{faculty_display} is from {faculty_college_name}. '
+                            f'Faculty may only be assigned subjects from their own college.'
+                        )
                 else:
                     errors.append(f'Subject code "{subject_code}" was not found in the system')
+
+            # Units validation: total scheduled time must equal subject units × 60 minutes
+            if subject_units is not None and starttime_1 and endtime_1:
+                day1_mins = to_minutes(endtime_1) - to_minutes(starttime_1)
+                day2_mins = (to_minutes(endtime_2) - to_minutes(starttime_2)) if (starttime_2 and endtime_2) else 0
+                total_mins = day1_mins + day2_mins
+                expected_mins = round(float(subject_units) * 60)
+                if total_mins != expected_mins:
+                    total_hrs = total_mins / 60
+                    exp_hrs = float(subject_units)
+                    errors.append(
+                        f'Total scheduled time ({total_hrs:.1f} hr{"s" if total_hrs != 1 else ""}) does not match '
+                        f'subject units ({subject_units} unit{"s" if float(subject_units) != 1 else ""} '
+                        f'= {exp_hrs:.1f} hr{"s" if exp_hrs != 1 else ""} per week). '
+                        f'Adjust the time slots to total {exp_hrs:.1f} hr{"s" if exp_hrs != 1 else ""} across all days.'
+                    )
 
             # Internal conflict: day1 == day2 overlapping
             if (not errors and classday_1 and classday_2 and classday_1 == classday_2
