@@ -276,6 +276,11 @@ body {
   font-size: 20px;
 }
 
+.kpi .subtitle {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .icon.sections { background: linear-gradient(135deg,#8b5cf6,#a855f7); }
 .icon.att { background: linear-gradient(135deg,var(--spc-maroon),var(--spc-maroon-dark)); }
 .icon.fac { background: linear-gradient(135deg,#3b82f6,#60a5fa); }
@@ -941,6 +946,44 @@ background:var(--spc-maroon);color:#fff;font-weight:600;cursor:pointer;
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Attendance Logs sub-tabs */
+.attendance-sub-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 12px;
+}
+.attendance-sub-tab {
+  padding: 7px 16px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 13px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.2s ease;
+  color: var(--muted);
+}
+.attendance-sub-tab:hover { color: var(--spc-maroon); }
+.attendance-sub-tab.active {
+  color: var(--spc-maroon);
+  border-color: var(--spc-maroon);
+}
+.sub-tab-content { display: none; }
+.sub-tab-content.active { display: block; }
+
+/* Campus Attendance — session badges */
+.campus-session-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.campus-session-morning   { background: #fef9c3; color: #92400e; }
+.campus-session-afternoon { background: #dbeafe; color: #1e40af; }
 
 /* Profile Header */
 .profile-header {
@@ -2499,12 +2542,17 @@ to { opacity: 1; }
   height: fit-content;
 }
 
-.hr-attendance-table th {
-  text-align: center;
+.hr-attendance-table {
+  table-layout: fixed;
+  width: 100%;
 }
 
+.hr-attendance-table th,
 .hr-attendance-table td {
   text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hr-pagination-controls {

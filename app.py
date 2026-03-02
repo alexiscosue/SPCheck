@@ -1518,6 +1518,171 @@ def api_biometric_logs():
         if conn:
             db_pool.return_connection(conn)
 
+@app.route('/api/hr/campus-attendance')
+@require_auth([20003])
+def api_campus_attendance():
+    """Read campus attendance records from campus_attendance table."""
+    conn = None
+    cursor = None
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT
+                ca.campus_attendance_id,
+                CONCAT(p.lastname, ', ', p.firstname,
+                    CASE WHEN p.honorifics IS NOT NULL AND p.honorifics <> ''
+                         THEN ', ' || p.honorifics ELSE '' END) AS person_name,
+                ca.attendance_date,
+                ca.session,
+                ca.time_in,
+                ca.time_out,
+                ca.status,
+                c.collegename,
+                pr.position,
+                pr.employmentstatus
+            FROM campus_attendance ca
+            INNER JOIN personnel p ON ca.personnel_id = p.personnel_id
+            LEFT JOIN college c ON p.college_id = c.college_id
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            ORDER BY ca.attendance_date DESC, person_name, ca.session
+        """)
+
+        records = []
+        for row in cursor.fetchall():
+            records.append({
+                'id':                row[0],
+                'name':              row[1],
+                'date':              row[2].isoformat() if row[2] else None,
+                'session':           row[3],
+                'time_in':           row[4].isoformat() if row[4] else None,
+                'time_out':          row[5].isoformat() if row[5] else None,
+                'status':            row[6],
+                'college':           row[7] or 'N/A',
+                'position':          row[8] or 'N/A',
+                'employment_status': row[9] or 'N/A',
+            })
+
+        return {'success': True, 'records': records}
+
+    except Exception as e:
+        print(f"Error fetching campus attendance: {e}")
+        return {'success': False, 'error': str(e)}
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            db_pool.return_connection(conn)
+
+
+@app.route('/api/hr/campus-attendance/sync', methods=['POST'])
+@require_auth([20003])
+def api_sync_campus_attendance():
+    """
+    Compute morning/afternoon sessions from biometriclogs and upsert into
+    campus_attendance. Generates Absent rows for biometric-registered personnel
+    on any date where at least one tap was recorded by anyone.
+    """
+    conn = None
+    cursor = None
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            WITH
+            -- All distinct dates that have any biometric activity
+            active_dates AS (
+                SELECT DISTINCT DATE(taptime AT TIME ZONE 'Asia/Manila') AS attendance_date
+                FROM biometriclogs
+            ),
+            -- All personnel (regardless of teaching load or biometric device)
+            all_faculty AS (
+                SELECT personnel_id
+                FROM personnel
+            ),
+            -- Every (date, person, session) combination we need to evaluate
+            all_combinations AS (
+                SELECT
+                    d.attendance_date,
+                    p.personnel_id,
+                    s.session,
+                    s.window_start,
+                    s.window_end,
+                    s.late_threshold
+                FROM active_dates d
+                CROSS JOIN all_faculty p
+                CROSS JOIN (VALUES
+                    ('Morning',   420,  764, 495),
+                    ('Afternoon', 765, 1065, 825)
+                ) AS s(session, window_start, window_end, late_threshold)
+            ),
+            -- Raw taps with local time in minutes
+            taps AS (
+                SELECT
+                    b.personnel_id,
+                    DATE(bl.taptime AT TIME ZONE 'Asia/Manila')                    AS tap_date,
+                    bl.taptime AT TIME ZONE 'Asia/Manila'                          AS local_dt,
+                    EXTRACT(HOUR  FROM bl.taptime AT TIME ZONE 'Asia/Manila') * 60
+                  + EXTRACT(MINUTE FROM bl.taptime AT TIME ZONE 'Asia/Manila')     AS tap_mins
+                FROM biometriclogs bl
+                INNER JOIN biometric b ON bl.biometric_id = b.biometric_id
+                WHERE b.personnel_id IS NOT NULL
+            ),
+            -- Group first/last tap per (person, date, session)
+            session_agg AS (
+                SELECT
+                    ac.personnel_id,
+                    ac.attendance_date,
+                    ac.session,
+                    ac.late_threshold,
+                    MIN(t.local_dt) AS time_in,
+                    MAX(t.local_dt) AS time_out
+                FROM all_combinations ac
+                LEFT JOIN taps t
+                    ON  t.personnel_id = ac.personnel_id
+                    AND t.tap_date     = ac.attendance_date
+                    AND t.tap_mins BETWEEN ac.window_start AND ac.window_end
+                GROUP BY ac.personnel_id, ac.attendance_date, ac.session, ac.late_threshold
+            )
+            INSERT INTO campus_attendance
+                (personnel_id, attendance_date, session, time_in, time_out, status)
+            SELECT
+                personnel_id,
+                attendance_date,
+                session,
+                time_in,
+                time_out,
+                CASE
+                    WHEN time_in IS NULL THEN 'Absent'
+                    WHEN (EXTRACT(HOUR  FROM time_in) * 60
+                        + EXTRACT(MINUTE FROM time_in)) <= late_threshold THEN 'Present'
+                    ELSE 'Late'
+                END AS status
+            FROM session_agg
+            ON CONFLICT (personnel_id, attendance_date, session)
+            DO UPDATE SET
+                time_in  = EXCLUDED.time_in,
+                time_out = EXCLUDED.time_out,
+                status   = EXCLUDED.status
+        """)
+
+        synced = cursor.rowcount
+        conn.commit()
+        return {'success': True, 'message': f'Synced {synced} records', 'synced': synced}
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"Error syncing campus attendance: {e}")
+        return {'success': False, 'error': str(e)}
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            db_pool.return_connection(conn)
+
 # ==================== END BIOMETRIC API ENDPOINTS ====================
 
 notification_queues = {}
@@ -1525,12 +1690,16 @@ notification_lock = threading.Lock()
 
 def broadcast_notification(personnel_id, notification_data):
     """Broadcast notification to specific personnel, HR, and VP/Pres, and persist to DB."""
+    notif_type = notification_data.get('notification_type', 'rfid')
+    is_scanner_event = notif_type in ('rfid', 'biometric')
+
     # Persist to DB first so each audience row gets its own notif_id
     faculty_notif_id = None
     if personnel_id and personnel_id > 0:
         faculty_notif_id = save_notification_to_db('faculty', personnel_id, notification_data)
     hr_notif_id = save_notification_to_db('hr', None, notification_data)
-    vp_notif_id = save_notification_to_db('vp', None, notification_data)
+    # VP/Pres do not receive biometric or RFID scanner notifications
+    vp_notif_id = None if is_scanner_event else save_notification_to_db('vp', None, notification_data)
 
     with notification_lock:
         if personnel_id and personnel_id > 0 and personnel_id in notification_queues:
@@ -1551,15 +1720,16 @@ def broadcast_notification(personnel_id, notification_data):
                 except Exception as e:
                     print(f"Error putting notification in HR queue: {e}")
 
-        vp_key = 'vp_all_notifications'
-        if vp_key in notification_queues:
-            vp_data = dict(notification_data, notif_id=vp_notif_id)
-            for q in notification_queues[vp_key]:
-                try:
-                    q.put(vp_data)
-                    print(f"✓ Sent notification to VP: {notification_data.get('action', 'unknown')}")
-                except Exception as e:
-                    print(f"Error putting notification in VP queue: {e}")
+        if not is_scanner_event:
+            vp_key = 'vp_all_notifications'
+            if vp_key in notification_queues:
+                vp_data = dict(notification_data, notif_id=vp_notif_id)
+                for q in notification_queues[vp_key]:
+                    try:
+                        q.put(vp_data)
+                        print(f"✓ Sent notification to VP: {notification_data.get('action', 'unknown')}")
+                    except Exception as e:
+                        print(f"Error putting notification in VP queue: {e}")
 
 def handle_rfid_notification(notification_data):
     """Handle RFID notifications from the reader"""
@@ -1859,6 +2029,7 @@ def api_notifications_history():
                        class_section, classroom, tap_time, is_read, created_at
                 FROM notifications
                 WHERE target_audience = 'vp'
+                  AND notification_type NOT IN ('rfid', 'biometric')
                 ORDER BY created_at DESC
                 LIMIT 100
             """)

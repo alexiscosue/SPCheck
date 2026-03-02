@@ -130,12 +130,6 @@ const NotifSystem = (function () {
     if (!data) return;
     if (!data.tap_time && data.notification_type !== 'license') return;
 
-    // VP/Pres roles only receive promotion and license notifications — no scanner events
-    if (_userType === 'vpaa' || _userType === 'president') {
-      var notifType = data.notification_type || 'rfid';
-      if (notifType === 'rfid' || notifType === 'biometric') return;
-    }
-
     // Role-based filtering for promotion notifications:
     //   HR      → only 'new_application'
     //   VPAA    → only 'forwarded_vpaa'
@@ -254,9 +248,6 @@ const NotifSystem = (function () {
         // Apply the same promotion role filter as _store() so server-loaded history
         // also respects the user's role (VPAA vs President vs HR).
         serverNotifs = serverNotifs.filter(function (n) {
-          // VP/Pres roles don't see RFID or biometric scan notifications
-          if ((_userType === 'vpaa' || _userType === 'president') &&
-              (n.type === 'rfid' || n.type === 'biometric')) return false;
           if (n.type !== 'promotion') return true;
           var act = n.action || '';
           if (_userType === 'hr'        && act !== 'new_application')     return false;
