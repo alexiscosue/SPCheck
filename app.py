@@ -6312,6 +6312,18 @@ def api_hr_validate_schedule_csv():
             except Exception:
                 return 0
 
+        def fmt_time(t):
+            """Format a DB time value (e.g. '07:30:00+08') to '7:30 AM'."""
+            if not t:
+                return str(t)
+            try:
+                h, m = int(str(t).split('+')[0].split(':')[0]), int(str(t).split('+')[0].split(':')[1])
+                suffix = 'AM' if h < 12 else 'PM'
+                h12 = h % 12 or 12
+                return f'{h12}:{m:02d} {suffix}'
+            except Exception:
+                return str(t)
+
         def overlaps(d_a, s_a, e_a, d_b, s_b, e_b):
             return (d_a and d_b and d_a == d_b and s_a and e_a and s_b and e_b and
                     to_minutes(s_a) < to_minutes(e_b) and to_minutes(e_a) > to_minutes(s_b))
@@ -6498,7 +6510,7 @@ def api_hr_validate_schedule_csv():
                       AND s.classday_1 = %s AND s.starttime_1 < %s AND s.endtime_1 > %s
                 """, (personnel_id, semester_id, classday_1, endtime_1, starttime_1))
                 for c in cursor.fetchall():
-                    errors.append(f'Conflicts with existing schedule: {c[0]} on {c[1]} {c[2]}–{c[3]} (Section {c[4]})')
+                    errors.append(f'Conflicts with existing schedule: {c[0]} on {c[1]} {fmt_time(c[2])} – {fmt_time(c[3])} (Section {c[4]})')
 
                 cursor.execute("""
                     SELECT sub.subjectcode, s.classday_2, s.starttime_2, s.endtime_2, s.classsection
@@ -6507,7 +6519,7 @@ def api_hr_validate_schedule_csv():
                       AND s.classday_2 = %s AND s.starttime_2 < %s AND s.endtime_2 > %s
                 """, (personnel_id, semester_id, classday_1, endtime_1, starttime_1))
                 for c in cursor.fetchall():
-                    errors.append(f'Conflicts with existing schedule: {c[0]} on {c[1]} {c[2]}–{c[3]} (Section {c[4]})')
+                    errors.append(f'Conflicts with existing schedule: {c[0]} on {c[1]} {fmt_time(c[2])} – {fmt_time(c[3])} (Section {c[4]})')
 
                 if classday_2 and starttime_2 and endtime_2:
                     cursor.execute("""
@@ -6517,7 +6529,7 @@ def api_hr_validate_schedule_csv():
                           AND s.classday_1 = %s AND s.starttime_1 < %s AND s.endtime_1 > %s
                     """, (personnel_id, semester_id, classday_2, endtime_2, starttime_2))
                     for c in cursor.fetchall():
-                        errors.append(f'Conflicts with existing schedule: {c[0]} on {c[1]} {c[2]}–{c[3]} (Section {c[4]})')
+                        errors.append(f'Conflicts with existing schedule: {c[0]} on {c[1]} {fmt_time(c[2])} – {fmt_time(c[3])} (Section {c[4]})')
 
                     cursor.execute("""
                         SELECT sub.subjectcode, s.classday_2, s.starttime_2, s.endtime_2, s.classsection
@@ -6526,7 +6538,7 @@ def api_hr_validate_schedule_csv():
                           AND s.classday_2 = %s AND s.starttime_2 < %s AND s.endtime_2 > %s
                     """, (personnel_id, semester_id, classday_2, endtime_2, starttime_2))
                     for c in cursor.fetchall():
-                        errors.append(f'Conflicts with existing schedule: {c[0]} on {c[1]} {c[2]}–{c[3]} (Section {c[4]})')
+                        errors.append(f'Conflicts with existing schedule: {c[0]} on {c[1]} {fmt_time(c[2])} – {fmt_time(c[3])} (Section {c[4]})')
 
             # Inter-row conflict (within this file)
             if not errors and starttime_1 and endtime_1:
@@ -6758,97 +6770,94 @@ def api_hr_delete_schedule_classes(personnel_id):
 @app.route('/api/hr/delete-schedule', methods=['POST'])
 @require_auth([20003])
 def api_hr_delete_schedule():
-    """Delete schedule and all associated attendance records AND attendance reports"""
+    """Delete one or more schedules and all associated attendance records / reports"""
     try:
         data = request.get_json()
-        class_id = data.get('class_id')
-        
-        if not class_id:
-            return {'success': False, 'error': 'Class ID is required'}
-        
+
+        # Accept either a single class_id (legacy) or a class_ids list
+        class_ids = data.get('class_ids') or []
+        if not class_ids and data.get('class_id'):
+            class_ids = [data['class_id']]
+        if not class_ids:
+            return {'success': False, 'error': 'At least one Class ID is required'}
+
         conn = db_pool.get_connection()
         cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT 
-                s.class_id,
-                sub.subjectcode,
-                sub.subjectname,
-                s.classsection,
-                s.classday_1,
-                s.starttime_1,
-                s.endtime_1,
-                s.classday_2,
-                s.starttime_2,
-                s.endtime_2,
-                p.firstname,
-                p.lastname,
-                p.honorifics
-            FROM schedule s
-            JOIN subjects sub ON s.subject_id = sub.subject_id
-            JOIN personnel p ON s.personnel_id = p.personnel_id
-            WHERE s.class_id = %s
-        """, (class_id,))
-        
-        schedule_result = cursor.fetchone()
-        
-        if not schedule_result:
-            cursor.close()
-            db_pool.return_connection(conn)
-            return {'success': False, 'error': 'Schedule not found'}
-        
-        (class_id, subjectcode, subjectname, classsection, classday_1, starttime_1, endtime_1,
-         classday_2, starttime_2, endtime_2, firstname, lastname, honorifics) = schedule_result
-        
-        faculty_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
-        
-        cursor.execute("SELECT COUNT(*) FROM attendance WHERE class_id = %s", (class_id,))
-        attendance_count = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT COUNT(*) FROM attendancereport WHERE class_id = %s", (class_id,))
-        attendance_report_count = cursor.fetchone()[0]
+
+        total_attendance = 0
+        total_reports = 0
+        audit_lines = []
+
         cursor.execute("BEGIN")
-        
-        # Delete records in the correct order to respect foreign key constraints:
-        # 1. First delete attendance reports (they reference the class_id)
-        cursor.execute("DELETE FROM attendancereport WHERE class_id = %s", (class_id,))
-        
-        # 2. Then delete attendance records
-        cursor.execute("DELETE FROM attendance WHERE class_id = %s", (class_id,))
-        
-        # 3. Finally delete the schedule record
-        cursor.execute("DELETE FROM schedule WHERE class_id = %s", (class_id,))
-        
+        for cid in class_ids:
+            cursor.execute("""
+                SELECT s.class_id, sub.subjectcode, sub.subjectname,
+                       s.classsection, s.classday_1, s.starttime_1, s.endtime_1,
+                       s.classday_2, s.starttime_2, s.endtime_2,
+                       p.firstname, p.lastname, p.honorifics
+                FROM schedule s
+                JOIN subjects sub ON s.subject_id = sub.subject_id
+                JOIN personnel p   ON s.personnel_id = p.personnel_id
+                WHERE s.class_id = %s
+            """, (cid,))
+            row = cursor.fetchone()
+            if not row:
+                continue
+
+            (cid, subjectcode, subjectname, classsection,
+             classday_1, starttime_1, endtime_1,
+             classday_2, starttime_2, endtime_2,
+             firstname, lastname, honorifics) = row
+
+            faculty_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
+
+            cursor.execute("SELECT COUNT(*) FROM attendance WHERE class_id = %s", (cid,))
+            att_count = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM attendancereport WHERE class_id = %s", (cid,))
+            rep_count = cursor.fetchone()[0]
+
+            cursor.execute("DELETE FROM attendancereport WHERE class_id = %s", (cid,))
+            cursor.execute("DELETE FROM attendance      WHERE class_id = %s", (cid,))
+            cursor.execute("DELETE FROM schedule        WHERE class_id = %s", (cid,))
+
+            total_attendance += att_count
+            total_reports    += rep_count
+
+            sched_info = f"{subjectcode} - {subjectname} | Section {classsection}"
+            if classday_1:
+                sched_info += f" | {classday_1} {starttime_1}-{endtime_1}"
+            if classday_2:
+                sched_info += f" & {classday_2} {starttime_2}-{endtime_2}"
+            audit_lines.append(f"{faculty_name}: {sched_info}")
+
         conn.commit()
-        
+
         hr_user_id = session['user_id']
         hr_personnel_info = get_personnel_info(hr_user_id)
         hr_personnel_id = hr_personnel_info.get('personnel_id')
-        
-        schedule_info = f"{subjectcode} - {subjectname} | Section {classsection}"
-        if classday_1:
-            schedule_info += f" | {classday_1} {starttime_1}-{endtime_1}"
-        if classday_2:
-            schedule_info += f" & {classday_2} {starttime_2}-{endtime_2}"
-        
+
         log_audit_action(
             hr_personnel_id,
             "Schedule deleted",
-            f"HR deleted schedule, {attendance_count} attendance records, and {attendance_report_count} attendance reports for {faculty_name}\nClass: {schedule_info}",
-            before_value=f"Schedule existed for class ID: {class_id} with {attendance_count} attendance records and {attendance_report_count} attendance reports",
-            after_value="Schedule and all associated records deleted"
+            f"HR deleted {len(class_ids)} schedule(s), {total_attendance} attendance record(s), "
+            f"and {total_reports} attendance report(s).\n" + "\n".join(audit_lines),
+            before_value=f"Schedules existed for class IDs: {class_ids}",
+            after_value="Schedules and all associated records deleted"
         )
-        
+
         cursor.close()
         db_pool.return_connection(conn)
-        
-        message = f'Schedule, {attendance_count} attendance records, and {attendance_report_count} attendance reports deleted successfully'
-        
+
+        n = len(class_ids)
+        message = (f'{n} schedule(s), {total_attendance} attendance record(s), and '
+                   f'{total_reports} attendance report(s) deleted successfully')
+
         return {
-            'success': True, 
+            'success': True,
             'message': message,
-            'attendance_records_deleted': attendance_count,
-            'attendance_reports_deleted': attendance_report_count
+            'deleted_count': n,
+            'attendance_records_deleted': total_attendance,
+            'attendance_reports_deleted': total_reports
         }
         
     except Exception as e:

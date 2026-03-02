@@ -3734,7 +3734,8 @@ table:has(#campusEntryBody) thead th:nth-child(4) {
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }
 
-#addScheduleModal .emp-modal-content {
+#addScheduleModal .emp-modal-content,
+#importCSVModal .emp-modal-content {
   max-width: 960px;
 }
 
