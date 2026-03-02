@@ -7284,46 +7284,105 @@ def submit_peer_eval(evaluatee_id):
         try:
             # Guidelines require a 4-point Likert scale (1-4)
             scores = [int(request.form.get(f'q{i}')) for i in range(1, 21)]
-            
-            # Category Calculation (5 questions each @ 25% per group)
-            cat1_avg = sum(scores[0:5]) / 5   # Dept Contribution
-            cat2_avg = sum(scores[5:10]) / 5  # Collegiality
-            cat3_avg = sum(scores[10:15]) / 5 # Institutional Engagement
-            cat4_avg = sum(scores[15:20]) / 5 # Reliability
-            
-            # Final score calculation based on equal category weighting
-            final_score = (cat1_avg + cat2_avg + cat3_avg + cat4_avg) / 4
-            
-            # Mandatory Qualitative Feedback
-            strengths = request.form.get('strengths')
-            growth = request.form.get('growth')
-            comments = request.form.get('comments')
 
-            # Insert raw scores for record-keeping
+            # Category averages (5 questions each, equal 25% weighting)
+            cat1_avg = sum(scores[0:5]) / 5    # Departmental / Unit Contribution
+            cat2_avg = sum(scores[5:10]) / 5   # Collegiality and Professional Conduct
+            cat3_avg = sum(scores[10:15]) / 5  # Institutional Engagement
+            cat4_avg = sum(scores[15:20]) / 5  # Reliability and Accountability
+
+            # Final score: equal weighting across 4 categories
+            final_score = (cat1_avg + cat2_avg + cat3_avg + cat4_avg) / 4
+
+            # Qualitative feedback
+            evaluator_name = request.form.get('evaluator_name', '').strip() or None  # NULL if blank (anonymous)
+            strengths = request.form.get('strengths', '').strip()
+            growth = request.form.get('growth', '').strip()
+            comments = request.form.get('comments', '').strip() or None
+
+            # Resolve evaluator's personnel_id from user_id
+            cur.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (user_id,))
+            evaluator_row = cur.fetchone()
+            if not evaluator_row:
+                raise ValueError(f"No personnel record found for user_id {user_id}")
+            evaluator_personnel_id = evaluator_row[0]
+
+            # Get the acadcalendar_id from the peer assignment
             cur.execute("""
-                INSERT INTO evaluation_raw_submissions 
-                (evaluator_id, target_id, cat1_score, cat2_score, cat3_score, cat4_score, 
-                 final_score, strengths, growth, comments, date_submitted, eval_type)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), 'Peer')
-            """, (user_id, evaluatee_id, cat1_avg, cat2_avg, cat3_avg, cat4_avg, 
-                  final_score, strengths, growth, comments))
-            
-            # Update the specific assignment record
-            cur.execute("""
-                UPDATE peer_assignments 
-                SET is_completed = TRUE 
+                SELECT acadcalendar_id
+                FROM peer_assignments
                 WHERE evaluator_id = %s AND evaluatee_id = %s
-            """, (user_id, evaluatee_id))
-            
+                ORDER BY date_assigned DESC
+                LIMIT 1
+            """, (evaluator_personnel_id, evaluatee_id))
+            assignment_row = cur.fetchone()
+            if not assignment_row:
+                raise ValueError(f"No peer assignment found for evaluator {evaluator_personnel_id} -> evaluatee {evaluatee_id}")
+            acadcalendar_id = assignment_row[0]
+
+            # 1. Save full submission to peer_evaluation_submissions (source of truth)
+            cur.execute("""
+                INSERT INTO peer_evaluation_submissions
+                    (evaluator_id, evaluatee_id, acadcalendar_id,
+                     evaluator_name,
+                     cat1_score, cat2_score, cat3_score, cat4_score,
+                     final_score,
+                     strengths, growth, comments,
+                     date_submitted)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            """, (evaluator_personnel_id, evaluatee_id, acadcalendar_id,
+                  evaluator_name,
+                  cat1_avg, cat2_avg, cat3_avg, cat4_avg,
+                  final_score,
+                  strengths, growth, comments))
+
+            # 2. Mark assignment as completed
+            cur.execute("""
+                UPDATE peer_assignments
+                SET is_completed = TRUE
+                WHERE evaluator_id = %s AND evaluatee_id = %s AND acadcalendar_id = %s
+            """, (evaluator_personnel_id, evaluatee_id, acadcalendar_id))
+
+            # 3. Recompute average peer score from all submissions for this evaluatee+semester
+            cur.execute("""
+                SELECT AVG(final_score), COUNT(*)
+                FROM peer_evaluation_submissions
+                WHERE evaluatee_id = %s AND acadcalendar_id = %s
+            """, (evaluatee_id, acadcalendar_id))
+            avg_row = cur.fetchone()
+            avg_peer_score = float(avg_row[0]) if avg_row and avg_row[0] is not None else 0.0
+            completed_count = int(avg_row[1]) if avg_row else 0
+            expected_count = 2  # Per SPC guidelines: 2 peer evaluators per employee
+
+            # 4. Upsert rolled-up average into faculty_evaluations
+            #    class_id = NULL because peer evals are not class-specific
+            cur.execute("""
+                INSERT INTO faculty_evaluations
+                    (personnel_id, acadcalendar_id, class_id, evaluator_type,
+                     score, total_responses, expected_responses, response_met, last_updated)
+                VALUES (%s, %s, NULL, 'peer', %s, %s, %s, %s, NOW())
+                ON CONFLICT (personnel_id, acadcalendar_id, evaluator_type)
+                WHERE class_id IS NULL
+                DO UPDATE SET
+                    score              = EXCLUDED.score,
+                    total_responses    = EXCLUDED.total_responses,
+                    response_met       = EXCLUDED.response_met,
+                    last_updated       = NOW()
+            """, (evaluatee_id, acadcalendar_id, avg_peer_score,
+                  completed_count, expected_count, completed_count >= expected_count))
+
             conn.commit()
+            print(f"✅ Peer eval submitted: evaluator={evaluator_personnel_id} -> evaluatee={evaluatee_id}, "
+                  f"score={final_score:.2f}, avg_peer={avg_peer_score:.2f} ({completed_count}/{expected_count})")
             return redirect(url_for('peer_evaluations_list'))
-            
+
         except Exception as e:
             conn.rollback()
+            print(f"❌ Peer eval submission error: {e}")
             return f"An error occurred: {e}", 500
         finally:
             cur.close()
-            conn.close()
+            return_db_connection(conn)
 
     # GET: Fetch evaluatee info with department
     cur.execute("""
@@ -7334,7 +7393,7 @@ def submit_peer_eval(evaluatee_id):
     """, (evaluatee_id,))
     row = cur.fetchone()
     cur.close()
-    conn.close()
+    return_db_connection(conn)
 
     if row is None:
         return f"Employee with ID {evaluatee_id} not found.", 404
@@ -7969,84 +8028,37 @@ def api_hr_evaluations():
 @app.route('/api/hr/update-evaluation-score', methods=['POST'])
 @require_auth([20003])
 def api_hr_update_evaluation_score():
-    """Manually update a specific evaluation score (e.g., Peer Score)"""
+    """Peer scores are system-generated and cannot be manually overridden.
+    This endpoint is retained for potential future use with other score types."""
     try:
         data = request.get_json()
         updates = data.get('updates', [])
         term_id = data.get('term_id')
-        
+
         if not updates or not term_id:
             return jsonify({'success': False, 'error': 'Missing updates or term ID.'}), 400
-        
-        conn = db_pool.get_connection()
-        cursor = conn.cursor()
-        
-        user_id = session['user_id']
-        hr_personnel_info = get_personnel_info(user_id)
-        hr_personnel_id = hr_personnel_info.get('personnel_id')
-        
-        updated_count = 0
-        
+
         for update in updates:
             personnel_id = update.get('personnel_id')
             peer_score = update.get('peer_score')
-            
+
             if personnel_id and peer_score is not None:
-                # 1. Fetch current score and name for logging
-                cursor.execute("""
-                    SELECT fe.score, CONCAT(p.lastname, ', ', p.firstname)
-                    FROM personnel p
-                    LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s AND fe.evaluator_type = 'peer'
-                    WHERE p.personnel_id = %s
-                """, (term_id, personnel_id))
-                
-                result = cursor.fetchone()
-                current_score = result[0] if result and result[0] is not None else 0.0
-                faculty_name = result[1] if result else "Unknown Faculty"
-                
-                # 2. Perform INSERT or UPDATE (ON CONFLICT)
-                cursor.execute("""
-                    INSERT INTO faculty_evaluations (
-                        personnel_id, acadcalendar_id, evaluator_type, score, total_responses, last_updated, class_id
-                    ) VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP, 0)
-                    ON CONFLICT (personnel_id, acadcalendar_id, class_id, evaluator_type)
-                    DO UPDATE SET
-                        score = EXCLUDED.score,
-                        last_updated = CURRENT_TIMESTAMP
-                """, (
-                    personnel_id,
-                    term_id,
-                    'peer',
-                    float(peer_score),
-                    1 # Manually set responses to 1 for manual entry to count
-                ))
-                updated_count += 1
-                
-                # 3. Log Audit Action
-                log_audit_action(
-                    hr_personnel_id,
-                    "Manual Evaluation Score Update",
-                    f"HR manually set Peer Score for {faculty_name} (Term ID: {term_id})",
-                    before_value=f"Peer Score: {float(current_score):.2f}",
-                    after_value=f"Peer Score: {float(peer_score):.2f}"
-                )
-                
-        conn.commit()
-        cursor.close()
-        db_pool.return_connection(conn)
-        
+                # Peer scores are system-generated from peer_evaluation_submissions
+                # and cannot be manually overridden to preserve data integrity.
+                print(f"⚠️  [EVAL UPDATE] Rejected manual peer score edit for personnel "
+                      f"{personnel_id} — peer scores are managed by peer_evaluation_submissions.")
+
         return jsonify({
-            'success': True,
-            'message': f'Successfully updated {updated_count} Peer Score record(s).',
-            'updated_count': updated_count
+            'success': False,
+            'message': 'Peer scores cannot be manually edited. They are automatically '
+                       'calculated from submitted peer evaluations.',
+            'updated_count': 0
         })
-        
+
     except Exception as e:
-        print(f"Error updating evaluation score: {e}")
+        print(f"Error in update evaluation score: {e}")
         import traceback
         traceback.print_exc()
-        if conn:
-            conn.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -8420,10 +8432,11 @@ def api_hr_new_evaluation_cycle():
 def fetch_evaluations():
     
     # Define all data sources
+    # NOTE: Peer evaluations are handled in-app via peer_evaluation_submissions
+    # and are NOT sourced from Google Sheets. Do not add peer here.
     sources = [
         {'type': 'student', 'fetcher': get_students_score_records},
         {'type': 'supervisor', 'fetcher': get_supervisors_score_records},
-        {'type': 'peer', 'fetcher': get_peers_score_records}
     ]
 
     total_updated = 0
@@ -8440,43 +8453,75 @@ def fetch_evaluations():
 
             for row in records:
                 
-                # 1. Safely retrieve Class ID. Defaults to 0 if the key is missing from the dictionary.
-                class_id_raw = row.get('Class ID', 0)
+                # 1. Safely retrieve Class ID.
+                # Student evals have a real class_id from Sheets.
+                # Supervisor evals use 0 or blank in Sheets — treat as NULL
+                # since supervisors evaluate the person, not a specific class.
+                class_id_raw = row.get('Class ID', None)
                 try:
-                    class_id = int(class_id_raw) if class_id_raw else 0
+                    class_id = int(class_id_raw) if class_id_raw else None
                 except (ValueError, TypeError):
-                    class_id = 0
-                
-                # 2. Extract Qualitative Feedback (NEW)
-                qualitative_feedback = row.get('Qualitative Feedback') # Expecting this column from Sheets
-                if qualitative_feedback == '':
-                    qualitative_feedback = None # Ensure empty strings are stored as NULL
+                    class_id = None
+
+                # Force supervisor class_id to NULL regardless of what Sheets sends
+                if source['type'] == 'supervisor':
+                    class_id = None
+
+                # 2. Extract Qualitative Feedback
+                qualitative_feedback = row.get('Qualitative Feedback') or None
 
                 # Ensure Personnel and Semester IDs are present
                 if not row.get('Faculty Personnel ID') or not row.get('Semester_AY ID'):
                     print(f"    - [Record] 🛑 SKIP: Missing Faculty ID or Semester ID in {source['type']} row.")
                     continue
-                
-                # Database insertion logic
-                cursor.execute("""
-                    INSERT INTO faculty_evaluations (
-                        personnel_id, acadcalendar_id, class_id, evaluator_type, score, total_responses, qualitative_feedback
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (personnel_id, acadcalendar_id, class_id, evaluator_type)
-                    DO UPDATE SET 
-                        score=EXCLUDED.score, 
-                        total_responses=EXCLUDED.total_responses, 
-                        qualitative_feedback=EXCLUDED.qualitative_feedback, -- NEW: Update feedback
-                        last_updated=CURRENT_TIMESTAMP
-                """, (
-                    row['Faculty Personnel ID'],
-                    row['Semester_AY ID'],
-                    class_id,                 
-                    source['type'], 
-                    row['Score'],
-                    row['Total Responses'],
-                    qualitative_feedback      
-                ))
+
+                # Database insertion logic.
+                # Uses two partial indexes created after schema migration:
+                #   uq_faculty_evaluation_key_class  WHERE class_id IS NOT NULL  (student)
+                #   uq_faculty_evaluation_key_peer   WHERE class_id IS NULL       (supervisor)
+                if class_id is not None:
+                    cursor.execute("""
+                        INSERT INTO faculty_evaluations (
+                            personnel_id, acadcalendar_id, class_id, evaluator_type,
+                            score, total_responses, qualitative_feedback
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (personnel_id, acadcalendar_id, class_id, evaluator_type)
+                        WHERE class_id IS NOT NULL
+                        DO UPDATE SET
+                            score                = EXCLUDED.score,
+                            total_responses      = EXCLUDED.total_responses,
+                            qualitative_feedback = EXCLUDED.qualitative_feedback,
+                            last_updated         = CURRENT_TIMESTAMP
+                    """, (
+                        row['Faculty Personnel ID'],
+                        row['Semester_AY ID'],
+                        class_id,
+                        source['type'],
+                        row['Score'],
+                        row['Total Responses'],
+                        qualitative_feedback
+                    ))
+                else:
+                    cursor.execute("""
+                        INSERT INTO faculty_evaluations (
+                            personnel_id, acadcalendar_id, class_id, evaluator_type,
+                            score, total_responses, qualitative_feedback
+                        ) VALUES (%s, %s, NULL, %s, %s, %s, %s)
+                        ON CONFLICT (personnel_id, acadcalendar_id, evaluator_type)
+                        WHERE class_id IS NULL
+                        DO UPDATE SET
+                            score                = EXCLUDED.score,
+                            total_responses      = EXCLUDED.total_responses,
+                            qualitative_feedback = EXCLUDED.qualitative_feedback,
+                            last_updated         = CURRENT_TIMESTAMP
+                    """, (
+                        row['Faculty Personnel ID'],
+                        row['Semester_AY ID'],
+                        source['type'],
+                        row['Score'],
+                        row['Total Responses'],
+                        qualitative_feedback
+                    ))
                 total_updated += 1
             
         conn.commit()
