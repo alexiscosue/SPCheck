@@ -68,6 +68,8 @@
           <div class="legend-item"><span class="legend-dot present"></span><span>Present</span></div>
           <div class="legend-item"><span class="legend-dot late"></span><span>Late</span></div>
           <div class="legend-item"><span class="legend-dot absent"></span><span>Absent</span></div>
+          <div class="legend-item"><span class="legend-dot excused"></span><span>Excused</span></div>
+          <div class="legend-item"><span class="legend-dot scheduled"></span><span>Scheduled</span></div>
         </div>
       </div>
 
@@ -126,7 +128,7 @@
 
           <!-- Trend Chart -->
           <div class="card" style="padding:14px">
-            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Attendance Trends Across Weeks</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Attendance Trends — Weeks of Selected Semester</div>
             <div style="position:relative;height:340px">
               <canvas id="analyticsTrendChart"></canvas>
             </div>
@@ -141,6 +143,38 @@
             <div id="analyticsDistLegend" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center"></div>
           </div>
 
+        </div>
+
+        <!-- Class Breakdown Table -->
+        <div style="margin-top:20px">
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Class Breakdown — Selected Semester</div>
+          <div class="search-filter">
+            <input type="text" id="cbSearch" placeholder="Search by subject or section…">
+          </div>
+          <div class="pagination-controls">
+            <button id="cbPrev" class="pagination-btn">‹</button>
+            <span id="cbPageInfo">0 records</span>
+            <button id="cbNext" class="pagination-btn">›</button>
+          </div>
+          <div class="table">
+            <table class="attendance-table" id="cbTable">
+              <thead>
+                <tr>
+                  <th style="cursor:pointer" data-sort-cb="subject_code">Subject <span class="cb-sort-icon">↕</span></th>
+                  <th style="cursor:pointer" data-sort-cb="section">Section <span class="cb-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-cb="present">Present <span class="cb-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-cb="late">Late <span class="cb-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-cb="absent">Absent <span class="cb-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-cb="excused">Excused <span class="cb-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-cb="total">Total <span class="cb-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-cb="rate">Rate <span class="cb-sort-icon">↑</span></th>
+                </tr>
+              </thead>
+              <tbody id="cbBody">
+                <tr><td colspan="8" style="text-align:center;padding:2rem;color:#6b7280">Select a semester to view breakdown</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
 
       </div>
@@ -272,6 +306,8 @@
   // ── State ──────────────────────────────────────────────────────
   let logs = [];
   let classAttendance = [];
+  let scheduleData = [];
+  let semesterEnd = null;
   let currentPage = 1;
   let recordsPerPage = 10;
   let filteredLogs = [];
@@ -351,6 +387,13 @@
       if (data.success) {
         logs = data.attendance_logs || [];
         classAttendance = data.class_attendance || [];
+        scheduleData = data.schedules || [];
+        const se = data.semester_info && data.semester_info.semesterend;
+        semesterEnd = se ? (function(s){
+          // Normalize: handles "YYYY-MM-DD", "YYYY-MM-DD HH:MM:SS", "YYYY-MM-DDTHH:MM:SS"
+          const p = s.slice(0, 10).split('-');
+          return new Date(+p[0], +p[1]-1, +p[2]);
+        })(se) : null;
         currentPage = 1;
         renderLogs();
         renderCalendar();
@@ -465,12 +508,42 @@
         dot.appendChild(tooltip);
         dotsContainer.appendChild(dot);
       });
+
+      // Grey dots for future scheduled classes
+      const today = new Date(); today.setHours(0,0,0,0);
+      const dayDate = new Date(year, month, i);
+      if (dayDate > today && (!semesterEnd || dayDate <= semesterEnd)) {
+        const weekdayMap = { Sunday:0, Monday:1, Tuesday:2, Wednesday:3, Thursday:4, Friday:5, Saturday:6 };
+        const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+        scheduleData.forEach(sched => {
+          const slots = [];
+          if (sched.classday_1) slots.push({ day: sched.classday_1, start: sched.starttime_1, end: sched.endtime_1 });
+          if (sched.classday_2) slots.push({ day: sched.classday_2, start: sched.starttime_2, end: sched.endtime_2 });
+          slots.forEach(({ day, start, end }) => {
+            if (weekdayMap[day] !== dayDate.getDay()) return;
+            const className = `${sched.subjectcode} - ${sched.subjectname}`;
+            const hasRecord = logs.some(r => r.date === dateStr && r.class_name === className);
+            if (!hasRecord) {
+              const dot = document.createElement('span');
+              dot.className = 'status-dot scheduled';
+              const tooltip = document.createElement('div');
+              tooltip.className = 'dot-tooltip';
+              tooltip.innerHTML = `<strong>Scheduled</strong><br>${className}<br>${sched.classroom || 'N/A'}<br>${sched.classsection || 'N/A'}<br>${convertTo12Hour(start)} – ${convertTo12Hour(end)}`;
+              dot.addEventListener('mouseenter', () => tooltip.classList.add('show'));
+              dot.addEventListener('mouseleave', () => tooltip.classList.remove('show'));
+              dot.appendChild(tooltip);
+              dotsContainer.appendChild(dot);
+            }
+          });
+        });
+      }
+
       div.appendChild(dotsContainer);
       cal.appendChild(div);
     }
   }
 
-  // ── Analytics (mirrors HR analytics tab exactly) ───────────────
+  // ── Analytics ──────────────────────────────────────────────────
 
   async function loadAnalyticsSemesters() {
     try {
@@ -482,17 +555,19 @@
       sel.innerHTML = '';
 
       const semesters = data.semesters || [];
+      const currentId = data.current_semester_id ? String(data.current_semester_id) : null;
+
       semesters.forEach(function(sem) {
         const opt = document.createElement('option');
         opt.value = sem.id;
-        opt.textContent = sem.text;
-        if (sem.is_current) opt.selected = true;
+        opt.textContent = sem.is_current ? sem.text + ' (Current)' : sem.text;
         sel.appendChild(opt);
       });
 
-      if (!sel.value && semesters.length > 0) {
-        sel.value = semesters[0].id;
-      }
+      // Default: current semester by date, fallback to first
+      sel.value = (currentId && sel.querySelector('option[value="' + currentId + '"]'))
+        ? currentId
+        : (semesters.length > 0 ? String(semesters[0].id) : '');
 
       fetchAnalytics(sel.value);
 
@@ -513,12 +588,103 @@
       const data = await resp.json();
       if (!data.success) return;
 
+      // Sync selector if backend resolved a different semester
+      if (data.selected_semester_id) {
+        const sel = document.getElementById('analyticsSemesterSelect');
+        if (sel && !semesterId) sel.value = String(data.selected_semester_id);
+      }
+
       updateAnalyticsKPIs(data.analytics_kpis);
       renderAnalyticsTrend(data.trends);
       renderAnalyticsDist(data.distribution);
+      renderClassBreakdown(data.class_breakdown || []);
     } catch (e) {
       console.error('Error fetching analytics:', e);
     }
+  }
+
+  // ── Class Breakdown ────────────────────────────────────────────
+  let cbAllData  = [];
+  let cbFiltered = [];
+  let cbPage     = 1;
+  const cbPerPage = 10;
+  let cbSort     = { column: 'rate', direction: 'asc' };
+
+  function renderClassBreakdown(breakdown) {
+    cbAllData = breakdown || [];
+    cbPage    = 1;
+    cbSort    = { column: 'rate', direction: 'asc' };
+    document.getElementById('cbSearch').value = '';
+    applyCbFilters();
+    updateCbSortIcons();
+  }
+
+  function applyCbFilters() {
+    const q = document.getElementById('cbSearch').value.toLowerCase();
+    cbFiltered = cbAllData.filter(function(r) {
+      return !q ||
+        r.subject_code.toLowerCase().includes(q) ||
+        r.subject_name.toLowerCase().includes(q) ||
+        r.section.toLowerCase().includes(q);
+    });
+    cbFiltered = cbFiltered.slice().sort(function(a, b) {
+      let av = a[cbSort.column], bv = b[cbSort.column];
+      if (typeof av === 'string') av = av.toLowerCase();
+      if (typeof bv === 'string') bv = bv.toLowerCase();
+      if (av < bv) return cbSort.direction === 'asc' ? -1 : 1;
+      if (av > bv) return cbSort.direction === 'asc' ?  1 : -1;
+      return 0;
+    });
+    renderCbPage();
+  }
+
+  function renderCbPage() {
+    const tbody = document.getElementById('cbBody');
+    const total = cbFiltered.length;
+    const totalPages = Math.max(1, Math.ceil(total / cbPerPage));
+    if (cbPage > totalPages) cbPage = totalPages;
+    const start = (cbPage - 1) * cbPerPage;
+    const slice = cbFiltered.slice(start, start + cbPerPage);
+
+    if (slice.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:#6b7280">' +
+        (cbAllData.length === 0 ? 'No data for this semester' : 'No records match your search') +
+        '</td></tr>';
+    } else {
+      tbody.innerHTML = slice.map(function(r) {
+        const rate = r.rate;
+        const rateColor = rate >= 80 ? '#16a34a' : rate >= 60 ? '#92400e' : '#b91c1c';
+        const rateBg    = rate >= 80 ? '#d1fae5' : rate >= 60 ? '#fef3c7' : '#fee2e2';
+        return '<tr>' +
+          '<td>' + r.subject_code + ' — ' + r.subject_name + '</td>' +
+          '<td>' + r.section + '</td>' +
+          '<td style="text-align:center">' + r.present + '</td>' +
+          '<td style="text-align:center">' + r.late + '</td>' +
+          '<td style="text-align:center">' + r.absent + '</td>' +
+          '<td style="text-align:center">' + r.excused + '</td>' +
+          '<td style="text-align:center">' + r.total + '</td>' +
+          '<td style="text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;background:' +
+          rateBg + ';color:' + rateColor + '">' + rate.toFixed(1) + '%</span></td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    const from = total === 0 ? 0 : start + 1;
+    const to   = Math.min(start + cbPerPage, total);
+    document.getElementById('cbPageInfo').textContent =
+      total === 0 ? '0 records' : from + '–' + to + ' of ' + total;
+    document.getElementById('cbPrev').disabled = cbPage <= 1;
+    document.getElementById('cbNext').disabled = cbPage >= totalPages;
+  }
+
+  function updateCbSortIcons() {
+    document.querySelectorAll('#cbTable th[data-sort-cb]').forEach(function(th) {
+      const icon = th.querySelector('.cb-sort-icon');
+      const col  = th.getAttribute('data-sort-cb');
+      icon.textContent = col === cbSort.column
+        ? (cbSort.direction === 'asc' ? '↑' : '↓')
+        : '↕';
+    });
   }
 
   function updateAnalyticsKPIs(kpis) {
@@ -667,6 +833,24 @@
   document.getElementById('semesterSelect').addEventListener('change', e => {
     const id = e.target.value;
     if (id && id !== currentSemesterId) { currentSemesterId = id; fetchAttendanceData(id); }
+  });
+  // Class Breakdown listeners
+  document.getElementById('cbSearch').addEventListener('input', () => { cbPage = 1; applyCbFilters(); });
+  document.getElementById('cbPrev').addEventListener('click', () => { cbPage--; renderCbPage(); updateCbSortIcons(); });
+  document.getElementById('cbNext').addEventListener('click', () => { cbPage++; renderCbPage(); updateCbSortIcons(); });
+  document.querySelectorAll('#cbTable th[data-sort-cb]').forEach(function(th) {
+    th.addEventListener('click', function() {
+      const col = th.getAttribute('data-sort-cb');
+      if (cbSort.column === col) {
+        cbSort.direction = cbSort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        cbSort.column = col;
+        cbSort.direction = 'asc';
+      }
+      cbPage = 1;
+      applyCbFilters();
+      updateCbSortIcons();
+    });
   });
 
   // ── Init ───────────────────────────────────────────────────────

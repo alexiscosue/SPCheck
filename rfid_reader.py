@@ -80,6 +80,41 @@ class RFIDReader:
     # Business logic (unchanged from original)
     # ------------------------------------------------------------------
 
+    def _auto_record_biometric_entry(self, cursor, personnel_id, current_time, subject_code):
+        """Auto-record a biometric Entry when RFID time-in is detected but no biometric scan exists today."""
+        try:
+            cursor.execute("SELECT biometric_id FROM biometric WHERE personnel_id = %s", (personnel_id,))
+            bio_result = cursor.fetchone()
+            if not bio_result:
+                print(f"No biometric record for personnel {personnel_id}, skipping override")
+                return
+
+            biometric_id = bio_result[0]
+            today_start = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
+
+            cursor.execute("""
+                SELECT biometriclog_id FROM biometriclogs
+                WHERE biometric_id = %s AND taptime >= %s
+                LIMIT 1
+            """, (biometric_id, today_start))
+
+            if cursor.fetchone():
+                print(f"Biometric entry already exists today for personnel {personnel_id}, no override needed")
+                return
+
+            cursor.execute("SELECT COALESCE(MAX(biometriclog_id), 150000) + 1 FROM biometriclogs")
+            new_log_id = cursor.fetchone()[0]
+            day_name = current_time.strftime('%A')
+            remarks = f"[Entry] Auto-recorded via RFID override ({subject_code}) on {day_name}"
+            cursor.execute("""
+                INSERT INTO biometriclogs (biometriclog_id, biometric_id, taptime, status, remarks)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (new_log_id, biometric_id, current_time, "Entry", remarks))
+            cursor.execute("UPDATE biometric SET lastused = %s WHERE biometric_id = %s", (current_time, biometric_id))
+            print(f"🔄 Biometric override: auto-recorded Entry for personnel {personnel_id} ({subject_code})")
+        except Exception as e:
+            print(f"⚠️ Failed to auto-record biometric entry: {e}")
+
     def _log_rfid_tap(self, cursor, rfid_uid, personnel_id, taptime, matched_class_id, status, remarks):
         try:
             cursor.execute("SELECT COALESCE(MAX(log_id), 110000) + 1 FROM rfidlogs")
@@ -282,6 +317,9 @@ class RFIDReader:
                         INSERT INTO attendance (personnel_id, class_id, attendancestatus, timein, timeout)
                         VALUES (%s, %s, %s, %s, NULL)
                     """, (personnel_id, class_id, status, current_time))
+
+                    # Biometrics override: if faculty forgot to scan fingerprint, auto-record their entry
+                    self._auto_record_biometric_entry(cursor, personnel_id, current_time, subject_code)
 
                     try:
                         cursor.execute("SELECT acadcalendar_id FROM schedule WHERE class_id = %s", (class_id,))

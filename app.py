@@ -187,6 +187,37 @@ def update_attendance_report(personnel_id, class_id, acadcalendar_id, conn=None)
             db_pool.return_connection(conn)
 
 
+def create_initial_attendance_report(personnel_id, class_id, acadcalendar_id, conn):
+    """
+    Insert a zero-initialized attendance report row for a newly created class.
+    Safe to call inside an existing transaction (uses the passed conn, never commits).
+    No-op if a row already exists for this personnel/class/semester.
+    """
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT 1 FROM attendancereport
+            WHERE personnel_id = %s AND class_id = %s AND acadcalendar_id = %s
+        """, (personnel_id, class_id, acadcalendar_id))
+        if cursor.fetchone():
+            cursor.close()
+            return
+        cursor.execute("SELECT COALESCE(MAX(attendancereport_id), 130000) + 1 FROM attendancereport")
+        new_id = cursor.fetchone()[0]
+        philippines_tz = pytz.timezone('Asia/Manila')
+        now = datetime.now(philippines_tz)
+        cursor.execute("""
+            INSERT INTO attendancereport (
+                attendancereport_id, personnel_id, class_id, acadcalendar_id,
+                presentcount, latecount, excusedcount, absentcount,
+                totalclasses, attendancerate, lastupdated
+            ) VALUES (%s, %s, %s, %s, 0, 0, 0, 0, 0, 0.0, %s)
+        """, (new_id, personnel_id, class_id, acadcalendar_id, now))
+        cursor.close()
+    except Exception as e:
+        print(f"❌ Error creating initial attendance report: {e}")
+
+
 # ========== CONNECTION POOLING ==========
 from queue import Queue, Empty
 import threading
@@ -1024,11 +1055,11 @@ def require_auth(allowed_roles):
         def wrapper(*args, **kwargs):
             if 'user_id' not in session:
                 return redirect(url_for('login'))
-            
+
             user_role = session.get('user_role')
             if user_role not in allowed_roles:
                 return redirect(url_for('login'))
-            
+
             return func(*args, **kwargs)
         wrapper.__name__ = func.__name__
         return wrapper
@@ -1487,6 +1518,171 @@ def api_biometric_logs():
         if conn:
             db_pool.return_connection(conn)
 
+@app.route('/api/hr/campus-attendance')
+@require_auth([20003])
+def api_campus_attendance():
+    """Read campus attendance records from campus_attendance table."""
+    conn = None
+    cursor = None
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT
+                ca.campus_attendance_id,
+                CONCAT(p.lastname, ', ', p.firstname,
+                    CASE WHEN p.honorifics IS NOT NULL AND p.honorifics <> ''
+                         THEN ', ' || p.honorifics ELSE '' END) AS person_name,
+                ca.attendance_date,
+                ca.session,
+                ca.time_in,
+                ca.time_out,
+                ca.status,
+                c.collegename,
+                pr.position,
+                pr.employmentstatus
+            FROM campus_attendance ca
+            INNER JOIN personnel p ON ca.personnel_id = p.personnel_id
+            LEFT JOIN college c ON p.college_id = c.college_id
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            ORDER BY ca.attendance_date DESC, person_name, ca.session
+        """)
+
+        records = []
+        for row in cursor.fetchall():
+            records.append({
+                'id':                row[0],
+                'name':              row[1],
+                'date':              row[2].isoformat() if row[2] else None,
+                'session':           row[3],
+                'time_in':           row[4].isoformat() if row[4] else None,
+                'time_out':          row[5].isoformat() if row[5] else None,
+                'status':            row[6],
+                'college':           row[7] or 'N/A',
+                'position':          row[8] or 'N/A',
+                'employment_status': row[9] or 'N/A',
+            })
+
+        return {'success': True, 'records': records}
+
+    except Exception as e:
+        print(f"Error fetching campus attendance: {e}")
+        return {'success': False, 'error': str(e)}
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            db_pool.return_connection(conn)
+
+
+@app.route('/api/hr/campus-attendance/sync', methods=['POST'])
+@require_auth([20003])
+def api_sync_campus_attendance():
+    """
+    Compute morning/afternoon sessions from biometriclogs and upsert into
+    campus_attendance. Generates Absent rows for biometric-registered personnel
+    on any date where at least one tap was recorded by anyone.
+    """
+    conn = None
+    cursor = None
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            WITH
+            -- All distinct dates that have any biometric activity
+            active_dates AS (
+                SELECT DISTINCT DATE(taptime AT TIME ZONE 'Asia/Manila') AS attendance_date
+                FROM biometriclogs
+            ),
+            -- All personnel (regardless of teaching load or biometric device)
+            all_faculty AS (
+                SELECT personnel_id
+                FROM personnel
+            ),
+            -- Every (date, person, session) combination we need to evaluate
+            all_combinations AS (
+                SELECT
+                    d.attendance_date,
+                    p.personnel_id,
+                    s.session,
+                    s.window_start,
+                    s.window_end,
+                    s.late_threshold
+                FROM active_dates d
+                CROSS JOIN all_faculty p
+                CROSS JOIN (VALUES
+                    ('Morning',   420,  764, 495),
+                    ('Afternoon', 765, 1065, 825)
+                ) AS s(session, window_start, window_end, late_threshold)
+            ),
+            -- Raw taps with local time in minutes
+            taps AS (
+                SELECT
+                    b.personnel_id,
+                    DATE(bl.taptime AT TIME ZONE 'Asia/Manila')                    AS tap_date,
+                    bl.taptime AT TIME ZONE 'Asia/Manila'                          AS local_dt,
+                    EXTRACT(HOUR  FROM bl.taptime AT TIME ZONE 'Asia/Manila') * 60
+                  + EXTRACT(MINUTE FROM bl.taptime AT TIME ZONE 'Asia/Manila')     AS tap_mins
+                FROM biometriclogs bl
+                INNER JOIN biometric b ON bl.biometric_id = b.biometric_id
+                WHERE b.personnel_id IS NOT NULL
+            ),
+            -- Group first/last tap per (person, date, session)
+            session_agg AS (
+                SELECT
+                    ac.personnel_id,
+                    ac.attendance_date,
+                    ac.session,
+                    ac.late_threshold,
+                    MIN(t.local_dt) AS time_in,
+                    MAX(t.local_dt) AS time_out
+                FROM all_combinations ac
+                LEFT JOIN taps t
+                    ON  t.personnel_id = ac.personnel_id
+                    AND t.tap_date     = ac.attendance_date
+                    AND t.tap_mins BETWEEN ac.window_start AND ac.window_end
+                GROUP BY ac.personnel_id, ac.attendance_date, ac.session, ac.late_threshold
+            )
+            INSERT INTO campus_attendance
+                (personnel_id, attendance_date, session, time_in, time_out, status)
+            SELECT
+                personnel_id,
+                attendance_date,
+                session,
+                time_in,
+                time_out,
+                CASE
+                    WHEN time_in IS NULL THEN 'Absent'
+                    WHEN (EXTRACT(HOUR  FROM time_in) * 60
+                        + EXTRACT(MINUTE FROM time_in)) <= late_threshold THEN 'Present'
+                    ELSE 'Late'
+                END AS status
+            FROM session_agg
+            ON CONFLICT (personnel_id, attendance_date, session)
+            DO UPDATE SET
+                time_in  = EXCLUDED.time_in,
+                time_out = EXCLUDED.time_out,
+                status   = EXCLUDED.status
+        """)
+
+        synced = cursor.rowcount
+        conn.commit()
+        return {'success': True, 'message': f'Synced {synced} records', 'synced': synced}
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"Error syncing campus attendance: {e}")
+        return {'success': False, 'error': str(e)}
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            db_pool.return_connection(conn)
+
 # ==================== END BIOMETRIC API ENDPOINTS ====================
 
 notification_queues = {}
@@ -1494,12 +1690,16 @@ notification_lock = threading.Lock()
 
 def broadcast_notification(personnel_id, notification_data):
     """Broadcast notification to specific personnel, HR, and VP/Pres, and persist to DB."""
+    notif_type = notification_data.get('notification_type', 'rfid')
+    is_scanner_event = notif_type in ('rfid', 'biometric')
+
     # Persist to DB first so each audience row gets its own notif_id
     faculty_notif_id = None
     if personnel_id and personnel_id > 0:
         faculty_notif_id = save_notification_to_db('faculty', personnel_id, notification_data)
     hr_notif_id = save_notification_to_db('hr', None, notification_data)
-    vp_notif_id = save_notification_to_db('vp', None, notification_data)
+    # VP/Pres do not receive biometric or RFID scanner notifications
+    vp_notif_id = None if is_scanner_event else save_notification_to_db('vp', None, notification_data)
 
     with notification_lock:
         if personnel_id and personnel_id > 0 and personnel_id in notification_queues:
@@ -1520,15 +1720,16 @@ def broadcast_notification(personnel_id, notification_data):
                 except Exception as e:
                     print(f"Error putting notification in HR queue: {e}")
 
-        vp_key = 'vp_all_notifications'
-        if vp_key in notification_queues:
-            vp_data = dict(notification_data, notif_id=vp_notif_id)
-            for q in notification_queues[vp_key]:
-                try:
-                    q.put(vp_data)
-                    print(f"✓ Sent notification to VP: {notification_data.get('action', 'unknown')}")
-                except Exception as e:
-                    print(f"Error putting notification in VP queue: {e}")
+        if not is_scanner_event:
+            vp_key = 'vp_all_notifications'
+            if vp_key in notification_queues:
+                vp_data = dict(notification_data, notif_id=vp_notif_id)
+                for q in notification_queues[vp_key]:
+                    try:
+                        q.put(vp_data)
+                        print(f"✓ Sent notification to VP: {notification_data.get('action', 'unknown')}")
+                    except Exception as e:
+                        print(f"Error putting notification in VP queue: {e}")
 
 def handle_rfid_notification(notification_data):
     """Handle RFID notifications from the reader"""
@@ -1828,6 +2029,7 @@ def api_notifications_history():
                        class_section, classroom, tap_time, is_read, created_at
                 FROM notifications
                 WHERE target_audience = 'vp'
+                  AND notification_type NOT IN ('rfid', 'biometric')
                 ORDER BY created_at DESC
                 LIMIT 100
             """)
@@ -1928,7 +2130,7 @@ def api_notifications_clear():
 def api_faculty_semesters():
     """API endpoint to get available semesters - CACHED"""
     cache_key = "all_semesters"
-    cached = get_cached(cache_key, ttl=1800) 
+    cached = get_cached(cache_key, ttl=60)  # Short TTL: is_current depends on eval data
     if cached:
         return cached
     
@@ -1943,10 +2145,15 @@ def api_faculty_semesters():
                 acadyear,
                 semesterstart,
                 semesterend,
-                CASE WHEN CURRENT_DATE BETWEEN semesterstart AND semesterend THEN 1 ELSE 0 END as is_current
-            FROM acadcalendar 
-            ORDER BY acadyear DESC, 
-                     CASE 
+                CASE WHEN CURRENT_DATE BETWEEN semesterstart AND semesterend THEN 1 ELSE 0 END as is_current,
+                -- has_data: 1 if this semester has any evaluation records
+                CASE WHEN EXISTS (
+                    SELECT 1 FROM faculty_evaluations fe
+                    WHERE fe.acadcalendar_id = acadcalendar.acadcalendar_id
+                ) THEN 1 ELSE 0 END as has_data
+            FROM acadcalendar
+            ORDER BY acadyear DESC,
+                     CASE
                          WHEN semester LIKE '%First%' THEN 1
                          WHEN semester LIKE '%Second%' THEN 2
                          ELSE 3
@@ -1959,10 +2166,11 @@ def api_faculty_semesters():
         
         semester_options = []
         current_semester_id = None
-        
+        data_semester_id = None  # most recent semester with actual eval data
+
         for sem in semesters:
-            acadcalendar_id, semester, acadyear, start_date, end_date, is_current = sem
-            
+            acadcalendar_id, semester, acadyear, start_date, end_date, is_current, has_data = sem
+
             if 'Semester' not in semester:
                 if 'First' in semester:
                     semester_display = 'First Semester'
@@ -1974,21 +2182,28 @@ def api_faculty_semesters():
                     semester_display = semester + ' Semester'
             else:
                 semester_display = semester
-            
+
             if 'AY' in acadyear:
                 year_display = acadyear
             else:
                 year_display = f'AY {acadyear}'
-            
+
             display_text = f"{semester_display}, {year_display}"
-            
+
             if is_current and current_semester_id is None:
                 current_semester_id = acadcalendar_id
-            
+
+            # Track the first (most recent) semester that has data
+            if has_data and data_semester_id is None:
+                data_semester_id = acadcalendar_id
+
             semester_options.append({
                 'id': acadcalendar_id,
                 'text': display_text,
-                'is_current': bool(is_current),
+                # Mark as current for the dropdown: prefer semester with data
+                # over the calendar-active semester
+                'is_current': bool(has_data and data_semester_id == acadcalendar_id)
+                              or (not data_semester_id and bool(is_current)),
                 'start_date': start_date.isoformat(),
                 'end_date': end_date.isoformat()
             })
@@ -2022,13 +2237,19 @@ def api_faculty_attendance_by_semester(semester_id):
                 WHERE acadcalendar_id = %s
             ),
             faculty_schedule AS (
-                SELECT 
+                SELECT
                     sch.class_id,
                     sub.subjectcode,
                     sub.subjectname,
                     sub.units,
                     sch.classsection,
-                    sch.classroom
+                    sch.classroom,
+                    sch.classday_1,
+                    sch.starttime_1,
+                    sch.endtime_1,
+                    sch.classday_2,
+                    sch.starttime_2,
+                    sch.endtime_2
                 FROM schedule sch
                 JOIN subjects sub ON sch.subject_id = sub.subject_id
                 JOIN personnel p ON sch.personnel_id = p.personnel_id
@@ -2174,13 +2395,16 @@ def api_faculty_attendance_by_semester(semester_id):
             'id': semester_info_json['acadcalendar_id'],
             'name': semester_info_json['semester'],
             'year': semester_info_json['acadyear'],
-            'display': f"{semester_info_json['semester']}, AY {semester_info_json['acadyear']}"
+            'display': f"{semester_info_json['semester']}, AY {semester_info_json['acadyear']}",
+            'semesterstart': str(semester_info_json.get('semesterstart', '') or ''),
+            'semesterend': str(semester_info_json.get('semesterend', '') or '')
         }
-        
+
         return {
             'success': True,
             'attendance_logs': attendance_logs,
             'class_attendance': class_attendance,
+            'schedules': scheduled_classes,
             'status_breakdown': status_counts,
             'kpis': kpis,
             'semester_info': semester_info
@@ -2195,8 +2419,9 @@ def api_faculty_attendance_by_semester(semester_id):
 @app.route('/api/faculty/attendance-analytics')
 @require_auth([20001, 20002])
 def api_faculty_attendance_analytics():
-    """Attendance analytics for the logged-in faculty: monthly trends + distribution/KPIs for selected semester"""
+    """Attendance analytics for the logged-in faculty: weekly trends for selected semester + class breakdown"""
     try:
+        from datetime import timedelta as _timedelta
         user_id = session['user_id']
         semester_id = request.args.get('semester_id')
 
@@ -2212,39 +2437,7 @@ def api_faculty_attendance_analytics():
             return jsonify({'success': False, 'error': 'Personnel not found'}), 404
         personnel_id = p_row[0]
 
-        # Weekly trends (all history for this faculty, timein covers absent records at midnight)
-        cursor.execute("""
-            SELECT
-                DATE_TRUNC('week', a.timein AT TIME ZONE 'Asia/Manila') AS week,
-                COUNT(*) FILTER (WHERE a.attendancestatus = 'Present')  AS total_present,
-                COUNT(*) FILTER (WHERE a.attendancestatus = 'Late')     AS total_late,
-                COUNT(*) FILTER (WHERE a.attendancestatus = 'Absent')   AS total_absent,
-                COUNT(*) FILTER (WHERE a.attendancestatus = 'Excused')  AS total_excused,
-                COUNT(*) AS total
-            FROM attendance a
-            WHERE a.personnel_id = %s
-              AND a.timein IS NOT NULL
-            GROUP BY DATE_TRUNC('week', a.timein AT TIME ZONE 'Asia/Manila')
-            ORDER BY week ASC
-        """, (personnel_id,))
-        trend_rows = cursor.fetchall()
-        trends = []
-        for row in trend_rows:
-            (week, tot_p, tot_l, tot_a, tot_e, total) = row
-            tot_p = int(tot_p); tot_l = int(tot_l)
-            tot_a = int(tot_a); tot_e = int(tot_e); total = int(total)
-            avg_r = round(((tot_p + tot_e + tot_l * 0.75) / total) * 100, 2) if total > 0 else 0.0
-            label = week.strftime('%b %Y') if week else ''
-            trends.append({
-                'label': label,
-                'total_present': tot_p,
-                'total_late': tot_l,
-                'total_absent': tot_a,
-                'total_excused': tot_e,
-                'avg_rate': avg_r
-            })
-
-        # Resolve selected semester (fallback: current)
+        # Resolve selected semester (fallback: current, then most recent)
         if not semester_id:
             cursor.execute("""
                 SELECT acadcalendar_id FROM acadcalendar
@@ -2254,14 +2447,74 @@ def api_faculty_attendance_analytics():
             result = cursor.fetchone()
             if result:
                 semester_id = result[0]
+            else:
+                cursor.execute("SELECT acadcalendar_id FROM acadcalendar ORDER BY semesterstart DESC LIMIT 1")
+                result = cursor.fetchone()
+                if result:
+                    semester_id = result[0]
+
+        # Get semester date range
+        sem_start = sem_end = None
+        if semester_id:
+            cursor.execute("""
+                SELECT semesterstart, semesterend FROM acadcalendar
+                WHERE acadcalendar_id = %s
+            """, (semester_id,))
+            sem_row = cursor.fetchone()
+            if sem_row:
+                sem_start, sem_end = sem_row
+
+        # Weekly trends filtered to selected semester, all weeks filled
+        trends = []
+        if semester_id and sem_start and sem_end:
+            cursor.execute("""
+                SELECT
+                    DATE_TRUNC('week', a.timein AT TIME ZONE 'Asia/Manila')::date AS week_start,
+                    COUNT(*) FILTER (WHERE a.attendancestatus = 'Present')  AS total_present,
+                    COUNT(*) FILTER (WHERE a.attendancestatus = 'Late')     AS total_late,
+                    COUNT(*) FILTER (WHERE a.attendancestatus = 'Absent')   AS total_absent,
+                    COUNT(*) FILTER (WHERE a.attendancestatus = 'Excused')  AS total_excused,
+                    COUNT(*) AS total
+                FROM attendance a
+                JOIN schedule sch ON a.class_id = sch.class_id
+                WHERE a.personnel_id = %s
+                  AND sch.acadcalendar_id = %s
+                  AND a.timein IS NOT NULL
+                GROUP BY DATE_TRUNC('week', a.timein AT TIME ZONE 'Asia/Manila')::date
+                ORDER BY week_start ASC
+            """, (personnel_id, semester_id))
+            week_data = {}
+            for row in cursor.fetchall():
+                (week_start, tot_p, tot_l, tot_a, tot_e, total) = row
+                tot_p = int(tot_p); tot_l = int(tot_l)
+                tot_a = int(tot_a); tot_e = int(tot_e); total = int(total)
+                avg_r = round(((tot_p + tot_e + tot_l * 0.75) / total) * 100, 2) if total > 0 else 0.0
+                label = week_start.strftime('%b %d') if week_start else ''
+                week_data[label] = {
+                    'label': label,
+                    'total_present': tot_p, 'total_late': tot_l,
+                    'total_absent': tot_a, 'total_excused': tot_e,
+                    'avg_rate': avg_r
+                }
+            # Fill every week in the semester range (zeros if no data)
+            cur_w = sem_start - _timedelta(days=sem_start.weekday())
+            while cur_w <= sem_end:
+                label = cur_w.strftime('%b %d')
+                trends.append(week_data.get(label, {
+                    'label': label, 'total_present': 0, 'total_late': 0,
+                    'total_absent': 0, 'total_excused': 0, 'avg_rate': 0.0
+                }))
+                cur_w += _timedelta(weeks=1)
 
         distribution = {'present': 0, 'late': 0, 'absent': 0, 'excused': 0}
         analytics_kpis = {
             'avg_rate': 0.0, 'total_present': 0, 'total_late': 0,
             'total_absent': 0, 'total_excused': 0
         }
+        class_breakdown = []
 
         if semester_id:
+            # KPIs + distribution
             cursor.execute("""
                 SELECT
                     COALESCE(SUM(ar.presentcount), 0),
@@ -2286,11 +2539,37 @@ def api_faculty_attendance_analytics():
                 }
                 analytics_kpis = {
                     'avg_rate': float(avg_r),
-                    'total_present': int(tot_p),
-                    'total_late': int(tot_l),
-                    'total_absent': int(tot_a),
-                    'total_excused': int(tot_e)
+                    'total_present': int(tot_p), 'total_late': int(tot_l),
+                    'total_absent': int(tot_a), 'total_excused': int(tot_e)
                 }
+
+            # Per-class breakdown for this faculty
+            cursor.execute("""
+                SELECT
+                    sub.subjectcode, sub.subjectname,
+                    sch.classsection,
+                    ar.presentcount, ar.latecount, ar.absentcount,
+                    ar.excusedcount, ar.totalclasses, ar.attendancerate
+                FROM attendancereport ar
+                JOIN schedule sch ON ar.class_id = sch.class_id
+                JOIN subjects sub ON sch.subject_id = sub.subject_id
+                WHERE ar.acadcalendar_id = %s
+                  AND ar.personnel_id = %s
+                ORDER BY ar.attendancerate ASC, sub.subjectcode
+            """, (semester_id, personnel_id))
+            for row in cursor.fetchall():
+                (scode, sname, section, pres, late, absent, excused, total, rate) = row
+                class_breakdown.append({
+                    'subject_code': scode,
+                    'subject_name': sname,
+                    'section': section or '—',
+                    'present': int(pres),
+                    'late': int(late),
+                    'absent': int(absent),
+                    'excused': int(excused),
+                    'total': int(total),
+                    'rate': round(float(rate), 2)
+                })
 
         cursor.close()
         db_pool.return_connection(conn)
@@ -2300,6 +2579,7 @@ def api_faculty_attendance_analytics():
             'trends': trends,
             'distribution': distribution,
             'analytics_kpis': analytics_kpis,
+            'class_breakdown': class_breakdown,
             'selected_semester_id': int(semester_id) if semester_id else None
         })
 
@@ -4139,48 +4419,14 @@ def api_hr_faculty_attendance():
 @app.route('/api/hr/attendance-analytics')
 @require_auth([20003])
 def api_hr_attendance_analytics():
-    """Attendance analytics: trends across all semesters + distribution/breakdown for selected semester"""
+    """Attendance analytics: trends by month for selected semester + distribution/breakdown"""
     try:
         semester_id = request.args.get('semester_id')
 
         conn = db_pool.get_connection()
         cursor = conn.cursor()
 
-        # --- Trends: one row per week (all history) ---
-        cursor.execute("""
-            SELECT
-                DATE_TRUNC('week', a.timein AT TIME ZONE 'Asia/Manila') AS week,
-                COUNT(*) FILTER (WHERE a.attendancestatus = 'Present')  AS total_present,
-                COUNT(*) FILTER (WHERE a.attendancestatus = 'Late')     AS total_late,
-                COUNT(*) FILTER (WHERE a.attendancestatus = 'Absent')   AS total_absent,
-                COUNT(*) FILTER (WHERE a.attendancestatus = 'Excused')  AS total_excused,
-                COUNT(*)                                                 AS total
-            FROM attendance a
-            JOIN personnel p ON a.personnel_id = p.personnel_id
-            WHERE p.role_id IN (20001, 20002)
-              AND a.timein IS NOT NULL
-            GROUP BY DATE_TRUNC('week', a.timein AT TIME ZONE 'Asia/Manila')
-            ORDER BY week ASC
-        """)
-
-        trend_rows = cursor.fetchall()
-        trends = []
-        for row in trend_rows:
-            (week, tot_p, tot_l, tot_a, tot_e, total) = row
-            tot_p = int(tot_p); tot_l = int(tot_l)
-            tot_a = int(tot_a); tot_e = int(tot_e); total = int(total)
-            avg_r = round(((tot_p + tot_e + tot_l * 0.75) / total) * 100, 2) if total > 0 else 0.0
-            label = week.strftime('%b %Y') if week else ''
-            trends.append({
-                'label': label,
-                'total_present': tot_p,
-                'total_late': tot_l,
-                'total_absent': tot_a,
-                'total_excused': tot_e,
-                'avg_rate': avg_r
-            })
-
-        # --- Resolve selected semester (fallback: current, then latest) ---
+        # --- 1. Resolve semester first ---
         if not semester_id:
             cursor.execute("""
                 SELECT acadcalendar_id FROM acadcalendar
@@ -4190,8 +4436,78 @@ def api_hr_attendance_analytics():
             result = cursor.fetchone()
             if result:
                 semester_id = result[0]
-            elif trends:
-                semester_id = trends[-1]['semester_id']
+            else:
+                cursor.execute("""
+                    SELECT acadcalendar_id FROM acadcalendar
+                    ORDER BY semesterstart DESC LIMIT 1
+                """)
+                result = cursor.fetchone()
+                if result:
+                    semester_id = result[0]
+
+        # --- 2. Get semester date range ---
+        sem_start = sem_end = None
+        if semester_id:
+            cursor.execute("""
+                SELECT semesterstart, semesterend FROM acadcalendar
+                WHERE acadcalendar_id = %s
+            """, (semester_id,))
+            sem_row = cursor.fetchone()
+            if sem_row:
+                sem_start, sem_end = sem_row
+
+        # --- 3. Trends: by week for the selected semester ---
+        trends = []
+        if semester_id and sem_start and sem_end:
+            cursor.execute("""
+                SELECT
+                    DATE_TRUNC('week', a.timein AT TIME ZONE 'Asia/Manila')::date AS week_start,
+                    COUNT(*) FILTER (WHERE a.attendancestatus = 'Present')  AS total_present,
+                    COUNT(*) FILTER (WHERE a.attendancestatus = 'Late')     AS total_late,
+                    COUNT(*) FILTER (WHERE a.attendancestatus = 'Absent')   AS total_absent,
+                    COUNT(*) FILTER (WHERE a.attendancestatus = 'Excused')  AS total_excused,
+                    COUNT(*)                                                 AS total
+                FROM attendance a
+                JOIN personnel p ON a.personnel_id = p.personnel_id
+                JOIN schedule sch ON a.class_id = sch.class_id
+                WHERE p.role_id IN (20001, 20002)
+                  AND a.timein IS NOT NULL
+                  AND sch.acadcalendar_id = %s
+                GROUP BY DATE_TRUNC('week', a.timein AT TIME ZONE 'Asia/Manila')::date
+                ORDER BY week_start ASC
+            """, (semester_id,))
+
+            week_data = {}
+            for row in cursor.fetchall():
+                (week_start, tot_p, tot_l, tot_a, tot_e, total) = row
+                tot_p = int(tot_p); tot_l = int(tot_l)
+                tot_a = int(tot_a); tot_e = int(tot_e); total = int(total)
+                avg_r = round(((tot_p + tot_e + tot_l * 0.75) / total) * 100, 2) if total > 0 else 0.0
+                label = week_start.strftime('%b %d') if week_start else ''
+                week_data[label] = {
+                    'label': label,
+                    'total_present': tot_p,
+                    'total_late': tot_l,
+                    'total_absent': tot_a,
+                    'total_excused': tot_e,
+                    'avg_rate': avg_r
+                }
+
+            # Fill every week in the semester range (zeros if no data)
+            from datetime import date as _date, timedelta as _timedelta
+            # Snap to Monday of the semester start week
+            cur_w = sem_start - _timedelta(days=sem_start.weekday())
+            while cur_w <= sem_end:
+                label = cur_w.strftime('%b %d')
+                trends.append(week_data.get(label, {
+                    'label': label,
+                    'total_present': 0,
+                    'total_late': 0,
+                    'total_absent': 0,
+                    'total_excused': 0,
+                    'avg_rate': 0.0
+                }))
+                cur_w += _timedelta(weeks=1)
 
         distribution = {'present': 0, 'late': 0, 'absent': 0, 'excused': 0}
         analytics_kpis = {
@@ -4241,7 +4557,8 @@ def api_hr_attendance_analytics():
                     sch.classsection,
                     ar.presentcount, ar.latecount, ar.absentcount,
                     ar.excusedcount, ar.totalclasses, ar.attendancerate,
-                    c.collegename, pr.position, pr.employmentstatus
+                    c.collegename, pr.position, pr.employmentstatus,
+                    ar.personnel_id, ar.class_id
                 FROM attendancereport ar
                 JOIN personnel p  ON ar.personnel_id = p.personnel_id
                 JOIN schedule sch ON ar.class_id     = sch.class_id
@@ -4254,7 +4571,7 @@ def api_hr_attendance_analytics():
             """, (semester_id,))
             for row in cursor.fetchall():
                 (fn, ln, hon, scode, sname, section, pres, late, absent, excused, total, rate,
-                 collegename, position, employmentstatus) = row
+                 collegename, position, employmentstatus, pid, cid) = row
                 name = f"{ln}, {fn}, {hon}" if hon else f"{ln}, {fn}"
                 faculty_breakdown.append({
                     'faculty_name': name,
@@ -4269,7 +4586,9 @@ def api_hr_attendance_analytics():
                     'rate': round(float(rate), 2),
                     'college': collegename or 'N/A',
                     'position': position or 'N/A',
-                    'employment_status': employmentstatus or 'N/A'
+                    'employment_status': employmentstatus or 'N/A',
+                    'personnel_id': pid,
+                    'class_id': cid
                 })
 
         cursor.close()
@@ -6208,7 +6527,9 @@ def api_hr_add_schedule():
             classday_2, starttime_2, endtime_2,
             classroom, semester_id, classsection
         ))
-        
+
+        create_initial_attendance_report(personnel_id, new_class_id, semester_id, conn)
+
         conn.commit()
         cursor.close()
         db_pool.return_connection(conn)
@@ -6268,8 +6589,8 @@ def api_hr_download_schedule_template():
     # Schedule table
     writer.writerow(['Subject Code', 'Day 1', 'Start Time 1', 'End Time 1',
                      'Day 2', 'Start Time 2', 'End Time 2', 'Room', 'Section'])
-    writer.writerow(['CS101', 'Monday',  '07:30', '09:00', 'Wednesday', '07:30', '09:00', 'Room 101', 'CS3A-1'])
-    writer.writerow(['CS102', 'Tuesday', '10:00', '11:30', '',          '',      '',      'Lab A',    'CS3B-1'])
+    writer.writerow(['ELS 100', 'Monday',    '07:30', '09:00', 'Wednesday', '07:30', '09:00', 'LR1',  '51001'])
+    writer.writerow(['ELS 102', 'Tuesday',   '10:00', '13:00', '',          '',      '',      'LR2',  '51002'])
     output.seek(0)
     return Response(
         output.getvalue(),
@@ -6341,6 +6662,47 @@ def api_hr_validate_schedule_csv():
         # ── Helpers ─────────────────────────────────────────────────────────
         valid_days = {'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'}
 
+        # ── Valid section ranges by college ──────────────────────────────────
+        VALID_SECTION_RANGES = [
+            (51000, 51200),   # College of Arts and Sciences
+            (31000, 31160),   # College of Business Administration
+            (83000, 83100),   # College of Computer Studies
+            (45000, 45100),   # College of Criminology
+            (72000, 72100),   # College of Education
+            (21000, 26000),   # College of Engineering
+        ]
+
+        def is_valid_section(s):
+            try:
+                n = int(s)
+                return any(lo <= n <= hi for lo, hi in VALID_SECTION_RANGES)
+            except (ValueError, TypeError):
+                return False
+
+        # ── Valid rooms by group ─────────────────────────────────────────────
+        def _expand_rooms():
+            rooms = set()
+            # CAS / CBA / CCS / COD shared rooms
+            for i in range(1, 33):   rooms.add(f'VR{i}')
+            for i in range(1, 6):    rooms.add(f'LR{i}')
+            for i in range(1, 4):    rooms.add(f'A20{i}')
+            for i in range(1, 6):    rooms.add(f'E10{i}')
+            for i in range(1, 7):    rooms.add(f'E20{i}')
+            for i in range(1, 7):    rooms.add(f'E30{i}')
+            for i in range(1, 3):    rooms.add(f'X10{i}')
+            for i in range(1, 5):    rooms.add(f'HS20{i}')
+            rooms.update({'SPEECHLAB', 'HL-RM'})
+            # COC rooms
+            rooms.update({'C-CL', 'C-AVR', 'C-MC', 'C-LWA',
+                          'CRIM 1-1', 'CRIM 1-2', 'CRIM 1-3',
+                          'CRIM 2-1', 'CRIM 2-2',
+                          'Chem Lab', 'KR'})
+            # COE (Engineering) rooms
+            rooms.update({'ALAB', 'EL1', 'EL2', 'EL3', 'SHOP'})
+            return rooms
+
+        VALID_ROOMS = _expand_rooms()
+
         def parse_time(t):
             if not t or not t.strip():
                 return None, None
@@ -6364,6 +6726,18 @@ def api_hr_validate_schedule_csv():
             except Exception:
                 return 0
 
+        def fmt_time(t):
+            """Format a DB time value (e.g. '07:30:00+08') to '7:30 AM'."""
+            if not t:
+                return str(t)
+            try:
+                h, m = int(str(t).split('+')[0].split(':')[0]), int(str(t).split('+')[0].split(':')[1])
+                suffix = 'AM' if h < 12 else 'PM'
+                h12 = h % 12 or 12
+                return f'{h12}:{m:02d} {suffix}'
+            except Exception:
+                return str(t)
+
         def overlaps(d_a, s_a, e_a, d_b, s_b, e_b):
             return (d_a and d_b and d_a == d_b and s_a and e_a and s_b and e_b and
                     to_minutes(s_a) < to_minutes(e_b) and to_minutes(e_a) > to_minutes(s_b))
@@ -6373,8 +6747,10 @@ def api_hr_validate_schedule_csv():
         cursor = conn.cursor()
 
         cursor.execute(
-            "SELECT personnel_id, firstname || ' ' || lastname "
-            "FROM personnel WHERE LOWER(lastname) = LOWER(%s) AND LOWER(firstname) = LOWER(%s)",
+            "SELECT p.personnel_id, p.firstname || ' ' || p.lastname, "
+            "p.college_id, c.collegename "
+            "FROM personnel p LEFT JOIN college c ON p.college_id = c.college_id "
+            "WHERE LOWER(p.lastname) = LOWER(%s) AND LOWER(p.firstname) = LOWER(%s)",
             (last_name, first_name))
         person = cursor.fetchone()
         if not person:
@@ -6385,6 +6761,8 @@ def api_hr_validate_schedule_csv():
                                      f'Check the spelling of the name.'})
         personnel_id = person[0]
         faculty_display = person[1]
+        faculty_college_id = person[2]
+        faculty_college_name = person[3] or 'Unknown College'
 
         # ── Subject cache ────────────────────────────────────────────────────
         subject_cache = {}
@@ -6393,7 +6771,9 @@ def api_hr_validate_schedule_csv():
             if code in subject_cache:
                 return subject_cache[code]
             cursor.execute(
-                "SELECT subject_id, units, subjectname FROM subjects WHERE subjectcode = %s",
+                "SELECT s.subject_id, s.units, s.subjectname, s.college_id, c.collegename "
+                "FROM subjects s LEFT JOIN college c ON s.college_id = c.college_id "
+                "WHERE s.subjectcode = %s",
                 (code,))
             row = cursor.fetchone()
             subject_cache[code] = row  # may be None
@@ -6433,6 +6813,22 @@ def api_hr_validate_schedule_csv():
             if not classroom:     errors.append('Room is required')
             if not classsection:  errors.append('Section is required')
 
+            # Section validation
+            if classsection and not is_valid_section(classsection):
+                errors.append(
+                    f"Section '{classsection}' is not a valid section number. "
+                    "Must be a numeric code within a recognised college range "
+                    "(e.g. 51001 for CAS, 31001 for CBA, 83001 for CCS, "
+                    "45001 for COC, 72001 for COEd, 21001 for COE)."
+                )
+
+            # Room validation
+            if classroom and classroom not in VALID_ROOMS:
+                errors.append(
+                    f"Room '{classroom}' is not in the official room list. "
+                    "Please check the room name (e.g. LR1, VR5, E101, SPEECHLAB, CRIM 1-1, ALAB)."
+                )
+
             # Day name validation
             if classday_1 and classday_1 not in valid_days:
                 errors.append(f"Day 1 '{classday_1}' is not valid — use Monday, Tuesday, … Sunday")
@@ -6463,16 +6859,54 @@ def api_hr_validate_schedule_csv():
             if starttime_2 and endtime_2 and to_minutes(starttime_2) >= to_minutes(endtime_2):
                 errors.append('Start Time 2 must be earlier than End Time 2')
 
+            # 30-minute boundary check (no 15-minute intervals)
+            for t_val, label in [(starttime_1, 'Start Time 1'), (endtime_1, 'End Time 1'),
+                                  (starttime_2, 'Start Time 2'), (endtime_2, 'End Time 2')]:
+                if t_val:
+                    t_min = int(t_val.split(':')[1])
+                    if t_min not in (0, 30):
+                        errors.append(
+                            f'{label}: Times must be on the hour or half-hour (e.g. 07:00, 07:30) '
+                            f'— :{t_min:02d} is not a valid interval'
+                        )
+
             # Subject lookup
             subject_id = None
             subject_name = subject_code
+            subject_units = None
             if subject_code:
                 subj = lookup_subject(subject_code)
                 if subj:
                     subject_id = subj[0]
+                    subject_units = subj[1]
                     subject_name = subj[2]
+                    subject_college_id = subj[3]
+                    subject_college_name = subj[4] or 'Unknown College'
+                    # College mismatch check
+                    if faculty_college_id and subject_college_id and faculty_college_id != subject_college_id:
+                        errors.append(
+                            f'Subject "{subject_code}" belongs to {subject_college_name} but '
+                            f'{faculty_display} is from {faculty_college_name}. '
+                            f'Faculty may only be assigned subjects from their own college.'
+                        )
                 else:
                     errors.append(f'Subject code "{subject_code}" was not found in the system')
+
+            # Units validation: total scheduled time must equal subject units × 60 minutes
+            if subject_units is not None and starttime_1 and endtime_1:
+                day1_mins = to_minutes(endtime_1) - to_minutes(starttime_1)
+                day2_mins = (to_minutes(endtime_2) - to_minutes(starttime_2)) if (starttime_2 and endtime_2) else 0
+                total_mins = day1_mins + day2_mins
+                expected_mins = round(float(subject_units) * 60)
+                if total_mins != expected_mins:
+                    total_hrs = total_mins / 60
+                    exp_hrs = float(subject_units)
+                    errors.append(
+                        f'Total scheduled time ({total_hrs:.1f} hr{"s" if total_hrs != 1 else ""}) does not match '
+                        f'subject units ({subject_units} unit{"s" if float(subject_units) != 1 else ""} '
+                        f'= {exp_hrs:.1f} hr{"s" if exp_hrs != 1 else ""} per week). '
+                        f'Adjust the time slots to total {exp_hrs:.1f} hr{"s" if exp_hrs != 1 else ""} across all days.'
+                    )
 
             # Internal conflict: day1 == day2 overlapping
             if (not errors and classday_1 and classday_2 and classday_1 == classday_2
@@ -6490,7 +6924,7 @@ def api_hr_validate_schedule_csv():
                       AND s.classday_1 = %s AND s.starttime_1 < %s AND s.endtime_1 > %s
                 """, (personnel_id, semester_id, classday_1, endtime_1, starttime_1))
                 for c in cursor.fetchall():
-                    errors.append(f'Conflicts with existing schedule: {c[0]} on {c[1]} {c[2]}–{c[3]} (Section {c[4]})')
+                    errors.append(f'Conflicts with existing schedule: {c[0]} on {c[1]} {fmt_time(c[2])} – {fmt_time(c[3])} (Section {c[4]})')
 
                 cursor.execute("""
                     SELECT sub.subjectcode, s.classday_2, s.starttime_2, s.endtime_2, s.classsection
@@ -6499,7 +6933,7 @@ def api_hr_validate_schedule_csv():
                       AND s.classday_2 = %s AND s.starttime_2 < %s AND s.endtime_2 > %s
                 """, (personnel_id, semester_id, classday_1, endtime_1, starttime_1))
                 for c in cursor.fetchall():
-                    errors.append(f'Conflicts with existing schedule: {c[0]} on {c[1]} {c[2]}–{c[3]} (Section {c[4]})')
+                    errors.append(f'Conflicts with existing schedule: {c[0]} on {c[1]} {fmt_time(c[2])} – {fmt_time(c[3])} (Section {c[4]})')
 
                 if classday_2 and starttime_2 and endtime_2:
                     cursor.execute("""
@@ -6509,7 +6943,7 @@ def api_hr_validate_schedule_csv():
                           AND s.classday_1 = %s AND s.starttime_1 < %s AND s.endtime_1 > %s
                     """, (personnel_id, semester_id, classday_2, endtime_2, starttime_2))
                     for c in cursor.fetchall():
-                        errors.append(f'Conflicts with existing schedule: {c[0]} on {c[1]} {c[2]}–{c[3]} (Section {c[4]})')
+                        errors.append(f'Conflicts with existing schedule: {c[0]} on {c[1]} {fmt_time(c[2])} – {fmt_time(c[3])} (Section {c[4]})')
 
                     cursor.execute("""
                         SELECT sub.subjectcode, s.classday_2, s.starttime_2, s.endtime_2, s.classsection
@@ -6518,7 +6952,7 @@ def api_hr_validate_schedule_csv():
                           AND s.classday_2 = %s AND s.starttime_2 < %s AND s.endtime_2 > %s
                     """, (personnel_id, semester_id, classday_2, endtime_2, starttime_2))
                     for c in cursor.fetchall():
-                        errors.append(f'Conflicts with existing schedule: {c[0]} on {c[1]} {c[2]}–{c[3]} (Section {c[4]})')
+                        errors.append(f'Conflicts with existing schedule: {c[0]} on {c[1]} {fmt_time(c[2])} – {fmt_time(c[3])} (Section {c[4]})')
 
             # Inter-row conflict (within this file)
             if not errors and starttime_1 and endtime_1:
@@ -6617,6 +7051,7 @@ def api_hr_import_schedule_csv():
         base_id = cursor.fetchone()[0]
 
         for i, row in enumerate(rows):
+            new_class_id = base_id + 1 + i
             cursor.execute("""
                 INSERT INTO schedule (
                     class_id, personnel_id, subject_id,
@@ -6625,12 +7060,13 @@ def api_hr_import_schedule_csv():
                     classroom, acadcalendar_id, classsection
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
-                base_id + 1 + i,
+                new_class_id,
                 row['personnel_id'], row['subject_id'],
                 row['classday_1'], row['starttime_1'], row['endtime_1'],
                 row.get('classday_2'), row.get('starttime_2'), row.get('endtime_2'),
                 row['classroom'], semester_id, row['classsection'],
             ))
+            create_initial_attendance_report(row['personnel_id'], new_class_id, semester_id, conn)
 
         conn.commit()
 
@@ -6750,97 +7186,94 @@ def api_hr_delete_schedule_classes(personnel_id):
 @app.route('/api/hr/delete-schedule', methods=['POST'])
 @require_auth([20003])
 def api_hr_delete_schedule():
-    """Delete schedule and all associated attendance records AND attendance reports"""
+    """Delete one or more schedules and all associated attendance records / reports"""
     try:
         data = request.get_json()
-        class_id = data.get('class_id')
-        
-        if not class_id:
-            return {'success': False, 'error': 'Class ID is required'}
-        
+
+        # Accept either a single class_id (legacy) or a class_ids list
+        class_ids = data.get('class_ids') or []
+        if not class_ids and data.get('class_id'):
+            class_ids = [data['class_id']]
+        if not class_ids:
+            return {'success': False, 'error': 'At least one Class ID is required'}
+
         conn = db_pool.get_connection()
         cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT 
-                s.class_id,
-                sub.subjectcode,
-                sub.subjectname,
-                s.classsection,
-                s.classday_1,
-                s.starttime_1,
-                s.endtime_1,
-                s.classday_2,
-                s.starttime_2,
-                s.endtime_2,
-                p.firstname,
-                p.lastname,
-                p.honorifics
-            FROM schedule s
-            JOIN subjects sub ON s.subject_id = sub.subject_id
-            JOIN personnel p ON s.personnel_id = p.personnel_id
-            WHERE s.class_id = %s
-        """, (class_id,))
-        
-        schedule_result = cursor.fetchone()
-        
-        if not schedule_result:
-            cursor.close()
-            db_pool.return_connection(conn)
-            return {'success': False, 'error': 'Schedule not found'}
-        
-        (class_id, subjectcode, subjectname, classsection, classday_1, starttime_1, endtime_1,
-         classday_2, starttime_2, endtime_2, firstname, lastname, honorifics) = schedule_result
-        
-        faculty_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
-        
-        cursor.execute("SELECT COUNT(*) FROM attendance WHERE class_id = %s", (class_id,))
-        attendance_count = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT COUNT(*) FROM attendancereport WHERE class_id = %s", (class_id,))
-        attendance_report_count = cursor.fetchone()[0]
+
+        total_attendance = 0
+        total_reports = 0
+        audit_lines = []
+
         cursor.execute("BEGIN")
-        
-        # Delete records in the correct order to respect foreign key constraints:
-        # 1. First delete attendance reports (they reference the class_id)
-        cursor.execute("DELETE FROM attendancereport WHERE class_id = %s", (class_id,))
-        
-        # 2. Then delete attendance records
-        cursor.execute("DELETE FROM attendance WHERE class_id = %s", (class_id,))
-        
-        # 3. Finally delete the schedule record
-        cursor.execute("DELETE FROM schedule WHERE class_id = %s", (class_id,))
-        
+        for cid in class_ids:
+            cursor.execute("""
+                SELECT s.class_id, sub.subjectcode, sub.subjectname,
+                       s.classsection, s.classday_1, s.starttime_1, s.endtime_1,
+                       s.classday_2, s.starttime_2, s.endtime_2,
+                       p.firstname, p.lastname, p.honorifics
+                FROM schedule s
+                JOIN subjects sub ON s.subject_id = sub.subject_id
+                JOIN personnel p   ON s.personnel_id = p.personnel_id
+                WHERE s.class_id = %s
+            """, (cid,))
+            row = cursor.fetchone()
+            if not row:
+                continue
+
+            (cid, subjectcode, subjectname, classsection,
+             classday_1, starttime_1, endtime_1,
+             classday_2, starttime_2, endtime_2,
+             firstname, lastname, honorifics) = row
+
+            faculty_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
+
+            cursor.execute("SELECT COUNT(*) FROM attendance WHERE class_id = %s", (cid,))
+            att_count = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM attendancereport WHERE class_id = %s", (cid,))
+            rep_count = cursor.fetchone()[0]
+
+            cursor.execute("DELETE FROM attendancereport WHERE class_id = %s", (cid,))
+            cursor.execute("DELETE FROM attendance      WHERE class_id = %s", (cid,))
+            cursor.execute("DELETE FROM schedule        WHERE class_id = %s", (cid,))
+
+            total_attendance += att_count
+            total_reports    += rep_count
+
+            sched_info = f"{subjectcode} - {subjectname} | Section {classsection}"
+            if classday_1:
+                sched_info += f" | {classday_1} {starttime_1}-{endtime_1}"
+            if classday_2:
+                sched_info += f" & {classday_2} {starttime_2}-{endtime_2}"
+            audit_lines.append(f"{faculty_name}: {sched_info}")
+
         conn.commit()
-        
+
         hr_user_id = session['user_id']
         hr_personnel_info = get_personnel_info(hr_user_id)
         hr_personnel_id = hr_personnel_info.get('personnel_id')
-        
-        schedule_info = f"{subjectcode} - {subjectname} | Section {classsection}"
-        if classday_1:
-            schedule_info += f" | {classday_1} {starttime_1}-{endtime_1}"
-        if classday_2:
-            schedule_info += f" & {classday_2} {starttime_2}-{endtime_2}"
-        
+
         log_audit_action(
             hr_personnel_id,
             "Schedule deleted",
-            f"HR deleted schedule, {attendance_count} attendance records, and {attendance_report_count} attendance reports for {faculty_name}\nClass: {schedule_info}",
-            before_value=f"Schedule existed for class ID: {class_id} with {attendance_count} attendance records and {attendance_report_count} attendance reports",
-            after_value="Schedule and all associated records deleted"
+            f"HR deleted {len(class_ids)} schedule(s), {total_attendance} attendance record(s), "
+            f"and {total_reports} attendance report(s).\n" + "\n".join(audit_lines),
+            before_value=f"Schedules existed for class IDs: {class_ids}",
+            after_value="Schedules and all associated records deleted"
         )
-        
+
         cursor.close()
         db_pool.return_connection(conn)
-        
-        message = f'Schedule, {attendance_count} attendance records, and {attendance_report_count} attendance reports deleted successfully'
-        
+
+        n = len(class_ids)
+        message = (f'{n} schedule(s), {total_attendance} attendance record(s), and '
+                   f'{total_reports} attendance report(s) deleted successfully')
+
         return {
-            'success': True, 
+            'success': True,
             'message': message,
-            'attendance_records_deleted': attendance_count,
-            'attendance_reports_deleted': attendance_report_count
+            'deleted_count': n,
+            'attendance_records_deleted': total_attendance,
+            'attendance_reports_deleted': total_reports
         }
         
     except Exception as e:
@@ -7356,28 +7789,10 @@ def api_faculty_peer_assignments():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/faculty/peer-evaluations')
-@require_auth([20001, 20002]) 
+@require_auth([20001, 20002])
 def peer_evaluations_list():
-    user_id = session['user_id']
-    
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    cur.execute("""
-        SELECT p.personnel_id, p.firstname, p.lastname, col.collegename,
-               c.acadyear, c.semester, pa.is_completed
-        FROM peer_assignments pa
-        JOIN personnel p ON pa.evaluatee_id = p.personnel_id
-        JOIN college col ON p.college_id = col.college_id
-        JOIN acadcalendar c ON pa.acadcalendar_id = c.acadcalendar_id
-        WHERE pa.evaluator_id = %s 
-    """, (user_id,))
-    assignments = cur.fetchall()
-    
-    cur.close()
-    conn.close()
-    
-    return render_template('faculty&dean/faculty-peer-list.html', assignments=assignments)
+    # Peer evaluation tasks are shown on the faculty evaluations dashboard.
+    return redirect(url_for('faculty_evaluations'))
 
 @app.route('/faculty/evaluate/<int:evaluatee_id>', methods=['GET', 'POST'])
 @require_auth([20001, 20002])
@@ -7388,62 +7803,101 @@ def submit_peer_eval(evaluatee_id):
 
     if request.method == 'POST':
         try:
-            # Guidelines require a 4-point Likert scale (1-4)
             scores = [int(request.form.get(f'q{i}')) for i in range(1, 21)]
-            
-            # Category Calculation (5 questions each @ 25% per group)
-            cat1_avg = sum(scores[0:5]) / 5   # Dept Contribution
-            cat2_avg = sum(scores[5:10]) / 5  # Collegiality
-            cat3_avg = sum(scores[10:15]) / 5 # Institutional Engagement
-            cat4_avg = sum(scores[15:20]) / 5 # Reliability
-            
-            # Final score calculation based on equal category weighting
+            cat1_avg = sum(scores[0:5]) / 5
+            cat2_avg = sum(scores[5:10]) / 5
+            cat3_avg = sum(scores[10:15]) / 5
+            cat4_avg = sum(scores[15:20]) / 5
             final_score = (cat1_avg + cat2_avg + cat3_avg + cat4_avg) / 4
-            
-            # Mandatory Qualitative Feedback
-            strengths = request.form.get('strengths')
-            growth = request.form.get('growth')
-            comments = request.form.get('comments')
 
-            # Insert raw scores for record-keeping
-            cur.execute("""
-                INSERT INTO evaluation_raw_submissions 
-                (evaluator_id, target_id, cat1_score, cat2_score, cat3_score, cat4_score, 
-                 final_score, strengths, growth, comments, date_submitted, eval_type)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), 'Peer')
-            """, (user_id, evaluatee_id, cat1_avg, cat2_avg, cat3_avg, cat4_avg, 
-                  final_score, strengths, growth, comments))
-            
-            # Update the specific assignment record
-            cur.execute("""
-                UPDATE peer_assignments 
-                SET is_completed = TRUE 
-                WHERE evaluator_id = %s AND evaluatee_id = %s
-            """, (user_id, evaluatee_id))
-            
+            evaluator_name = request.form.get('evaluator_name', '').strip() or None
+            strengths = request.form.get('strengths', '').strip()
+            growth = request.form.get('growth', '').strip()
+            comments = request.form.get('comments', '').strip() or None
+
+            # Resolve personnel_id from user_id
+            cur.execute('SELECT personnel_id FROM personnel WHERE user_id = %s', (user_id,))
+            evaluator_row = cur.fetchone()
+            if not evaluator_row:
+                raise ValueError(f'No personnel record for user_id {user_id}')
+            evaluator_personnel_id = evaluator_row[0]
+
+            # Get acadcalendar_id from the assignment
+            cur.execute(
+                'SELECT acadcalendar_id FROM peer_assignments '
+                'WHERE evaluator_id = %s AND evaluatee_id = %s '
+                'ORDER BY date_assigned DESC LIMIT 1',
+                (evaluator_personnel_id, evaluatee_id))
+            assignment_row = cur.fetchone()
+            if not assignment_row:
+                raise ValueError(f'No peer assignment for evaluator {evaluator_personnel_id} -> {evaluatee_id}')
+            acadcalendar_id = assignment_row[0]
+
+            # 1. Save to peer_evaluation_submissions (source of truth)
+            cur.execute(
+                'INSERT INTO peer_evaluation_submissions '
+                '(evaluator_id, evaluatee_id, acadcalendar_id, evaluator_name, '
+                ' cat1_score, cat2_score, cat3_score, cat4_score, '
+                ' final_score, strengths, growth, comments, date_submitted) '
+                'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())',
+                (evaluator_personnel_id, evaluatee_id, acadcalendar_id, evaluator_name,
+                 cat1_avg, cat2_avg, cat3_avg, cat4_avg,
+                 final_score, strengths, growth, comments))
+
+            # 2. Mark assignment complete
+            cur.execute(
+                'UPDATE peer_assignments SET is_completed = TRUE '
+                'WHERE evaluator_id = %s AND evaluatee_id = %s AND acadcalendar_id = %s',
+                (evaluator_personnel_id, evaluatee_id, acadcalendar_id))
+
+            # 3. Recompute average from all submissions for this evaluatee+semester
+            cur.execute(
+                'SELECT AVG(final_score), COUNT(*) FROM peer_evaluation_submissions '
+                'WHERE evaluatee_id = %s AND acadcalendar_id = %s',
+                (evaluatee_id, acadcalendar_id))
+            avg_row = cur.fetchone()
+            avg_peer_score = float(avg_row[0]) if avg_row and avg_row[0] else 0.0
+            completed_count = int(avg_row[1]) if avg_row else 0
+            expected_count = 2
+
+            # 4. Upsert summary into faculty_evaluations (class_id = NULL for peer)
+            cur.execute(
+                'INSERT INTO faculty_evaluations '
+                '(personnel_id, acadcalendar_id, class_id, evaluator_type, '
+                ' score, total_responses, expected_responses, response_met, last_updated) '
+                'VALUES (%s, %s, NULL, %s, %s, %s, %s, %s, NOW()) '
+                'ON CONFLICT (personnel_id, acadcalendar_id, evaluator_type) '
+                'WHERE class_id IS NULL '
+                'DO UPDATE SET score=EXCLUDED.score, total_responses=EXCLUDED.total_responses, '
+                '             response_met=EXCLUDED.response_met, last_updated=NOW()',
+                (evaluatee_id, acadcalendar_id, 'peer', avg_peer_score,
+                 completed_count, expected_count, completed_count >= expected_count))
+
             conn.commit()
-            return redirect(url_for('peer_evaluations_list'))
-            
+            print(f'Peer eval submitted: evaluator={evaluator_personnel_id} -> evaluatee={evaluatee_id}, score={final_score:.2f}')
+            return redirect(url_for('faculty_evaluations'))
+
         except Exception as e:
             conn.rollback()
-            return f"An error occurred: {e}", 500
+            print(f'Peer eval error: {e}')
+            return f'An error occurred: {e}', 500
         finally:
             cur.close()
-            conn.close()
+            return_db_connection(conn)
 
-    # GET: Fetch evaluatee info with department
-    cur.execute("""
-        SELECT p.firstname, p.lastname, col.collegename
-        FROM personnel p
-        JOIN college col ON p.college_id = col.college_id
-        WHERE p.personnel_id = %s
-    """, (evaluatee_id,))
+    # GET
+    cur.execute(
+        'SELECT p.firstname, p.lastname, col.collegename '
+        'FROM personnel p '
+        'JOIN college col ON p.college_id = col.college_id '
+        'WHERE p.personnel_id = %s',
+        (evaluatee_id,))
     row = cur.fetchone()
     cur.close()
-    conn.close()
+    return_db_connection(conn)
 
     if row is None:
-        return f"Employee with ID {evaluatee_id} not found.", 404
+        return f'Employee with ID {evaluatee_id} not found.', 404
 
     return render_template(
         'faculty&dean/peer-eval-form.html',
@@ -7788,8 +8242,32 @@ def hr_employees_return():
 @app.route('/hr_evaluations')
 @require_auth([20003])
 def hr_evaluations():
-    current_term_id = 80001
     personnel_info = get_personnel_info(session['user_id'])
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT COALESCE(
+                (SELECT fe.acadcalendar_id
+                 FROM faculty_evaluations fe
+                 JOIN acadcalendar ac ON ac.acadcalendar_id = fe.acadcalendar_id
+                 GROUP BY fe.acadcalendar_id, ac.semesterstart
+                 ORDER BY ac.semesterstart DESC
+                 LIMIT 1),
+                (SELECT acadcalendar_id FROM acadcalendar
+                 WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                 ORDER BY semesterstart DESC LIMIT 1),
+                (SELECT acadcalendar_id FROM acadcalendar
+                 ORDER BY semesterstart DESC LIMIT 1)
+            )
+        """)
+        row = cursor.fetchone()
+        current_term_id = row[0] if row and row[0] else 80001
+        cursor.close()
+        db_pool.return_connection(conn)
+    except Exception as e:
+        print(f"Warning: could not resolve current term: {e}")
+        current_term_id = 80001
     return render_template('hrmd/hr-evaluations.html', acadcalendar_id=current_term_id, **personnel_info)
 
 @app.route('/api/hr/evaluation-dashboard-data')
@@ -7944,8 +8422,33 @@ def api_hr_evaluations():
     conn = db_pool.get_connection()
     cursor = conn.cursor()
 
-    # Define the term ID for use in all queries
-    current_term_id = term if term else '80001'
+    # Resolve term ID: use filter param if provided, otherwise find the most
+    # recent semester that has evaluation data (not necessarily today's semester).
+    if term:
+        try:
+            current_term_id = int(term)
+        except (ValueError, TypeError):
+            current_term_id = 80001
+    else:
+        try:
+            cursor.execute("""
+                SELECT COALESCE(
+                    (SELECT fe.acadcalendar_id
+                     FROM faculty_evaluations fe
+                     JOIN acadcalendar ac ON ac.acadcalendar_id = fe.acadcalendar_id
+                     GROUP BY fe.acadcalendar_id, ac.semesterstart
+                     ORDER BY ac.semesterstart DESC LIMIT 1),
+                    (SELECT acadcalendar_id FROM acadcalendar
+                     WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                     ORDER BY semesterstart DESC LIMIT 1),
+                    (SELECT acadcalendar_id FROM acadcalendar
+                     ORDER BY semesterstart DESC LIMIT 1)
+                )
+            """)
+            row = cursor.fetchone()
+            current_term_id = row[0] if row and row[0] else 80001
+        except Exception:
+            current_term_id = 80001
     
     # Fetch academic calendar display information
     acadcalendar_info = get_current_acadcalendar_info(current_term_id)
@@ -8218,6 +8721,10 @@ def api_hr_faculty_evaluation_report(personnel_id):
     term_id = request.args.get('term_id')
     if not term_id:
         return jsonify({'success': False, 'error': 'Missing term ID'}), 400
+    try:
+        term_id = int(term_id)
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'error': 'Invalid term ID'}), 400
 
     try:
         conn = db_pool.get_connection()
@@ -8535,8 +9042,213 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
     # 8c. Set the Content-Disposition header once, ensuring it is the only one.
     filename = f'Evaluation_Report_{faculty_name.replace(" ", "_")}_T{term_id}.pdf'
     response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
-    
+
     return response
+
+@app.route('/api/hr/faculty-class-attendance-pdf/<int:personnel_id>/<int:class_id>')
+@require_auth([20003])
+def api_hr_faculty_class_attendance_pdf(personnel_id, class_id):
+    """Generate a per-class attendance PDF for a specific faculty and class."""
+    try:
+        semester_id = request.args.get('semester_id')
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        # 1. Faculty details
+        cursor.execute("""
+            SELECT p.firstname, p.lastname, p.honorifics, c.collegename
+            FROM personnel p
+            LEFT JOIN college c ON p.college_id = c.college_id
+            WHERE p.personnel_id = %s
+        """, (personnel_id,))
+        person = cursor.fetchone()
+        if not person:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify({'success': False, 'error': 'Faculty not found'}), 404
+
+        firstname, lastname, honorifics, collegename = person
+        faculty_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
+        department = collegename or 'N/A'
+
+        # 2. Class / subject details
+        cursor.execute("""
+            SELECT sub.subjectcode, sub.subjectname, sch.classsection, sch.classroom
+            FROM schedule sch
+            JOIN subjects sub ON sch.subject_id = sub.subject_id
+            WHERE sch.class_id = %s
+        """, (class_id,))
+        cls = cursor.fetchone()
+        if not cls:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify({'success': False, 'error': 'Class not found'}), 404
+
+        subject_code, subject_name, section, classroom = cls
+
+        # 3. Semester display
+        if not semester_id:
+            cursor.execute("""
+                SELECT acadcalendar_id FROM acadcalendar
+                WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                ORDER BY semesterstart DESC LIMIT 1
+            """)
+            result = cursor.fetchone()
+            semester_id = result[0] if result else None
+
+        semester_display = 'N/A'
+        is_preliminary = False
+        if semester_id:
+            cursor.execute("""
+                SELECT semester, acadyear, semesterend FROM acadcalendar
+                WHERE acadcalendar_id = %s
+            """, (semester_id,))
+            cal = cursor.fetchone()
+            if cal:
+                sem_name, acad_year, semesterend = cal
+                if 'semester' not in sem_name.lower():
+                    sem_name = f"{sem_name} Semester"
+                acad_year_clean = acad_year.upper().lstrip('AY').strip()
+                semester_display = f"{sem_name}, AY {acad_year_clean}"
+                from datetime import date as _date
+                if semesterend and _date.today() <= semesterend:
+                    is_preliminary = True
+
+        # 4. Attendance report for this specific class
+        present = late = excused = absent = total_classes = 0
+        rate = 0.0
+        if semester_id:
+            cursor.execute("""
+                SELECT presentcount, latecount, excusedcount, absentcount, totalclasses, attendancerate
+                FROM attendancereport
+                WHERE personnel_id = %s AND class_id = %s AND acadcalendar_id = %s
+            """, (personnel_id, class_id, semester_id))
+            row = cursor.fetchone()
+            if row:
+                present, late, excused, absent, total_classes, rate = row
+                present = present or 0; late = late or 0
+                excused = excused or 0; absent = absent or 0
+                total_classes = total_classes or 0
+                rate = round(float(rate), 2) if rate else 0.0
+
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        # 5. Build PDF
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=(8.5 * inch, 11 * inch),
+            topMargin=0.75 * inch,
+            leftMargin=0.75 * inch,
+            rightMargin=0.75 * inch,
+            bottomMargin=0.5 * inch
+        )
+        styles = getSampleStyleSheet()
+        story = []
+
+        title_style = ParagraphStyle(
+            'Title',
+            parent=styles['h1'],
+            fontSize=16,
+            textColor=colors.HexColor('#7b1113'),
+            spaceAfter=6
+        )
+        preliminary_style = ParagraphStyle(
+            'Disclaimer',
+            parent=styles['h2'],
+            fontSize=14,
+            textColor=colors.red,
+            alignment=1,
+            spaceAfter=18,
+            spaceBefore=12
+        )
+
+        # 5a. Title
+        story.append(Paragraph("Saint Peter's College - Faculty Attendance Report", title_style))
+
+        # 5b. Preliminary banner
+        if is_preliminary:
+            story.append(Paragraph(
+                "<b>*** PRELIMINARY REPORT - NOT FINALIZED ***</b>",
+                preliminary_style
+            ))
+            story.append(Paragraph(
+                "<font color='#FF0000' size='9'><i>Warning: This report is based on attendance recorded so far. "
+                "The semester is still in progress and the final figures may change.</i></font>",
+                styles['Normal']
+            ))
+
+        # 5c. Faculty / semester header
+        story.append(Paragraph(f"<b>Faculty:</b> {faculty_name}", styles['Normal']))
+        story.append(Paragraph(f"<b>Department:</b> {department}", styles['Normal']))
+        story.append(Paragraph(f"<b>Semester:</b> {semester_display}", styles['Normal']))
+        story.append(Spacer(1, 0.2 * inch))
+
+        # 5d. Class Details table
+        generated_date = datetime.now().strftime('%B %d, %Y %I:%M %p')
+        class_details_data = [
+            ['Subject:', f"{subject_code} \u2014 {subject_name}"],
+            ['Section:', section or '\u2014'],
+            ['Classroom:', classroom or '\u2014'],
+            ['Generated Date:', generated_date],
+        ]
+        class_details_style = TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F2F2F2')),
+            ('LINEBELOW', (0, 0), (-1, -1), 0.5, colors.HexColor('#E0E0E0')),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ])
+        class_details_table = Table(class_details_data, colWidths=[2.5 * inch, 2.5 * inch])
+        class_details_table.setStyle(class_details_style)
+        story.append(Paragraph("<b>Class Details</b>", styles['h3']))
+        story.append(class_details_table)
+        story.append(Spacer(1, 0.25 * inch))
+
+        # 6. Attendance summary
+        summary_data = [
+            ['Present:', str(present)],
+            ['Late:', str(late)],
+            ['Excused:', str(excused)],
+            ['Absent:', str(absent)],
+            ['Total Classes:', str(total_classes)],
+            ['Attendance Rate:', f'{rate:.2f}%'],
+        ]
+        summary_table_style = TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F2F2F2')),
+            ('LINEBELOW', (0, 0), (-1, -1), 0.5, colors.HexColor('#E0E0E0')),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ])
+        summary_table = Table(summary_data, colWidths=[2.5 * inch, 2.5 * inch])
+        summary_table.setStyle(summary_table_style)
+        story.append(Paragraph("<b>Attendance Summary</b>", styles['h3']))
+        story.append(summary_table)
+
+        doc.build(story)
+
+        buffer.seek(0)
+        response = make_response(buffer.getvalue())
+        response.headers['Content-Type'] = 'application/pdf'
+        safe_name = faculty_name.replace(' ', '_')
+        safe_code = subject_code.replace(' ', '_')
+        safe_section = (section or 'NoSection').replace(' ', '_')
+        filename = f'Attendance_Report_{safe_name}_{safe_code}_{safe_section}.pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    except Exception as e:
+        print(f"Error generating class attendance report PDF: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/hr/new-evaluation-cycle', methods=['POST'])
 @require_auth([20003])
@@ -8597,43 +9309,52 @@ def fetch_evaluations():
 
             for row in records:
                 
-                # 1. Safely retrieve Class ID. Defaults to 0 if the key is missing from the dictionary.
-                class_id_raw = row.get('Class ID', 0)
+                # 1. Class ID: students have one, supervisors always NULL.
+                class_id_raw = row.get('Class ID', None)
                 try:
-                    class_id = int(class_id_raw) if class_id_raw else 0
+                    class_id = int(class_id_raw) if class_id_raw else None
                 except (ValueError, TypeError):
-                    class_id = 0
-                
-                # 2. Extract Qualitative Feedback (NEW)
-                qualitative_feedback = row.get('Qualitative Feedback') # Expecting this column from Sheets
-                if qualitative_feedback == '':
-                    qualitative_feedback = None # Ensure empty strings are stored as NULL
+                    class_id = None
+                if source['type'] == 'supervisor':
+                    class_id = None
 
-                # Ensure Personnel and Semester IDs are present
+                # 2. Qualitative Feedback
+                qualitative_feedback = row.get('Qualitative Feedback') or None
+
                 if not row.get('Faculty Personnel ID') or not row.get('Semester_AY ID'):
                     print(f"    - [Record] 🛑 SKIP: Missing Faculty ID or Semester ID in {source['type']} row.")
                     continue
-                
-                # Database insertion logic
-                cursor.execute("""
-                    INSERT INTO faculty_evaluations (
-                        personnel_id, acadcalendar_id, class_id, evaluator_type, score, total_responses, qualitative_feedback
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (personnel_id, acadcalendar_id, class_id, evaluator_type)
-                    DO UPDATE SET 
-                        score=EXCLUDED.score, 
-                        total_responses=EXCLUDED.total_responses, 
-                        qualitative_feedback=EXCLUDED.qualitative_feedback, -- NEW: Update feedback
-                        last_updated=CURRENT_TIMESTAMP
-                """, (
-                    row['Faculty Personnel ID'],
-                    row['Semester_AY ID'],
-                    class_id,                 
-                    source['type'], 
-                    row['Score'],
-                    row['Total Responses'],
-                    qualitative_feedback      
-                ))
+
+                if class_id is not None:
+                    cursor.execute(
+                        'INSERT INTO faculty_evaluations '
+                        '(personnel_id, acadcalendar_id, class_id, evaluator_type, '
+                        ' score, total_responses, qualitative_feedback) '
+                        'VALUES (%s,%s,%s,%s,%s,%s,%s) '
+                        'ON CONFLICT (personnel_id, acadcalendar_id, class_id, evaluator_type) '
+                        'WHERE class_id IS NOT NULL '
+                        'DO UPDATE SET score=EXCLUDED.score, '
+                        '             total_responses=EXCLUDED.total_responses, '
+                        '             qualitative_feedback=EXCLUDED.qualitative_feedback, '
+                        '             last_updated=CURRENT_TIMESTAMP',
+                        (row['Faculty Personnel ID'], row['Semester_AY ID'],
+                         class_id, source['type'],
+                         row['Score'], row['Total Responses'], qualitative_feedback))
+                else:
+                    cursor.execute(
+                        'INSERT INTO faculty_evaluations '
+                        '(personnel_id, acadcalendar_id, class_id, evaluator_type, '
+                        ' score, total_responses, qualitative_feedback) '
+                        'VALUES (%s,%s,NULL,%s,%s,%s,%s) '
+                        'ON CONFLICT (personnel_id, acadcalendar_id, evaluator_type) '
+                        'WHERE class_id IS NULL '
+                        'DO UPDATE SET score=EXCLUDED.score, '
+                        '             total_responses=EXCLUDED.total_responses, '
+                        '             qualitative_feedback=EXCLUDED.qualitative_feedback, '
+                        '             last_updated=CURRENT_TIMESTAMP',
+                        (row['Faculty Personnel ID'], row['Semester_AY ID'],
+                         source['type'],
+                         row['Score'], row['Total Responses'], qualitative_feedback))
                 total_updated += 1
             
         conn.commit()

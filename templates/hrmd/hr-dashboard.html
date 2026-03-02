@@ -10,7 +10,7 @@
         <div class="kpi card" style="gap:14px">
           <div class="icon att"><i class='bx bx-check-shield' style="font-size:20px"></i></div>
           <div>
-            <div class="title">Attendance (Today)</div>
+            <div class="title">Attendance</div>
             <div class="value" id="kpi-att">Loading...</div>
             <div class="subtitle" id="kpi-att-subtitle"></div>
             <!-- Removed the note about classes scheduled today -->
@@ -165,7 +165,7 @@
       if (todayStatsData.success) {
         document.getElementById('kpi-att').textContent = `${todayStatsData.attendance_percentage}%`;
         document.getElementById('kpi-att-subtitle').textContent = 
-          `${todayStatsData.present_classes}/${todayStatsData.total_classes_today} classes attended`;
+          `of faculty attended their classes today`;
         
         // Removed the note update since we're not showing it anymore
       } else {

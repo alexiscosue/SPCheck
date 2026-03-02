@@ -101,21 +101,6 @@
           <h3>Personal Information</h3>
           <div class="emp-form-row">
             <div class="emp-form-group">
-              <label for="employee_no">Employee Number *</label>
-              <input type="text" id="employee_no" name="employee_no" required 
-                    placeholder="e.g., 10-1223" maxlength="7"
-                    oninput="formatEmployeeNumber(this)">
-              <div class="emp-error-message" id="employeeNoError"></div>
-            </div>
-            <div class="emp-form-group">
-              <label for="hire_date">Hire Date *</label>
-              <input type="date" id="hire_date" name="hire_date" required 
-                    max="{{ today_date }}" 
-                    pattern="\d{4}-\d{2}-\d{2}">
-            </div>
-          </div>
-          <div class="emp-form-row">
-            <div class="emp-form-group">
               <label for="firstname">First Name *</label>
               <input type="text" id="firstname" name="firstname" required>
             </div>
@@ -123,11 +108,24 @@
               <label for="lastname">Last Name *</label>
               <input type="text" id="lastname" name="lastname" required>
             </div>
-          </div>
-          <div class="emp-form-row">
             <div class="emp-form-group">
               <label for="honorifics">Honorifics</label>
               <input type="text" id="honorifics" name="honorifics" placeholder="e.g., Ph.D., M.A.">
+            </div>
+          </div>
+          <div class="emp-form-row">
+            <div class="emp-form-group">
+              <label for="employee_no">Employee Number *</label>
+              <input type="text" id="employee_no" name="employee_no" required
+                    placeholder="e.g., 10-1223" maxlength="7"
+                    oninput="formatEmployeeNumber(this)">
+              <div class="emp-error-message" id="employeeNoError"></div>
+            </div>
+            <div class="emp-form-group">
+              <label for="hire_date">Hire Date *</label>
+              <input type="date" id="hire_date" name="hire_date" required
+                    max="{{ today_date }}"
+                    pattern="\d{4}-\d{2}-\d{2}">
             </div>
             <div class="emp-form-group">
               <label for="phone">Contact Number *</label>
@@ -157,8 +155,6 @@
                 <option value="20004">VP/President</option>
               </select>
             </div>
-          </div>
-          <div class="emp-form-row">
             <div class="emp-form-group">
               <label for="employment_status">Employment Status *</label>
               <select id="employment_status" name="employment_status" required>
@@ -370,7 +366,7 @@
 
 <!-- Import Schedule CSV Modal -->
 <div id="importCSVModal" class="emp-modal">
-  <div class="emp-modal-content" style="max-width:860px;width:95%;">
+  <div class="emp-modal-content">
     <div class="emp-modal-header">
       <h2>Import Schedule via CSV</h2>
       <span class="emp-close" onclick="closeImportCSVModal()">&times;</span>
@@ -435,7 +431,7 @@
           <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:780px;">
             <thead>
               <tr style="background:#f3f4f6;position:sticky;top:0;z-index:1;">
-                <th style="padding:8px;border:1px solid #e5e7eb;white-space:nowrap;">Row</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;white-space:nowrap;">#</th>
                 <th style="padding:8px;border:1px solid #e5e7eb;white-space:nowrap;">Status</th>
                 <th style="padding:8px;border:1px solid #e5e7eb;white-space:nowrap;">Faculty</th>
                 <th style="padding:8px;border:1px solid #e5e7eb;white-space:nowrap;">Subject</th>
@@ -477,18 +473,52 @@
       <form id="deleteEmployeeForm">
         <div class="emp-form-section">
           <h3>Select Employee to Delete</h3>
-          <div class="emp-form-row">
-            <div class="emp-form-group">
-              <label for="delete_personnel_id">Employee *</label>
-              <select id="delete_personnel_id" name="delete_personnel_id" required>
-                <option value="">Select Employee</option>
-                <!-- Employees will be populated dynamically -->
-              </select>
-              <div class="emp-error-message" id="deletePersonnelError"></div>
-            </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+            <input type="text" id="deleteEmpSearch" placeholder="Search by Name, Role, Position, Status..."
+                   style="flex:2;min-width:180px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;"
+                   oninput="filterDeleteEmployeeList()">
+            <select id="deleteEmpCollegeFilter" onchange="filterDeleteEmployeeList()"
+                    style="flex:1;min-width:130px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+              <option value="all">All Colleges</option>
+            </select>
+            <select id="deleteEmpPositionFilter" onchange="filterDeleteEmployeeList()"
+                    style="flex:1;min-width:130px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+              <option value="all">All Positions</option>
+              <option value="Instructor">Instructor</option>
+              <option value="Assistant Professor">Assistant Professor</option>
+              <option value="Associate Professor">Associate Professor</option>
+              <option value="Professor">Professor</option>
+              <option value="Dean">Dean</option>
+              <option value="HR Staff">HR Staff</option>
+              <option value="Vice President">Vice President</option>
+              <option value="President">President</option>
+            </select>
+            <select id="deleteEmpStatusFilter" onchange="filterDeleteEmployeeList()"
+                    style="flex:1;min-width:120px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+              <option value="all">All Status</option>
+              <option value="Full-Time">Full-Time</option>
+              <option value="Part-Time">Part-Time</option>
+              <option value="Regular">Regular</option>
+              <option value="Probationary">Probationary</option>
+            </select>
           </div>
+          <div style="max-height:360px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px;">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+              <thead>
+                <tr style="background:#f3f4f6;position:sticky;top:0;z-index:1;">
+                  <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Name</th>
+                  <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">College</th>
+                  <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Position</th>
+                  <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Status</th>
+                </tr>
+              </thead>
+              <tbody id="deleteEmpTableBody"></tbody>
+            </table>
+          </div>
+          <input type="hidden" id="delete_personnel_id" name="delete_personnel_id">
+          <div class="emp-error-message" id="deletePersonnelError"></div>
         </div>
-        
+
         <div class="emp-form-actions">
           <button type="button" class="emp-btn-cancel" onclick="closeDeleteEmployeeModal()">Cancel</button>
           <button type="submit" class="emp-btn-submit emp-btn-danger">Delete Employee</button>
@@ -509,25 +539,73 @@
       <form id="deleteScheduleForm">
         <div class="emp-form-section">
           <h3>Select Schedule to Delete</h3>
-          <div class="emp-form-row">
-            <div class="emp-form-group">
-              <label for="delete_schedule_personnel_id">Faculty *</label>
-              <select id="delete_schedule_personnel_id" name="delete_schedule_personnel_id" required>
-                <option value="">Select Faculty</option>
-                <!-- Faculty will be populated dynamically -->
-              </select>
-              <div class="emp-error-message" id="deleteSchedulePersonnelError"></div>
-            </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+            <input type="text" id="deleteSchedSearch" placeholder="Search by Name, College, Position..."
+                   style="flex:2;min-width:180px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;"
+                   oninput="filterDeleteScheduleFacultyList()">
+            <select id="deleteSchedCollegeFilter" onchange="filterDeleteScheduleFacultyList()"
+                    style="flex:1;min-width:130px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+              <option value="all">All Colleges</option>
+            </select>
+            <select id="deleteSchedPositionFilter" onchange="filterDeleteScheduleFacultyList()"
+                    style="flex:1;min-width:130px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+              <option value="all">All Positions</option>
+              <option value="Instructor">Instructor</option>
+              <option value="Assistant Professor">Assistant Professor</option>
+              <option value="Associate Professor">Associate Professor</option>
+              <option value="Professor">Professor</option>
+              <option value="Dean">Dean</option>
+            </select>
+            <select id="deleteSchedStatusFilter" onchange="filterDeleteScheduleFacultyList()"
+                    style="flex:1;min-width:120px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+              <option value="all">All Status</option>
+              <option value="Full-Time">Full-Time</option>
+              <option value="Part-Time">Part-Time</option>
+              <option value="Regular">Regular</option>
+              <option value="Probationary">Probationary</option>
+            </select>
           </div>
-          <div class="emp-form-row">
-            <div class="emp-form-group">
-              <label for="delete_class_id">Class Schedule *</label>
-              <select id="delete_class_id" name="delete_class_id" required disabled>
-                <option value="">Select Faculty First</option>
-                <!-- Classes will be populated dynamically -->
-              </select>
-              <div class="emp-error-message" id="deleteClassError"></div>
+          <div style="max-height:280px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px;margin-bottom:12px;">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+              <thead>
+                <tr style="background:#f3f4f6;position:sticky;top:0;z-index:1;">
+                  <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Name</th>
+                  <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">College</th>
+                  <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Position</th>
+                  <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Status</th>
+                </tr>
+              </thead>
+              <tbody id="deleteSchedFacultyTableBody"></tbody>
+            </table>
+          </div>
+          <input type="hidden" id="delete_schedule_personnel_id" name="delete_schedule_personnel_id">
+          <div class="emp-error-message" id="deleteSchedulePersonnelError"></div>
+
+          <div id="deleteSchedClassSection" style="margin-top:14px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+              <div style="font-size:13px;font-weight:600;color:#374151;">Class Schedules *</div>
+              <span id="deleteSchedSelectedCount" style="font-size:12px;color:#6b7280;"></span>
             </div>
+            <div style="max-height:280px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px;">
+              <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead>
+                  <tr style="background:#f3f4f6;position:sticky;top:0;z-index:1;">
+                    <th style="padding:10px 14px;width:36px;border-bottom:1px solid #e5e7eb;">
+                      <input type="checkbox" id="deleteSchedSelectAll" title="Select all" onchange="toggleSelectAllSchedules(this)">
+                    </th>
+                    <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Subject</th>
+                    <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Section</th>
+                    <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Day 1</th>
+                    <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Day 2</th>
+                    <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Room</th>
+                  </tr>
+                </thead>
+                <tbody id="deleteSchedClassTableBody">
+                  <tr><td colspan="6" style="padding:12px;text-align:center;color:#6b7280;">Select a faculty member first</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="emp-error-message" id="deleteClassError"></div>
           </div>
         </div>
         
@@ -604,14 +682,15 @@
 
 <!-- Confirmation Modal for Schedule Deletion -->
 <div id="confirmationDeleteScheduleModal" class="emp-modal">
-  <div class="emp-modal-content" style="max-width: 500px;">
+  <div class="emp-modal-content" style="max-width: 560px;">
     <div class="emp-modal-header">
       <h2>Confirm Schedule Deletion</h2>
     </div>
     <div class="emp-modal-body">
       <p style="color: #ef4444; font-weight: 500; margin-bottom: 1rem;">⚠️ This action cannot be undone!</p>
-      <p>Are you sure you want to delete this schedule?</p>
-      <p><strong>Note:</strong> All associated attendance records will also be permanently deleted. Audit logs and RFID logs will be preserved for record keeping.</p>
+      <p style="margin-bottom:10px;">The following schedule(s) will be permanently deleted along with all associated attendance records:</p>
+      <div id="deleteScheduleSummary" style="max-height:220px;overflow-y:auto;border:1px solid #fca5a5;border-radius:6px;margin-bottom:12px;"></div>
+      <p style="font-size:12px;color:#6b7280;"><strong>Note:</strong> Audit logs and RFID logs will be preserved for record keeping.</p>
       <div class="emp-confirmation-actions">
         <button type="button" class="emp-btn-cancel" onclick="closeConfirmationDeleteScheduleModal()">Cancel</button>
         <button type="button" class="emp-btn-confirm-icon emp-btn-danger" id="confirmDeleteScheduleButton" onclick="processScheduleDeletion()">
@@ -876,10 +955,19 @@ function resetScheduleForm() {
 }
 
 // Delete Employee Functions
+let allDeleteEmployees = [];
+let allDeleteFaculty = [];
+
 async function openDeleteEmployeeModal() {
   document.getElementById('deleteEmployeeForm').reset();
+  document.getElementById('deleteEmpSearch').value = '';
+  document.getElementById('deleteEmpCollegeFilter').value = 'all';
+  document.getElementById('deleteEmpPositionFilter').value = 'all';
+  document.getElementById('deleteEmpStatusFilter').value = 'all';
+  document.getElementById('delete_personnel_id').value = '';
+  document.getElementById('delete_personnel_id').removeAttribute('data-name');
   clearErrorMessages();
-  
+
   await populateDeleteEmployeeDropdown();
   document.getElementById('deleteEmployeeModal').style.display = 'block';
 }
@@ -893,28 +981,90 @@ async function populateDeleteEmployeeDropdown() {
   try {
     const response = await fetch('/api/hr/employees-list');
     const data = await response.json();
-    
+
     if (data.success) {
-      const personnelSelect = document.getElementById('delete_personnel_id');
-      personnelSelect.innerHTML = '<option value="">Select Employee</option>';
-      
-      data.employees.forEach(employee => {
-        const option = document.createElement('option');
-        option.value = employee.personnel_id;
-        option.textContent = `${employee.name} (${employee.employee_no}) - ${employee.role}`;
-        option.setAttribute('data-name', employee.name);
-        personnelSelect.appendChild(option);
+      allDeleteEmployees = data.employees;
+
+      // Populate college filter with unique values
+      const collegeFilter = document.getElementById('deleteEmpCollegeFilter');
+      collegeFilter.innerHTML = '<option value="all">All Colleges</option>';
+      const colleges = [...new Set(data.employees.map(e => e.college).filter(c => c && c !== 'N/A'))].sort();
+      colleges.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c; opt.textContent = c;
+        collegeFilter.appendChild(opt);
       });
+
+      filterDeleteEmployeeList();
     }
   } catch (error) {
     console.error('Error fetching employees for deletion:', error);
   }
 }
 
+function filterDeleteEmployeeList() {
+  const search   = document.getElementById('deleteEmpSearch').value.toLowerCase();
+  const college  = document.getElementById('deleteEmpCollegeFilter').value;
+  const position = document.getElementById('deleteEmpPositionFilter').value;
+  const status   = document.getElementById('deleteEmpStatusFilter').value;
+
+  const tbody = document.getElementById('deleteEmpTableBody');
+  const hiddenInput = document.getElementById('delete_personnel_id');
+  tbody.innerHTML = '';
+
+  const filtered = allDeleteEmployees.filter(emp => {
+    const haystack = `${emp.name} ${emp.role} ${emp.position} ${emp.status} ${emp.college}`.toLowerCase();
+    if (search && !haystack.includes(search)) return false;
+    if (college  !== 'all' && emp.college  !== college)  return false;
+    if (position !== 'all' && emp.position !== position) return false;
+    if (status   !== 'all' && emp.status   !== status)   return false;
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" style="padding:12px;text-align:center;color:#6b7280;">No employees match your filters</td></tr>`;
+    return;
+  }
+
+  filtered.forEach(emp => {
+    const tr = document.createElement('tr');
+    const isSelected = hiddenInput.value == emp.personnel_id;
+    tr.style.cssText = `cursor:pointer;background:${isSelected ? '#dbeafe' : 'transparent'};`;
+    tr.innerHTML = `
+      <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;">
+        <div style="font-weight:500;">${formatNameSurnameFirst(emp.name)}</div>
+        <div style="font-size:11px;color:#6b7280;">${emp.role}</div>
+      </td>
+      <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;">${emp.college}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;">${emp.position}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;">${emp.status}</td>
+    `;
+    tr.addEventListener('click', () => {
+      document.querySelectorAll('#deleteEmpTableBody tr').forEach(r => r.style.background = 'transparent');
+      tr.style.background = '#dbeafe';
+      hiddenInput.value = emp.personnel_id;
+      hiddenInput.setAttribute('data-name', emp.name);
+      document.getElementById('deletePersonnelError').textContent = '';
+    });
+    tbody.appendChild(tr);
+  });
+}
+
 async function openDeleteScheduleModal() {
   document.getElementById('deleteScheduleForm').reset();
+  document.getElementById('deleteSchedSearch').value = '';
+  document.getElementById('deleteSchedCollegeFilter').value = 'all';
+  document.getElementById('deleteSchedPositionFilter').value = 'all';
+  document.getElementById('deleteSchedStatusFilter').value = 'all';
+  document.getElementById('delete_schedule_personnel_id').value = '';
+  selectedDeleteSchedules = [];
+  document.getElementById('deleteSchedSelectedCount').textContent = '';
+  const selectAll = document.getElementById('deleteSchedSelectAll');
+  if (selectAll) { selectAll.checked = false; selectAll.indeterminate = false; }
+  document.getElementById('deleteSchedClassTableBody').innerHTML =
+    `<tr><td colspan="6" style="padding:12px;text-align:center;color:#6b7280;">Select a faculty member first</td></tr>`;
   clearErrorMessages();
-  
+
   await populateDeleteScheduleFacultyDropdown();
   document.getElementById('deleteScheduleModal').style.display = 'block';
 }
@@ -928,52 +1078,167 @@ async function populateDeleteScheduleFacultyDropdown() {
   try {
     const response = await fetch('/api/hr/faculty-list');
     const data = await response.json();
-    
+
     if (data.success) {
-      const facultySelect = document.getElementById('delete_schedule_personnel_id');
-      facultySelect.innerHTML = '<option value="">Select Faculty</option>';
-      
-      data.faculty_list.forEach(faculty => {
-        const option = document.createElement('option');
-        option.value = faculty.personnel_id;
-        option.textContent = faculty.name;
-        option.setAttribute('data-name', faculty.name);
-        facultySelect.appendChild(option);
+      allDeleteFaculty = data.faculty_list;
+
+      // Populate college filter with unique values
+      const collegeFilter = document.getElementById('deleteSchedCollegeFilter');
+      collegeFilter.innerHTML = '<option value="all">All Colleges</option>';
+      const colleges = [...new Set(data.faculty_list.map(f => f.college).filter(c => c && c !== 'N/A'))].sort();
+      colleges.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c; opt.textContent = c;
+        collegeFilter.appendChild(opt);
       });
+
+      filterDeleteScheduleFacultyList();
     }
   } catch (error) {
     console.error('Error fetching faculty for schedule deletion:', error);
   }
 }
 
+function filterDeleteScheduleFacultyList() {
+  const search   = document.getElementById('deleteSchedSearch').value.toLowerCase();
+  const college  = document.getElementById('deleteSchedCollegeFilter').value;
+  const position = document.getElementById('deleteSchedPositionFilter').value;
+  const status   = document.getElementById('deleteSchedStatusFilter').value;
+
+  const tbody = document.getElementById('deleteSchedFacultyTableBody');
+  const hiddenInput = document.getElementById('delete_schedule_personnel_id');
+  tbody.innerHTML = '';
+
+  const filtered = allDeleteFaculty.filter(fac => {
+    const haystack = `${fac.name} ${fac.college} ${fac.position} ${fac.employment_status}`.toLowerCase();
+    if (search && !haystack.includes(search)) return false;
+    if (college  !== 'all' && fac.college           !== college)  return false;
+    if (position !== 'all' && fac.position          !== position) return false;
+    if (status   !== 'all' && fac.employment_status !== status)   return false;
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" style="padding:12px;text-align:center;color:#6b7280;">No faculty match your filters</td></tr>`;
+    return;
+  }
+
+  filtered.forEach(fac => {
+    const tr = document.createElement('tr');
+    const isSelected = hiddenInput.value == fac.personnel_id;
+    tr.style.cssText = `cursor:pointer;background:${isSelected ? '#dbeafe' : 'transparent'};`;
+    tr.innerHTML = `
+      <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;">
+        <div style="font-weight:500;">${formatNameSurnameFirst(fac.name)}</div>
+      </td>
+      <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;">${fac.college}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;">${fac.position}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;">${fac.employment_status}</td>
+    `;
+    tr.addEventListener('click', () => {
+      document.querySelectorAll('#deleteSchedFacultyTableBody tr').forEach(r => r.style.background = 'transparent');
+      tr.style.background = '#dbeafe';
+      hiddenInput.value = fac.personnel_id;
+      document.getElementById('deleteSchedulePersonnelError').textContent = '';
+      populateDeleteScheduleClassesDropdown(fac.personnel_id);
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+let selectedDeleteSchedules = []; // [{class_id, subject_code, section, day1, day2, classroom}]
+
+function updateScheduleSelectionCount() {
+  const count = selectedDeleteSchedules.length;
+  document.getElementById('deleteSchedSelectedCount').textContent =
+    count > 0 ? `${count} selected` : '';
+  const selectAll = document.getElementById('deleteSchedSelectAll');
+  const allBoxes = document.querySelectorAll('.sched-del-cb');
+  if (selectAll && allBoxes.length > 0) {
+    selectAll.checked = count === allBoxes.length;
+    selectAll.indeterminate = count > 0 && count < allBoxes.length;
+  }
+}
+
+function toggleSelectAllSchedules(masterCb) {
+  document.querySelectorAll('.sched-del-cb').forEach(cb => {
+    cb.checked = masterCb.checked;
+    const tr = cb.closest('tr');
+    tr.style.background = masterCb.checked ? '#dbeafe' : 'transparent';
+  });
+  if (masterCb.checked) {
+    // rebuild from current rendered rows
+    selectedDeleteSchedules = [];
+    document.querySelectorAll('.sched-del-cb').forEach(cb => {
+      selectedDeleteSchedules.push(JSON.parse(cb.dataset.sched));
+    });
+  } else {
+    selectedDeleteSchedules = [];
+  }
+  updateScheduleSelectionCount();
+}
+
 async function populateDeleteScheduleClassesDropdown(personnelId) {
+  const tbody = document.getElementById('deleteSchedClassTableBody');
+  selectedDeleteSchedules = [];
+  updateScheduleSelectionCount();
+  const selectAll = document.getElementById('deleteSchedSelectAll');
+  if (selectAll) { selectAll.checked = false; selectAll.indeterminate = false; }
+
+  tbody.innerHTML = `<tr><td colspan="6" style="padding:12px;text-align:center;color:#6b7280;">Loading schedules…</td></tr>`;
+
   try {
     const response = await fetch(`/api/hr/delete-schedule/classes/${personnelId}`);
     const data = await response.json();
-    
-    const classSelect = document.getElementById('delete_class_id');
-    
-    if (data.success && data.schedules.length > 0) {
-      classSelect.innerHTML = '<option value="">Select Class Schedule</option>';
-      
-      data.schedules.forEach(schedule => {
-        const option = document.createElement('option');
-        option.value = schedule.class_id;
-        option.textContent = schedule.display_label;
-        option.setAttribute('data-name', schedule.display_label);
-        classSelect.appendChild(option);
-      });
-      
-      classSelect.disabled = false;
-    } else {
-      classSelect.innerHTML = '<option value="">No schedules found</option>';
-      classSelect.disabled = true;
+
+    if (!data.success || data.schedules.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" style="padding:12px;text-align:center;color:#6b7280;">No schedules found for this faculty</td></tr>`;
+      return;
     }
+
+    tbody.innerHTML = '';
+    data.schedules.forEach(schedule => {
+      const tr = document.createElement('tr');
+      tr.style.cursor = 'pointer';
+      const schedData = JSON.stringify({
+        class_id: schedule.class_id,
+        subject_code: schedule.subject_code,
+        section: schedule.section,
+        day1: schedule.day1,
+        day2: schedule.day2,
+        classroom: schedule.classroom
+      });
+      tr.innerHTML = `
+        <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;text-align:center;">
+          <input type="checkbox" class="sched-del-cb" data-sched='${schedData}'>
+        </td>
+        <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;font-weight:600;">${schedule.subject_code}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;">${schedule.section}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;">${schedule.day1 || '—'}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;">${schedule.day2 || '—'}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;">${schedule.classroom || '—'}</td>
+      `;
+      const cb = tr.querySelector('.sched-del-cb');
+      // Clicking the row toggles the checkbox
+      tr.addEventListener('click', (e) => {
+        if (e.target.type !== 'checkbox') cb.checked = !cb.checked;
+        const sched = JSON.parse(cb.dataset.sched);
+        if (cb.checked) {
+          tr.style.background = '#dbeafe';
+          if (!selectedDeleteSchedules.find(s => s.class_id === sched.class_id))
+            selectedDeleteSchedules.push(sched);
+        } else {
+          tr.style.background = 'transparent';
+          selectedDeleteSchedules = selectedDeleteSchedules.filter(s => s.class_id !== sched.class_id);
+        }
+        updateScheduleSelectionCount();
+        document.getElementById('deleteClassError').textContent = '';
+      });
+      tbody.appendChild(tr);
+    });
   } catch (error) {
     console.error('Error fetching schedules for deletion:', error);
-    const classSelect = document.getElementById('delete_class_id');
-    classSelect.innerHTML = '<option value="">Error loading schedules</option>';
-    classSelect.disabled = true;
+    tbody.innerHTML = `<tr><td colspan="6" style="padding:12px;text-align:center;color:#dc2626;">Error loading schedules</td></tr>`;
   }
 }
 
@@ -1122,7 +1387,7 @@ async function populateSemesterDropdown() {
       data.semesters.forEach(semester => {
         const option = document.createElement('option');
         option.value = semester.id;
-        const isPast = !semester.is_current && new Date(semester.end_date) < today;
+        const isPast = new Date(semester.end_date) < today;
         if (isPast) {
           option.textContent = semester.text + ' (Past)';
           option.disabled = true;
@@ -1643,16 +1908,14 @@ document.getElementById('deleteEmployeeForm').addEventListener('submit', async f
   
   const formData = new FormData(this);
   const personnelId = formData.get('delete_personnel_id');
-  
+
   if (!personnelId) {
     document.getElementById('deletePersonnelError').textContent = 'Please select an employee';
     return;
   }
-  
-  const personnelSelect = document.getElementById('delete_personnel_id');
-  const selectedOption = personnelSelect.options[personnelSelect.selectedIndex];
-  const employeeName = selectedOption.getAttribute('data-name');
-  
+
+  const employeeName = document.getElementById('delete_personnel_id').getAttribute('data-name');
+
   pendingDeleteEmployeeData = {
     personnel_id: parseInt(personnelId),
     employee_name: employeeName
@@ -1664,21 +1927,35 @@ document.getElementById('deleteEmployeeForm').addEventListener('submit', async f
 
 document.getElementById('deleteScheduleForm').addEventListener('submit', async function(e) {
   e.preventDefault();
-  
   clearErrorMessages();
-  
-  const formData = new FormData(this);
-  const classId = formData.get('delete_class_id');
-  
-  if (!classId) {
-    document.getElementById('deleteClassError').textContent = 'Please select a class schedule';
+
+  const personnelId = document.getElementById('delete_schedule_personnel_id').value;
+  if (!personnelId) {
+    document.getElementById('deleteSchedulePersonnelError').textContent = 'Please select a faculty member';
     return;
   }
-  
+  if (selectedDeleteSchedules.length === 0) {
+    document.getElementById('deleteClassError').textContent = 'Please select at least one class schedule';
+    return;
+  }
+
   pendingDeleteScheduleData = {
-    class_id: parseInt(classId)
+    class_ids: selectedDeleteSchedules.map(s => s.class_id),
+    schedules: selectedDeleteSchedules
   };
-  
+
+  // Build summary list in confirmation modal
+  const summary = document.getElementById('deleteScheduleSummary');
+  summary.innerHTML = selectedDeleteSchedules.map(s => `
+    <div style="display:grid;grid-template-columns:80px 80px 1fr 1fr 70px;gap:6px;padding:8px 12px;border-bottom:1px solid #fee2e2;font-size:12px;">
+      <div style="font-weight:600;color:#111827;">${s.subject_code}</div>
+      <div style="color:#374151;">§ ${s.section}</div>
+      <div style="color:#374151;">${s.day1 || '—'}</div>
+      <div style="color:#374151;">${s.day2 || '—'}</div>
+      <div style="color:#374151;">${s.classroom || '—'}</div>
+    </div>
+  `).join('');
+
   document.getElementById('deleteScheduleModal').style.display = 'none';
   openConfirmationDeleteScheduleModal();
 });
@@ -1904,7 +2181,7 @@ async function processScheduleDeletion() {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(pendingDeleteScheduleData)
+      body: JSON.stringify({ class_ids: pendingDeleteScheduleData.class_ids })
     });
     
     const result = await response.json();
@@ -1957,17 +2234,7 @@ document.getElementById('subject_id').addEventListener('change', function() {
   }
 });
 
-document.getElementById('delete_schedule_personnel_id').addEventListener('change', function() {
-  const selectedFacultyId = this.value;
-  const classSelect = document.getElementById('delete_class_id');
-  
-  if (selectedFacultyId) {
-    populateDeleteScheduleClassesDropdown(selectedFacultyId);
-  } else {
-    classSelect.disabled = true;
-    classSelect.innerHTML = '<option value="">Select Faculty First</option>';
-  }
-});
+// Faculty selection is now handled by row click in filterDeleteScheduleFacultyList()
 
 async function fetchEmployeesData() {
   try {
@@ -2260,7 +2527,7 @@ async function openImportCSVModal() {
       data.semesters.forEach(semester => {
         const option = document.createElement('option');
         option.value = semester.id;
-        const isPast = !semester.is_current && new Date(semester.end_date) < today;
+        const isPast = new Date(semester.end_date) < today;
         if (isPast) {
           option.textContent = semester.text + ' (Past)';
           option.disabled = true;
@@ -2344,6 +2611,11 @@ async function handleCSVValidate() {
     const res = await fetch('/api/hr/validate-schedule-csv', { method: 'POST', body: formData });
     const result = await res.json();
 
+    // Always reset the file input after each attempt so re-uploads are always a fresh File object
+    csvSelectedFile = null;
+    document.getElementById('csvFileInput').value = '';
+    document.getElementById('csvFileName').textContent = '';
+
     if (!result.success) {
       showNotification(result.error, 'error');
       btn.disabled = false;
@@ -2355,6 +2627,10 @@ async function handleCSVValidate() {
     renderCSVResults(result);
 
   } catch (e) {
+    // Reset file input on network/browser error too
+    csvSelectedFile = null;
+    document.getElementById('csvFileInput').value = '';
+    document.getElementById('csvFileName').textContent = '';
     showNotification('Validation request failed: ' + e.message, 'error');
     btn.disabled = false;
     document.getElementById('csvValidateBtnText').textContent = 'Validate & Preview';
@@ -2386,19 +2662,19 @@ function renderCSVResults(result) {
 
   const tbody = document.getElementById('csvResultsBody');
   tbody.innerHTML = '';
-  result.rows.forEach(row => {
+  result.rows.forEach((row, index) => {
     const isErr = row.status === 'error';
     const tr = document.createElement('tr');
     tr.style.background = isErr ? '#fff1f2' : '#f0fdf4';
     tr.innerHTML = `
-      <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:center;">${row.row_num}</td>
+      <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:center;">${index + 1}</td>
       <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:center;">
         <span style="background:${isErr ? '#ef4444' : '#22c55e'};color:#fff;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;">
           ${isErr ? 'Error' : 'Valid'}
         </span>
       </td>
       <td style="padding:6px 10px;border:1px solid #e5e7eb;">${result.faculty_name || '—'}</td>
-      <td style="padding:6px 10px;border:1px solid #e5e7eb;">${row.subject_name || row.subject_code}</td>
+      <td style="padding:6px 10px;border:1px solid #e5e7eb;">${row.subject_code}</td>
       <td style="padding:6px 10px;border:1px solid #e5e7eb;">${row.classday_1}</td>
       <td style="padding:6px 10px;border:1px solid #e5e7eb;">${row.starttime_1} – ${row.endtime_1}</td>
       <td style="padding:6px 10px;border:1px solid #e5e7eb;">${row.classday_2 || '—'}</td>
@@ -2428,7 +2704,7 @@ async function handleCSVImport() {
     if (result.success) {
       showNotification(`Successfully imported ${result.count} schedule(s)!`, 'success');
       closeImportCSVModal();
-      fetchFacultyData && fetchFacultyData();
+      typeof fetchFacultyData === 'function' && fetchFacultyData();
     } else {
       showNotification('Import failed: ' + result.error, 'error');
       btn.disabled = false;
