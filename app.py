@@ -7683,28 +7683,10 @@ def api_faculty_peer_assignments():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/faculty/peer-evaluations')
-@require_auth([20001, 20002]) 
+@require_auth([20001, 20002])
 def peer_evaluations_list():
-    user_id = session['user_id']
-    
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    cur.execute("""
-        SELECT p.personnel_id, p.firstname, p.lastname, col.collegename,
-               c.acadyear, c.semester, pa.is_completed
-        FROM peer_assignments pa
-        JOIN personnel p ON pa.evaluatee_id = p.personnel_id
-        JOIN college col ON p.college_id = col.college_id
-        JOIN acadcalendar c ON pa.acadcalendar_id = c.acadcalendar_id
-        WHERE pa.evaluator_id = %s 
-    """, (user_id,))
-    assignments = cur.fetchall()
-    
-    cur.close()
-    conn.close()
-    
-    return render_template('faculty&dean/faculty-peer-list.html', assignments=assignments)
+    # Peer evaluation tasks are shown on the faculty evaluations dashboard.
+    return redirect(url_for('faculty_evaluations'))
 
 @app.route('/faculty/evaluate/<int:evaluatee_id>', methods=['GET', 'POST'])
 @require_auth([20001, 20002])
@@ -7715,62 +7697,101 @@ def submit_peer_eval(evaluatee_id):
 
     if request.method == 'POST':
         try:
-            # Guidelines require a 4-point Likert scale (1-4)
             scores = [int(request.form.get(f'q{i}')) for i in range(1, 21)]
-            
-            # Category Calculation (5 questions each @ 25% per group)
-            cat1_avg = sum(scores[0:5]) / 5   # Dept Contribution
-            cat2_avg = sum(scores[5:10]) / 5  # Collegiality
-            cat3_avg = sum(scores[10:15]) / 5 # Institutional Engagement
-            cat4_avg = sum(scores[15:20]) / 5 # Reliability
-            
-            # Final score calculation based on equal category weighting
+            cat1_avg = sum(scores[0:5]) / 5
+            cat2_avg = sum(scores[5:10]) / 5
+            cat3_avg = sum(scores[10:15]) / 5
+            cat4_avg = sum(scores[15:20]) / 5
             final_score = (cat1_avg + cat2_avg + cat3_avg + cat4_avg) / 4
-            
-            # Mandatory Qualitative Feedback
-            strengths = request.form.get('strengths')
-            growth = request.form.get('growth')
-            comments = request.form.get('comments')
 
-            # Insert raw scores for record-keeping
-            cur.execute("""
-                INSERT INTO evaluation_raw_submissions 
-                (evaluator_id, target_id, cat1_score, cat2_score, cat3_score, cat4_score, 
-                 final_score, strengths, growth, comments, date_submitted, eval_type)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), 'Peer')
-            """, (user_id, evaluatee_id, cat1_avg, cat2_avg, cat3_avg, cat4_avg, 
-                  final_score, strengths, growth, comments))
-            
-            # Update the specific assignment record
-            cur.execute("""
-                UPDATE peer_assignments 
-                SET is_completed = TRUE 
-                WHERE evaluator_id = %s AND evaluatee_id = %s
-            """, (user_id, evaluatee_id))
-            
+            evaluator_name = request.form.get('evaluator_name', '').strip() or None
+            strengths = request.form.get('strengths', '').strip()
+            growth = request.form.get('growth', '').strip()
+            comments = request.form.get('comments', '').strip() or None
+
+            # Resolve personnel_id from user_id
+            cur.execute('SELECT personnel_id FROM personnel WHERE user_id = %s', (user_id,))
+            evaluator_row = cur.fetchone()
+            if not evaluator_row:
+                raise ValueError(f'No personnel record for user_id {user_id}')
+            evaluator_personnel_id = evaluator_row[0]
+
+            # Get acadcalendar_id from the assignment
+            cur.execute(
+                'SELECT acadcalendar_id FROM peer_assignments '
+                'WHERE evaluator_id = %s AND evaluatee_id = %s '
+                'ORDER BY date_assigned DESC LIMIT 1',
+                (evaluator_personnel_id, evaluatee_id))
+            assignment_row = cur.fetchone()
+            if not assignment_row:
+                raise ValueError(f'No peer assignment for evaluator {evaluator_personnel_id} -> {evaluatee_id}')
+            acadcalendar_id = assignment_row[0]
+
+            # 1. Save to peer_evaluation_submissions (source of truth)
+            cur.execute(
+                'INSERT INTO peer_evaluation_submissions '
+                '(evaluator_id, evaluatee_id, acadcalendar_id, evaluator_name, '
+                ' cat1_score, cat2_score, cat3_score, cat4_score, '
+                ' final_score, strengths, growth, comments, date_submitted) '
+                'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())',
+                (evaluator_personnel_id, evaluatee_id, acadcalendar_id, evaluator_name,
+                 cat1_avg, cat2_avg, cat3_avg, cat4_avg,
+                 final_score, strengths, growth, comments))
+
+            # 2. Mark assignment complete
+            cur.execute(
+                'UPDATE peer_assignments SET is_completed = TRUE '
+                'WHERE evaluator_id = %s AND evaluatee_id = %s AND acadcalendar_id = %s',
+                (evaluator_personnel_id, evaluatee_id, acadcalendar_id))
+
+            # 3. Recompute average from all submissions for this evaluatee+semester
+            cur.execute(
+                'SELECT AVG(final_score), COUNT(*) FROM peer_evaluation_submissions '
+                'WHERE evaluatee_id = %s AND acadcalendar_id = %s',
+                (evaluatee_id, acadcalendar_id))
+            avg_row = cur.fetchone()
+            avg_peer_score = float(avg_row[0]) if avg_row and avg_row[0] else 0.0
+            completed_count = int(avg_row[1]) if avg_row else 0
+            expected_count = 2
+
+            # 4. Upsert summary into faculty_evaluations (class_id = NULL for peer)
+            cur.execute(
+                'INSERT INTO faculty_evaluations '
+                '(personnel_id, acadcalendar_id, class_id, evaluator_type, '
+                ' score, total_responses, expected_responses, response_met, last_updated) '
+                'VALUES (%s, %s, NULL, %s, %s, %s, %s, %s, NOW()) '
+                'ON CONFLICT (personnel_id, acadcalendar_id, evaluator_type) '
+                'WHERE class_id IS NULL '
+                'DO UPDATE SET score=EXCLUDED.score, total_responses=EXCLUDED.total_responses, '
+                '             response_met=EXCLUDED.response_met, last_updated=NOW()',
+                (evaluatee_id, acadcalendar_id, 'peer', avg_peer_score,
+                 completed_count, expected_count, completed_count >= expected_count))
+
             conn.commit()
-            return redirect(url_for('peer_evaluations_list'))
-            
+            print(f'Peer eval submitted: evaluator={evaluator_personnel_id} -> evaluatee={evaluatee_id}, score={final_score:.2f}')
+            return redirect(url_for('faculty_evaluations'))
+
         except Exception as e:
             conn.rollback()
-            return f"An error occurred: {e}", 500
+            print(f'Peer eval error: {e}')
+            return f'An error occurred: {e}', 500
         finally:
             cur.close()
-            conn.close()
+            return_db_connection(conn)
 
-    # GET: Fetch evaluatee info with department
-    cur.execute("""
-        SELECT p.firstname, p.lastname, col.collegename
-        FROM personnel p
-        JOIN college col ON p.college_id = col.college_id
-        WHERE p.personnel_id = %s
-    """, (evaluatee_id,))
+    # GET
+    cur.execute(
+        'SELECT p.firstname, p.lastname, col.collegename '
+        'FROM personnel p '
+        'JOIN college col ON p.college_id = col.college_id '
+        'WHERE p.personnel_id = %s',
+        (evaluatee_id,))
     row = cur.fetchone()
     cur.close()
-    conn.close()
+    return_db_connection(conn)
 
     if row is None:
-        return f"Employee with ID {evaluatee_id} not found.", 404
+        return f'Employee with ID {evaluatee_id} not found.', 404
 
     return render_template(
         'faculty&dean/peer-eval-form.html',
