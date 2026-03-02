@@ -317,25 +317,6 @@ def save_notification_to_db(target_audience, target_personnel_id, data):
         print(f"Error saving notification to DB: {e}")
         return None
 
-
-def ensure_schema_updates():
-    """Apply any required schema migrations at startup."""
-    try:
-        conn = db_pool.get_connection()
-        cursor = conn.cursor()
-        # Add probationary_start_date so regularization countdown starts from
-        # when the faculty actually entered probationary status (not hire date).
-        cursor.execute("""
-            ALTER TABLE profile
-            ADD COLUMN IF NOT EXISTS probationary_start_date DATE DEFAULT NULL
-        """)
-        conn.commit()
-        cursor.close()
-        db_pool.return_connection(conn)
-        print("Schema up to date.")
-    except Exception as e:
-        print(f"Schema update error: {e}")
-
 ensure_notifications_table()
 ensure_schema_updates()
 shared_serial = SharedSerialPort()
@@ -893,6 +874,61 @@ ROLE_REDIRECTS = {
     20003: ('hrmd', 'hr_dashboard'),
     20004: ('vppres', 'vp_promotions')
 }
+
+@app.context_processor
+def inject_pending_counts():
+    """
+    Inject role-aware pending counts and is_vpaa into every template context.
+    Keeps sidebar badges and VP role distinction consistent across all pages.
+    """
+    role_id = session.get('user_role')
+    if not role_id:
+        return {}
+
+    result = {}
+    conn = None
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        if role_id == 20003:  # HR
+            cursor.execute(
+                "SELECT COUNT(*) FROM promotion_application "
+                "WHERE current_status = 'hrmd' AND final_decision IS NULL"
+            )
+            result['pending_hr_promo_count'] = cursor.fetchone()[0] or 0
+
+        elif role_id == 20004:  # VP / President
+            # Determine VPAA vs President from the logged-in user's position
+            user_id = session.get('user_id')
+            if user_id:
+                info = get_personnel_info(user_id)
+                pos = (info.get('position') or '').lower()
+                is_vpaa = 'president' not in pos
+            else:
+                is_vpaa = True
+
+            result['is_vpaa'] = is_vpaa
+
+            # Count promotions waiting for this specific role's action
+            status_key = 'vpa' if is_vpaa else 'pres'
+            cursor.execute(
+                "SELECT COUNT(*) FROM promotion_application "
+                "WHERE current_status = %s AND final_decision IS NULL",
+                (status_key,)
+            )
+            result['pending_vp_promo_count'] = cursor.fetchone()[0] or 0
+
+        cursor.close()
+        db_pool.return_connection(conn)
+    except Exception:
+        if conn:
+            try:
+                db_pool.return_connection(conn)
+            except Exception:
+                pass
+
+    return result
 
 def get_personnel_info(user_id):
     """Get personnel information with profile picture - OPTIMIZED with single query"""
