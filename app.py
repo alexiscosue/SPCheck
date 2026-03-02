@@ -318,7 +318,6 @@ def save_notification_to_db(target_audience, target_personnel_id, data):
         return None
 
 ensure_notifications_table()
-ensure_schema_updates()
 shared_serial = SharedSerialPort()
 rfid_reader = RFIDReader(db_pool, shared_serial)
 biometric_reader = BiometricReader(db_pool, shared_serial)
