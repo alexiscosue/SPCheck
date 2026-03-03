@@ -428,8 +428,12 @@ function renderTablePage(pageNumber) {
         const peerScore = formatScore(row.peer_score); // This is the value displayed by default
 
         // MODIFIED OVERALL RATING CELL (Left Aligned)
+        const isComplete = row.score_complete === true;
+        const incompleteIcon = !isComplete && rating > 0
+            ? ` <i class='bx bx-error-circle' title='Incomplete Score: not all evaluator types have been submitted yet.' style='color:#f59e0b;font-size:13px;vertical-align:middle;cursor:help;'></i>`
+            : '';
         const overallDisplay = (rating > 0) ? 
-            `<span class="status ${statusClass}" style="padding: 4px 8px;">${rating.toFixed(2)} - ${statusLabel}</span>` : 
+            `<span class="status ${statusClass}" style="padding: 4px 8px;">${rating.toFixed(2)} - ${statusLabel}</span>${incompleteIcon}` : 
             `<span class="status pending">${statusLabel}</span>`;
             
         // Check if this specific row is being edited (It shouldn't be if we use loadEvaluations() correctly, but good for rendering checks)
@@ -769,12 +773,24 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
     $('#noFeedback').show();
     MODAL.style.display = 'flex';
 
-    $.get(`/api/hr/faculty-evaluation-report/${personnelId}?term_id=${window.CURRENT_TERM_ID}`, function(data) {
+    const selectedTermId = $('#semesterFilter').val() || window.CURRENT_TERM_ID;
+    $.get(`/api/hr/faculty-evaluation-report/${personnelId}?term_id=${selectedTermId}`, function(data) {
         $('#ratingBreakdownBody').empty();
         $('#feedbackList').empty();
         
         if (data.success && data.report) {
             const report = data.report;
+            // Update circle + badge from accurate API score
+            const apiOverall = parseFloat(report.overall_rating) || 0;
+            $('#overallRatingCircle').css('--percentage', `${Math.min((apiOverall / 5) * 100, 100)}`);
+            $('#overallRatingValue').text(apiOverall.toFixed(2));
+            const apiStatus = getStatusInfo(apiOverall);
+            $('#finalStatusBadge').text(apiStatus.label).removeClass().addClass(`status ${apiStatus.class}`);
+            // Incomplete score warning
+            $('#modalIncompleteWarning').remove();
+            if (!report.score_complete && apiOverall > 0) {
+                $('#finalStatusBadge').after(`<span id='modalIncompleteWarning' style='margin-left:8px;color:#f59e0b;font-size:12px;font-weight:600;'><i class='bx bx-error-circle'></i> Incomplete Score</span>`);
+            }
             
             // --- Define all expected evaluation types and their weights/placeholders ---
             const expectedTypes = {

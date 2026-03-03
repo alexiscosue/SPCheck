@@ -8459,12 +8459,17 @@ def api_hr_evaluations():
             SELECT 
                 p.personnel_id,
                 p.college_id,
-                -- Weighted Overall Score
+                -- Weighted Overall Score: partial if not all 3 components present
                 COALESCE(
-                    SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
-                    SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
-                    SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
+                    COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END), 0) * 0.55 +
+                    COALESCE(MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END), 0) * 0.35 +
+                    COALESCE(MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END), 0) * 0.10,
                 0) AS overall_score,
+                -- Score completeness flag
+                (CASE WHEN MAX(CASE WHEN fe.evaluator_type = 'student'    THEN 1 END) = 1
+                       AND MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN 1 END) = 1
+                       AND MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN 1 END) = 1
+                  THEN TRUE ELSE FALSE END) AS score_complete,
                 -- Student Response Count
                 COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.total_responses ELSE 0 END), 0) AS student_responses_count
             FROM personnel p
@@ -8527,17 +8532,21 @@ def api_hr_evaluations():
             -- METRIC 1 (Response Rate): Student Response Count ONLY 
             COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.total_responses ELSE 0 END), 0) AS student_responses_count,
             
-            -- METRIC 2 (Status): Weighted Overall Score 
+            -- METRIC 2: Weighted Overall Score (partial if missing components)
             COALESCE(
-                SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
-                SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
-                SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
+                COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END), 0) * 0.55 +
+                COALESCE(MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END), 0) * 0.35 +
+                COALESCE(MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END), 0) * 0.10,
             0) AS overall_score,
-            -- NEW: Individual Scores
-            COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score END), 0) AS student_score,
-            COALESCE(SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END), 0) AS supervisor_score,
-            COALESCE(SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score END), 0) AS peer_score,
-            
+            -- Individual Scores
+            COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END), 0) AS student_score,
+            COALESCE(MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END), 0) AS supervisor_score,
+            COALESCE(MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END), 0) AS peer_score,
+            -- Completeness flag: TRUE only when all 3 evaluator types present
+            (CASE WHEN MAX(CASE WHEN fe.evaluator_type = 'student'    THEN 1 END) = 1
+                   AND MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN 1 END) = 1
+                   AND MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN 1 END) = 1
+              THEN TRUE ELSE FALSE END) AS score_complete,
             -- Store position for separate filtering/list
             pr.position AS faculty_position
             
@@ -8611,9 +8620,10 @@ def api_hr_evaluations():
         "position": row[3],
         "studentresponses": row[4],
         "avgscore": row[5],
-        "student_score": row[6],     
-        "supervisor_score": row[7],  
-        "peer_score": row[8],        
+        "student_score": row[6],
+        "supervisor_score": row[7],
+        "peer_score": row[8],
+        "score_complete": bool(row[9]),
     } for row in evaluations]
 
     # Combine table data and KPIs into the final JSON response
@@ -8773,26 +8783,33 @@ def api_hr_faculty_evaluation_report(personnel_id):
         # Fixed weights based on business logic: Student(55%), Supervisor(35%), Peer(10%)
         weights = {'student': 0.55, 'supervisor': 0.35, 'peer': 0.10}
 
+        # Group by type: student has multiple rows (per class), supervisor/peer have one.
+        from collections import defaultdict
+        type_scores = defaultdict(list)
+        type_responses = defaultdict(int)
+        type_feedback = defaultdict(list)
+
         for eval_type, score, total_responses, feedback in evaluation_rows:
-            weight = weights.get(eval_type, 0)
-            
-            # Convert score (Decimal) to float before multiplication
             score_float = float(score) if score is not None else 0.0
-            weighted_score = score_float * weight
-            total_score += weighted_score
-            
-            rating_breakdown.append({
-                'type': eval_type.capitalize(),
-                'score': score_float,
-                'weight': weight,
-                'total_responses': total_responses
-            })
-            
-            # --- Process Feedback ---
+            type_scores[eval_type].append(score_float)
+            type_responses[eval_type] += (total_responses or 0)
             if feedback and feedback.strip():
                 comments = [c.strip() for c in feedback.split('\n') if c.strip()]
-                qualitative_feedback.extend(comments)
-            # --- Process Feedback ---
+                type_feedback[eval_type].extend(comments)
+
+        score_complete = all(et in type_scores for et in ['student', 'supervisor', 'peer'])
+
+        for eval_type, weight in weights.items():
+            scores_list = type_scores.get(eval_type, [])
+            avg_score = (sum(scores_list) / len(scores_list)) if scores_list else 0.0
+            total_score += avg_score * weight
+            rating_breakdown.append({
+                'type': eval_type.capitalize(),
+                'score': avg_score,
+                'weight': weight,
+                'total_responses': type_responses.get(eval_type, 0)
+            })
+            qualitative_feedback.extend(type_feedback.get(eval_type, []))
 
 
         cursor.close()
@@ -8805,6 +8822,7 @@ def api_hr_faculty_evaluation_report(personnel_id):
                 'college': collegename,
                 'semester_display': semester_display,
                 'overall_rating': total_score,
+                'score_complete': score_complete,
                 'rating_breakdown': rating_breakdown,
                 'qualitative_feedback': qualitative_feedback
             }
