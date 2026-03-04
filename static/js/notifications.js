@@ -131,9 +131,10 @@ const NotifSystem = (function () {
     if (!data.tap_time && data.notification_type !== 'license' && data.notification_type !== 'probationary') return;
 
     // Role-based filtering for promotion notifications:
-    //   HR      → only 'new_application'
-    //   VPAA    → only 'forwarded_vpaa'
+    //   HR        → only 'new_application'
+    //   VPAA      → only 'forwarded_vpaa'
     //   President → only 'forwarded_president'
+    //   Faculty   → 'approved' and 'rejected' (pushed directly to their queue)
     if (data.notification_type === 'promotion') {
       var act = data.action || '';
       if (_userType === 'hr'        && act !== 'new_application')     return;
@@ -355,6 +356,10 @@ const NotifSystem = (function () {
       title = 'Promotion Forwarded to You'; icon = 'bx-send';         color = '#b45309';
     } else if (n.action === 'forwarded_president') {
       title = 'Promotion Forwarded to You'; icon = 'bx-send';         color = '#1d4ed8';
+    } else if (n.action === 'approved') {
+      title = 'Promotion Approved!';        icon = 'bx-trophy';       color = '#059669';
+    } else if (n.action === 'rejected') {
+      title = 'Promotion Application Rejected'; icon = 'bx-x-circle'; color = '#dc2626';
     } else {
       title = 'Promotion Update';           icon = 'bx-award';        color = '#7b1113';
     }

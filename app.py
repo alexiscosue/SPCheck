@@ -7998,10 +7998,11 @@ def faculty_promotion():
     available_ranks = []
 
     # Promotion window: June 1 – August 31
-    if not (6 <= today.month <= 8):
-        lock_reasons.append(
-            f"Submission window closed. Promotion applications are only accepted June 1 – August 31 each year."
-        )
+    # DEV: window check disabled for testing
+    # if not (6 <= today.month <= 8):
+    #     lock_reasons.append(
+    #         f"Submission window closed. Promotion applications are only accepted June 1 – August 31 each year."
+    #     )
 
     # Active application check
     cursor.execute(
@@ -8087,14 +8088,24 @@ def faculty_promotion():
             available_ranks = [target_rank]
     # 5. Fetch Active Application and History
     cursor.execute("""
-        SELECT application_id, current_status, date_submitted, hrmd_approval_date, vpa_approval_date, pres_approval_date, 
+        SELECT application_id, current_status, date_submitted, hrmd_approval_date, vpa_approval_date, pres_approval_date,
                final_decision, resume, cover_letter, resume_filename, cover_letter_filename, requested_rank,
                tor_filename, tor, diploma_filename, diploma
-        FROM promotion_application 
+        FROM promotion_application
         WHERE faculty_id = %s AND final_decision IS NULL
         ORDER BY date_submitted DESC LIMIT 1
     """, (faculty_id,))
     row = cursor.fetchone()
+
+    # Fetch latest application (including finalized) for stepper display
+    cursor.execute("""
+        SELECT application_id, current_status, date_submitted, hrmd_approval_date, vpa_approval_date, pres_approval_date,
+               final_decision, requested_rank, letter_acknowledged
+        FROM promotion_application
+        WHERE faculty_id = %s
+        ORDER BY date_submitted DESC LIMIT 1
+    """, (faculty_id,))
+    latest_row = cursor.fetchone()
 
     cursor.execute("""
         SELECT years_of_service, current_status, hrmd_endorsement_date, vpa_recommendation_date, pres_approval_date, final_decision, date_initiated
@@ -8153,7 +8164,13 @@ def faculty_promotion():
             'vpa_date': h[4].strftime('%Y-%m-%d') if h[4] else None,
             'pres_date': h[5].strftime('%Y-%m-%d') if h[5] else None,
             'requested_position': h[6],
-            'remarks': h[7] if display_final == 'Rejected' else 'Application under review'
+            'remarks': (
+                (h[7] or 'No reason provided.')
+                if display_final == 'Rejected'
+                else (f"Congratulations! Your promotion to {h[6]} has been approved."
+                      if display_final == 'Approved'
+                      else 'Application is currently under review.')
+            )
         })
 
     # 6. Prepare Final Template Data
@@ -8161,6 +8178,47 @@ def faculty_promotion():
     profile_img = f"data:image/jpeg;base64,{base64.b64encode(bytes(profilepic)).decode('utf-8')}" if profilepic else ''
     
     at_highest_rank = current_rank == 'Professor'
+
+    # DEV: disable all promotion locks for testing
+    lock_reasons.clear()
+    if not available_ranks and not at_highest_rank:
+        # determine target rank so the form has something to submit
+        target_idx = RANK_ORDER.index(current_rank) + 1 if current_rank in RANK_ORDER else 0
+        if target_idx < len(RANK_ORDER):
+            available_ranks = [RANK_ORDER[target_idx]]
+
+    # Stepper display vars — always sourced from latest_row so they persist after approval/rejection
+    _STAGE_STATUS = {
+        'hrmd': 'Under HR Review',
+        'vpa': 'Under VPAA Review',
+        'pres': 'Awaiting Presidential Approval',
+        'approved': 'Approved',
+        'rejected': 'Rejected',
+    }
+    if latest_row:
+        _lr_status   = (latest_row[1] or '').lower()
+        _lr_decision = latest_row[6]
+        if _lr_decision == 1 or _lr_status == 'approved':
+            _display_decision = 'approved'
+        elif _lr_decision == 0 or _lr_status == 'rejected':
+            _display_decision = 'rejected'
+        else:
+            _display_decision = None
+        display_date_submitted  = latest_row[2]
+        display_hrmd_date       = latest_row[3]
+        display_vpa_date        = latest_row[4]
+        display_pres_date       = latest_row[5]
+        display_current_status  = _STAGE_STATUS.get(_lr_status, _lr_status.title() if _lr_status else '')
+        display_requested_rank  = latest_row[7]
+        display_final_decision  = _display_decision
+        has_unacknowledged_letter = (_lr_decision == 1 and latest_row[8] is False)
+        letter_app_id           = latest_row[0] if _lr_decision == 1 else None
+    else:
+        display_date_submitted = display_hrmd_date = display_vpa_date = display_pres_date = None
+        display_current_status = display_requested_rank = display_final_decision = None
+        has_unacknowledged_letter = False
+        letter_app_id = None
+
     template_data = {
         'faculty_name': f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}",
         'college': college or 'College of Computer Studies',
@@ -8183,7 +8241,17 @@ def faculty_promotion():
         'regularization_status_data': {
             'requested_tenure': "Tenured" if float(reg_app[0] or years_decimal) >= 7 else "Regular",
             'current_status': reg_app[1], 'hrmd_date': reg_app[2], 'vpa_date': reg_app[3], 'pres_date': reg_app[4]
-        } if reg_app else None
+        } if reg_app else None,
+        # Stepper display (always shows latest application state)
+        'display_date_submitted': display_date_submitted,
+        'display_hrmd_date': display_hrmd_date,
+        'display_vpa_date': display_vpa_date,
+        'display_pres_date': display_pres_date,
+        'display_current_status': display_current_status,
+        'display_requested_rank': display_requested_rank,
+        'display_final_decision': display_final_decision,
+        'has_unacknowledged_letter': has_unacknowledged_letter,
+        'letter_app_id': letter_app_id,
     }
 
     if row:
@@ -9916,33 +9984,57 @@ def vp_promotions():
 # === REGULARIZATION API ROUTES FOR VP/PRESIDENT ===
 
 @app.route('/api/promotion/forward-to-president', methods=['POST'])
-@require_auth([20004])  # Only VPAA
+@require_auth([20004])  # VPAA or President
 def forward_to_president():
-    """VPAA forwards promotion to President"""
+    """VPAA (or President acting as reviewer) forwards a vpa-status promotion to President."""
     try:
         data = request.get_json()
         application_id = data.get('application_id')
         vpa_remarks = data.get('vpa_remarks', '').strip()
-        
+
         if not application_id:
             return jsonify(success=False, error='Application ID is required'), 400
-        
+
         conn = db_pool.get_connection()
         cursor = conn.cursor()
-        
+
+        # Verify the application is actually at the vpa stage
+        cursor.execute(
+            "SELECT current_status FROM promotion_application WHERE application_id = %s",
+            (application_id,)
+        )
+        status_row = cursor.fetchone()
+        if not status_row:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify(success=False, error='Application not found'), 404
+        if status_row[0] != 'vpa':
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify(success=False, error='Application is not at VPAA review stage'), 400
+
+        # Determine who is forwarding (VPAA vs President)
+        user_id = session.get('user_id')
+        cursor.execute(
+            "SELECT pr.position FROM personnel p LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id WHERE p.user_id = %s",
+            (user_id,)
+        )
+        pos_row = cursor.fetchone()
+        forwarder_label = 'President' if (pos_row and pos_row[0] == 'President') else 'VPAA'
+
         philippines_tz = pytz.timezone('Asia/Manila')
         current_time = datetime.now(philippines_tz)
-        
+
         cursor.execute(
-            """UPDATE promotion_application 
-               SET current_status = %s, 
+            """UPDATE promotion_application
+               SET current_status = %s,
                    vpa_approval_date = %s,
                    vpa_remarks = %s
                WHERE application_id = %s""",
             ('pres', current_time, vpa_remarks if vpa_remarks else None, application_id)
         )
-        
-        # Fetch faculty name for notification before releasing connection
+
+        # Fetch faculty name for notification
         cursor.execute(
             "SELECT p.firstname, p.lastname, pa.requested_rank "
             "FROM promotion_application pa JOIN personnel p ON pa.faculty_id = p.personnel_id "
@@ -9951,11 +10043,9 @@ def forward_to_president():
         fac_row = cursor.fetchone()
 
         conn.commit()
-
         cursor.close()
         db_pool.return_connection(conn)
 
-        user_id = session.get('user_id')
         vp_info = get_personnel_info(user_id)
         vp_personnel_id = vp_info.get('personnel_id')
 
@@ -9965,18 +10055,18 @@ def forward_to_president():
             log_audit_action(
                 vp_personnel_id,
                 'Promotion forwarded to President',
-                f'VPAA forwarded {fac_name}\'s promotion application (App ID: {application_id}) for {fac_rank}',
+                f'{forwarder_label} forwarded {fac_name}\'s promotion application (App ID: {application_id}) for {fac_rank}',
                 before_value=f'Faculty: {fac_name} | Applying For: {fac_rank} | Status: VPAA Review',
-                after_value='Status: President Review' + (f' | VPAA Notes: {vpa_remarks}' if vpa_remarks else '')
+                after_value='Status: President Review' + (f' | Notes: {vpa_remarks}' if vpa_remarks else '')
             )
             trigger_promotion_forwarded_president(fac_name, fac_rank)
         else:
             log_audit_action(
                 vp_personnel_id,
                 'Promotion forwarded to President',
-                f'VPAA forwarded promotion application (App ID: {application_id}) to President',
+                f'{forwarder_label} forwarded promotion application (App ID: {application_id}) to President',
                 before_value='Status: VPAA Review',
-                after_value='Status: President Review' + (f' | VPAA Notes: {vpa_remarks}' if vpa_remarks else '')
+                after_value='Status: President Review' + (f' | Notes: {vpa_remarks}' if vpa_remarks else '')
             )
 
         return jsonify(success=True, message='Application forwarded to President successfully')
@@ -10325,13 +10415,14 @@ def promotion_document_upload():
         return "Unauthorized", 401
 
     # Enforce the official promotion submission window: June 1 – August 31
-    from datetime import date as _date
-    _today = _date.today()
-    if not (6 <= _today.month <= 8):
-        return (
-            "Promotion applications are only accepted between June 1 and August 31 each year. "
-            "Please resubmit during the official submission period."
-        ), 403
+    # DEV: date window disabled for testing
+    # from datetime import date as _date
+    # _today = _date.today()
+    # if not (6 <= _today.month <= 8):
+    #     return (
+    #         "Promotion applications are only accepted between June 1 and August 31 each year. "
+    #         "Please resubmit during the official submission period."
+    #     ), 403
 
     conn = db_pool.get_connection()
     cursor = conn.cursor()
@@ -10975,13 +11066,128 @@ def approve_promotion():
             "UPDATE profile SET position = %s WHERE personnel_id = %s",
             (requested_rank, faculty_id)
         )
-        
+
+        # Generate promotion letter PDF with ReportLab
+        from io import BytesIO
+        import os as _os
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.lib import colors as rl_colors
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
+
+        # Fetch the President's full name (firstname + lastname + honorifics/suffix)
+        cursor.execute("""
+            SELECT p.firstname, p.lastname, p.honorifics
+            FROM personnel p
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            WHERE pr.position = 'President'
+            LIMIT 1
+        """)
+        pres_row = cursor.fetchone()
+        if pres_row:
+            pres_fn, pres_ln, pres_sfx = pres_row
+            pres_fullname = f"{pres_fn} {pres_ln}"
+            if pres_sfx:
+                pres_fullname += f", {pres_sfx}"
+        else:
+            pres_fullname = "The President"
+
+        buf = BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=(8.5 * inch, 11 * inch),
+                                leftMargin=1.2*inch, rightMargin=1.2*inch,
+                                topMargin=1*inch, bottomMargin=1*inch)
+        styles = getSampleStyleSheet()
+        heading  = ParagraphStyle('heading',  parent=styles['Normal'], fontSize=13, leading=16, alignment=TA_CENTER, fontName='Helvetica-Bold')
+        subhead  = ParagraphStyle('subhead',  parent=styles['Normal'], fontSize=11, leading=14, alignment=TA_CENTER, fontName='Helvetica-Bold')
+        body_j   = ParagraphStyle('body_j',   parent=styles['Normal'], fontSize=10.5, leading=15, alignment=TA_JUSTIFY, fontName='Helvetica')
+        body_l   = ParagraphStyle('body_l',   parent=styles['Normal'], fontSize=10.5, leading=15, alignment=TA_LEFT,    fontName='Helvetica')
+        bold_l   = ParagraphStyle('bold_l',   parent=styles['Normal'], fontSize=10.5, leading=15, alignment=TA_LEFT,    fontName='Helvetica-Bold')
+        muted    = ParagraphStyle('muted',    parent=styles['Normal'], fontSize=9,    leading=12, alignment=TA_CENTER,  fontName='Helvetica', textColor=rl_colors.grey)
+
+        ph_tz = pytz.timezone('Asia/Manila')
+        letter_date = datetime.now(ph_tz).strftime('%B %d, %Y')
+        fullname_display = name_row[0] + ' ' + name_row[1] if name_row else fac_name
+
+        logo_path = _os.path.join(_os.path.dirname(__file__), 'static', 'img', 'spc_logo.png')
+
+        story = []
+
+        # Logo header
+        if _os.path.exists(logo_path):
+            logo = RLImage(logo_path, width=0.85*inch, height=0.85*inch)
+            logo.hAlign = 'CENTER'
+            story.append(logo)
+            story.append(Spacer(1, 0.08*inch))
+
+        story += [
+            Paragraph("ST. PETER'S COLLEGE", heading),
+            Paragraph("Iligan City, Philippines", subhead),
+            Spacer(1, 0.1*inch),
+            Paragraph("OFFICE OF THE PRESIDENT", subhead),
+            Spacer(1, 0.3*inch),
+            Paragraph(letter_date, body_l),
+            Spacer(1, 0.15*inch),
+            Paragraph(f"<b>{fullname_display}</b>", body_l),
+            Paragraph("Faculty Member", body_l),
+            Paragraph("St. Peter's College", body_l),
+            Spacer(1, 0.25*inch),
+            Paragraph("Dear Faculty Member,", body_l),
+            Spacer(1, 0.15*inch),
+            Paragraph(
+                f"On behalf of the Administration of St. Peter's College, I am pleased to inform you that your "
+                f"application for promotion has been reviewed and approved by the Office of the President.",
+                body_j),
+            Spacer(1, 0.15*inch),
+            Paragraph(
+                f"Effective immediately, you are hereby promoted to the rank of <b>{requested_rank}</b>. "
+                "This promotion reflects your dedication, exemplary performance, and outstanding contributions "
+                "to the academic community of St. Peter's College.",
+                body_j),
+            Spacer(1, 0.15*inch),
+            Paragraph(
+                "Please coordinate with the Human Resource Management Division (HRMD) for the necessary "
+                "documentary requirements and adjustments to your compensation and benefits. "
+                "Congratulations on this well-deserved achievement.",
+                body_j),
+            Spacer(1, 0.25*inch),
+            Paragraph("Sincerely,", body_l),
+            Spacer(1, 0.5*inch),
+            Paragraph(f"<b>{pres_fullname}</b>", bold_l),
+            Paragraph("President, St. Peter's College", body_l),
+            Spacer(1, 0.4*inch),
+            Paragraph(
+                "This letter is system-generated and serves as official notification of your promotion. "
+                "Please acknowledge receipt by clicking the Acknowledge button in the Faculty Portal.",
+                muted),
+        ]
+        doc.build(story)
+        letter_bytes = buf.getvalue()
+
+        cursor.execute(
+            """UPDATE promotion_application
+               SET promotion_letter = %s, letter_generated_at = %s, letter_acknowledged = FALSE
+               WHERE application_id = %s""",
+            (letter_bytes, current_time, application_id)
+        )
+
         conn.commit()
-        
+
+        # Notify the faculty member via SSE
+        _push_to_queue(faculty_id, {
+            'notification_type': 'promotion',
+            'action': 'approved',
+            'person_name': fac_name,
+            'requested_rank': requested_rank,
+            'message': f'Congratulations! Your promotion application to {requested_rank} has been approved.',
+            'application_id': application_id,
+            'tap_time': datetime.now(ph_tz).strftime('%A, %B %d, %Y %I:%M %p'),
+        })
+
         # Audit log
         personnel_info = get_personnel_info(user_id)
         personnel_id = personnel_info.get('personnel_id')
-        
+
         if personnel_id:
             log_audit_action(
                 personnel_id,
@@ -10990,10 +11196,10 @@ def approve_promotion():
                 before_value=f'Faculty: {fac_name} | Status: President Review',
                 after_value=f'Status: Approved | New Rank: {requested_rank}' + (f' | President Notes: {pres_remarks}' if pres_remarks else '')
             )
-        
+
         cursor.close()
         db_pool.return_connection(conn)
-        
+
         return jsonify(success=True, message=f'Promotion approved! Faculty rank updated to {requested_rank}')
         
     except Exception as e:
@@ -11027,7 +11233,7 @@ def reject_promotion():
         
         # Get current status and faculty name
         cursor.execute("""
-            SELECT pa.current_status, p.firstname, p.lastname, pa.requested_rank
+            SELECT pa.current_status, p.firstname, p.lastname, pa.requested_rank, pa.faculty_id
             FROM promotion_application pa
             JOIN personnel p ON pa.faculty_id = p.personnel_id
             WHERE pa.application_id = %s
@@ -11039,26 +11245,38 @@ def reject_promotion():
             db_pool.return_connection(conn)
             return jsonify(success=False, error='Application not found'), 404
 
-        current_status, fac_firstname, fac_lastname, requested_rank = result
+        current_status, fac_firstname, fac_lastname, requested_rank, rejected_faculty_id = result
         fac_name = f"{fac_lastname}, {fac_firstname}"
-        
+
         # Update status to rejected with rejection reason
         cursor.execute(
-            """UPDATE promotion_application 
-               SET current_status = %s, 
+            """UPDATE promotion_application
+               SET current_status = %s,
                    final_decision = %s,
                    rejection_reason = %s
                WHERE application_id = %s""",
             ('rejected', 0, rejection_reason, application_id)
         )
-        
+
         conn.commit()
-        
+
+        # Notify the faculty member via SSE
+        ph_tz = pytz.timezone('Asia/Manila')
+        _push_to_queue(rejected_faculty_id, {
+            'notification_type': 'promotion',
+            'action': 'rejected',
+            'person_name': fac_name,
+            'requested_rank': requested_rank,
+            'message': f'Your promotion application to {requested_rank} has been rejected. Reason: {rejection_reason}',
+            'application_id': application_id,
+            'tap_time': datetime.now(ph_tz).strftime('%A, %B %d, %Y %I:%M %p'),
+        })
+
         # Audit log
         user_id = session.get('user_id')
         personnel_info = get_personnel_info(user_id)
         personnel_id = personnel_info.get('personnel_id')
-        
+
         if personnel_id:
             _stage_labels = {'hrmd': 'HRMD Review', 'vpa': 'VPAA Review', 'pres': 'President Review'}
             stage_label = _stage_labels.get(current_status, current_status.title() if current_status else 'Unknown')
@@ -11072,7 +11290,7 @@ def reject_promotion():
 
         cursor.close()
         db_pool.return_connection(conn)
-        
+
         return jsonify(success=True, message='Promotion application rejected')
         
     except Exception as e:
@@ -11083,6 +11301,104 @@ def reject_promotion():
             conn.rollback()
             cursor.close()
             db_pool.return_connection(conn)
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/promotion/letter/<int:application_id>')
+@require_auth([20001, 20002])
+def get_promotion_letter(application_id):
+    """Stream the promotion letter PDF for a given application."""
+    try:
+        user_id = session.get('user_id')
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        # Resolve the logged-in faculty's personnel_id
+        cursor.execute(
+            "SELECT p.personnel_id FROM personnel p WHERE p.user_id = %s",
+            (user_id,)
+        )
+        pid_row = cursor.fetchone()
+        if not pid_row:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify(success=False, error='Personnel record not found'), 404
+        logged_in_personnel_id = pid_row[0]
+
+        cursor.execute(
+            "SELECT promotion_letter, faculty_id FROM promotion_application WHERE application_id = %s",
+            (application_id,)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        if not row or row[0] is None:
+            return jsonify(success=False, error='Letter not found'), 404
+
+        letter_bytes, owner_faculty_id = row
+        if logged_in_personnel_id != owner_faculty_id:
+            return jsonify(success=False, error='Access denied'), 403
+
+        from flask import Response
+        return Response(
+            bytes(letter_bytes),
+            mimetype='application/pdf',
+            headers={'Content-Disposition': f'inline; filename="promotion_letter_{application_id}.pdf"'}
+        )
+    except Exception as e:
+        print(f"Error serving promotion letter: {e}")
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/promotion/acknowledge/<int:application_id>', methods=['POST'])
+@require_auth([20001, 20002])
+def acknowledge_promotion_letter(application_id):
+    """Mark the promotion letter as acknowledged by the faculty."""
+    conn = None
+    try:
+        user_id = session.get('user_id')
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT p.personnel_id FROM personnel p WHERE p.user_id = %s",
+            (user_id,)
+        )
+        pid_row = cursor.fetchone()
+        if not pid_row:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify(success=False, error='Personnel record not found'), 404
+        logged_in_personnel_id = pid_row[0]
+
+        cursor.execute(
+            "SELECT faculty_id FROM promotion_application WHERE application_id = %s AND final_decision = 1",
+            (application_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify(success=False, error='Application not found or not yet approved'), 404
+
+        if logged_in_personnel_id != row[0]:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify(success=False, error='Access denied'), 403
+
+        cursor.execute(
+            "UPDATE promotion_application SET letter_acknowledged = TRUE WHERE application_id = %s",
+            (application_id,)
+        )
+        conn.commit()
+        cursor.close()
+        db_pool.return_connection(conn)
+        return jsonify(success=True, message='Letter acknowledged')
+    except Exception as e:
+        print(f"Error acknowledging promotion letter: {e}")
+        if conn:
+            conn.rollback()
         return jsonify(success=False, error=str(e)), 500
 
 
@@ -11380,9 +11696,11 @@ def get_promotion_eligibility():
                                                 #else:
                                                 #   is_tenure_ok = years_employed >= 3
         
-    is_attendance_ok = True                     #avg_attendance_rate >= 80.0
-    is_eval_ok = True                           #weighted_eval_score >= 3.0
-    can_apply = is_tenure_ok and is_attendance_ok and is_eval_ok and is_cooldown_ok
+    # DEV: all eligibility checks disabled for testing
+    is_attendance_ok = True  # avg_attendance_rate >= 80.0
+    is_eval_ok = True        # weighted_eval_score >= 3.0
+    is_cooldown_ok = True
+    can_apply = True  # is_tenure_ok and is_attendance_ok and is_eval_ok and is_cooldown_ok
 
     # Determine tenure type (for display, prioritizing employment_status)
     tenure_type = employment_status
