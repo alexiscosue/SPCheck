@@ -722,13 +722,21 @@ def return_db_connection(conn):
 
 
 # ========== Google Sheets ==========
+def _get_gsheets_creds(scopes):
+    """Load Google service account credentials from env var or fallback to file."""
+    import json as _json
+    creds_json = os.getenv('GOOGLE_CREDENTIALS_JSON')
+    if creds_json:
+        return Credentials.from_service_account_info(_json.loads(creds_json), scopes=scopes)
+    return Credentials.from_service_account_file('spcheck-ingest-key.json', scopes=scopes)
+
 def get_students_score_records():
     SERVICE_ACCOUNT_FILE = 'spcheck-ingest-key.json'
     SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
     
     try:
         print("🟡 [SHEETS] Attempting to authorize Google Sheets API...")
-        creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+        creds = _get_gsheets_creds(SCOPES)
         gc = gspread.authorize(creds)
         print("✅ [SHEETS] Authorization successful.")
         
@@ -765,7 +773,7 @@ def get_supervisors_score_records():
     
     try:
         print(f"🟡 [SHEETS] Attempting to fetch records from: {SHEET_NAME}")
-        creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+        creds = _get_gsheets_creds(SCOPES)
         gc = gspread.authorize(creds)
         
         url = 'https://docs.google.com/spreadsheets/d/1uWiA1_c5fVqYf1dNwAZgtA5xAaUrgMAHH3BtABIZh-Y/edit'
@@ -796,7 +804,7 @@ def get_peers_score_records():
     
     try:
         print(f"🟡 [SHEETS] Attempting to fetch records from: {SHEET_NAME}")
-        creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+        creds = _get_gsheets_creds(SCOPES)
         gc = gspread.authorize(creds)
         
         url = 'https://docs.google.com/spreadsheets/d/1uWiA1_c5fVqYf1dNwAZgtA5xAaUrgMAHH3BtABIZh-Y/edit'
@@ -7926,7 +7934,7 @@ def faculty_promotion():
             (SELECT acadcalendar_id FROM acadcalendar
              WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
              ORDER BY semesterstart DESC LIMIT 1),
-            pr.highest_degree_level, pr.has_doctorate, pr.has_aligned_master,
+            pr.has_doctorate, pr.has_aligned_master,
             pr.probationary_start_date
         FROM personnel p
         LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
@@ -7942,7 +7950,7 @@ def faculty_promotion():
 
     (faculty_id, hire_date, current_rank, firstname, lastname,
      honorifics, college, profilepic, employment_status, current_term_id,
-     highest_degree_level, has_doctorate, has_aligned_master,
+     has_doctorate, has_aligned_master,
      probationary_start_date) = result
 
     # 2. SERVICE CALCULATION
@@ -11690,50 +11698,82 @@ def initiate_regularization():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# Rank promotion ladder and per-rank requirements
+_RANK_LADDER = [
+    'Associate Instructor',
+    'Instructor',
+    'Assistant Professor',
+    'Associate Professor',
+    'Professor',
+]
+
+_RANK_REQUIREMENTS = {
+    'Associate Instructor': {'degree': 'Bachelor',  'years': 3},
+    'Instructor':           {'degree': 'Master',    'years': 4},
+    'Assistant Professor':  {'degree': 'Master',    'years': 5},
+    'Associate Professor':  {'degree': 'Doctorate', 'years': 9},
+    'Professor':            {'degree': 'Doctorate', 'years': 10},
+}
+
+
+def _has_degree(required_degree, has_aligned_master, has_doctorate):
+    """Return True if the faculty holds at least the required degree level."""
+    if required_degree == 'Bachelor':
+        return True
+    if required_degree == 'Master':
+        return bool(has_aligned_master)
+    if required_degree == 'Doctorate':
+        return bool(has_doctorate)
+    return False
+
+
 @app.route('/api/faculty/promotion/eligibility')
 @require_auth([20001, 20002])
 def get_promotion_eligibility():
     user_id = session.get('user_id')
     if not user_id:
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
+
     conn = db_pool.get_connection()
     cursor = conn.cursor()
-    
-    # Get faculty info, hire date, employment status, and current term
+
+    # Get faculty info, hire date, employment status, degree flags, current rank, and current term
     cursor.execute("""
-        SELECT 
-            p.personnel_id, 
+        SELECT
+            p.personnel_id,
             p.hiredate,
-            pr.employmentstatus, 
-            (SELECT acadcalendar_id 
-             FROM acadcalendar 
-             WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend 
-             ORDER BY semesterstart DESC 
+            pr.employmentstatus,
+            pr.position,
+            pr.has_aligned_master,
+            pr.has_doctorate,
+            (SELECT acadcalendar_id
+             FROM acadcalendar
+             WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+             ORDER BY semesterstart DESC
              LIMIT 1)
         FROM personnel p
         LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
         WHERE p.user_id = %s
     """, (user_id,))
-    
+
     result = cursor.fetchone()
     if not result:
         cursor.close()
         db_pool.return_connection(conn)
         return jsonify({'success': False, 'error': 'Faculty not found'}), 404
-    
-    faculty_id, hire_date, employment_status, current_term_id = result
-    
-    # Calculate years of service (Used for fallback and display)
+
+    faculty_id, hire_date, employment_status, current_rank, has_aligned_master, has_doctorate, current_term_id = result
+
+    # Calculate years of teaching from hire date
     from datetime import date
     today = date.today()
     years_employed = 0
-    
+
     if hire_date:
         years_employed = today.year - hire_date.year
         if (today.month < hire_date.month) or (today.month == hire_date.month and today.day < hire_date.day):
             years_employed -= 1
-    
+
     # Check attendance rate
     cursor.execute("""
         SELECT COALESCE(AVG(ar.attendancerate), 0) AS avg_attendance_rate
@@ -11741,7 +11781,7 @@ def get_promotion_eligibility():
         WHERE ar.personnel_id = %s AND ar.acadcalendar_id = %s
     """, (faculty_id, current_term_id))
     avg_attendance_rate = float(cursor.fetchone()[0] or 0)
-    
+
     # Check weighted evaluation score
     cursor.execute("""
         SELECT COALESCE(
@@ -11754,7 +11794,7 @@ def get_promotion_eligibility():
         WHERE fe.personnel_id = %s AND fe.acadcalendar_id = %s
     """, (faculty_id, current_term_id))
     weighted_eval_score = float(cursor.fetchone()[0] or 0)
-    
+
     # Check promotion cooldown
     cursor.execute("""
         SELECT pres_approval_date
@@ -11763,48 +11803,70 @@ def get_promotion_eligibility():
         ORDER BY pres_approval_date DESC
         LIMIT 1
     """, (faculty_id,))
-    
+
     last_promotion = cursor.fetchone()
     is_cooldown_ok = True
     months_remaining = 0
-    
+
     if last_promotion and last_promotion[0]:
         days_since_promotion = (today - last_promotion[0].date()).days
         years_since_promotion = days_since_promotion / 365.25
-        
+
         if years_since_promotion < 1.0:
             is_cooldown_ok = False
-            # Calculate months remaining for lock reason display (30.44 days per month avg)
             months_remaining = int((365.25 - days_since_promotion) / 30.44)
-    
+
     # Check for active application
     cursor.execute("""
-        SELECT COUNT(*) 
-        FROM promotion_application 
+        SELECT COUNT(*)
+        FROM promotion_application
         WHERE faculty_id = %s AND final_decision IS NULL
     """, (faculty_id,))
     has_active_application = cursor.fetchone()[0] > 0
-    
+
     cursor.close()
     db_pool.return_connection(conn)
-    
-    # --- Determine Eligibility and Tenure Status ---
-    
-    is_tenure_ok = True
-    
-                                                #if employment_status in ["Regular", "Tenured"]:
-                                                #    is_tenure_ok = True
-                                                #elif employment_status == "Probationary":
-                                                    # Probationary requires 3 years of service minimum for promotion eligibility
-                                                #    is_tenure_ok = years_employed >= 3
-                                                #else:
-                                                #   is_tenure_ok = years_employed >= 3
-        
+
+    # --- Determine next rank and rank-based requirements ---
+
+    # Find the faculty's position in the ladder; default to bottom if unrecognized
+    try:
+        current_index = _RANK_LADDER.index(current_rank)
+    except (ValueError, TypeError):
+        current_index = -1  # treat as below Associate Instructor
+
+    if current_index >= len(_RANK_LADDER) - 1:
+        # Already at the top rank — cannot promote further
+        return jsonify({
+            'success': True,
+            'can_apply': False,
+            'has_active_application': has_active_application,
+            'tenure_type': employment_status or 'Regular',
+            'years_employed': years_employed,
+            'attendance_rate': avg_attendance_rate,
+            'eval_score': weighted_eval_score,
+            'is_cooldown_ok': is_cooldown_ok,
+            'months_remaining': months_remaining,
+            'current_rank': current_rank,
+            'next_rank': None,
+            'required_degree': None,
+            'required_years': None,
+            'lock_reasons': ['Already at the highest rank (Professor)']
+        })
+
+    next_rank = _RANK_LADDER[current_index + 1]
+    req = _RANK_REQUIREMENTS[next_rank]
+    required_degree = req['degree']
+    required_years = req['years']
+
+    is_degree_ok = _has_degree(required_degree, has_aligned_master, has_doctorate)
+    is_years_ok = years_employed >= required_years
     is_attendance_ok = avg_attendance_rate >= 80.0
     is_eval_ok = weighted_eval_score >= 3.0
-    can_apply = is_tenure_ok and is_attendance_ok and is_eval_ok and is_cooldown_ok
 
-    # Determine tenure type (for display, prioritizing employment_status)
+    can_apply = is_degree_ok and is_years_ok and is_attendance_ok and is_eval_ok and is_cooldown_ok
+
+    # Determine tenure type for display
     tenure_type = employment_status
     if not tenure_type:
         if years_employed >= 7:
@@ -11813,24 +11875,21 @@ def get_promotion_eligibility():
             tenure_type = 'Regular'
         else:
             tenure_type = 'Probationary'
-    
-    lock_reasons = []
-    
-    if not is_tenure_ok:
-        if employment_status == "Probationary" and years_employed < 3:
-            years_needed = 3 - years_employed
-            lock_reasons.append(f"Requires {years_needed} more year(s) of service (Probationary)")
-        elif not employment_status and years_employed < 3:
-            years_needed = 3 - years_employed
-            lock_reasons.append(f"Requires {years_needed} more year(s) of service (Status Missing)")
 
+    lock_reasons = []
+
+    if not is_degree_ok:
+        lock_reasons.append(f"Degree: {required_degree}'s Degree required for {next_rank}")
+    if not is_years_ok:
+        years_needed = required_years - years_employed
+        lock_reasons.append(f"Teaching experience: {years_needed} more year(s) needed (requires {required_years} years for {next_rank})")
     if not is_attendance_ok:
         lock_reasons.append(f"Attendance: {avg_attendance_rate:.1f}% (needs 80%+)")
     if not is_eval_ok:
         lock_reasons.append(f"Evaluation: {weighted_eval_score:.2f} (needs 3.00+)")
     if not is_cooldown_ok:
         lock_reasons.append(f"Cooldown: {months_remaining} month(s) remaining")
-    
+
     return jsonify({
         'success': True,
         'can_apply': can_apply and not has_active_application,
@@ -11841,6 +11900,12 @@ def get_promotion_eligibility():
         'eval_score': weighted_eval_score,
         'is_cooldown_ok': is_cooldown_ok,
         'months_remaining': months_remaining,
+        'current_rank': current_rank,
+        'next_rank': next_rank,
+        'required_degree': required_degree,
+        'required_years': required_years,
+        'is_degree_ok': is_degree_ok,
+        'is_years_ok': is_years_ok,
         'lock_reasons': lock_reasons
     })
 
