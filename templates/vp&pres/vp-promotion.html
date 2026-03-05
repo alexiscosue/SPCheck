@@ -46,7 +46,7 @@
     <select id="filterPromotionStatus">
       <option value="">All Status</option>
       <option value="Hrmd">For HRMD Checking</option>
-      <option value="Vpa">For VPAA Checking</option>
+      <option value="Vpa">For VPA Checking</option>
       <option value="Pres">For President Checking</option>
       <option value="approved">Approved</option>
       <option value="rejected">Rejected</option>
@@ -73,7 +73,7 @@
     </select>
     <select id="filterRegularizationStatus">
       <option value="">All Status</option>
-      <option value="vpa">For VPAA Review</option>
+      <option value="vpa">For VPA Review</option>
       <option value="pres">For President Review</option>
     </select>
   </div>
@@ -82,7 +82,13 @@
   <div class="card" style="grid-column:1 / -1; padding:20px">
     <div class="tabs_profile">
       <div class="tab active" data-tab="promotions">Promotions</div>
-      <div class="tab" data-tab="regularizations">Regularizations</div>
+      <div class="tab" data-tab="regularizations" style="display:inline-flex; align-items:center; gap:6px;">
+        Regularizations
+        {% set forwarded_count = regularizations|selectattr('reg_status','equalto','vpa')|list|length if is_vpaa else regularizations|selectattr('reg_status','equalto','pres')|list|length %}
+        {% if forwarded_count > 0 %}
+        <span style="background:#7b1113; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:99px; line-height:1.6;">{{ forwarded_count }}</span>
+        {% endif %}
+      </div>
     </div>
 
     <!-- Promotions Table -->
@@ -148,7 +154,7 @@
                 </span>
                 {% elif 'vpa' in promo.status|lower %}
                 <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#eff6ff;color:#1d4ed8;padding:4px 10px;border-radius:10px;border:1px solid #bfdbfe;">
-                  <i class='bx bx-time-five' style="font-size:12px;"></i> VPAA Review
+                  <i class='bx bx-time-five' style="font-size:12px;"></i> VPA Review
                 </span>
                 {% elif 'pres' in promo.status|lower %}
                 <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#f5f3ff;color:#6d28d9;padding:4px 10px;border-radius:10px;border:1px solid #ddd6fe;">
@@ -208,14 +214,26 @@
     <!-- Regularizations Table -->
     <div class="tab-content" id="regularizations">
 
-      <!-- Section Banner -->
-      <div style="border-left:4px solid #16a34a;border-radius:0 10px 10px 0;background:#f0fdf4;padding:14px 18px;margin-bottom:6px;display:flex;align-items:center;gap:12px;">
-        <i class='bx bx-check-shield' style="font-size:22px;color:#16a34a;flex-shrink:0;"></i>
-        <div style="flex:1;">
-          <div style="font-size:14px;font-weight:700;color:#14532d;">Regularization Applications</div>
-          <div style="font-size:11px;color:#166534;margin-top:1px;">Faculty pending tenure regularization approval.</div>
+      <!-- Section Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:40px;height:40px;background:linear-gradient(135deg,#7b1113,#9b1b1d);border-radius:10px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(123,17,19,.25);">
+            <i class='bx bx-user-check' style="font-size:20px;color:#fff;"></i>
+          </div>
+          <div>
+            <div style="font-size:15px;font-weight:800;color:#111;">Regularization Applications</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:1px;">
+              {% if is_vpaa %}Faculty applications awaiting VPAA endorsement to President.
+              {% else %}Faculty applications forwarded for Presidential approval. You may also act on applications still at VPAA stage.{% endif %}
+            </div>
+          </div>
         </div>
-        <span style="background:#dcfce7;color:#166534;font-size:13px;font-weight:700;padding:4px 14px;border-radius:20px;flex-shrink:0;">{{ regularizations|length }}</span>
+        {% set actionable_count = regularizations|selectattr('reg_status','equalto','vpa')|list|length + regularizations|selectattr('reg_status','equalto','pres')|list|length if not is_vpaa else regularizations|selectattr('reg_status','equalto','vpa')|list|length %}
+        {% if actionable_count > 0 %}
+        <span style="display:inline-flex;align-items:center;gap:5px;background:#fef2f2;color:#991b1b;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;border:1px solid #fecaca;">
+          <i class='bx bx-bell' style="font-size:13px;"></i> {{ actionable_count }} Pending Your Action
+        </span>
+        {% endif %}
       </div>
 
       <div class="table">
@@ -231,14 +249,14 @@
             </tr>
           </thead>
           <tbody id="regularizationsBody">
-            {% if is_vpaa %}{% set my_reg_key = 'vpa' %}{% else %}{% set my_reg_key = 'pres' %}{% endif %}
             {% set ns2 = namespace(reg_action=[], reg_other=[]) %}
             {% for reg in regularizations %}
-              {% if reg.reg_status == my_reg_key %}{% set ns2.reg_action = ns2.reg_action + [reg] %}
+              {% if (is_vpaa and reg.reg_status == 'vpa') or (not is_vpaa and reg.reg_status in ['vpa', 'pres']) %}
+                {% set ns2.reg_action = ns2.reg_action + [reg] %}
               {% else %}{% set ns2.reg_other = ns2.reg_other + [reg] %}{% endif %}
             {% endfor %}
             {% for reg in ns2.reg_action + ns2.reg_other %}
-            {% set is_my_reg_turn = reg.reg_status == my_reg_key %}
+            {% set is_my_reg_turn = (is_vpaa and reg.reg_status == 'vpa') or (not is_vpaa and reg.reg_status in ['vpa', 'pres']) %}
             <tr data-dept="{{ reg.department }}" data-tenure="{{ reg.eligible_for }}" data-status="{{ reg.reg_status }}"
                 style="{% if is_my_reg_turn %}border-left:4px solid #16a34a;background:#f0fdf4;{% endif %}transition:background .15s;">
               <td style="padding:14px 12px;">
@@ -269,9 +287,18 @@
               </td>
               <td style="padding:14px 12px;">
                 {% if reg.reg_status == 'vpa' %}
-                <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#eff6ff;color:#1d4ed8;padding:4px 10px;border-radius:10px;border:1px solid #bfdbfe;">
-                  <i class='bx bx-time-five' style="font-size:12px;"></i> VPAA Review
-                </span>
+                  {% if not is_vpaa %}
+                  <div style="display:flex;flex-direction:column;gap:4px;">
+                    <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#eff6ff;color:#1d4ed8;padding:4px 10px;border-radius:10px;border:1px solid #bfdbfe;">
+                      <i class='bx bx-time-five' style="font-size:12px;"></i> VPA Stage
+                    </span>
+                    <span style="font-size:10px;color:#d97706;font-weight:600;">President override available</span>
+                  </div>
+                  {% else %}
+                  <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#eff6ff;color:#1d4ed8;padding:4px 10px;border-radius:10px;border:1px solid #bfdbfe;">
+                    <i class='bx bx-time-five' style="font-size:12px;"></i> VPA Review
+                  </span>
+                  {% endif %}
                 {% elif reg.reg_status == 'pres' %}
                 <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#f5f3ff;color:#6d28d9;padding:4px 10px;border-radius:10px;border:1px solid #ddd6fe;">
                   <i class='bx bx-time-five' style="font-size:12px;"></i> President Review
@@ -289,12 +316,14 @@
               <td style="padding:14px 12px;">
                 {% if is_my_reg_turn %}
                 <button class="review-regularization-btn"
-                        style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:#7b1113;color:#fff;border-radius:7px;font-size:12px;font-weight:700;border:none;cursor:pointer;box-shadow:0 1px 4px rgba(123,17,19,.3);"
+                        style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:{% if not is_vpaa and reg.reg_status == 'vpa' %}#92400e{% else %}#7b1113{% endif %};color:#fff;border-radius:7px;font-size:12px;font-weight:700;border:none;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.2);"
                         data-regularization-id="{{ reg.regularization_id }}"
                         data-faculty-name="{{ reg.name }}"
                         data-status="{{ reg.reg_status }}"
-                        data-eligible-for="{{ reg.eligible_for }}">
-                  <i class='bx bx-check-circle' style="font-size:14px;"></i> Review Now
+                        data-eligible-for="{{ reg.eligible_for }}"
+                        data-is-vpaa="{{ 'true' if is_vpaa else 'false' }}">
+                  <i class='bx {% if not is_vpaa and reg.reg_status == 'vpa' %}bx-fast-forward{% else %}bx-check-circle{% endif %}' style="font-size:14px;"></i>
+                  {% if not is_vpaa and reg.reg_status == 'vpa' %}Override & Approve{% else %}Review Now{% endif %}
                 </button>
                 {% else %}
                 <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;background:#f3f4f6;color:#374151;padding:5px 10px;border-radius:8px;border:1px solid #e5e7eb;">
@@ -664,7 +693,7 @@ function loadPromotionDetails(applicationId) {
         const statusLower = (data.status || '').toLowerCase();
         const pillMap = {
           hrmd:     { bg:'#fef9c3', color:'#713f12', border:'#fde68a', icon:'bx-time-five',    label:'HR Review'        },
-          vpa:      { bg:'#eff6ff', color:'#1d4ed8', border:'#bfdbfe', icon:'bx-time-five',    label:'VPAA Review'      },
+          vpa:      { bg:'#eff6ff', color:'#1d4ed8', border:'#bfdbfe', icon:'bx-time-five',    label:'VPA Review'      },
           pres:     { bg:'#f5f3ff', color:'#6d28d9', border:'#ddd6fe', icon:'bx-time-five',    label:'President Review' },
           approved: { bg:'#f0fdf4', color:'#166534', border:'#bbf7d0', icon:'bx-check-circle', label:'Approved'         },
           rejected: { bg:'#fef2f2', color:'#991b1b', border:'#fecaca', icon:'bx-x-circle',     label:'Rejected'         },
@@ -716,7 +745,7 @@ function loadPromotionDetails(applicationId) {
             <div class="review-note-card vpa">
               <div class="review-note-header">
                 <span class="review-note-role vpa">
-                  <i class='bx bx-shield-quarter'></i>VPAA Review
+                  <i class='bx bx-shield-quarter'></i>VPA Review
                 </span>
               </div>
               <div class="review-note-content">${data.vpa_remarks}</div>
@@ -935,23 +964,27 @@ document.querySelectorAll('.review-regularization-btn').forEach(btn => {
     const facultyName = this.getAttribute('data-faculty-name');
     const status = this.getAttribute('data-status');
     const eligibleFor = this.getAttribute('data-eligible-for');
-    
+    const isVpaa = this.getAttribute('data-is-vpaa') === 'true';
+
     let actionText = '';
     let endpoint = '';
-    
-    if (status === 'vpa') {
-      actionText = `Forward regularization to ${eligibleFor} status for ${facultyName} to President for approval?`;
+
+    if (isVpaa && status === 'vpa') {
+      actionText = `Forward ${facultyName}'s regularization to President for approval?`;
       endpoint = '/api/regularization/forward-to-president';
+    } else if (!isVpaa && status === 'vpa') {
+      actionText = `Approve ${facultyName}'s regularization to ${eligibleFor} status directly?\n\nNote: This bypasses the VPAA endorsement stage.`;
+      endpoint = '/api/regularization/approve-by-president';
     } else if (status === 'pres') {
-      actionText = `Approve regularization to ${eligibleFor} status for ${facultyName}?`;
+      actionText = `Approve ${facultyName}'s regularization to ${eligibleFor} status?`;
       endpoint = '/api/regularization/approve-by-president';
     } else {
       alert('Invalid status for review');
       return;
     }
-    
+
     if (!confirm(actionText)) return;
-    
+
     fetch(endpoint, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},

@@ -844,11 +844,11 @@ transition: transform .15s ease, box-shadow .15s ease;
 
 .grid-2 {display:grid;grid-template-columns:1fr 1fr;gap:20px;}
 
-/* Circular progress */
+/* Circular progress — base rule; overridden by the block below */
 .progress-circle {
   width:100px;height:100px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;
-  background:conic-gradient(var(--spc-maroon) 70%, #e5e7eb 0);
+  background:conic-gradient(var(--spc-maroon) calc(var(--percentage, 0) * 1%), #e5e7eb 0);
   position:relative;
   margin-right:20px;
 }
@@ -3497,7 +3497,7 @@ table:has(#campusEntryBody) thead th:nth-child(4) {
   width: 120px;
   height: 120px;
   border-radius: 50%;
-  background: conic-gradient(#7b1113 calc(var(--percentage) * 1%), #e0e0e0 0);
+  background: conic-gradient(#7b1113 calc(var(--percentage, 0) * 1%), #e0e0e0 0);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3507,8 +3507,11 @@ table:has(#campusEntryBody) thead th:nth-child(4) {
 .progress-circle::before {
   content: '';
   position: absolute;
-  width: 150px;
-  height: 150px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 70%;
+  height: 70%;
   border-radius: 50%;
   background: white;
 }

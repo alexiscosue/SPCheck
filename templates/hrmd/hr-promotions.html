@@ -47,7 +47,7 @@
   <select id="filterPromotionStatus">
     <option value="">All Status</option>
     <option value="Hrmd">For HRMD Checking</option>
-    <option value="Vpa">For VPAA Checking</option>
+    <option value="Vpa">For VPA Checking</option>
     <option value="Pres">For President Checking</option>
     <option value="approved">Approved</option>
     <option value="rejected">Rejected</option>
@@ -75,7 +75,7 @@
   <select id="filterRegularizationStatus">
     <option value="">All Status</option>
     <option value="eligible">Eligible (Not Yet Initiated)</option>
-    <option value="vpa">For VPAA Review</option>
+    <option value="vpa">For VPA Review</option>
     <option value="pres">For President Review</option>
     <option value="approved">Approved</option>
     <option value="rejected">Rejected</option>
@@ -90,7 +90,14 @@
   <div class="card" style="grid-column:1 / -1; padding:20px">
     <div class="tabs_profile">
       <div class="tab active" data-tab="promotions">Promotions</div>
-      <div class="tab" data-tab="regularizations">Regularizations</div>
+      <div class="tab" data-tab="regularizations" style="display:inline-flex; align-items:center; gap:6px;">
+        Regularizations
+        <span style="display:inline-flex; align-items:center; gap:3px;">
+          <span style="background:#16a34a; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:99px; line-height:1.6;">{{ regularizations|length }}</span>
+          <span style="background:#2563eb; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:99px; line-height:1.6;">{{ probationary_faculty|length }}</span>
+          <span style="background:#6b7280; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:99px; line-height:1.6;">{{ contractual_faculty|length }}</span>
+        </span>
+      </div>
       <div class="tab" data-tab="auditlogs">Audit Logs</div>
     </div>
 
@@ -165,7 +172,7 @@
                 </span>
                 {% elif 'vpa' in promo.status|lower %}
                 <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#eff6ff;color:#1d4ed8;padding:4px 10px;border-radius:10px;border:1px solid #bfdbfe;">
-                  <i class='bx bx-time-five' style="font-size:12px;"></i> VPAA Review
+                  <i class='bx bx-time-five' style="font-size:12px;"></i> VPA Review
                 </span>
                 {% elif 'pres' in promo.status|lower %}
                 <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#f5f3ff;color:#6d28d9;padding:4px 10px;border-radius:10px;border:1px solid #ddd6fe;">
@@ -224,6 +231,37 @@
 
     <!-- Regularizations Tab -->
     <div class="tab-content" id="regularizations">
+
+      <!-- Faculty Tenure Overview -->
+      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px;">
+        <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:12px; padding:14px 16px; display:flex; align-items:center; gap:12px;">
+          <div style="width:42px; height:42px; background:#16a34a; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <i class='bx bx-check-shield' style="font-size:22px; color:#fff;"></i>
+          </div>
+          <div>
+            <div style="font-size:24px; font-weight:800; color:#14532d; line-height:1;">{{ regularizations|length }}</div>
+            <div style="font-size:12px; color:#166534; font-weight:600; margin-top:3px;">Eligible</div>
+          </div>
+        </div>
+        <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:14px 16px; display:flex; align-items:center; gap:12px;">
+          <div style="width:42px; height:42px; background:#2563eb; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <i class='bx bx-time-five' style="font-size:22px; color:#fff;"></i>
+          </div>
+          <div>
+            <div style="font-size:24px; font-weight:800; color:#1e3a8a; line-height:1;">{{ probationary_faculty|length }}</div>
+            <div style="font-size:12px; color:#1d4ed8; font-weight:600; margin-top:3px;">Probationary</div>
+          </div>
+        </div>
+        <div style="background:#f9fafb; border:1px solid #e5e7eb; border-radius:12px; padding:14px 16px; display:flex; align-items:center; gap:12px;">
+          <div style="width:42px; height:42px; background:#6b7280; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <i class='bx bx-file-blank' style="font-size:22px; color:#fff;"></i>
+          </div>
+          <div>
+            <div style="font-size:24px; font-weight:800; color:#111827; line-height:1;">{{ contractual_faculty|length }}</div>
+            <div style="font-size:12px; color:#6b7280; font-weight:600; margin-top:3px;">Contractual</div>
+          </div>
+        </div>
+      </div>
 
       <!-- ── ELIGIBLE / ACTIVE APPLICATIONS ─────────────────────────────── -->
       <div style="border-left:4px solid #16a34a;border-radius:0 10px 10px 0;background:#f0fdf4;padding:14px 18px;margin-bottom:6px;display:flex;align-items:center;gap:12px;">
@@ -616,7 +654,7 @@
     <div id="hrNotesSection" style="margin:18px 24px 0;display:none;">
       <label style="display:block;font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;">
         <i class='bx bx-edit' style="font-size:14px;vertical-align:middle;color:#7b1113;"></i> HRMD Notes
-        <span style="font-weight:400;font-size:11px;color:#9ca3af;text-transform:none;letter-spacing:0;"> — optional, visible to VPAA &amp; President</span>
+        <span style="font-weight:400;font-size:11px;color:#9ca3af;text-transform:none;letter-spacing:0;"> — optional, visible to VPA &amp; President</span>
       </label>
       <textarea id="hrNotes" placeholder="Enter review notes..."
                 style="width:100%;min-height:80px;border-radius:8px;border:1px solid #d1d5db;padding:10px 12px;font-size:13px;resize:vertical;box-sizing:border-box;font-family:inherit;color:#111;"></textarea>
@@ -640,7 +678,7 @@
       </button>
       <button id="forwardBtn"
               style="display:none;align-items:center;gap:5px;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;background:#7b1113;color:#fff;border:none;box-shadow:0 2px 6px rgba(123,17,19,.3);">
-        <i class='bx bx-send' style="font-size:15px;"></i> Forward to VPAA
+        <i class='bx bx-send' style="font-size:15px;"></i> Forward to VPA
       </button>
       <button id="viewProfileBtn"
               style="display:inline-flex;align-items:center;gap:5px;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;"
@@ -948,7 +986,7 @@ function loadPromotionDetails(applicationId) {
         const statusLower = (data.status || '').toLowerCase();
         const pillMap = {
           hrmd:     { bg:'#fef9c3', color:'#713f12', border:'#fde68a', icon:'bx-time-five',   label:'HR Review'        },
-          vpa:      { bg:'#eff6ff', color:'#1d4ed8', border:'#bfdbfe', icon:'bx-time-five',   label:'VPAA Review'      },
+          vpa:      { bg:'#eff6ff', color:'#1d4ed8', border:'#bfdbfe', icon:'bx-time-five',   label:'VPA Review'      },
           pres:     { bg:'#f5f3ff', color:'#6d28d9', border:'#ddd6fe', icon:'bx-time-five',   label:'President Review' },
           approved: { bg:'#f0fdf4', color:'#166534', border:'#bbf7d0', icon:'bx-check-circle',label:'Approved'         },
           rejected: { bg:'#fef2f2', color:'#991b1b', border:'#fecaca', icon:'bx-x-circle',    label:'Rejected'         },
@@ -1000,7 +1038,7 @@ function loadPromotionDetails(applicationId) {
             <div class="review-note-card vpa">
               <div class="review-note-header">
                 <span class="review-note-role vpa">
-                  <i class='bx bx-shield-quarter'></i>VPAA Review
+                  <i class='bx bx-shield-quarter'></i>VPA Review
                 </span>
               </div>
               <div class="review-note-content">${data.vpa_remarks}</div>
@@ -1130,13 +1168,13 @@ document.getElementById('viewProfileBtn').addEventListener('click', () => {
   window.location.href = `/hr_employee_profile/${currentFacultyId}`;
 });
 
-// FORWARD TO VPAA (MODIFIED)
+// FORWARD TO VPA (MODIFIED)
 document.getElementById('forwardBtn').addEventListener('click', () => {
   if (!currentApplicationId) return alert('No application selected');
   
   const hrNotes = document.getElementById('hrNotes').value.trim();
   
-  if (!confirm('Forward this application to VPAA for review?')) return;
+  if (!confirm('Forward this application to VPA for review?')) return;
   
   fetch('/api/promotion/forward-to-vpaa', {
     method: 'POST',
@@ -1149,7 +1187,7 @@ document.getElementById('forwardBtn').addEventListener('click', () => {
   .then(response => response.json())
   .then(result => {
     if (result.success) {
-      alert('Application forwarded to VPAA successfully');
+      alert('Application forwarded to VPA successfully');
       location.reload();
     } else {
       alert('Error: ' + result.error);

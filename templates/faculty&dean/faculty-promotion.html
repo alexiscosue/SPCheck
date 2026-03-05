@@ -9,10 +9,18 @@
 
   <!-- Stepper -->
   <div class="card" style="grid-column:1 / -1; padding:20px">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:18px">
-      <h3 style="margin:0">Promotion Application Progress</h3>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid #e5e7eb;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div style="width:38px; height:38px; background:#fef2f2; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+          <i class='bx bx-git-merge' style="font-size:22px; color:#7b1113;"></i>
+        </div>
+        <div>
+          <h3 style="margin:0; font-size:16px; font-weight:700; color:#111827;">Promotion Application Progress</h3>
+          <p style="margin:2px 0 0 0; font-size:12px; color:#6b7280;">Track your application through each review stage</p>
+        </div>
+      </div>
       {% if display_requested_rank %}
-        <span style="font-size:13px;color:#64748b">Applying for: <strong>{{ display_requested_rank }}</strong></span>
+        <span style="font-size:13px;color:#64748b;background:#f1f5f9;padding:5px 12px;border-radius:20px;">Applying for: <strong style="color:#7b1113;">{{ display_requested_rank }}</strong></span>
       {% endif %}
     </div>
     {% if display_date_submitted %}
@@ -25,7 +33,7 @@
       </div>
 
       <!-- Step 2: HRMD Review -->
-      {% set hrmd_done = display_hrmd_date or display_current_status in ['Under VPAA Review', 'Awaiting Presidential Approval', 'Approved', 'Rejected'] %}
+      {% set hrmd_done = display_hrmd_date or display_current_status in ['Under VPA Review', 'Awaiting Presidential Approval', 'Approved', 'Rejected'] %}
       <div class="step {% if display_current_status == 'Under HR Review' %}active{% elif hrmd_done %}done{% endif %}">
         <div class="circle">{% if hrmd_done %}<i class='bx bx-check'></i>{% else %}2{% endif %}</div>
         HRMD Review
@@ -37,13 +45,13 @@
         </small>
       </div>
 
-      <!-- Step 3: VPAA Review -->
+      <!-- Step 3: VPA Review -->
       {% set vpa_done = display_vpa_date or display_current_status in ['Awaiting Presidential Approval', 'Approved', 'Rejected'] %}
-      <div class="step {% if display_current_status == 'Under VPAA Review' %}active{% elif vpa_done %}done{% endif %}">
+      <div class="step {% if display_current_status == 'Under VPA Review' %}active{% elif vpa_done %}done{% endif %}">
         <div class="circle">{% if vpa_done %}<i class='bx bx-check'></i>{% else %}3{% endif %}</div>
-        VPAA Review
+        VPA Review
         <small>
-          {% if display_current_status == 'Under VPAA Review' %}In Progress
+          {% if display_current_status == 'Under VPA Review' %}In Progress
           {% elif display_vpa_date %}{{ display_vpa_date.strftime("%b %d, %Y") }}
           {% elif vpa_done %}Forwarded
           {% else %}Not yet{% endif %}
@@ -169,106 +177,173 @@
 <!-- Regularization Status (View Only - HR Initiated) -->
 <div class="card-promotion">
   <div class="card-header">
-    <i class='bx bx-shield-check'></i>
+    <i class='bx bx-award' style="color:#7b1113;"></i>
     <span>Tenure Regularization Status</span>
   </div>
-  
-  <div style="padding:20px;">
-    
-    <!-- Centered Progress Circle -->
-    <div style="text-align:center; margin-bottom:24px;">
-      <div class="progress-circle" data-percentage="{{ regularization_percentage }}" style="width:210px; height:210px; margin:0 auto;">
-        <span style="font-size:32px; font-weight:700; color:#7b1113;">{{ regularization_percentage }}%</span>
+
+  <div style="padding:20px; display:flex; flex-direction:column; gap:16px;">
+
+    <!-- Top Row: circle + status (centered) -->
+    <div style="display:flex; flex-direction:column; align-items:center; text-align:center; gap:14px; padding:8px 0 4px;">
+      <div class="progress-circle" data-percentage="{{ regularization_percentage }}" style="width:160px; height:160px; flex-shrink:0; --percentage:{{ regularization_percentage }};">
+        <span style="font-size:28px; font-weight:800; color:#7b1113;">{{ regularization_percentage }}%</span>
       </div>
-      <p style="margin:12px 0 0 0; font-size:16px; font-weight:600; color:#111827;">{{ regularization_status }}</p>
-      <div style="margin-top:8px; display:inline-block;">
-        {% if tenure_type == 'Probationary' %}
-          <span class="status pending">{{ tenure_type }}</span>
-        {% elif tenure_type == 'Regular' %}
-          <span class="status ok">{{ tenure_type }}</span>
-        {% elif tenure_type == 'Tenured' %}
-          <span class="status completed">{{ tenure_type }}</span>
-        {% else %}
-          <span class="status nu">{{ tenure_type }}</span>
-        {% endif %}
-      </div>
-    </div>
-    
-    <!-- Employment Details Grid -->
-    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:20px;">
-      
-      <!-- Hire Date Card -->
-      <div style="padding:16px; background:#f0f9ff; border-left:4px solid #3b82f6; border-radius:10px;">
-        <p style="margin:0 0 6px 0; font-size:11px; color:#1e40af; text-transform:uppercase; letter-spacing:0.5px; font-weight:600;">
-          <i class='bx bx-calendar'></i> Hire Date
-        </p>
-        <p style="margin:0; font-size:15px; font-weight:600; color:#1e3a8a;">
-          {{ hire_date.strftime('%B %d, %Y') if hire_date else 'Not set' }}
-        </p>
-      </div>
-      
-      <!-- Years Employed Card -->
-      <div style="padding:16px; background:#f0fdf4; border-left:4px solid #22c55e; border-radius:10px;">
-        <p style="margin:0 0 6px 0; font-size:11px; color:#166534; text-transform:uppercase; letter-spacing:0.5px; font-weight:600;">
-          <i class='bx bx-time-five'></i> Years Employed
-        </p>
-        <p style="margin:0; font-size:15px; font-weight:600; color:#15803d;">
-          {{ years_employed }} year{{ 's' if years_employed != 1 else '' }}
-        </p>
-      </div>
-      
-    </div>
-    
-    {% if regularization_status_data %}
-    <!-- Active Regularization Process -->
-    <div style="background:#f0f9ff; border-left:4px solid #3b82f6; border-radius:10px; padding:16px; margin-bottom:16px;">
-      <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
-        <div style="width:32px; height:32px; background:#3b82f6; border-radius:8px; display:flex; align-items:center; justify-content:center;">
-          <i class='bx bx-info-circle' style="color:#fff; font-size:18px;"></i>
-        </div>
-        <p style="margin:0; font-size:14px; color:#1e40af; font-weight:600;">Regularization Initiated by HR</p>
-      </div>
-      <p style="margin:0 0 0 42px; font-size:13px; color:#1e3a8a;">
-        Your regularization to <strong>{{ regularization_status_data.requested_tenure }}</strong> status is currently being processed.
-      </p>
-    </div>
-    
-    <!-- Regularization Progress Stepper -->
-    <div class="stepper" style="margin-top:16px;">
-      <div class="step {% if regularization_status_data.hrmd_date %}done{% else %}active{% endif %}">
-        <div class="circle">1</div>
-        HR Endorsement
-        <small>{{ regularization_status_data.hrmd_date.strftime("%Y-%m-%d") if regularization_status_data.hrmd_date else 'Pending' }}</small>
-      </div>
-      <div class="step {% if regularization_status_data.vpa_date %}done{% elif regularization_status_data.current_status == 'vpa' %}active{% endif %}">
-        <div class="circle">2</div>
-        VP Admin Review
-        <small>{{ regularization_status_data.vpa_date.strftime("%Y-%m-%d") if regularization_status_data.vpa_date else 'Not yet' }}</small>
-      </div>
-      <div class="step {% if regularization_status_data.pres_date %}done{% elif regularization_status_data.current_status == 'pres' %}active{% endif %}">
-        <div class="circle">3</div>
-        President Approval
-        <small>{{ regularization_status_data.pres_date.strftime("%Y-%m-%d") if regularization_status_data.pres_date else 'Not yet' }}</small>
-      </div>
-    </div>
-    
-    {% else %}
-    <!-- No Active Regularization Process -->
-    <div style="padding:16px; background:#fef3c7; border-left:4px solid #f59e0b; border-radius:10px; display:flex; align-items:start; gap:12px;">
-      <i class='bx bx-info-circle' style="color:#92400e; font-size:20px; flex-shrink:0; margin-top:2px;"></i>
       <div>
-        <p style="margin:0 0 6px 0; font-size:13px; color:#92400e; font-weight:600;">Note</p>
-        <p style="margin:0; font-size:13px; color:#78350f; line-height:1.6;">
-          Regularization is initiated by HR once you meet the eligibility criteria (3+ years of service with required degree). No application is needed from your end.
-        </p>
+        <div style="font-size:20px; font-weight:700; color:#111827; margin-bottom:8px;">{{ regularization_status }}</div>
+        {% if tenure_type == 'Probationary' %}
+          <span class="status pending" style="font-size:13px; padding:5px 14px;">Probationary</span>
+        {% elif tenure_type == 'Regular' %}
+          <span class="status ok" style="font-size:13px; padding:5px 14px;">Regular</span>
+        {% elif tenure_type == 'Tenured' %}
+          <span class="status completed" style="font-size:13px; padding:5px 14px;">Tenured</span>
+        {% else %}
+          <span class="status nu" style="font-size:13px; padding:5px 14px;">{{ tenure_type or 'Contractual' }}</span>
+        {% endif %}
+        <div style="margin-top:12px; font-size:13px; color:#6b7280; line-height:1.6;">
+          {% if tenure_type in ['Regular', 'Tenured'] %}
+            <i class='bx bx-check-circle' style="color:#059669; vertical-align:middle;"></i> Regularization achieved.
+          {% elif not has_aligned_master %}
+            <i class='bx bx-x-circle' style="color:#dc2626; vertical-align:middle;"></i> Aligned Master's degree required to begin probation.
+          {% else %}
+            <i class='bx bx-time-five' style="color:#d97706; vertical-align:middle;"></i>
+            <strong style="color:#374151;">{{ days_remaining_regular }}</strong> day{{ 's' if days_remaining_regular != 1 else '' }} remaining to Regular status.
+          {% endif %}
+        </div>
       </div>
     </div>
-    
-    <p style="font-size:12px; color:#6b7280; margin-top:12px; text-align:center; font-style:italic;">
-      {{ regularization_message }}
-    </p>
+
+    <!-- Progress bar (only for probationary) -->
+    {% if tenure_type == 'Probationary' %}
+    <div>
+      <div style="display:flex; justify-content:space-between; font-size:11px; color:#6b7280; margin-bottom:5px; font-weight:600; text-transform:uppercase; letter-spacing:0.4px;">
+        <span>Probationary Progress</span>
+        <span>{{ prob_days }} / {{ prob_days_required }} days</span>
+      </div>
+      <div style="background:#f1f5f9; border-radius:99px; height:10px; overflow:hidden;">
+        <div style="background:linear-gradient(90deg,#7b1113,#b91c1c); height:100%; border-radius:99px; width:{{ regularization_percentage }}%; transition:width 0.6s ease;"></div>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:10px; color:#94a3b8; margin-top:4px;">
+        <span>Start</span>
+        <span>Regular (3 yrs)</span>
+      </div>
+    </div>
     {% endif %}
-    
+
+    <!-- Detail stat row -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+
+      <div style="padding:12px 14px; background:#fef2f2; border-left:3px solid #7b1113; border-radius:8px;">
+        <div style="font-size:10px; color:#7b1113; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">Probation Start</div>
+        <div style="font-size:13px; font-weight:600; color:#1e293b;">
+          {% if prob_start_date %}{{ prob_start_date.strftime('%b %d, %Y') }}
+          {% elif hire_date %}{{ hire_date.strftime('%b %d, %Y') }}
+          {% else %}Not set{% endif %}
+        </div>
+      </div>
+
+      <div style="padding:12px 14px; background:#fef2f2; border-left:3px solid #7b1113; border-radius:8px;">
+        <div style="font-size:10px; color:#7b1113; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">Probationary Service</div>
+        <div style="font-size:13px; font-weight:600; color:#1e293b;">
+          {% if prob_days > 0 %}{{ (prob_days / 365.25) | round(1) }} yr{{ 's' if (prob_days / 365.25) | round(1) != 1 else '' }} ({{ prob_days }} days)
+          {% else %}Not started{% endif %}
+        </div>
+      </div>
+
+      <div style="padding:12px 14px; background:{% if has_aligned_master %}#f0fdf4{% else %}#fef2f2{% endif %}; border-left:3px solid {% if has_aligned_master %}#059669{% else %}#dc2626{% endif %}; border-radius:8px;">
+        <div style="font-size:10px; color:{% if has_aligned_master %}#059669{% else %}#dc2626{% endif %}; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">Aligned Master's</div>
+        <div style="font-size:13px; font-weight:600; color:#1e293b;">
+          {% if has_aligned_master %}<i class='bx bx-check-circle' style="color:#059669"></i> Completed
+          {% else %}<i class='bx bx-x-circle' style="color:#dc2626"></i> Not yet
+          {% endif %}
+        </div>
+      </div>
+
+      {% if tenure_type == 'Probationary' and prob_days > 0 %}
+      <div style="padding:12px 14px; background:#fffbeb; border-left:3px solid #d97706; border-radius:8px;">
+        <div style="font-size:10px; color:#92400e; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">
+          {% if days_remaining_regular > 0 %}Est. Regular Date{% else %}Regular Eligible{% endif %}
+        </div>
+        <div style="font-size:13px; font-weight:600; color:#1e293b;">
+          {% if expected_regular_date %}{{ expected_regular_date.strftime('%b %d, %Y') }}
+          {% elif days_remaining_regular == 0 %}Eligible now
+          {% else %}—{% endif %}
+        </div>
+      </div>
+      {% elif tenure_type in ['Regular', 'Tenured'] %}
+      <div style="padding:12px 14px; background:#f0fdf4; border-left:3px solid #059669; border-radius:8px;">
+        <div style="font-size:10px; color:#059669; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">Probation Days</div>
+        <div style="font-size:13px; font-weight:600; color:#1e293b;">1,095 / 1,095 <i class='bx bx-check-circle' style="color:#059669; font-size:14px"></i></div>
+      </div>
+      {% else %}
+      <div style="padding:12px 14px; background:#fef2f2; border-left:3px solid #94a3b8; border-radius:8px;">
+        <div style="font-size:10px; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">Probation Days</div>
+        <div style="font-size:13px; font-weight:600; color:#94a3b8;">Not started</div>
+      </div>
+      {% endif %}
+
+    </div>
+
+    <!-- Requirement checklist -->
+    <div style="background:#f8fafc; border-radius:10px; padding:14px 16px; border:1px solid #e5e7eb;">
+      <div style="font-size:11px; color:#374151; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px;">Regularization Requirements</div>
+      <div style="display:grid; gap:7px;">
+        <div style="display:flex; align-items:center; gap:8px; font-size:13px;">
+          {% if has_aligned_master %}
+            <i class='bx bx-check-circle' style="color:#059669; font-size:17px; flex-shrink:0;"></i>
+            <span style="color:#374151;">Aligned Master's Degree</span>
+          {% else %}
+            <i class='bx bx-circle' style="color:#cbd5e1; font-size:17px; flex-shrink:0;"></i>
+            <span style="color:#94a3b8;">Aligned Master's Degree <em style="font-size:11px;">(required)</em></span>
+          {% endif %}
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; font-size:13px;">
+          {% if prob_days >= 1095 %}
+            <i class='bx bx-check-circle' style="color:#059669; font-size:17px; flex-shrink:0;"></i>
+            <span style="color:#374151;">3 Years Probationary Service (1,095 days)</span>
+          {% elif prob_days > 0 %}
+            <i class='bx bx-time-five' style="color:#d97706; font-size:17px; flex-shrink:0;"></i>
+            <span style="color:#374151;">3 Years Probationary Service — <strong>{{ prob_days }}/1,095 days</strong></span>
+          {% else %}
+            <i class='bx bx-circle' style="color:#cbd5e1; font-size:17px; flex-shrink:0;"></i>
+            <span style="color:#94a3b8;">3 Years Probationary Service (1,095 days)</span>
+          {% endif %}
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; font-size:13px;">
+          <i class='bx bx-info-circle' style="color:#6b7280; font-size:17px; flex-shrink:0;"></i>
+          <span style="color:#6b7280; font-size:12px;">Regularization is HR-initiated — no application needed from you.</span>
+        </div>
+      </div>
+    </div>
+
+    {% if regularization_status_data %}
+    <!-- Active HR-initiated regularization process -->
+    <div style="background:#fef2f2; border:1px solid #fca5a5; border-radius:10px; padding:14px 16px;">
+      <div style="font-size:12px; color:#7b1113; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+        <i class='bx bx-loader-alt' style="font-size:16px;"></i> Regularization In Progress
+      </div>
+      <div style="font-size:13px; color:#7f1d1d; margin-bottom:12px;">
+        HR has initiated your regularization to <strong>{{ regularization_status_data.requested_tenure }}</strong> status.
+      </div>
+      <div class="stepper" style="margin:0;">
+        <div class="step {% if regularization_status_data.hrmd_date %}done{% else %}active{% endif %}">
+          <div class="circle">{% if regularization_status_data.hrmd_date %}<i class='bx bx-check'></i>{% else %}1{% endif %}</div>
+          HR Endorsement
+          <small>{{ regularization_status_data.hrmd_date.strftime("%b %d, %Y") if regularization_status_data.hrmd_date else 'Pending' }}</small>
+        </div>
+        <div class="step {% if regularization_status_data.vpa_date %}done{% elif regularization_status_data.current_status == 'vpa' %}active{% endif %}">
+          <div class="circle">{% if regularization_status_data.vpa_date %}<i class='bx bx-check'></i>{% else %}2{% endif %}</div>
+          VPA Review
+          <small>{{ regularization_status_data.vpa_date.strftime("%b %d, %Y") if regularization_status_data.vpa_date else 'Not yet' }}</small>
+        </div>
+        <div class="step {% if regularization_status_data.pres_date %}done{% elif regularization_status_data.current_status == 'pres' %}active{% endif %}">
+          <div class="circle">{% if regularization_status_data.pres_date %}<i class='bx bx-check'></i>{% else %}3{% endif %}</div>
+          President
+          <small>{{ regularization_status_data.pres_date.strftime("%b %d, %Y") if regularization_status_data.pres_date else 'Not yet' }}</small>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
   </div>
 </div>
 
@@ -276,8 +351,8 @@
     <!-- Promotion Application -->
     <div class="card-promotion" style="padding:20px;">
     <div class="card-header">
-    <i class='bx bx-shield-check'></i>
-    <span>Promotion Section</span>
+    <i class='bx bx-trending-up' style="color:#7b1113;"></i>
+    <span>Promotion Application</span>
   </div>
       
       {% if at_highest_rank %}
@@ -565,25 +640,37 @@
 
   <!-- Bottom Section - Always Visible -->
   <div style="grid-column:1 / -1;">
-    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+    <div style="display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 15px;">
 
       <!-- SPC Guidelines -->
-      <div class="card-promotion" style="padding:20px;">
-        <h4 style="margin:0 0 15px 0; font-size:16px; font-weight:600; color:#333; display:flex; align-items:center; gap:8px;">
-          📘 SPC Guidelines
-        </h4>
-        <ul style="line-height:1.8; font-size:14px; margin:0; padding-left:20px; color:#555;">
-          <li><strong>Regularization:</strong> HR-initiated once eligible (3+ years with Master's degree).</li>
-          <li><strong>Promotion:</strong> Faculty-initiated, degree-based (requires documents).</li>
-          <li>Research involvement recognized separately, not part of rank promotion.</li>
-        </ul>
+      <div class="card-promotion" style="padding:0; overflow:hidden;">
+        <div class="card-header">
+          <i class='bx bx-book-open' style="color:#7b1113;"></i>
+          <span>SPC Guidelines</span>
+        </div>
+        <div style="padding:16px 20px; display:grid; gap:12px;">
+          <div style="display:flex; gap:10px; align-items:flex-start;">
+            <i class='bx bx-badge-check' style="color:#059669; font-size:18px; flex-shrink:0; margin-top:2px;"></i>
+            <p style="margin:0; font-size:13px; color:#374151; line-height:1.6;"><strong>Regularization:</strong> HR-initiated once eligible (3+ years with aligned Master's degree).</p>
+          </div>
+          <div style="display:flex; gap:10px; align-items:flex-start;">
+            <i class='bx bx-trending-up' style="color:#7b1113; font-size:18px; flex-shrink:0; margin-top:2px;"></i>
+            <p style="margin:0; font-size:13px; color:#374151; line-height:1.6;"><strong>Promotion:</strong> Faculty-initiated, degree-based. Requires submitting official documents.</p>
+          </div>
+          <div style="display:flex; gap:10px; align-items:flex-start;">
+            <i class='bx bx-info-circle' style="color:#6b7280; font-size:18px; flex-shrink:0; margin-top:2px;"></i>
+            <p style="margin:0; font-size:13px; color:#6b7280; line-height:1.6;">Research involvement is recognized separately and does not count toward rank promotion.</p>
+          </div>
+        </div>
       </div>
 
       <!-- Application History -->
-      <div class="card-promotion" style="padding:20px;">
-        <h4 style="margin:0 0 15px 0; font-size:16px; font-weight:600; color:#333; display:flex; align-items:center; gap:8px;">
-          📂 Application History
-        </h4>
+      <div class="card-promotion" style="padding:0; overflow:hidden;">
+        <div class="card-header">
+          <i class='bx bx-history' style="color:#7b1113;"></i>
+          <span>Application History</span>
+        </div>
+        <div style="padding:16px 20px;">
         {% if application_history and application_history|length > 0 %}
         <div class="history-table-wrapper">
           <table>
@@ -635,18 +722,44 @@
           <p>No previous applications found.</p>
         </div>
         {% endif %}
+        </div>
       </div>
 
       <!-- Need Help -->
-      <div class="card-promotion" style="padding:20px;">
-        <h4 style="margin:0 0 15px 0; font-size:16px; font-weight:600; color:#333; display:flex; align-items:center; gap:8px;">
-          ❓ Need Help?
-        </h4>
-        <ul style="line-height:1.8; font-size:14px; margin:0; padding-left:20px; color:#555;">
-          <li>📄 For promotion document requirements, check the HRMD portal or ask your department secretary.</li>
-          <li>📧 For questions on regularization, email <strong>hrmd@spc.edu.ph</strong>.</li>
-          <li>📞 For urgent concerns, call the HRMD office at (032) 123-4567.</li>
-        </ul>
+      <div class="card-promotion" style="padding:0; overflow:hidden;">
+        <div class="card-header">
+          <i class='bx bx-help-circle' style="color:#7b1113;"></i>
+          <span>Need Help?</span>
+        </div>
+        <div style="padding:16px 20px; display:grid; gap:12px;">
+          <div style="display:flex; gap:12px; align-items:flex-start;">
+            <div style="width:34px; height:34px; background:#fef2f2; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              <i class='bx bx-file' style="font-size:16px; color:#7b1113;"></i>
+            </div>
+            <div>
+              <p style="margin:0; font-size:13px; font-weight:600; color:#374151;">Document Requirements</p>
+              <p style="margin:3px 0 0 0; font-size:12px; color:#6b7280; line-height:1.5;">Check the HRMD portal or ask your department secretary.</p>
+            </div>
+          </div>
+          <div style="display:flex; gap:12px; align-items:flex-start;">
+            <div style="width:34px; height:34px; background:#fef2f2; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              <i class='bx bx-envelope' style="font-size:16px; color:#7b1113;"></i>
+            </div>
+            <div>
+              <p style="margin:0; font-size:13px; font-weight:600; color:#374151;">Email HRMD</p>
+              <p style="margin:3px 0 0 0; font-size:12px; color:#6b7280; line-height:1.5;">For regularization questions: <a href="mailto:hrmd@spc.edu.ph" style="color:#7b1113; font-weight:600;">hrmd@spc.edu.ph</a></p>
+            </div>
+          </div>
+          <div style="display:flex; gap:12px; align-items:flex-start;">
+            <div style="width:34px; height:34px; background:#fef2f2; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              <i class='bx bx-phone' style="font-size:16px; color:#7b1113;"></i>
+            </div>
+            <div>
+              <p style="margin:0; font-size:13px; font-weight:600; color:#374151;">HRMD Office</p>
+              <p style="margin:3px 0 0 0; font-size:12px; color:#6b7280; line-height:1.5;">For urgent concerns: <strong style="color:#374151;">(032) 123-4567</strong></p>
+            </div>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -713,7 +826,7 @@
                 <div style="width:2px; flex:1; background:#e5e7eb; margin-top:4px; min-height:20px;"></div>
               </div>
               <div style="flex:1; padding-top:1px">
-                <div style="font-size:13px; font-weight:600; color:#374151;">VPAA Review</div>
+                <div style="font-size:13px; font-weight:600; color:#374151;">VPA Review</div>
                 <div id="modalVpaDate" style="font-size:12px; color:#64748b; margin-top:2px;"></div>
               </div>
             </div>

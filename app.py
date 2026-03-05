@@ -1789,7 +1789,7 @@ def trigger_promotion_forwarded_vpaa(faculty_name, requested_rank):
         'action': 'forwarded_vpaa',
         'person_name': faculty_name,
         'requested_rank': requested_rank,
-        'message': f"{faculty_name}'s promotion application has been forwarded to VPAA for review.",
+        'message': f"{faculty_name}'s promotion application has been forwarded to VPA for review.",
         'tap_time': datetime.now(philippines_tz).strftime('%A, %B %d, %Y %I:%M %p'),
     }
     _push_to_queue('vp_all_notifications', notification_data)
@@ -7963,9 +7963,17 @@ def faculty_promotion():
     reg_status_label = employment_status or "Contractual"
     reg_message = ""
 
+    # Extra detail vars for the breakdown display
+    _prob_days = 0
+    _days_remaining_regular = 1095
+    _expected_regular_date = None
+    _prob_start_date = None
+
     if employment_status in ["Regular", "Tenured"]:
         reg_percent = 100
         reg_message = "Regular status achieved."
+        _prob_days = 1095
+        _days_remaining_regular = 0
     elif not has_aligned_master:
         reg_status_label = "Contractual"
         reg_percent = 0
@@ -7973,9 +7981,15 @@ def faculty_promotion():
     else:
         reg_status_label = "Probationary"
         prob_start = probationary_start_date if probationary_start_date else hire_date
-        prob_days = max(0, (today - prob_start).days) if prob_start else 0
-        reg_percent = min(round((prob_days / 1095) * 100, 1), 100)  # 1095 = 3 years
-        reg_message = f"Probationary Progress: {prob_days} days completed out of 1,095 ({reg_percent}%)."
+        _prob_start_date = prob_start
+        _prob_days = max(0, (today - prob_start).days) if prob_start else 0
+        reg_percent = min(round((_prob_days / 1095) * 100, 1), 100)  # 1095 = 3 years
+        reg_message = f"Probationary Progress: {_prob_days} days completed out of 1,095 ({reg_percent}%)."
+        _days_remaining_regular = max(0, 1095 - _prob_days)
+        if prob_start and _days_remaining_regular > 0:
+            from datetime import timedelta as _td
+            _expected_regular_date = prob_start + _td(days=1095)
+        prob_days = _prob_days  # keep for any existing references below
 
     # 4. RANK ELIGIBILITY (SPC Promotion Table)
     # Associate Instructor : Bachelor's + 3 yrs
@@ -8126,7 +8140,7 @@ def faculty_promotion():
 
     _STAGE_LABELS = {
         'hrmd': 'Under HR Review',
-        'vpa': 'Under VPAA Review',
+        'vpa': 'Under VPA Review',
         'pres': 'Awaiting Presidential Approval',
     }
     application_history = []
@@ -8190,7 +8204,7 @@ def faculty_promotion():
     # Stepper display vars — always sourced from latest_row so they persist after approval/rejection
     _STAGE_STATUS = {
         'hrmd': 'Under HR Review',
-        'vpa': 'Under VPAA Review',
+        'vpa': 'Under VPA Review',
         'pres': 'Awaiting Presidential Approval',
         'approved': 'Approved',
         'rejected': 'Rejected',
@@ -8229,6 +8243,13 @@ def faculty_promotion():
         'tenure_type': reg_status_label,
         'years_employed': round(years_decimal, 1),
         'hire_date': hire_date,
+        'prob_days': _prob_days,
+        'prob_days_required': 1095,
+        'days_remaining_regular': _days_remaining_regular,
+        'expected_regular_date': _expected_regular_date,
+        'has_aligned_master': bool(has_aligned_master),
+        'prob_start_date': _prob_start_date,
+        'total_service_days': total_days,
         'current_rank': current_rank,
         'available_ranks': available_ranks,
         'application_history': application_history,
@@ -9759,7 +9780,7 @@ def hr_promotions():
             # Determine status display
             if reg_status:
                 if reg_status == 'vpa':
-                    status_display = "For VPAA Review"
+                    status_display = "For VPA Review"
                     status_class = "warn"
                 elif reg_status == 'pres':
                     status_display = "For President Review"
@@ -9962,8 +9983,32 @@ def vp_promotions():
             })
 
         cursor.close()
+
+        # === FACULTY TENURE STATUS COUNTS (for regularization tab overview) ===
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT
+                COUNT(CASE WHEN pr.has_aligned_master = TRUE
+                      AND COALESCE(pr.probationary_start_date, p.hiredate) IS NOT NULL
+                      AND (CURRENT_DATE - COALESCE(pr.probationary_start_date, p.hiredate)) >= 1095
+                      THEN 1 END) AS eligible_count,
+                COUNT(CASE WHEN pr.has_aligned_master = TRUE
+                      AND COALESCE(pr.probationary_start_date, p.hiredate) IS NOT NULL
+                      AND (CURRENT_DATE - COALESCE(pr.probationary_start_date, p.hiredate)) < 1095
+                      THEN 1 END) AS probationary_count,
+                COUNT(CASE WHEN pr.has_aligned_master IS NOT TRUE THEN 1 END) AS contractual_count
+            FROM personnel p
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            WHERE p.role_id IN (20001, 20002)
+        """)
+        counts_row = cursor.fetchone()
+        cursor.close()
         db_pool.return_connection(conn)
-        
+
+        eligible_count     = int(counts_row[0]) if counts_row and counts_row[0] else 0
+        probationary_count = int(counts_row[1]) if counts_row and counts_row[1] else 0
+        contractual_count  = int(counts_row[2]) if counts_row and counts_row[2] else 0
+
         return render_template('vp&pres/vp-promotion.html',
                              vp_name=personnel_info.get('vp_name', 'VP Admin'),
                              college=personnel_info.get('college', 'Office of the VP'),
@@ -9971,6 +10016,9 @@ def vp_promotions():
                              personnelinfo=personnel_info,
                              promotions=promotions_list,
                              regularizations=regularizations_list,
+                             eligible_count=eligible_count,
+                             probationary_count=probationary_count,
+                             contractual_count=contractual_count,
                              user_role=user_role)
                              
     except Exception as e:
@@ -10118,9 +10166,9 @@ def approve_regularization_by_president():
         philippines_tz = pytz.timezone('Asia/Manila')
         current_time = datetime.now(philippines_tz)
         
-        # Fetch faculty_id and years_of_service to determine new employment status
+        # Fetch faculty_id, years_of_service, current status, and finalization state
         cursor.execute(
-            "SELECT faculty_id, years_of_service FROM regularization_application WHERE regularization_id = %s",
+            "SELECT faculty_id, years_of_service, current_status, final_decision FROM regularization_application WHERE regularization_id = %s",
             (regularization_id,)
         )
         reg_result = cursor.fetchone()
@@ -10129,7 +10177,19 @@ def approve_regularization_by_president():
             db_pool.return_connection(conn)
             return jsonify(success=False, error='Regularization application not found'), 404
 
-        faculty_id_for_update, years_of_service = reg_result
+        faculty_id_for_update, years_of_service, current_reg_status, final_decision = reg_result
+
+        if final_decision is not None:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify(success=False, error='Regularization has already been finalized'), 400
+
+        # President can approve from 'vpa' (override) or 'pres' (normal flow)
+        if current_reg_status not in ('vpa', 'pres'):
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify(success=False, error='Application is not at an active review stage'), 400
+
         new_employment_status = 'Tenured' if (years_of_service or 0) >= 7 else 'Regular'
 
         cursor.execute("""
@@ -10160,12 +10220,15 @@ def approve_regularization_by_president():
         personnel_info = get_personnel_info(user_id)
         pres_personnel_id = personnel_info.get('personnel_id')
 
+        _stage_labels = {'vpa': 'VPAA Review', 'pres': 'President Review'}
+        stage_label = _stage_labels.get(current_reg_status, current_reg_status.title())
+
         if pres_personnel_id:
             log_audit_action(
                 pres_personnel_id,
                 'Regularization approved',
                 f'President approved regularization for {fac_name} (Reg ID: {regularization_id})',
-                before_value=f'Faculty: {fac_name} | Status: President Review',
+                before_value=f'Faculty: {fac_name} | Status: {stage_label}',
                 after_value=f'Status: Approved | New Employment: {new_employment_status}'
             )
 
@@ -10206,9 +10269,9 @@ def forward_regularization_to_president():
         philippines_tz = pytz.timezone('Asia/Manila')
         current_time = datetime.now(philippines_tz)
 
-        # 1. Fetch faculty_id, current status, and faculty name for auditing
+        # 1. Fetch faculty_id, current status, final_decision, and faculty name for auditing
         cursor.execute("""
-            SELECT ra.faculty_id, ra.current_status, p.firstname, p.lastname
+            SELECT ra.faculty_id, ra.current_status, p.firstname, p.lastname, ra.final_decision
             FROM regularization_application ra
             JOIN personnel p ON ra.faculty_id = p.personnel_id
             WHERE ra.regularization_id = %s
@@ -10218,8 +10281,18 @@ def forward_regularization_to_president():
         if not result:
             return jsonify(success=False, error='Regularization application not found.'), 404
 
-        faculty_id, old_status, fac_firstname, fac_lastname = result
+        faculty_id, old_status, fac_firstname, fac_lastname, final_decision = result
         fac_name = f"{fac_lastname}, {fac_firstname}"
+
+        if final_decision is not None:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify(success=False, error='Regularization has already been finalized'), 400
+
+        if old_status != 'vpa':
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify(success=False, error='Application is not at VPAA review stage'), 400
 
         # 2. Update status to 'pres' (President Review) and record VPAA action date
         cursor.execute(
@@ -10277,9 +10350,9 @@ def reject_regularization():
         conn = db_pool.get_connection()
         cursor = conn.cursor()
         
-        # Get faculty_id, current_status, and name
+        # Get faculty_id, current_status, final_decision, and name
         cursor.execute("""
-            SELECT ra.faculty_id, ra.current_status, p.firstname, p.lastname
+            SELECT ra.faculty_id, ra.current_status, p.firstname, p.lastname, ra.final_decision
             FROM regularization_application ra
             JOIN personnel p ON ra.faculty_id = p.personnel_id
             WHERE ra.regularization_id = %s
@@ -10291,8 +10364,19 @@ def reject_regularization():
             db_pool.return_connection(conn)
             return jsonify({'success': False, 'error': 'Regularization not found'}), 404
 
-        faculty_id, old_reg_status, fac_firstname, fac_lastname = result
+        faculty_id, old_reg_status, fac_firstname, fac_lastname, final_decision = result
         fac_name = f"{fac_lastname}, {fac_firstname}"
+
+        if final_decision is not None:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify({'success': False, 'error': 'Regularization has already been finalized'}), 400
+
+        # President can reject from 'vpa' (override) or 'pres' (normal flow)
+        if old_reg_status not in ('vpa', 'pres'):
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify({'success': False, 'error': 'Application is not at an active review stage'}), 400
         
         philippines_tz = pytz.timezone('Asia/Manila')
         current_time = datetime.now(philippines_tz)
@@ -10415,14 +10499,13 @@ def promotion_document_upload():
         return "Unauthorized", 401
 
     # Enforce the official promotion submission window: June 1 – August 31
-    # DEV: date window disabled for testing
-    # from datetime import date as _date
-    # _today = _date.today()
-    # if not (6 <= _today.month <= 8):
-    #     return (
-    #         "Promotion applications are only accepted between June 1 and August 31 each year. "
-    #         "Please resubmit during the official submission period."
-    #     ), 403
+    from datetime import date as _date
+    _today = _date.today()
+    if not (6 <= _today.month <= 8):
+        return (
+            "Promotion applications are only accepted between June 1 and August 31 each year. "
+            "Please resubmit during the official submission period."
+        ), 403
 
     conn = db_pool.get_connection()
     cursor = conn.cursor()
@@ -10712,7 +10795,7 @@ def delete_submission():
 
 
 @app.route('/api/promotion/details/<int:application_id>')
-@require_auth([20003, 20004, 20005])
+@require_auth([20003, 20004])
 def get_promotion_details(application_id):
     """Get detailed promotion information - COMPLETE VERSION"""
     try:
@@ -10880,7 +10963,7 @@ def get_profile_image_base64(personnel_id):
 
 
 @app.route('/api/promotion/document/<int:application_id>/<doc_type>')
-@require_auth([20003, 20004, 20005])  # HR only
+@require_auth([20003, 20004])
 def get_promotion_document(application_id, doc_type):
     """Serve PDF documents from promotion_application table"""
     try:
@@ -10933,14 +11016,29 @@ def forward_to_vpaa():
         
         conn = db_pool.get_connection()
         cursor = conn.cursor()
-        
+
+        # Verify the application is at the hrmd or pending stage
+        cursor.execute(
+            "SELECT current_status FROM promotion_application WHERE application_id = %s",
+            (application_id,)
+        )
+        status_row = cursor.fetchone()
+        if not status_row:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify(success=False, error='Application not found'), 404
+        if status_row[0] not in ('hrmd', 'pending'):
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify(success=False, error='Application is not at HRMD review stage'), 400
+
         philippines_tz = pytz.timezone('Asia/Manila')
         current_time = datetime.now(philippines_tz)
-        
+
         # Update status to VPA and save HRMD remarks
         cursor.execute(
-            """UPDATE promotion_application 
-               SET current_status = %s, 
+            """UPDATE promotion_application
+               SET current_status = %s,
                    hrmd_approval_date = %s,
                    hrmd_remarks = %s
                WHERE application_id = %s""",
@@ -11231,9 +11329,9 @@ def reject_promotion():
         conn = db_pool.get_connection()
         cursor = conn.cursor()
         
-        # Get current status and faculty name
+        # Get current status, final_decision, and faculty name
         cursor.execute("""
-            SELECT pa.current_status, p.firstname, p.lastname, pa.requested_rank, pa.faculty_id
+            SELECT pa.current_status, p.firstname, p.lastname, pa.requested_rank, pa.faculty_id, pa.final_decision
             FROM promotion_application pa
             JOIN personnel p ON pa.faculty_id = p.personnel_id
             WHERE pa.application_id = %s
@@ -11245,7 +11343,12 @@ def reject_promotion():
             db_pool.return_connection(conn)
             return jsonify(success=False, error='Application not found'), 404
 
-        current_status, fac_firstname, fac_lastname, requested_rank, rejected_faculty_id = result
+        current_status, fac_firstname, fac_lastname, requested_rank, rejected_faculty_id, final_decision = result
+
+        if final_decision is not None:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify(success=False, error='Application has already been finalized'), 400
         fac_name = f"{fac_lastname}, {fac_firstname}"
 
         # Update status to rejected with rejection reason
@@ -11426,6 +11529,7 @@ def get_eligible_faculty():
             LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
             WHERE
                 p.hiredate IS NOT NULL
+                AND pr.has_aligned_master = TRUE
                 AND (CURRENT_DATE - COALESCE(pr.probationary_start_date, p.hiredate))::float / 365.25 >= 3
                 AND p.personnel_id NOT IN (
                     SELECT faculty_id
@@ -11696,11 +11800,9 @@ def get_promotion_eligibility():
                                                 #else:
                                                 #   is_tenure_ok = years_employed >= 3
         
-    # DEV: all eligibility checks disabled for testing
-    is_attendance_ok = True  # avg_attendance_rate >= 80.0
-    is_eval_ok = True        # weighted_eval_score >= 3.0
-    is_cooldown_ok = True
-    can_apply = True  # is_tenure_ok and is_attendance_ok and is_eval_ok and is_cooldown_ok
+    is_attendance_ok = avg_attendance_rate >= 80.0
+    is_eval_ok = weighted_eval_score >= 3.0
+    can_apply = is_tenure_ok and is_attendance_ok and is_eval_ok and is_cooldown_ok
 
     # Determine tenure type (for display, prioritizing employment_status)
     tenure_type = employment_status
@@ -11744,7 +11846,7 @@ def get_promotion_eligibility():
 
 
 @app.route('/api/promotion/list')
-@require_auth([20003, 20004, 20005])
+@require_auth([20003, 20004])
 def get_promotion_list():
     status_filter = request.args.get('status', None)
 
@@ -11835,47 +11937,13 @@ def get_audit_logs():
         print(f"Audit log fetch error: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/promotion/submit', methods=['POST'])
-@require_auth([20001, 20002]) # Faculty or Deans
-def api_promotion_submit():
-    try:
-        data = request.get_json()
-        faculty_id = session.get('personnel_id')
-        current_date = datetime.now()
-        
-        # RULE: Official Promotion Submission Period is June 1 to August 31 [cite: 79]
-        is_in_window = (6 <= current_date.month <= 8)
-        status = 'HRMD Review'
-        
-        if not is_in_window:
-            # RULE: Submissions after August must wait for next cycle or get special approval [cite: 100, 101]
-            status = 'Pending Special Approval'
-        
-        conn = db_pool.get_connection()
-        cursor = conn.cursor()
-        
-        # RULE: Salary adjustments take effect upon submission of complete documents [cite: 93]
-        cursor.execute("""
-            INSERT INTO promotion_application 
-            (faculty_id, requested_rank, date_submitted, current_status, effectivity_date)
-            VALUES (%s, %s, CURRENT_TIMESTAMP, %s, CURRENT_DATE)
-        """, (faculty_id, data.get('requested_rank'), status))
-        
-        conn.commit()
-        cursor.close()
-        db_pool.return_connection(conn)
-        
-        msg = "Application submitted." if is_in_window else "Submitted outside window. Pending President approval."
-        return jsonify({'success': True, 'message': msg})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
 @app.route('/api/regularization/check-status/<int:faculty_id>')
+@require_auth([20001, 20002, 20003, 20004])
 def check_regularization_status(faculty_id):
     try:
         conn = db_pool.get_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("""
             SELECT pr.has_aligned_master,
                    COALESCE(pr.probationary_start_date, p.hiredate) AS prob_start,
@@ -11886,6 +11954,10 @@ def check_regularization_status(faculty_id):
         """, (faculty_id,))
 
         res = cursor.fetchone()
+        if not res:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify({'eligible': False, 'category': 'Unknown', 'reason': 'Faculty record not found.'}), 404
         has_master, prob_start, current_status = res
 
         if not has_master:
