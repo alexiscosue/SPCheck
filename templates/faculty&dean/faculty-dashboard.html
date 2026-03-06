@@ -53,8 +53,19 @@
     -->
 
     <div class="chart-card card">
-      <div style="font-weight:700;margin-bottom:6px">Evaluation Breakdown</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <div style="font-weight:700;">Evaluation Breakdown</div>
+        <div id="eval-overall-badge" style="display:none;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;background:#f3f4f6;color:#6b7280;"></div>
+      </div>
       <canvas id="myEvalChart" height="170"></canvas>
+    </div>
+
+    <div class="chart-card card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <div style="font-weight:700;">Score vs. College Average</div>
+        <div id="comparison-college-label" style="font-size:12px;color:var(--muted);"></div>
+      </div>
+      <canvas id="myComparisonChart" height="130"></canvas>
     </div>
 
     <div id="license-status-card" style="display:none;">
@@ -93,7 +104,8 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
   let dashboardData = null;
-  let evalChartInstance = null; 
+  let evalChartInstance = null;
+  let comparisonChartInstance = null;
 
   async function fetchDashboardData() {
     try {
@@ -109,7 +121,8 @@
         dashboardData = { ...mainData, ...evalData }; // Combine data
         updateDashboardDisplay();
         // Use the specific 'chart_data' key returned by the eval API
-        renderEvaluationChart(dashboardData.chart_data);
+        renderEvaluationChart(dashboardData.chart_data, dashboardData.kpis);
+        renderComparisonChart(dashboardData.comparison);
       } else {
         console.error('Failed to fetch dashboard data:', mainData.error || evalData.error);
         showErrorState();
@@ -133,42 +146,111 @@
   });
   */
 
-  function renderEvaluationChart(data) {
+  function renderEvaluationChart(data, kpis) {
     const evalCtx = document.getElementById('myEvalChart').getContext('2d');
-    
-    // Destroy old chart instance if it exists
+
     if (evalChartInstance) {
       evalChartInstance.destroy();
     }
-    
-    // Chart Labels: Students, Peers, Supervisors (matches backend output order)
-    const chartLabels = ['Students','Peers','Supervisors'];
-    
+
+    // Show overall weighted score badge
+    if (kpis) {
+      const badge = document.getElementById('eval-overall-badge');
+      const overall = parseFloat(kpis.overall_average);
+      const badgeColor = overall >= 3.5 ? { bg:'#dcfce7', color:'#16a34a' }
+                       : overall >= 3.0 ? { bg:'#fef9c3', color:'#ca8a04' }
+                       : { bg:'#fee2e2', color:'#dc2626' };
+      badge.textContent = `Overall: ${overall.toFixed(2)} / 4`;
+      badge.style.background = badgeColor.bg;
+      badge.style.color = badgeColor.color;
+      badge.style.display = 'inline-block';
+    }
+
     evalChartInstance = new Chart(evalCtx, {
       type: 'bar',
       data: {
-        labels: chartLabels,
-        datasets:[{ 
-          label:'Average Score', 
-          // Data is an array of 3 floats: [Student Avg, Peer Avg, Supervisor Avg]
-          data: data, 
-          backgroundColor:['#3b82f6','#10b981','#f1c40f'] 
+        labels: ['Students (55%)','Peers (10%)','Supervisors (35%)'],
+        datasets:[{
+          label:'Average Score',
+          data: data,
+          backgroundColor:['#3b82f6','#10b981','#f1c40f'],
+          borderRadius: 4,
+          borderSkipped: false
         }]
       },
-      options:{ 
-        responsive:true, 
-        plugins:{ 
-          legend:{ display:false } 
-        }, 
-        scales:{ 
-          y:{ 
-            min:0, 
-            max:5, 
-            ticks:{ 
-              stepSize:1 
-            } 
-          } 
-        } 
+      options:{
+        responsive:true,
+        plugins:{
+          legend:{ display:false },
+          tooltip: {
+            callbacks: {
+              label: ctx => ` ${ctx.parsed.y.toFixed(2)} / 4`
+            }
+          }
+        },
+        scales:{
+          y:{
+            min:0,
+            max:4,
+            ticks:{ stepSize:1 },
+            grid:{ color:'rgba(0,0,0,0.05)' }
+          },
+          x:{ grid:{ display:false } }
+        }
+      }
+    });
+  }
+
+  function renderComparisonChart(comparison) {
+    const ctx = document.getElementById('myComparisonChart').getContext('2d');
+
+    if (comparisonChartInstance) {
+      comparisonChartInstance.destroy();
+    }
+
+    if (!comparison) return;
+
+    const collegeName = comparison.college_name || 'College';
+    document.getElementById('comparison-college-label').textContent = collegeName;
+
+    const yourAvg  = parseFloat(comparison.your_avg  || 0);
+    const deptAvg  = parseFloat(comparison.dept_avg  || 0);
+    const collegeAvg = parseFloat(comparison.college_avg || 0);
+
+    const yourColor = yourAvg >= deptAvg ? '#7b1113' : '#f59e0b';
+
+    comparisonChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: ['You', 'Department', 'College'],
+        datasets: [{
+          label: 'Weighted Score',
+          data: [yourAvg, deptAvg, collegeAvg],
+          backgroundColor: [yourColor, '#94a3b8', '#cbd5e1'],
+          borderRadius: 4,
+          borderSkipped: false
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => ` ${ctx.parsed.x.toFixed(2)} / 4`
+            }
+          }
+        },
+        scales: {
+          x: {
+            min: 0,
+            max: 4,
+            ticks: { stepSize: 1 },
+            grid: { color: 'rgba(0,0,0,0.05)' }
+          },
+          y: { grid: { display: false } }
+        }
       }
     });
   }
@@ -190,23 +272,23 @@
     const overallScore = parseFloat(dashboardData.overall_eval_score || dashboardData.kpis.overall_average); 
     const scoreDisplay = overallScore.toFixed(2);
     
-    // Determine the trend for overall score (Placeholder logic based on target 4.0/5.0)
+    // Scale is 1–4. Green ≥ 3.5, amber 3.0–3.49, red < 3.0 (aligns with promotion lock)
     let evalTrend = 'right-arrow-alt';
     let evalTrendColor = '#6b7280';
-    
-    if (overallScore >= 4.0) {
+
+    if (overallScore >= 3.5) {
         evalTrend = 'up-arrow-alt';
         evalTrendColor = '#10b981';
     } else if (overallScore < 3.0 && overallScore > 0) {
         evalTrend = 'down-arrow-alt';
         evalTrendColor = '#ef4444';
     }
-    
+
     // If score is 0.0, show N/A
     if (overallScore === 0.0) {
         evalScoreElement.innerHTML = `N/A <i class='bx bx-minus' style="color:#6b7280"></i>`;
     } else {
-        evalScoreElement.innerHTML = `${scoreDisplay} / 5 <i class='bx bx-${evalTrend}' style="color:${evalTrendColor}"></i>`;
+        evalScoreElement.innerHTML = `${scoreDisplay} / 4 <i class='bx bx-${evalTrend}' style="color:${evalTrendColor}"></i>`;
     }
 
     // Teaching Load KPI
@@ -396,19 +478,8 @@
     document.getElementById('promotionStatus').innerHTML = 'Error <i class="bx bx-error-circle" style="color:#ef4444"></i>';
     document.getElementById('classScheduleBody').innerHTML = '<div style="text-align: center; padding: 1rem; color: #ef4444;">Error loading schedule</div>';
     
-    // Destroy chart if error occurs to show blank
-    const evalCtx = document.getElementById('myEvalChart').getContext('2d');
-    if (evalChartInstance) {
-      evalChartInstance.destroy();
-    }
-    evalChartInstance = new Chart(evalCtx, {
-      type: 'bar',
-      data: {
-        labels: ['Students','Peers','Supervisors'],
-        datasets:[{ label:'Average Score', data:[0,0,0], backgroundColor:['#3b82f6','#10b981','#f1c40f'] }]
-      },
-      options:{ responsive:true, plugins:{ legend:{ display:false } }, scales:{ y:{ min:0, max:5, ticks:{ stepSize:1 } } } }
-    });
+    if (evalChartInstance) evalChartInstance.destroy();
+    if (comparisonChartInstance) comparisonChartInstance.destroy();
   }
 
   function loadLicenseStatusCard() {
