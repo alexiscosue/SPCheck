@@ -2138,7 +2138,7 @@ def api_notifications_clear():
 def api_faculty_semesters():
     """API endpoint to get available semesters - CACHED"""
     cache_key = "all_semesters"
-    cached = get_cached(cache_key, ttl=60)  # Short TTL: is_current depends on eval data
+    cached = get_cached(cache_key, ttl=60)  # Short TTL: is_current depends on calendar date
     if cached:
         return cached
     
@@ -2172,9 +2172,9 @@ def api_faculty_semesters():
         cursor.close()
         db_pool.return_connection(conn)
         
-        semester_options = []
-        current_semester_id = None
-        data_semester_id = None  # most recent semester with actual eval data
+        current_semester_id = None  # calendar-based: today falls between start/end
+        data_semester_id = None    # fallback: most recent semester with eval data
+        raw_semesters = []
 
         for sem in semesters:
             acadcalendar_id, semester, acadyear, start_date, end_date, is_current, has_data = sem
@@ -2196,24 +2196,30 @@ def api_faculty_semesters():
             else:
                 year_display = f'AY {acadyear}'
 
-            display_text = f"{semester_display}, {year_display}"
-
             if is_current and current_semester_id is None:
                 current_semester_id = acadcalendar_id
 
-            # Track the first (most recent) semester that has data
             if has_data and data_semester_id is None:
                 data_semester_id = acadcalendar_id
 
-            semester_options.append({
+            raw_semesters.append({
                 'id': acadcalendar_id,
-                'text': display_text,
-                # Mark as current for the dropdown: prefer semester with data
-                # over the calendar-active semester
-                'is_current': bool(has_data and data_semester_id == acadcalendar_id)
-                              or (not data_semester_id and bool(is_current)),
+                'text': f"{semester_display}, {year_display}",
                 'start_date': start_date.isoformat(),
                 'end_date': end_date.isoformat()
+            })
+
+        # Calendar-active semester takes priority; fall back to most recent with data
+        effective_current_id = current_semester_id if current_semester_id else data_semester_id
+
+        semester_options = []
+        for item in raw_semesters:
+            semester_options.append({
+                'id': item['id'],
+                'text': item['text'],
+                'is_current': item['id'] == effective_current_id,
+                'start_date': item['start_date'],
+                'end_date': item['end_date']
             })
         
         result = {
@@ -8741,7 +8747,7 @@ def api_hr_evaluations():
                 COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.total_responses ELSE 0 END), 0) AS student_responses_count
             FROM personnel p
             LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s
-            WHERE p.role_id IN (20001, 20002)
+            WHERE p.role_id = 20001
             GROUP BY p.personnel_id, p.college_id
         ),
         department_avg AS (
@@ -8821,7 +8827,7 @@ def api_hr_evaluations():
         LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s
         LEFT JOIN college c ON p.college_id = c.college_id
         LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
-        WHERE 1=1 AND p.role_id IN (20001, 20002)
+        WHERE 1=1 AND p.role_id = 20001
     """
     params = [current_term_id]
 
@@ -8870,7 +8876,7 @@ def api_hr_evaluations():
         SELECT DISTINCT pr.position
         FROM personnel p
         JOIN profile pr ON p.personnel_id = pr.personnel_id
-        WHERE p.role_id IN (20001, 20002) AND pr.position IS NOT NULL
+        WHERE p.role_id = 20001 AND pr.position IS NOT NULL
         ORDER BY pr.position
     """)
     unique_positions = [row[0] for row in cursor.fetchall() if row[0] and row[0].strip() != '']
