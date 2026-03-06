@@ -10,7 +10,8 @@
   <div style="grid-column: 1 / -1; display:block; width:100%">
     <div class="attendance-main card" style="width:100%">
       <div class="tabs_profile">
-        <div class="tab active" data-tab="logs">Attendance Records</div>
+        <div class="tab active" data-tab="logs">Class Attendance</div>
+        <div class="tab" data-tab="campus-attendance">Campus Attendance</div>
         <div class="tab" data-tab="calendar">Calendar View</div>
         <div class="tab" data-tab="analytics"><i class='bx bx-bar-chart-alt-2' style="vertical-align:middle;margin-right:4px"></i>Analytics</div>
       </div>
@@ -56,6 +57,59 @@
         </div>
       </div>
 
+      <!-- Campus Attendance Tab -->
+      <div id="campus-attendance" class="tab-content">
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:14px">
+          <label for="campusSemesterSelect" style="font-size:13px;color:var(--muted);white-space:nowrap">Semester:</label>
+          <select id="campusSemesterSelect" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:var(--card);color:var(--text);cursor:pointer;min-width:220px">
+            <option value="">Loading semesters...</option>
+          </select>
+        </div>
+        <div class="search-filter">
+          <input type="text" id="campusLogSearch" placeholder="Search by date...">
+          <select id="campusSessionFilter" style="margin-left:auto">
+            <option value="">All Sessions</option>
+            <option value="Morning">Morning</option>
+            <option value="Afternoon">Afternoon</option>
+          </select>
+          <select id="campusStatusFilter">
+            <option value="">All Status</option>
+            <option value="Present">Present</option>
+            <option value="Late">Late</option>
+            <option value="Absent">Absent</option>
+            <option value="Excused">Excused</option>
+          </select>
+        </div>
+        <div class="hr-pagination-controls">
+          <button id="campusPrevPage" class="hr-pagination-btn">‹</button>
+          <span id="campusPageInfo">0 records</span>
+          <button id="campusNextPage" class="hr-pagination-btn">›</button>
+        </div>
+        <div class="table">
+          <table class="hr-attendance-table">
+            <colgroup>
+              <col style="width:20%">
+              <col style="width:20%">
+              <col style="width:20%">
+              <col style="width:20%">
+              <col style="width:20%">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Time In</th>
+                <th>Time Out</th>
+                <th>Session</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="campusLogsBody">
+              <tr><td colspan="5" style="text-align:center;padding:2rem;color:#6b7280">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Calendar View Tab -->
       <div id="calendar" class="tab-content">
         <div class="calendar-header">
@@ -77,12 +131,21 @@
       <div id="analytics" class="tab-content">
 
         <!-- Semester selector -->
-        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:18px">
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px">
           <label for="analyticsSemesterSelect" style="font-size:13px;color:var(--muted);white-space:nowrap">Semester:</label>
           <select id="analyticsSemesterSelect" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:var(--card);color:var(--text);cursor:pointer">
             <option value="">Loading…</option>
           </select>
         </div>
+
+        <!-- Analytics mini-tabs -->
+        <div class="attendance-sub-tabs">
+          <div class="attendance-sub-tab active" data-subtab="sub-analytics-class">Class Attendance</div>
+          <div class="attendance-sub-tab" data-subtab="sub-analytics-campus">Campus Attendance</div>
+        </div>
+
+        <!-- Class Attendance sub-content -->
+        <div id="sub-analytics-class" class="sub-tab-content active">
 
         <!-- Analytics KPI Cards -->
         <div class="kpis" style="margin-bottom:20px">
@@ -128,7 +191,7 @@
 
           <!-- Trend Chart -->
           <div class="card" style="padding:14px">
-            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Attendance Trends — Weeks of Selected Semester</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Class Attendance Trends</div>
             <div style="position:relative;height:340px">
               <canvas id="analyticsTrendChart"></canvas>
             </div>
@@ -147,7 +210,7 @@
 
         <!-- Class Breakdown Table -->
         <div style="margin-top:20px">
-          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Class Breakdown — Selected Semester</div>
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Class Breakdown</div>
           <div class="search-filter">
             <input type="text" id="cbSearch" placeholder="Search by subject or section…">
           </div>
@@ -177,6 +240,68 @@
           </div>
         </div>
 
+        </div><!-- /sub-analytics-class -->
+
+        <!-- Campus Attendance sub-content -->
+        <div id="sub-analytics-campus" class="sub-tab-content">
+
+          <!-- Campus KPI Cards -->
+          <div class="kpis" style="margin-bottom:20px">
+            <div class="kpi card" style="gap:14px">
+              <div class="icon fac"><i class='bx bx-trending-up'></i></div>
+              <div>
+                <div class="title">Avg. Attendance Rate</div>
+                <div class="value" id="ca-kpi-rate">—</div>
+              </div>
+            </div>
+            <div class="kpi card" style="gap:14px">
+              <div class="icon eval"><i class='bx bx-check-circle'></i></div>
+              <div>
+                <div class="title">Total Present</div>
+                <div class="value" id="ca-kpi-present">—</div>
+              </div>
+            </div>
+            <div class="kpi card" style="gap:14px">
+              <div class="icon promo"><i class='bx bx-time'></i></div>
+              <div>
+                <div class="title">Total Late</div>
+                <div class="value" id="ca-kpi-late">—</div>
+              </div>
+            </div>
+            <div class="kpi card" style="gap:14px">
+              <div class="icon att"><i class='bx bx-x-circle'></i></div>
+              <div>
+                <div class="title">Total Absent</div>
+                <div class="value" id="ca-kpi-absent">—</div>
+              </div>
+            </div>
+            <div class="kpi card" style="gap:14px">
+              <div class="icon" style="background:#ede9fe"><i class='bx bx-calendar-x' style="color:#7c3aed"></i></div>
+              <div>
+                <div class="title">Total Excused</div>
+                <div class="value" id="ca-kpi-excused">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Campus Charts Row -->
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px">
+            <div class="card" style="padding:14px">
+              <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Campus Attendance Trends</div>
+              <div style="position:relative;height:340px">
+                <canvas id="caTrendChart"></canvas>
+              </div>
+            </div>
+            <div class="card" style="padding:14px;display:flex;flex-direction:column;align-items:center">
+              <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;align-self:flex-start">Status Distribution</div>
+              <div style="position:relative;height:280px;width:100%">
+                <canvas id="caDistChart"></canvas>
+              </div>
+              <div id="caDistLegend" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center"></div>
+            </div>
+          </div>
+        </div>
+
       </div>
 
     </div>
@@ -203,6 +328,22 @@
           analyticsLoaded = true;
         }
       }
+      if (btn.dataset.tab === 'campus-attendance') {
+        if (!campusSemesterLoaded) {
+          loadCampusSemesters();
+          campusSemesterLoaded = true;
+        }
+      }
+    });
+  });
+
+  // ── Analytics sub-tab switching ────────────────────────────────
+  document.querySelectorAll('#analytics .attendance-sub-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#analytics .attendance-sub-tab').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('#analytics .sub-tab-content').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.subtab).classList.add('active');
     });
   });
 
@@ -317,6 +458,15 @@
   let analyticsLoaded = false;
   let analyticsTrendChart = null;
   let analyticsDistChart  = null;
+  let caTrendChart = null;
+  let caDistChart  = null;
+
+  // Campus Attendance state
+  let campusLogs = [];
+  let campusFiltered = [];
+  let campusPage = 1;
+  const campusPerPage = 10;
+  let campusSemesterLoaded = false;
 
   // ── Semesters & logs data fetch ────────────────────────────────
   async function fetchSemesters() {
@@ -584,20 +734,32 @@
       const url = semesterId
         ? '/api/faculty/attendance-analytics?semester_id=' + semesterId
         : '/api/faculty/attendance-analytics';
-      const resp = await fetch(url);
-      const data = await resp.json();
-      if (!data.success) return;
+      const [resp, caResp] = await Promise.all([
+        fetch(url),
+        fetch(semesterId
+          ? '/api/faculty/campus-attendance-analytics?semester_id=' + semesterId
+          : '/api/faculty/campus-attendance-analytics')
+      ]);
+      const data   = await resp.json();
+      const caData = await caResp.json();
 
-      // Sync selector if backend resolved a different semester
-      if (data.selected_semester_id) {
-        const sel = document.getElementById('analyticsSemesterSelect');
-        if (sel && !semesterId) sel.value = String(data.selected_semester_id);
+      if (data.success) {
+        // Sync selector if backend resolved a different semester
+        if (data.selected_semester_id) {
+          const sel = document.getElementById('analyticsSemesterSelect');
+          if (sel && !semesterId) sel.value = String(data.selected_semester_id);
+        }
+        updateAnalyticsKPIs(data.analytics_kpis);
+        renderAnalyticsTrend(data.trends);
+        renderAnalyticsDist(data.distribution);
+        renderClassBreakdown(data.class_breakdown || []);
       }
 
-      updateAnalyticsKPIs(data.analytics_kpis);
-      renderAnalyticsTrend(data.trends);
-      renderAnalyticsDist(data.distribution);
-      renderClassBreakdown(data.class_breakdown || []);
+      if (caData.success) {
+        updateCaKPIs(caData.kpis);
+        renderCaTrend(caData.trends);
+        renderCaDist(caData.distribution);
+      }
     } catch (e) {
       console.error('Error fetching analytics:', e);
     }
@@ -819,6 +981,162 @@
     }).join('');
   }
 
+  // ── Campus Analytics ───────────────────────────────────────────
+  function updateCaKPIs(kpis) {
+    document.getElementById('ca-kpi-rate').textContent    = kpis.avg_rate    != null ? kpis.avg_rate.toFixed(1) + '%' : '—';
+    document.getElementById('ca-kpi-present').textContent = kpis.total_present ?? '—';
+    document.getElementById('ca-kpi-late').textContent    = kpis.total_late    ?? '—';
+    document.getElementById('ca-kpi-absent').textContent  = kpis.total_absent  ?? '—';
+    document.getElementById('ca-kpi-excused').textContent = kpis.total_excused ?? '—';
+  }
+
+  function renderCaTrend(trends) {
+    const ctx = document.getElementById('caTrendChart').getContext('2d');
+    if (caTrendChart) { caTrendChart.destroy(); caTrendChart = null; }
+    if (!trends || trends.length === 0) return;
+    caTrendChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: trends.map(t => t.label),
+        datasets: [
+          { label: 'Avg. Rate (%)', data: trends.map(t => t.avg_rate), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', fill: true, tension: 0.4, yAxisID: 'yRate', pointRadius: 4, pointHoverRadius: 6 },
+          { label: 'Present Sessions', data: trends.map(t => t.total_present), borderColor: '#10b981', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
+          { label: 'Late Sessions', data: trends.map(t => t.total_late), borderColor: '#f59e0b', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
+          { label: 'Absent Sessions', data: trends.map(t => t.total_absent), borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+        scales: {
+          yRate: { type: 'linear', position: 'left', min: 0, max: 100, title: { display: true, text: 'Rate (%)', font: { size: 11 } }, ticks: { font: { size: 11 }, callback: v => v + '%' } },
+          yCounts: { type: 'linear', position: 'right', min: 0, title: { display: true, text: 'Sessions', font: { size: 11 } }, ticks: { font: { size: 11 } }, grid: { drawOnChartArea: false } },
+          x: { ticks: { font: { size: 11 }, maxRotation: 30 } }
+        }
+      }
+    });
+  }
+
+  function renderCaDist(dist) {
+    const ctx = document.getElementById('caDistChart').getContext('2d');
+    if (caDistChart) { caDistChart.destroy(); caDistChart = null; }
+    const colors = ['#16a34a', '#f59e0b', '#ef4444', '#6b7280'];
+    const labels = ['Present', 'Late', 'Absent', 'Excused'];
+    const values = [dist.present || 0, dist.late || 0, dist.absent || 0, dist.excused || 0];
+    caDistChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '68%' }
+    });
+    const legendEl = document.getElementById('caDistLegend');
+    const total = values.reduce((a, b) => a + b, 0);
+    legendEl.innerHTML = labels.map(function(lbl, i) {
+      const pct = total > 0 ? ((values[i] / total) * 100).toFixed(1) : '0.0';
+      return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text)">' +
+        '<span style="width:10px;height:10px;border-radius:50%;background:' + colors[i] + ';flex-shrink:0"></span>' +
+        lbl + ': <strong>' + values[i] + '</strong> (' + pct + '%)' +
+      '</span>';
+    }).join('');
+  }
+
+  // ── Campus Attendance ──────────────────────────────────────────
+  function fmtHHMM(hhmm) {
+    if (!hhmm) return '---';
+    const parts = hhmm.split(':');
+    let h = parseInt(parts[0]), m = parts[1];
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${h}:${m} ${ampm}`;
+  }
+
+  async function loadCampusSemesters() {
+    try {
+      const resp = await fetch('/api/faculty/semesters');
+      const data = await resp.json();
+      if (!data.success) return;
+      const sel = document.getElementById('campusSemesterSelect');
+      sel.innerHTML = '';
+      const semesters = data.semesters || [];
+      const currentId = data.current_semester_id ? String(data.current_semester_id) : null;
+      semesters.forEach(sem => {
+        const opt = document.createElement('option');
+        opt.value = sem.id;
+        opt.textContent = sem.is_current ? sem.text + ' (Current)' : sem.text;
+        sel.appendChild(opt);
+      });
+      sel.value = (currentId && sel.querySelector('option[value="' + currentId + '"]'))
+        ? currentId : (semesters.length > 0 ? String(semesters[0].id) : '');
+      fetchCampusAttendance(sel.value);
+      sel.addEventListener('change', () => fetchCampusAttendance(sel.value));
+    } catch (e) { console.error('Error loading campus semesters:', e); }
+  }
+
+  async function fetchCampusAttendance(semesterId) {
+    const tbody = document.getElementById('campusLogsBody');
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:#6b7280">Loading...</td></tr>';
+    try {
+      const url = semesterId ? `/api/faculty/campus-attendance?semester_id=${semesterId}` : '/api/faculty/campus-attendance';
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (data.success) {
+        campusLogs = data.records || [];
+        campusPage = 1;
+        renderCampusLogs();
+      } else {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:#6b7280">No records found</td></tr>';
+      }
+    } catch (e) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:#6b7280">Error loading records</td></tr>';
+    }
+  }
+
+  function renderCampusLogs() {
+    const search   = document.getElementById('campusLogSearch').value.toLowerCase();
+    const sessionF = document.getElementById('campusSessionFilter').value;
+    const statusF  = document.getElementById('campusStatusFilter').value;
+    campusFiltered = campusLogs.filter(r => {
+      const matchSearch  = !search   || (r.date && r.date.includes(search));
+      const matchSession = !sessionF || r.session === sessionF;
+      const matchStatus  = !statusF  || r.status  === statusF;
+      return matchSearch && matchSession && matchStatus;
+    });
+    const tbody      = document.getElementById('campusLogsBody');
+    const total      = campusFiltered.length;
+    const totalPages = Math.ceil(total / campusPerPage);
+    const start      = (campusPage - 1) * campusPerPage;
+    const pageRows   = campusFiltered.slice(start, start + campusPerPage);
+    tbody.innerHTML  = '';
+    if (pageRows.length === 0) {
+      const msg = total === 0 && (search || sessionF || statusF)
+        ? 'No records match your search criteria'
+        : 'No campus attendance data available';
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:2rem;color:#6b7280;">${msg}</td></tr>`;
+    } else {
+      pageRows.forEach(r => {
+        const sessionClass = r.session === 'Morning' ? 'campus-session-morning' : 'campus-session-afternoon';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.date || '---'}</td>
+          <td>${fmtHHMM(r.time_in)}</td>
+          <td>${fmtHHMM(r.time_out)}</td>
+          <td><span class="campus-session-badge ${sessionClass}">${r.session}</span></td>
+          <td><span class="status ${(r.status || '').toLowerCase()}">${r.status || '---'}</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+    const pageInfo = document.getElementById('campusPageInfo');
+    if (total === 0) {
+      pageInfo.textContent = '0 records';
+    } else {
+      const s = start + 1, e = Math.min(start + campusPerPage, total);
+      pageInfo.textContent = `${s} - ${e} of ${total} records`;
+    }
+    document.getElementById('campusPrevPage').disabled = campusPage <= 1;
+    document.getElementById('campusNextPage').disabled = campusPage >= totalPages || totalPages === 0;
+  }
+
   // ── Event listeners ────────────────────────────────────────────
   document.getElementById('prevMonth').addEventListener('click', () => {
     currentDate.setMonth(currentDate.getMonth() - 1); renderCalendar();
@@ -851,6 +1169,18 @@
       applyCbFilters();
       updateCbSortIcons();
     });
+  });
+
+  document.getElementById('campusLogSearch').addEventListener('input', () => { campusPage = 1; renderCampusLogs(); });
+  document.getElementById('campusSessionFilter').addEventListener('change', () => { campusPage = 1; renderCampusLogs(); });
+  document.getElementById('campusStatusFilter').addEventListener('change', () => { campusPage = 1; renderCampusLogs(); });
+  document.getElementById('campusPrevPage').addEventListener('click', () => {
+    const totalPages = Math.ceil(campusFiltered.length / campusPerPage);
+    if (campusPage > 1) { campusPage--; renderCampusLogs(); }
+  });
+  document.getElementById('campusNextPage').addEventListener('click', () => {
+    const totalPages = Math.ceil(campusFiltered.length / campusPerPage);
+    if (campusPage < totalPages) { campusPage++; renderCampusLogs(); }
   });
 
   // ── Init ───────────────────────────────────────────────────────

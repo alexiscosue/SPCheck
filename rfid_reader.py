@@ -378,7 +378,7 @@ class RFIDReader:
                         'subject_name': subject_name,
                         'class_section': class_section,
                         'classroom': classroom,
-                        'message': f'Time-in recorded - {status} ({timing_msg})'
+                            'message': f'Time-in recorded - {status} ({timing_msg})'
                     }
                     self._trigger_notification(notification_data)
                     self._log_rfid_tap(cursor, rfid_uid, personnel_id, current_time, class_id, 'timein_recorded',
@@ -406,7 +406,7 @@ class RFIDReader:
                                 'subject_name': subject_name,
                                 'class_section': class_section,
                                 'classroom': classroom,
-                                'message': 'Already recorded time-in. Wait 15 minutes for time-out.'
+                                            'message': 'Already recorded time-in. Wait 15 minutes for time-out.'
                             }
                             self._trigger_notification(notification_data)
                             self._log_rfid_tap(cursor, rfid_uid, personnel_id, current_time, class_id, 'buffer_period',
@@ -428,7 +428,7 @@ class RFIDReader:
                                 'subject_name': subject_name,
                                 'class_section': class_section,
                                 'classroom': classroom,
-                                'message': 'Already recorded time-in for this class'
+                                            'message': 'Already recorded time-in for this class'
                             }
                             self._trigger_notification(notification_data)
                             self._log_rfid_tap(cursor, rfid_uid, personnel_id, current_time, class_id, 'duplicate_timein',
@@ -450,7 +450,7 @@ class RFIDReader:
                             'subject_name': subject_name,
                             'class_section': class_section,
                             'classroom': classroom,
-                            'message': f'Attendance already complete for {subject_code}'
+                                    'message': f'Attendance already complete for {subject_code}'
                         }
                         self._trigger_notification(notification_data)
                         self._log_rfid_tap(cursor, rfid_uid, personnel_id, current_time, class_id, 'already_complete',
@@ -548,7 +548,7 @@ class RFIDReader:
                             'subject_name': subject_name,
                             'class_section': class_section,
                             'classroom': classroom,
-                            'message': f'Time-out recorded for {subject_code}'
+                                    'message': f'Time-out recorded for {subject_code}'
                         }
                         self._trigger_notification(notification_data)
                         self._log_rfid_tap(cursor, rfid_uid, personnel_id, current_time, class_id, 'timeout_recorded',
@@ -571,7 +571,7 @@ class RFIDReader:
                             'subject_name': subject_name,
                             'class_section': class_section,
                             'classroom': classroom,
-                            'message': f'Already timed out for {subject_code}'
+                                    'message': f'Already timed out for {subject_code}'
                         }
                         self._trigger_notification(notification_data)
                         self._log_rfid_tap(cursor, rfid_uid, personnel_id, current_time, class_id, 'duplicate_timeout',

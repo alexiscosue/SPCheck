@@ -97,6 +97,15 @@ class BiometricReader:
     # Business logic (unchanged from original)
     # ------------------------------------------------------------------
 
+    def _get_session(self, dt):
+        """Return 'Morning', 'Afternoon', or None based on tap time."""
+        tap_mins = dt.hour * 60 + dt.minute
+        if 420 <= tap_mins <= 764:
+            return 'Morning'
+        elif 765 <= tap_mins <= 1065:
+            return 'Afternoon'
+        return None
+
     def _process_biometric(self, biometric_uid):
         conn = None
         cursor = None
@@ -106,6 +115,7 @@ class BiometricReader:
 
             current_time = self._truncate_timestamp(datetime.now(self.manila_tz))
             day_name = current_time.strftime('%A')
+            session = self._get_session(current_time)
 
             if biometric_uid == "UNKNOWN":
                 remarks = f"[Unknown] Unregistered fingerprint scanned on {day_name}"
@@ -117,6 +127,7 @@ class BiometricReader:
                     'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
                     'action': 'unknown_biometric',
                     'status': 'error',
+                    'session': session,
                     'message': 'Unregistered fingerprint detected'
                 }
                 self._trigger_notification(notification_data)
@@ -142,6 +153,7 @@ class BiometricReader:
                     'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
                     'action': 'unknown_biometric',
                     'status': 'error',
+                    'session': session,
                     'message': f'Fingerprint ID {biometric_uid} not registered in system'
                 }
                 self._trigger_notification(notification_data)
@@ -171,6 +183,7 @@ class BiometricReader:
                     'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
                     'action': 'buffer_period',
                     'status': 'buffer',
+                    'session': session,
                     'message': f'{person_name} - Already scanned. Wait 15 minutes.'
                 }
                 self._trigger_notification(notification_data)
@@ -185,6 +198,7 @@ class BiometricReader:
                     'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
                     'action': status.lower(),
                     'status': 'success',
+                    'session': session,
                     'message': f'{person_name} - {status}'
                 }
                 self._trigger_notification(notification_data)

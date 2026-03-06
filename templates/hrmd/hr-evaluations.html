@@ -25,223 +25,672 @@
           <div class="icon promo"><i class='bx bx-user'></i></div>
           <div>
             <div class="title">Met Response Rate</div>
+            <!-- <div class="subtitle" style="font-size:11px;color:var(--muted);margin-top:2px;">varies by class size</div> -->
             <div class="value" id="kpiMetRate">—</div>
           </div>
         </div>
         <div class="kpi card" style="gap:14px">
           <div class="icon att"><i class='bx bx-user'></i></div>
           <div>
-            <div class="title">Best Dept.</div>
+            <div class="title">Leading Dept.</div>
             <div class="value" id="kpiBestDept">—</div>
           </div>
         </div>
       </div>
 
       <div style="grid-column:1 / -1; margin-top:8px;">
-        <div class="controls">
-            <div class="right">
-            <button class="btn primary" onclick="openPeerAssignmentModal()">
-                <i class='bx bx-git-merge'></i> Manage Peer Assignments
+
+        <!-- Top bar: Search + Semester + Actions -->
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px;">
+
+          <!-- Search -->
+          <div style="position:relative; flex:1; min-width:180px;">
+            <i class='bx bx-search' style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:15px; pointer-events:none;"></i>
+            <input type="text" id="evalSearch" placeholder="Search faculty name..."
+              style="width:100%; box-sizing:border-box; padding:9px 12px 9px 34px; border:1.5px solid #e5e7eb; border-radius:8px; font-size:13px; color:#1f2937; outline:none; transition:border-color .15s;"
+              onfocus="this.style.borderColor='var(--spc-maroon)'" onblur="this.style.borderColor='#e5e7eb'">
+          </div>
+
+          <!-- Semester selector -->
+          <div style="position:relative; flex-shrink:0;">
+            <i class='bx bx-calendar' style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:14px; pointer-events:none;"></i>
+            <select id="semesterFilter"
+              style="padding:9px 12px 9px 30px; border:1.5px solid #e5e7eb; border-radius:8px; font-size:13px; color:#1f2937; background:#fff; outline:none; min-width:210px; cursor:pointer;">
+              <option value="">Loading Semesters...</option>
+            </select>
+          </div>
+
+          <!-- Divider -->
+          <div style="width:1px; height:30px; background:#e5e7eb; flex-shrink:0;"></div>
+
+          <!-- Action buttons -->
+          <div style="display:flex; gap:8px; flex-shrink:0; margin-left:auto;">
+            <button class="btn eval-btn-ghost" id="update-eval-btn"
+              style="display:flex; align-items:center; gap:6px; font-size:13px;">
+              <i class='bx bx-refresh'></i> Update Records
             </button>
-            <button class="btn primary" id="update-eval-btn" >
-              Update Evaluation Records
+            <button class="btn eval-btn-peer" onclick="openPeerAssignmentModal()"
+              style="display:flex; align-items:center; gap:6px; font-size:13px;">
+              <i class='bx bx-git-merge'></i> Peer Assignments
             </button>
-            <button class="btn primary" id="newCycleBtn">
-              <i class='bx bx-refresh'></i>&nbsp; New Evaluation Cycle
+            <button class="btn eval-btn-blue" id="newCycleBtn"
+              style="display:flex; align-items:center; gap:6px; font-size:13px;">
+              <i class='bx bx-calendar-plus'></i> New Cycle
             </button>
           </div>
-          <div class="left">
-            <div class="search-filter">
-              <input type="text" id="evalSearch" placeholder="Search Faculty Name...">
-              <select id="semesterFilter">
-                <option value="">Loading Semesters...</option>
-              </select>
-              <select id="deptFilter">
-                <option value="">All Departments</option>
-              </select>
-              <select id="positionFilter">
-                <option value="">All Positions</option>
-              </select>
-              <select id="statusFilter">
-                <option value="">Rating</option>
-                <option value="above-average">Above Average (3–4)</option>
-                <option value="average">Average (2–3)</option>
-                <option value="below-average">Below Average (<2)</option>
-              </select>
-              <select id="responseRateFilter">
-                <option value="">All Response Rates</option>
-                <option value="met">Met (>= 10)</option>
-                <option value="not-met">Not Met (< 10)</option>
-              </select>
-              </div>
-          </div>
-          
+
         </div>
+
+        <!-- Secondary filter bar -->
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:#f8fafc; border:1px solid #e5e7eb; border-radius:10px; padding:10px 14px;">
+          <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted); white-space:nowrap; display:flex; align-items:center; gap:4px; flex-shrink:0;">
+            <i class='bx bx-filter-alt'></i> Filters
+          </span>
+          <div style="width:1px; height:20px; background:#e5e7eb; flex-shrink:0;"></div>
+
+          <select id="deptFilter"
+            style="padding:7px 10px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; flex:1; min-width:130px; cursor:pointer;">
+            <option value="">All Departments</option>
+          </select>
+
+          <select id="positionFilter"
+            style="padding:7px 10px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; flex:1; min-width:120px; cursor:pointer;">
+            <option value="">All Positions</option>
+          </select>
+
+          <select id="statusFilter"
+            style="padding:7px 10px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; flex:1; min-width:150px; cursor:pointer;">
+            <option value="">All Ratings</option>
+            <option value="above-average">Above Average (3–4)</option>
+            <option value="average">Average (2–3)</option>
+            <option value="below-average">Below Average (&lt;2)</option>
+          </select>
+
+          <select id="responseRateFilter"
+            style="padding:7px 10px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; flex:1; min-width:155px; cursor:pointer;">
+            <option value="">All Response Rates</option>
+            <option value="met">Met</option>
+            <option value="not-met">Not Met</option>
+          </select>
+
+          <button onclick="clearEvalFilters()"
+            style="padding:7px 12px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:12px; font-weight:700; color:var(--muted); background:#fff; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:4px; flex-shrink:0; transition:all .15s;"
+            onmouseover="this.style.borderColor='#ef4444';this.style.color='#ef4444';"
+            onmouseout="this.style.borderColor='#e5e7eb';this.style.color='var(--muted)';">
+            <i class='bx bx-x'></i> Clear
+          </button>
+        </div>
+
       </div>
 
-      <div class="chart-large card" style="grid-column:1 / -1; padding:16px;">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <div style="font-weight:700">Evaluations</div>
-          </div>
+      <div class="chart-large card" style="grid-column:1 / -1; padding:0; overflow:hidden;">
 
-        <div class="card" style="padding:16px; margin-bottom:16px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-            <div>
-              <div style="font-weight:700;font-size:15px;" id="termDisplay">📅 Semester 1 — AY 2025–2026</div>
-              <div style="font-size:13px;color:var(--muted)">Evaluation Cycle Information</div>
-            </div>
-            <div style="display:flex;gap:20px;font-size:14px;">
-              <div><strong>⏳ Duration:</strong> <span id="durationDates">Loading...</span></div>
-              
-              <div id="cycleStatusContainer">
-                <strong>🔔 Status:</strong> 
-                <span id="cycleStatus" style="color:#f59e0b;font-weight:600;">Loading...</span>
+        <!-- Page-level Tab Bar -->
+        <div style="display:flex; border-bottom:2px solid #e5e7eb; background:#f8fafc; padding:0 16px;">
+          <button id="evalPageTab-evaluations" class="eval-page-tab active" onclick="switchEvalTab('evaluations')">
+            <i class='bx bx-list-ul'></i> Evaluations
+          </button>
+          <button id="evalPageTab-analytics" class="eval-page-tab" onclick="switchEvalTab('analytics')">
+            <i class='bx bx-bar-chart-alt-2'></i> Analytics
+          </button>
+        </div>
+
+        <!-- Tab: Evaluations -->
+        <div id="evalTabContent-evaluations" style="padding:16px;">
+
+          <div class="card" style="padding:16px; margin-bottom:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+              <div>
+                <div style="font-weight:700;font-size:15px;" id="termDisplay">📅 Semester 1 — AY 2025–2026</div>
+                <div style="font-size:13px;color:var(--muted)">Evaluation Cycle Information</div>
+              </div>
+              <div style="display:flex;gap:20px;font-size:14px;">
+                <div><strong>⏳ Duration:</strong> <span id="durationDates">Loading...</span></div>
+
+                <div id="cycleStatusContainer">
+                  <strong>🔔 Status:</strong>
+                  <span id="cycleStatus" style="color:#f59e0b;font-weight:600;">Loading...</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="table" style="margin-top:12px;">
-          <table id="evalTable" aria-label="Evaluations table">
-            <thead>
-              <tr>
-                <th>Faculty</th>
-                <th>Department</th>
-                <th>Position</th>
-                <th>Student Response Rate</th>
-                <th>Student</th>
-                <th>Supervisor</th>
-                <th>Peer</th>
-                <th>Overall Score</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="evalTableBody">
+          <div class="table" style="margin-top:12px;">
+            <table id="evalTable" aria-label="Evaluations table">
+              <thead>
+                <tr>
+                  <th>Faculty</th>
+                  <th>Department</th>
+                  <th>Position</th>
+                  <th>Student Response Rate</th>
+                  <th>Student</th>
+                  <th>Supervisor</th>
+                  <th>Peer</th>
+                  <th>Overall Score</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="evalTableBody">
               </tbody>
-          </table>
-          <div id="emptyState" class="table-empty" style="display:none;">No evaluations found — try clearing filters.</div>
+            </table>
+            <div id="emptyState" class="table-empty" style="display:none;">No evaluations found — try clearing filters.</div>
+          </div>
+
+          <div class="page-controls">
+            <div id="pagerInfo" style="font-size:13px;color:var(--muted)"></div>
+            <button class="btn ghost" id="prevPage">Prev</button>
+            <button class="btn ghost" id="nextPage">Next</button>
+          </div>
+
         </div>
 
-        <div class="page-controls">
-          <div id="pagerInfo" style="font-size:13px;color:var(--muted)"></div>
-          <button class="btn ghost" id="prevPage">Prev</button>
-          <button class="btn ghost" id="nextPage">Next</button>
+        <!-- Tab: Analytics -->
+        <div id="evalTabContent-analytics" style="display:none; padding:16px;">
+
+          <!-- Analytics KPI Cards -->
+          <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px;">
+            <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; display:flex; align-items:center; gap:12px;">
+              <div style="width:40px; height:40px; background:#fef3c7; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <i class='bx bx-star' style="font-size:20px; color:#d97706;"></i>
+              </div>
+              <div>
+                <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted);">Avg Rating</div>
+                <div style="font-size:1.5rem; font-weight:800; color:#1f2937; line-height:1.2;" id="an-avgRating">—</div>
+              </div>
+            </div>
+            <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; display:flex; align-items:center; gap:12px;">
+              <div style="width:40px; height:40px; background:#dcfce7; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <i class='bx bx-check-shield' style="font-size:20px; color:#16a34a;"></i>
+              </div>
+              <div>
+                <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted);">Eval. Coverage</div>
+                <div style="font-size:1.5rem; font-weight:800; color:#1f2937; line-height:1.2;" id="an-coverage">—</div>
+                <div style="font-size:11px; color:var(--muted); margin-top:1px;" id="an-coverageDetail"></div>
+              </div>
+            </div>
+            <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; display:flex; align-items:center; gap:12px;">
+              <div style="width:40px; height:40px; background:#dbeafe; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <i class='bx bx-trending-up' style="font-size:20px; color:#2563eb;"></i>
+              </div>
+              <div>
+                <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted);">Above Average</div>
+                <div style="font-size:1.5rem; font-weight:800; color:#1f2937; line-height:1.2;" id="an-aboveAvg">—</div>
+              </div>
+            </div>
+            <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; display:flex; align-items:center; gap:12px;">
+              <div style="width:40px; height:40px; background:#fee2e2; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <i class='bx bx-trending-down' style="font-size:20px; color:#dc2626;"></i>
+              </div>
+              <div>
+                <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted);">Below Average</div>
+                <div style="font-size:1.5rem; font-weight:800; color:#1f2937; line-height:1.2;" id="an-belowAvg">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Charts Row -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px;">
+            <div style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; padding:16px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+                <div style="font-weight:700; font-size:13px; color:#374151;"><i class='bx bx-bar-chart-alt-2' style="color:var(--spc-maroon); margin-right:5px;"></i>Rating Distribution</div>
+                <div style="display:flex; gap:4px;">
+                  <button id="distChartToggle-bar" onclick="switchDistChartView('bar')"
+                    style="padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid var(--spc-maroon); background:var(--spc-maroon); color:#fff; transition:all .15s;">
+                    <i class='bx bx-bar-chart-alt-2'></i> Bar
+                  </button>
+                  <button id="distChartToggle-line" onclick="switchDistChartView('line')"
+                    style="padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid #e5e7eb; background:#fff; color:var(--muted); transition:all .15s;">
+                    <i class='bx bx-line-chart'></i> Trend
+                  </button>
+                </div>
+              </div>
+              <canvas id="evalDistChart"></canvas>
+              <canvas id="evalDistTrendChart" style="display:none;"></canvas>
+            </div>
+            <div style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; padding:16px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+                <div style="font-weight:700; font-size:13px; color:#374151;"><i class='bx bx-buildings' style="color:var(--spc-maroon); margin-right:5px;"></i>Avg Rating by Department</div>
+                <div style="display:flex; gap:4px;">
+                  <button id="deptChartToggle-bar" onclick="switchDeptChartView('bar')"
+                    style="padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid var(--spc-maroon); background:var(--spc-maroon); color:#fff; transition:all .15s;">
+                    <i class='bx bx-bar-chart-alt-2'></i> Bar
+                  </button>
+                  <button id="deptChartToggle-line" onclick="switchDeptChartView('line')"
+                    style="padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid #e5e7eb; background:#fff; color:var(--muted); transition:all .15s;">
+                    <i class='bx bx-line-chart'></i> Trend
+                  </button>
+                </div>
+              </div>
+              <canvas id="evalDeptChart"></canvas>
+              <canvas id="evalDeptTrendChart" style="display:none;"></canvas>
+            </div>
+          </div>
+
+          <!-- Faculty Breakdown Table -->
+          <div style="border:1px solid #e5e7eb; border-radius:10px; overflow:hidden;">
+            <div style="background:#f8fafc; padding:12px 16px; border-bottom:1px solid #e5e7eb; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+              <span style="font-weight:700; font-size:13px; color:#374151;"><i class='bx bx-table' style="margin-right:5px; color:var(--muted);"></i>Faculty Rating Breakdown</span>
+              <input type="text" id="analyticsSearch" placeholder="Search faculty..."
+                style="padding:6px 12px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; outline:none; width:200px; transition:border-color .15s;"
+                onfocus="this.style.borderColor='var(--spc-maroon)'" onblur="this.style.borderColor='#e5e7eb'"
+                oninput="renderAnalyticsTable()">
+            </div>
+            <div style="overflow-x:auto; max-height:380px; overflow-y:auto;">
+              <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead style="position:sticky; top:0; background:#f8fafc; z-index:1;">
+                  <tr>
+                    <th onclick="sortAnalytics('name')" style="padding:10px 14px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; cursor:pointer; white-space:nowrap;">Faculty <i class='bx bx-sort' id="an-sort-name"></i></th>
+                    <th style="padding:10px 14px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; white-space:nowrap;">Department</th>
+                    <th onclick="sortAnalytics('student')" style="padding:10px 14px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; cursor:pointer; white-space:nowrap;">Student <i class='bx bx-sort' id="an-sort-student"></i></th>
+                    <th onclick="sortAnalytics('supervisor')" style="padding:10px 14px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; cursor:pointer; white-space:nowrap;">Supervisor <i class='bx bx-sort' id="an-sort-supervisor"></i></th>
+                    <th onclick="sortAnalytics('peer')" style="padding:10px 14px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; cursor:pointer; white-space:nowrap;">Peer <i class='bx bx-sort' id="an-sort-peer"></i></th>
+                    <th onclick="sortAnalytics('overall')" style="padding:10px 14px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; cursor:pointer; white-space:nowrap;">Overall <i class='bx bx-sort-down' id="an-sort-overall"></i></th>
+                    <th style="padding:10px 14px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; white-space:nowrap;">Rating</th>
+                    <th style="padding:10px 14px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; white-space:nowrap;">Trend</th>
+                  </tr>
+                </thead>
+                <tbody id="analyticsTableBody">
+                  <tr><td colspan="8" style="text-align:center; padding:24px; color:var(--muted);">Click the Analytics tab to load data.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
         </div>
       </div>
     </section>
 
-    <div id="peerAssignmentModal" class="hr-modal-wrapper" style="display: none;">
-        <div class="hr-modal-content" style="max-width: 500px;">
-            <div class="emp-modal-header" style="background: var(--spc-maroon);">
-                <h2 style="color: white; font-size: 1.2rem;"><i class='bx bx-git-merge' style="margin-right: 8px;"></i>Manage Peer Assignments</h2>
-                <span class="emp-close" onclick="closePeerModal()" style="color: white;">&times;</span>
+    <!-- Faculty Trend Modal -->
+    <div id="facultyTrendModal" class="hr-modal-wrapper" style="display:none;">
+        <div class="hr-modal-content" style="max-width:700px; width:95vw; padding:0; overflow:hidden;">
+            <div style="background:linear-gradient(135deg, var(--spc-maroon), #a71d2a); padding:18px 24px; display:flex; align-items:center; justify-content:space-between;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <div style="width:36px; height:36px; background:rgba(255,255,255,0.15); border-radius:9px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <i class='bx bx-line-chart' style="font-size:18px; color:#fff;"></i>
+                    </div>
+                    <div>
+                        <h2 id="facultyTrendTitle" style="color:#fff; font-size:1rem; margin:0; font-weight:700;">Performance Trend</h2>
+                        <p style="color:rgba(255,255,255,0.7); font-size:11px; margin:2px 0 0;">Scores across all evaluated semesters</p>
+                    </div>
+                </div>
+                <button onclick="closeFacultyTrendModal()" style="background:rgba(255,255,255,0.15); border:none; color:#fff; width:30px; height:30px; border-radius:7px; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center;">&times;</button>
             </div>
-            <div class="emp-modal-body">
-                <p style="margin-bottom: 15px; color: #555;">Generate randomized assignments where each faculty member evaluates 2 peers within their department.</p>
+            <div style="padding:24px;">
+                <div id="facultyTrendLoader" style="text-align:center; padding:40px; color:var(--muted);">
+                    <i class='bx bx-loader-alt bx-spin' style="font-size:24px;"></i>
+                </div>
+                <canvas id="facultyTrendChart" style="display:none;"></canvas>
+                <div id="facultyTrendEmpty" style="display:none; text-align:center; padding:40px; color:var(--muted); font-size:13px;">
+                    No evaluation history found for this faculty member.
+                </div>
+            </div>
+        </div>
+    </div>
 
-                <label for="assignment-dept">Target Department</label>
-                <div class="input-with-icon">
-                    <i class='bx bx-buildings'></i>
-                    <select id="assignment-dept" class="form-control">
-                        <option value="" disabled selected>Loading departments...</option>
-                    </select>
+    <div id="peerAssignmentModal" class="hr-modal-wrapper" style="display: none;">
+        <div class="hr-modal-content" style="max-width: 1200px; width: 95vw; padding: 0; overflow: hidden;">
+            <!-- Modal Header -->
+            <div style="background: linear-gradient(135deg, var(--spc-maroon), #a71d2a); padding: 20px 24px; display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 40px; height: 40px; background: rgba(255,255,255,0.15); border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+                        <i class='bx bx-git-merge' style="font-size: 20px; color: #fff;"></i>
+                    </div>
+                    <div>
+                        <h2 style="color: #fff; font-size: 1.1rem; margin: 0; font-weight: 700;">Manage Peer Assignments</h2>
+                        <p style="color: rgba(255,255,255,0.7); font-size: 12px; margin: 2px 0 0;">Generate and view peer evaluation assignments</p>
+                    </div>
+                </div>
+                <button onclick="closePeerModal()" style="background: rgba(255,255,255,0.15); border: none; color: #fff; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; line-height: 1;">&times;</button>
+            </div>
+
+            <!-- Tabs -->
+            <div style="display: flex; border-bottom: 1px solid #e5e7eb; background: #f8fafc;">
+                <button id="peerTab-generate" class="peer-modal-tab active" onclick="switchPeerTab('generate')">
+                    <i class='bx bx-shuffle'></i> Generate
+                </button>
+                <button id="peerTab-view" class="peer-modal-tab" onclick="switchPeerTab('view')">
+                    <i class='bx bx-list-ul'></i> View Assignments
+                </button>
+                <button id="peerTab-manual" class="peer-modal-tab" onclick="switchPeerTab('manual')">
+                    <i class='bx bx-user-plus'></i> Manual Assign
+                </button>
+            </div>
+
+            <!-- Tab: Generate -->
+            <div id="peerTabContent-generate" class="peer-tab-content" style="padding: 24px;">
+                <div style="background: #fffbea; border: 1px solid #fde68a; border-left: 4px solid var(--spc-gold); border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; display: flex; gap: 10px; align-items: flex-start;">
+                    <i class='bx bx-info-circle' style="color: #92400e; font-size: 16px; margin-top: 1px; flex-shrink: 0;"></i>
+                    <p style="margin: 0; font-size: 13px; color: #78350f; line-height: 1.5;">Each faculty member will be assigned to evaluate <strong>2 peers</strong> and be evaluated by <strong>2 peers</strong> within their department. Existing assignments for the selected term and department will be replaced.</p>
                 </div>
 
-                <label for="assignment-acad-id">Academic Term</label>
-                <div class="input-with-icon">
-                    <i class='bx bx-calendar'></i>
-                    <select id="assignment-acad-id" class="form-control">
-                        <option value="" disabled selected>Loading terms...</option>
-                    </select>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 6px;">
+                            <i class='bx bx-buildings' style="color: var(--spc-maroon);"></i> Target Department
+                        </label>
+                        <select id="assignment-dept" style="width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 14px; color: #1f2937; background: #fff; outline: none; transition: border-color .15s;">
+                            <option value="" disabled selected>Loading departments...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 6px;">
+                            <i class='bx bx-calendar' style="color: var(--spc-maroon);"></i> Academic Term
+                        </label>
+                        <select id="assignment-acad-id" style="width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 14px; color: #1f2937; background: #fff; outline: none; transition: border-color .15s;">
+                            <option value="" disabled selected>Loading terms...</option>
+                        </select>
+                    </div>
                 </div>
 
-                <div id="assignment-status" style="display: none; margin-top: 15px; color: #f59e0b; font-weight: 500;">
+                <div id="assignment-status" style="display: none; background: #fef3c7; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; color: #92400e; font-weight: 500; font-size: 13px; align-items: center; gap: 8px;">
                     <i class='bx bx-loader-alt bx-spin'></i> Randomizing assignments...
                 </div>
 
-                <button class="btn primary" onclick="runAssignmentLogic()" style="width: 100%; margin-top: 15px;">
-                    <i class='bx bx-git-merge'></i>&nbsp; Generate Assignments
-                </button>
-                <button class="btn secondary emp-btn-cancel" onclick="closePeerModal()" style="width: 100%; margin-top: 8px;">
-                    Cancel
-                </button>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn primary" onclick="runAssignmentLogic()" style="flex: 1; justify-content: center; display: flex; align-items: center; gap: 6px;">
+                        <i class='bx bx-shuffle'></i> Generate Assignments
+                    </button>
+                    <button class="btn secondary" onclick="closePeerModal()" style="padding: 8px 20px;">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tab: View Assignments -->
+            <div id="peerTabContent-view" class="peer-tab-content" style="display: none; padding: 24px;">
+                <!-- Filters -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; margin-bottom: 16px; align-items: end;">
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 5px;">Department</label>
+                        <select id="view-dept-filter" style="width: 100%; padding: 9px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 13px; color: #1f2937; background: #fff; outline: none;">
+                            <option value="">All Departments</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 5px;">Academic Term</label>
+                        <select id="view-term-filter" style="width: 100%; padding: 9px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 13px; color: #1f2937; background: #fff; outline: none;">
+                            <option value="">All Terms</option>
+                        </select>
+                    </div>
+                    <button onclick="loadHRPeerAssignments()" class="btn primary" style="padding: 9px 16px; display: flex; align-items: center; gap: 6px; white-space: nowrap;">
+                        <i class='bx bx-search'></i> Filter
+                    </button>
+                </div>
+
+                <!-- Summary row -->
+                <div id="peer-assign-summary" style="display: none; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 16px; margin-bottom: 14px; align-items: center; gap: 16px; font-size: 13px; color: #065f46;">
+                    <span><i class='bx bx-group' style="margin-right: 4px;"></i> <strong id="pa-total">0</strong> total assignments</span>
+                    <span style="color: #15803d;"><i class='bx bx-check-circle' style="margin-right: 4px;"></i> <strong id="pa-completed">0</strong> completed</span>
+                    <span style="color: #92400e;"><i class='bx bx-time' style="margin-right: 4px;"></i> <strong id="pa-pending">0</strong> pending</span>
+                </div>
+
+                <!-- Table -->
+                <div style="overflow-x: auto; max-height: 340px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                        <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 1;">
+                            <tr>
+                                <th style="padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid #e5e7eb;">Evaluator</th>
+                                <th style="padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid #e5e7eb;">Evaluatee</th>
+                                <th style="padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid #e5e7eb;">Department</th>
+                                <th style="padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid #e5e7eb;">Term</th>
+                                <th style="padding: 10px 14px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid #e5e7eb;">Status</th>
+                                <th style="padding: 10px 14px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid #e5e7eb;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="peer-assign-tbody">
+                            <tr><td colspan="6" style="text-align: center; padding: 24px; color: var(--muted);">Select filters and click Filter to view assignments.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Tab: Manual Assign -->
+            <div id="peerTabContent-manual" class="peer-tab-content" style="display: none; padding: 24px;">
+                <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #3b82f6; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; display: flex; gap: 10px; align-items: flex-start;">
+                    <i class='bx bx-info-circle' style="color: #1e40af; font-size: 16px; margin-top: 1px; flex-shrink: 0;"></i>
+                    <p style="margin: 0; font-size: 13px; color: #1e3a8a; line-height: 1.5;">Use this form to manually create a single peer assignment. The evaluator and evaluatee must be from the <strong>same department</strong>. Employees cannot evaluate themselves.</p>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 6px;">
+                            <i class='bx bx-calendar' style="color: var(--spc-maroon);"></i> Academic Term
+                        </label>
+                        <select id="manual-term" style="width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 14px; color: #1f2937; background: #fff; outline: none;" onchange="loadFacultyForManualTab()">
+                            <option value="" disabled selected>Select term...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 6px;">
+                            <i class='bx bx-buildings' style="color: var(--spc-maroon);"></i> Department
+                        </label>
+                        <select id="manual-dept" style="width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 14px; color: #1f2937; background: #fff; outline: none;" onchange="loadFacultyForManualTab()">
+                            <option value="" disabled selected>Select department...</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 6px;">
+                            <i class='bx bx-user' style="color: var(--spc-maroon);"></i> Evaluator
+                        </label>
+                        <select id="manual-evaluator" style="width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 14px; color: #1f2937; background: #fff; outline: none;" onchange="updateManualEvaluateeOptions()">
+                            <option value="" disabled selected>Select term &amp; department first</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 6px;">
+                            <i class='bx bx-user-check' style="color: #3b82f6;"></i> Evaluatee
+                        </label>
+                        <select id="manual-evaluatee" style="width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 14px; color: #1f2937; background: #fff; outline: none;">
+                            <option value="" disabled selected>Select evaluator first</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="manual-assign-msg" style="display: none; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px; font-weight: 500;"></div>
+
+                <div style="display: flex; gap: 10px;">
+                    <button onclick="submitManualAssignment()" class="btn primary" style="flex: 1; justify-content: center; display: flex; align-items: center; gap: 6px;">
+                        <i class='bx bx-user-plus'></i> Add Assignment
+                    </button>
+                    <button onclick="closePeerModal()" class="btn secondary" style="padding: 8px 20px;">Cancel</button>
+                </div>
             </div>
         </div>
     </div>
 
     <div id="evaluationModal" class="hr-modal-wrapper" style="display: none;">
-      <div class="hr-modal-content" style="max-width: 800px; padding: 0;">
-          <div class="emp-modal-header" style="border-radius: 12px 12px 0 0; background: linear-gradient(90deg, #7b1113, #a71d2a);">
-              <h2 id="modalTitle" style="color: white; font-size: 1.25rem;">Evaluation Report: Faculty Name</h2>
-              <span class="emp-close" onclick="closeModal()" style="color: white;">&times;</span>
+      <div class="hr-modal-content" style="max-width: 860px; width: 95vw; padding: 0; overflow: hidden; display: flex; flex-direction: column; max-height: 90vh;">
+
+          <!-- Header -->
+          <div style="background: linear-gradient(135deg, var(--spc-maroon), #a71d2a); padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
+              <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+                  <div style="width: 44px; height: 44px; background: rgba(255,255,255,0.15); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                      <i class='bx bx-check-shield' style="font-size: 22px; color: #fff;"></i>
+                  </div>
+                  <div style="min-width: 0;">
+                      <h2 id="modalTitle" style="color: #fff; font-size: 1.05rem; margin: 0; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Evaluation Report</h2>
+                      <p id="reportSemester" style="color: rgba(255,255,255,0.75); font-size: 12px; margin: 3px 0 0;">Loading...</p>
+                  </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: 16px;">
+                  <button id="modalDownloadBtn" data-personnel-id="0"
+                      style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.35); color: #fff; border-radius: 8px; padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background .15s;"
+                      onmouseover="this.style.background='rgba(255,255,255,0.25)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
+                      <i class='bx bx-download'></i> Download PDF
+                  </button>
+                  <button onclick="closeModal()"
+                      style="background: rgba(255,255,255,0.15); border: none; color: #fff; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-size: 20px; display: flex; align-items: center; justify-content: center; line-height: 1; transition: background .15s;"
+                      onmouseover="this.style.background='rgba(255,255,255,0.25)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">&times;</button>
+              </div>
           </div>
-          <div class="emp-modal-body" style="padding: 24px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h3 style="margin: 0; font-size: 1.1rem; color: #333;">Summary for <span id="reportSemester">Semester 1, AY 2025-2026</span></h3>
-                <button class="btn primary" id="modalDownloadBtn" data-personnel-id="0">
-                    <i class='bx bx-download'></i>&nbsp; Download PDF
-                </button>
-              </div>
 
-              <div class="report-content" id="reportContent">
-                  <div class="card" style="margin-bottom: 20px;">
-                      <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 15px; color: var(--spc-maroon); font-weight: 700;">Overall Rating Breakdown</h4>
-                      <div style="display: flex; align-items: center; gap: 30px; flex-wrap: wrap;">
-                          <div class="progress-circle" id="overallRatingCircle" style="--percentage: 0;">
-                              <span id="overallRatingValue">0.00</span>
-                          </div>
-                          <div style="flex-grow: 1;">
-                              <div style="margin-bottom: 10px;">
-                                  <span style="font-weight: 600; font-size: 15px;">Final Status:</span>
-                                  <span class="status above-average" id="finalStatusBadge" style="margin-left: 8px;">N/A</span>
-                              </div>
-                              <table style="width: 100%; border-collapse: separate; border-spacing: 0 5px;">
-                                  <tbody id="ratingBreakdownBody">
-                                      </tbody>
-                              </table>
-                          </div>
+          <!-- Scrollable Body -->
+          <div id="reportContent" style="overflow-y: auto; padding: 24px; flex: 1;">
+
+              <!-- Score Summary: circle + breakdown side-by-side -->
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+
+                  <!-- Overall Circle -->
+                  <div style="background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+                      <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted);">Overall Rating</div>
+                      <div class="progress-circle" id="overallRatingCircle" style="--percentage: 0;">
+                          <span id="overallRatingValue">0.00</span>
                       </div>
+                      <span class="status above-average" id="finalStatusBadge">N/A</span>
                   </div>
 
-                  <div class="card" style="margin-bottom: 20px;">
-                      <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 15px; color: var(--spc-maroon); font-weight: 700;">Student Feedback (Total Responses: <span id="studentResponsesCount">0</span>)</h4>
-                      <ul id="feedbackList" style="list-style: none; padding: 0;">
-                          </ul>
-                      <div id="noFeedback" style="text-align: center; color: var(--muted); padding: 20px; border: 1px dashed #eee;">No qualitative feedback available.</div>
+                  <!-- Score Breakdown -->
+                  <div style="background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px;">
+                      <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 14px;">Score Breakdown</div>
+                      <table style="width: 100%; border-collapse: separate; border-spacing: 0 6px;">
+                          <tbody id="ratingBreakdownBody">
+                              <tr><td colspan="2" style="text-align:center; color:var(--muted); font-size:13px;">Loading...</td></tr>
+                          </tbody>
+                      </table>
+                  </div>
+
+              </div>
+
+              <!-- Student Feedback -->
+              <div style="border: 1px solid #fde68a; border-radius: 12px; overflow: hidden; margin-bottom: 16px;">
+                  <div style="background: #fffbea; border-bottom: 1px solid #fde68a; padding: 11px 16px; display: flex; align-items: center; gap: 8px;">
+                      <i class='bx bxs-graduation' style="color: #92400e; font-size: 15px;"></i>
+                      <span style="font-weight: 700; font-size: 13px; color: #78350f;">Student Feedback</span>
+                      <span style="margin-left: auto; background: #fef3c7; color: #92400e; border-radius: 999px; padding: 2px 10px; font-size: 11px; font-weight: 700; border: 1px solid #fde68a;">
+                          <span id="studentResponsesCount">0</span> responses
+                      </span>
+                  </div>
+                  <div style="padding: 14px 16px; background: #fff;">
+                      <ul id="feedbackList" style="list-style: none; padding: 0; margin: 0;"></ul>
+                      <div id="noFeedback" style="text-align: center; color: var(--muted); padding: 16px; font-size: 13px;">No qualitative feedback available.</div>
                   </div>
               </div>
+
+              <!-- Peer Feedback -->
+              <div id="peerFeedbackCard" style="border: 1px solid #bfdbfe; border-radius: 12px; overflow: hidden; margin-bottom: 8px;">
+                  <div style="background: #eff6ff; border-bottom: 1px solid #bfdbfe; padding: 11px 16px; display: flex; align-items: center; gap: 8px;">
+                      <i class='bx bx-group' style="color: #1d4ed8; font-size: 15px;"></i>
+                      <span style="font-weight: 700; font-size: 13px; color: #1e3a8a;">Peer Feedback</span>
+                      <span style="margin-left: auto; background: #dbeafe; color: #1e40af; border-radius: 999px; padding: 2px 10px; font-size: 11px; font-weight: 700; border: 1px solid #bfdbfe;">
+                          <span id="peerSubmissionsCount">0</span> submission(s)
+                      </span>
+                  </div>
+                  <div style="padding: 14px 16px; background: #fff;">
+                      <div id="peerFeedbackList"></div>
+                      <div id="noPeerFeedback" style="text-align: center; color: var(--muted); padding: 16px; font-size: 13px;">No peer evaluation feedback available.</div>
+                  </div>
+              </div>
+
           </div>
       </div>
     </div>
     
     <div id="newCycleModal" class="hr-modal-wrapper" style="display: none;">
-        <div class="hr-modal-content" style="max-width: 500px;">
-            <div class="emp-modal-header" style="background: var(--spc-maroon);">
-                <h2 id="newCycleModalTitle" style="color: white; font-size: 1.2rem;">Initiate New Evaluation Term</h2>
-                <span class="emp-close" onclick="closeNewCycleModal()" style="color: white;">&times;</span>
+        <div class="hr-modal-content" style="max-width: 1100px; width: 95vw; padding: 0; overflow: hidden;">
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #1e40af, #3b82f6); padding: 20px 24px; display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 40px; height: 40px; background: rgba(255,255,255,0.15); border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+                        <i class='bx bx-calendar' style="font-size: 20px; color: #fff;"></i>
+                    </div>
+                    <div>
+                        <h2 style="color: #fff; font-size: 1.1rem; margin: 0; font-weight: 700;">Evaluation Cycles</h2>
+                        <p style="color: rgba(255,255,255,0.7); font-size: 12px; margin: 2px 0 0;">Create or manage academic evaluation cycles</p>
+                    </div>
+                </div>
+                <button onclick="closeNewCycleModal()" style="background: rgba(255,255,255,0.15); border: none; color: #fff; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; line-height: 1;">&times;</button>
             </div>
-            <div class="emp-modal-body">
-                <p style="margin-bottom: 15px; color: #555;">Define the start and end dates for the next academic term to begin the new evaluation cycle.</p>
-                <form id="newCycleForm">
-                    <label for="new_semester">Semester</label>
-                    <select id="new_semester" required>
-                        <option value="">Select Semester</option>
-                        <option value="First Semester">First Semester</option>
-                        <option value="Second Semester">Second Semester</option>
-                    </select>
-                    
-                    <label for="new_acadyear">Academic Year (e.g., 2025-2026)</label>
-                    <input type="text" id="new_acadyear" placeholder="AY 20XX-20YY" required>
-                    
-                    <label for="new_start_date">Semester Start Date</label>
-                    <input type="date" id="new_start_date" required>
-                    
-                    <label for="new_end_date">Semester End Date</label>
-                    <input type="date" id="new_end_date" required>
 
-                    <button type="submit" class="btn primary" id="saveNewCycleBtn" style="width: 100%; margin-top: 15px;">Create Term & Roll Cycle</button>
-                    <div id="cycleFormMessage" class="form-message" style="margin-top: 10px; display:none;"></div>
+            <!-- Tabs -->
+            <div style="display: flex; border-bottom: 1px solid #e5e7eb; background: #f8fafc;">
+                <button id="cycleTab-new" class="peer-modal-tab active" onclick="switchCycleTab('new')">
+                    <i class='bx bx-calendar-plus'></i> New Cycle
+                </button>
+                <button id="cycleTab-manage" class="peer-modal-tab" onclick="switchCycleTab('manage')">
+                    <i class='bx bx-list-ul'></i> Manage Cycles
+                </button>
+            </div>
+
+            <!-- Tab: New Cycle -->
+            <div id="cycleTabContent-new" class="peer-tab-content" style="padding: 24px;">
+                <form id="newCycleForm">
+                    <!-- Semester + Year row -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
+                        <div>
+                            <label style="display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 6px;">Semester</label>
+                            <select id="new_semester" required style="width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 14px; color: #1f2937; background: #fff; outline: none; transition: border-color .15s;">
+                                <option value="">Select...</option>
+                                <option value="First Semester">First Semester</option>
+                                <option value="Second Semester">Second Semester</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 6px;">Academic Year</label>
+                            <input type="text" id="new_acadyear" placeholder="e.g. 2025-2026" required
+                                style="width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 14px; color: #1f2937; background: #fff; outline: none; box-sizing: border-box; transition: border-color .15s;">
+                        </div>
+                    </div>
+
+                    <!-- Date range card -->
+                    <div style="background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; margin-bottom: 16px;">
+                        <p style="margin: 0 0 12px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted);">
+                            <i class='bx bx-calendar-range' style="margin-right: 4px; color: #3b82f6;"></i>Semester Duration
+                        </p>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                            <div>
+                                <label style="display: block; font-size: 12px; color: #374151; font-weight: 600; margin-bottom: 5px;">Start Date</label>
+                                <input type="date" id="new_start_date" required
+                                    style="width: 100%; padding: 9px 11px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 13px; color: #1f2937; background: #fff; outline: none; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 12px; color: #374151; font-weight: 600; margin-bottom: 5px;">End Date</label>
+                                <input type="date" id="new_end_date" required
+                                    style="width: 100%; padding: 9px 11px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 13px; color: #1f2937; background: #fff; outline: none; box-sizing: border-box;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Live preview chip -->
+                    <div id="cyclePreviewChip" style="display: none; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 13px; color: #1e40af; font-weight: 600;">
+                        <i class='bx bx-check-circle' style="margin-right: 6px; color: #3b82f6;"></i>
+                        <span id="cyclePreviewText"></span>
+                    </div>
+
+                    <div id="cycleFormMessage" style="display: none; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px; font-weight: 500;"></div>
+
+                    <div style="display: flex; gap: 10px;">
+                        <button type="submit" class="btn primary" id="saveNewCycleBtn" style="flex: 1; justify-content: center; display: flex; align-items: center; gap: 6px; background: #1e40af;">
+                            <i class='bx bx-calendar-plus'></i> Create Term
+                        </button>
+                        <button type="button" onclick="closeNewCycleModal()" class="btn secondary" style="padding: 8px 20px;">Cancel</button>
+                    </div>
                 </form>
+            </div>
+
+            <!-- Tab: Manage Cycles -->
+            <div id="cycleTabContent-manage" class="peer-tab-content" style="display: none; padding: 24px;">
+                <div style="background: #fffbea; border: 1px solid #fde68a; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: #78350f;">
+                    <i class='bx bx-info-circle' style="font-size: 15px; margin-top: 1px; flex-shrink: 0;"></i>
+                    Only cycles with status <strong>Not Started</strong> can be edited or deleted.
+                </div>
+                <div style="overflow-x: auto; max-height: 380px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                        <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 1;">
+                            <tr>
+                                <th style="padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid #e5e7eb;">Term</th>
+                                <th style="padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid #e5e7eb;">Duration</th>
+                                <th style="padding: 10px 14px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid #e5e7eb;">Status</th>
+                                <th style="padding: 10px 14px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid #e5e7eb;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="manage-cycles-tbody">
+                            <tr><td colspan="4" style="text-align:center; padding: 24px; color: var(--muted);">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -317,11 +766,119 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<style>
+/* ── Page-level Eval Tabs ─────────────────────────── */
+.eval-page-tab {
+    padding: 12px 20px;
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-bottom: 3px solid transparent;
+    transition: color .15s, border-color .15s, background .15s;
+}
+.eval-page-tab:hover {
+    color: var(--spc-maroon);
+    background: rgba(123,17,19,0.03);
+}
+.eval-page-tab.active {
+    color: var(--spc-maroon);
+    border-bottom-color: var(--spc-maroon);
+    background: #fff;
+}
+
+.peer-modal-tab {
+    flex: 1;
+    padding: 11px 16px;
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border-bottom: 3px solid transparent;
+    transition: color .15s, border-color .15s, background .15s;
+}
+.peer-modal-tab:hover {
+    color: var(--spc-maroon);
+    background: rgba(123,17,19,0.04);
+}
+.peer-modal-tab.active {
+    color: var(--spc-maroon);
+    border-bottom-color: var(--spc-maroon);
+    background: #fff;
+}
+.peer-tab-content { animation: fadeIn .2s ease; }
+
+/* ── Toolbar Buttons ──────────────────────────────── */
+.eval-btn-ghost {
+    border: 1.5px solid #e5e7eb;
+    color: #374151;
+    background: #fff;
+    transition: border-color .15s, background .15s, color .15s;
+}
+.eval-btn-ghost:hover { border-color: #9ca3af; background: #f3f4f6; color: #111; }
+
+.eval-btn-peer {
+    border: 1.5px solid var(--spc-maroon);
+    color: var(--spc-maroon);
+    background: #fff5f5;
+    transition: background .15s, border-color .15s;
+}
+.eval-btn-peer:hover { background: #fee2e2; border-color: #991b1b; }
+
+.eval-btn-blue {
+    background: #1e40af;
+    color: #fff;
+    transition: background .15s;
+}
+.eval-btn-blue:hover { background: #1d4ed8; }
+
+/* ── Evaluations Table ────────────────────────────── */
+#evalTable {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: 100%;
+}
+#evalTable thead th {
+    background: #f8fafc;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    padding: 11px 14px;
+    border-top: 1px solid #e5e7eb;
+    border-bottom: 2px solid #e5e7eb;
+    white-space: nowrap;
+}
+#evalTable tbody tr { transition: background .1s; }
+#evalTable tbody tr:hover td { background: #f9fafb; }
+#evalTable tbody td {
+    padding: 11px 14px;
+    border-bottom: 1px solid #f1f3f5;
+    font-size: 13px;
+    vertical-align: middle;
+    color: #1f2937;
+}
+#evalTable tbody tr:last-child td { border-bottom: none; }
+#evalTable tbody td:first-child { font-weight: 600; color: #111827; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script>
-window.CURRENT_TERM_ID = {{ acadcalendar_id }}; 
+window.CURRENT_TERM_ID = {{ acadcalendar_id }};
 const MODAL = document.getElementById('evaluationModal');
-let ALL_COLLEGES = []; 
+let ALL_COLLEGES = [];
 
 let EVALUATIONS_DATA = []; 
 const PAGE_SIZE = 10;
@@ -413,11 +970,19 @@ function renderTablePage(pageNumber) {
             statusClass = 'pending'; statusLabel = 'Not Rated'; 
         }
         
-        var studentResponses = row.studentresponses; 
-        var metThreshold = 10; 
-        var responseStatusLabel = studentResponses >= metThreshold ? 
-                                  '<span style="color:#166534;font-weight:600">Met</span>' : 
-                                  '<span style="color:#991b1b;font-weight:600">Not Met</span>';
+        var studentResponses = row.studentresponses;
+        var totalStudents = row.total_students || 0;
+        var metThreshold = totalStudents > 0 ? getResponseThreshold(totalStudents) : null;
+        var metRateNum = totalStudents > 0 ? Math.ceil(totalStudents * metThreshold) : null;
+        var responseMet = metThreshold !== null && studentResponses >= totalStudents * metThreshold;
+        var responseStatusLabel = metThreshold === null
+            ? '<span style="color:#6b7280;font-weight:600">No Data</span>'
+            : responseMet
+                ? '<span style="color:#166534;font-weight:600">Met</span>'
+                : '<span style="color:#991b1b;font-weight:600">Not Met</span>';
+        var responseDisplay = totalStudents > 0
+            ? `${studentResponses} / ${totalStudents} (need ${metRateNum})`
+            : `${studentResponses}`;
 
         // Check if rating is zero or less to disable download
         const disableDownload = (rating <= 0 || isNaN(rating)) ? 'disabled' : '';
@@ -438,11 +1003,7 @@ function renderTablePage(pageNumber) {
             
         // Check if this specific row is being edited (It shouldn't be if we use loadEvaluations() correctly, but good for rendering checks)
         
-        // Peer score is system-generated from peer_evaluation_submissions — read-only.
-        // Show a lock icon with tooltip to indicate it cannot be manually edited.
-        const peerScoreDisplay = parseFloat(row.peer_score) > 0
-            ? `${peerScore} <i class='bx bx-lock-alt' title="Auto-calculated from submitted peer evaluations" style="color:#9ca3af;font-size:12px;vertical-align:middle;cursor:help;"></i>`
-            : `— <i class='bx bx-lock-alt' title="No peer evaluations submitted yet" style="color:#d1d5db;font-size:12px;vertical-align:middle;cursor:help;"></i>`;
+        const peerScoreDisplay = parseFloat(row.peer_score) > 0 ? peerScore : '—';
 
         const actionButtons = `
             <button class="btn action" onclick="openModal(${row.personnelid}, '${row.name}', ${rating.toFixed(2)}, ${studentResponses})">
@@ -458,7 +1019,7 @@ function renderTablePage(pageNumber) {
             `<td>${row.name}</td>` +
             `<td>${row.department}</td>` +
             `<td>${row.position || 'N/A'}</td>` +
-            `<td>${studentResponses} — ${responseStatusLabel}</td>` +
+            `<td>${responseDisplay} — ${responseStatusLabel}</td>` +
             `<td style="text-align: center;">${studentScore}</td>` +
             `<td style="text-align: center;">${supervisorScore}</td>` +
             `<td style="text-align: center;">${peerScoreDisplay}</td>` +
@@ -515,8 +1076,12 @@ function confirmDelete() {
             if (response.success) {
                 showToast(`Successfully deleted term: ${termName}. The list will now refresh.`);
                 closeDeleteModal();
-                $('#semesterFilter').val(''); 
-                fetchSemestersAndPopulate(); 
+                $('#semesterFilter').val('');
+                fetchSemestersAndPopulate();
+                if (document.getElementById('cycleTabContent-manage') &&
+                    document.getElementById('cycleTabContent-manage').style.display !== 'none') {
+                    loadManageCycles();
+                }
             } else {
                 showToast(`Deletion failed. Reason: ${response.error}`, 'error');
                 button.prop('disabled', false).html("<i class='bx bx-trash'></i>&nbsp; Delete Permanently");
@@ -567,7 +1132,7 @@ function loadEvaluations() {
             
             $('#kpiAvg').text(avgRating);
             $('#kpiTotalFaculty').text(totalFaculty);
-            $('#kpiMetRate').text(`${metRate}/${totalEvaluated}`);
+            $('#kpiMetRate').text(`${metRate}/${totalFaculty}`);
             $('#kpiBestDept').text(kpis.best_department_name);
         }
         
@@ -631,22 +1196,10 @@ function loadEvaluations() {
                  statusColor = "#6b7280";
             }
             
-            // 3. Render Status and Delete Button into the container
-            const currentTermId = selectedOption.val();
-            const currentTermName = info.display.replace('📅 ', '').trim();
-
-            const deleteButtonHtml = canDelete ? `
-                <button class="btn secondary" 
-                        onclick="deleteAcademicTerm(${currentTermId}, '${currentTermName}')" 
-                        title="Delete Academic Term" 
-                        style="margin-left: 10px; padding: 6px 8px; font-size: 14px; background-color: #fef2f2; color: #dc2626; border: 1px solid #fecaca;">
-                    <i class='bx bx-trash'></i>
-                </button>` : '';
-
+            // 3. Render Status into the container
             $('#cycleStatusContainer').html(`
-                <strong>🔔 Status:</strong> 
+                <strong>🔔 Status:</strong>
                 <span id="cycleStatus" style="color:${statusColor};font-weight:600;">${statusText}</span>
-                ${deleteButtonHtml}
             `);
         }
         
@@ -673,12 +1226,18 @@ function loadEvaluations() {
 
         // --- 4. STORE DATA & RENDER FIRST PAGE ---
         if(data.success && data.evaluations.length > 0) {
-            EVALUATIONS_DATA = data.evaluations; 
-            CURRENT_PAGE = 1; 
+            EVALUATIONS_DATA = data.evaluations;
+            CURRENT_PAGE = 1;
             renderTablePage(CURRENT_PAGE);
         } else {
             EVALUATIONS_DATA = [];
-            renderTablePage(1); 
+            renderTablePage(1);
+        }
+
+        // Refresh analytics if that tab is currently visible
+        const analyticsTab = document.getElementById('evalTabContent-analytics');
+        if (analyticsTab && analyticsTab.style.display !== 'none') {
+            renderAnalytics();
         }
     }).fail(function() {
         $('#evalTableBody').html('<tr><td colspan="6" class="table-empty" style="color:#991b1b;">Failed to load data from API.</td></tr>');
@@ -697,7 +1256,7 @@ function fetchSemestersAndPopulate() {
             data.semesters.forEach(function(sem) {
                 const isCurrent = sem.is_current;
                 const selectedAttr = (isCurrent && !currentTermSet) ? 'selected' : '';
-                const display = `${sem.text}`;
+                const display = isCurrent ? `${sem.text} (Current)` : sem.text;
 
                 semesterFilter.append(
                     `<option 
@@ -742,6 +1301,14 @@ function fetchSemestersAndPopulate() {
 }
 
 
+function getResponseThreshold(totalStudents) {
+    if (totalStudents <= 25)  return 0.80;
+    if (totalStudents <= 50)  return 0.66;
+    if (totalStudents <= 100) return 0.50;
+    if (totalStudents <= 200) return 0.33;
+    return 0.25;
+}
+
 function getStatusInfo(rating) {
     if (rating >= 3) { 
         return { class: 'above-average completed', label: 'Above Average' };
@@ -756,7 +1323,7 @@ function getStatusInfo(rating) {
 
 function openModal(personnelId, facultyName, overallRating, studentResponses) {
     $('#modalTitle').text(`Evaluation Report: ${facultyName}`);
-    const circlePercentage = Math.min((overallRating / 5) * 100, 100); 
+    const circlePercentage = Math.min((overallRating / 4) * 100, 100);
     $('#overallRatingCircle').css('--percentage', `${circlePercentage}`);
     $('#overallRatingValue').text(overallRating.toFixed(2));
     
@@ -767,22 +1334,26 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
     const statusInfo = getStatusInfo(overallRating);
     $('#finalStatusBadge').text(statusInfo.label).removeClass().addClass(`status ${statusInfo.class}`);
     
-    $('#reportSemester').text('Loading...'); // Reset semester text temporarily
-    $('#ratingBreakdownBody').empty().append('<tr><td colspan="2" style="text-align:center;">Loading details...</td></tr>');
+    $('#reportSemester').text('Loading...');
+    $('#ratingBreakdownBody').html('<tr><td colspan="2" style="text-align:center;color:var(--muted);font-size:13px;">Loading...</td></tr>');
     $('#feedbackList').empty();
     $('#noFeedback').show();
+    $('#peerFeedbackList').empty();
+    $('#noPeerFeedback').show();
+    $('#peerSubmissionsCount').text(0);
     MODAL.style.display = 'flex';
 
     const selectedTermId = $('#semesterFilter').val() || window.CURRENT_TERM_ID;
     $.get(`/api/hr/faculty-evaluation-report/${personnelId}?term_id=${selectedTermId}`, function(data) {
         $('#ratingBreakdownBody').empty();
         $('#feedbackList').empty();
+        $('#peerFeedbackList').empty();
         
         if (data.success && data.report) {
             const report = data.report;
             // Update circle + badge from accurate API score
             const apiOverall = parseFloat(report.overall_rating) || 0;
-            $('#overallRatingCircle').css('--percentage', `${Math.min((apiOverall / 5) * 100, 100)}`);
+            $('#overallRatingCircle').css('--percentage', `${Math.min((apiOverall / 4) * 100, 100)}`);
             $('#overallRatingValue').text(apiOverall.toFixed(2));
             const apiStatus = getStatusInfo(apiOverall);
             $('#finalStatusBadge').text(apiStatus.label).removeClass().addClass(`status ${apiStatus.class}`);
@@ -867,6 +1438,33 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
                 $('#noFeedback').show().text('No qualitative feedback available.');
             }
             
+            // --- Peer Submissions ---
+            const peerSubs = report.peer_submissions || [];
+            $('#peerSubmissionsCount').text(peerSubs.length);
+            if (peerSubs.length > 0) {
+                $('#noPeerFeedback').hide();
+                peerSubs.forEach(function(sub) {
+                    let html = `<div style="margin-bottom: 14px; padding: 12px 14px; border: 1px solid #dbeafe; border-left: 3px solid #3b82f6; border-radius: 6px; background: #f8fbff;">`;
+                    html += `<div style="font-weight: 700; font-size: 13px; color: #1e40af; margin-bottom: 8px;"><i class='bx bx-user' style="margin-right: 5px;"></i>${sub.evaluator_name} <span style="font-weight: 400; color: var(--muted); font-size: 12px;">— Score: ${sub.final_score.toFixed(2)}</span></div>`;
+                    if (sub.strengths) {
+                        html += `<div style="margin-bottom: 6px;"><span style="font-weight: 600; font-size: 12px; color: #166534;">Strengths:</span> <span style="font-size: 13px; color: #374151;">${sub.strengths}</span></div>`;
+                    }
+                    if (sub.growth) {
+                        html += `<div style="margin-bottom: 6px;"><span style="font-weight: 600; font-size: 12px; color: #92400e;">Areas for Growth:</span> <span style="font-size: 13px; color: #374151;">${sub.growth}</span></div>`;
+                    }
+                    if (sub.comments) {
+                        html += `<div><span style="font-weight: 600; font-size: 12px; color: #374151;">Comments:</span> <span style="font-size: 13px; font-style: italic; color: #374151;">${sub.comments}</span></div>`;
+                    }
+                    if (!sub.strengths && !sub.growth && !sub.comments) {
+                        html += `<span style="font-size: 12px; color: var(--muted);">No written feedback provided.</span>`;
+                    }
+                    html += `</div>`;
+                    $('#peerFeedbackList').append(html);
+                });
+            } else {
+                $('#noPeerFeedback').show();
+            }
+
             let cleanedReportSemester = report.semester_display.replace('AY AY', 'AY').replace('  ', ' ').trim();
             $('#reportSemester').text(cleanedReportSemester);
         } else {
@@ -909,9 +1507,10 @@ function closeLinkModal() {
 
 
 function openNewCycleModal() {
-    $('#newCycleModalTitle').text('Initiate New Evaluation Term');
     $('#newCycleForm')[0].reset();
     $('#cycleFormMessage').hide().text('');
+    $('#cyclePreviewChip').hide();
+    switchCycleTab('new');
     $('#newCycleModal').css('display', 'flex');
 }
 
@@ -919,6 +1518,169 @@ function closeNewCycleModal() {
     $('#newCycleModal').css('display', 'none');
 }
 
+function switchCycleTab(tab) {
+    ['new', 'manage'].forEach(t => {
+        document.getElementById(`cycleTabContent-${t}`).style.display = t === tab ? 'block' : 'none';
+        document.getElementById(`cycleTab-${t}`).classList.toggle('active', t === tab);
+    });
+    if (tab === 'manage') loadManageCycles();
+}
+
+async function loadManageCycles() {
+    const tbody = document.getElementById('manage-cycles-tbody');
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted);"><i class='bx bx-loader-alt bx-spin'></i> Loading...</td></tr>`;
+    try {
+        const res  = await fetch('/api/hr/acadcalendar');
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error);
+
+        const records = data.calendar_records;
+        if (records.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--muted);">No cycles found.</td></tr>`;
+            return;
+        }
+
+        const today = new Date(); today.setHours(0,0,0,0);
+        const fmt = d => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+        tbody.innerHTML = records.map(r => {
+            const start = new Date(r.start_date); start.setHours(0,0,0,0);
+            const end   = new Date(r.end_date);   end.setHours(0,0,0,0);
+
+            let statusLabel, statusStyle;
+            const canEdit = today < start;
+            if (today < start) {
+                statusLabel = 'Not Started';
+                statusStyle = 'background:#dbeafe;color:#1e40af;';
+            } else if (today <= end) {
+                statusLabel = 'In Progress';
+                statusStyle = 'background:#fef3c7;color:#92400e;';
+            } else {
+                statusLabel = 'Finished';
+                statusStyle = 'background:#dcfce7;color:#166534;';
+            }
+
+            const statusBadge = `<span style="${statusStyle}padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;">${statusLabel}</span>`;
+            const actions = canEdit ? `
+                <button onclick="startEditCycle(${r.id}, '${r.semester}', '${r.year}', '${r.start_date}', '${r.end_date}')"
+                    style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;font-weight:600;margin-right:4px;">
+                    <i class='bx bx-edit'></i> Edit
+                </button>
+                <button onclick="openDeleteModal(${r.id}, '${r.semester}, AY ${r.year}')"
+                    style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;font-weight:600;">
+                    <i class='bx bx-trash'></i> Delete
+                </button>` : `<span style="font-size:12px;color:var(--muted);">—</span>`;
+
+            return `<tr id="cycle-row-${r.id}">
+                <td style="padding:10px 14px;border-bottom:1px solid #f1f3f7;font-weight:600;">${r.semester}, AY ${r.year}</td>
+                <td style="padding:10px 14px;border-bottom:1px solid #f1f3f7;color:var(--muted);font-size:12px;">${fmt(r.start_date)} – ${fmt(r.end_date)}</td>
+                <td style="padding:10px 14px;border-bottom:1px solid #f1f3f7;text-align:center;">${statusBadge}</td>
+                <td style="padding:10px 14px;border-bottom:1px solid #f1f3f7;text-align:center;">${actions}</td>
+            </tr>`;
+        }).join('');
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:#dc2626;">Failed to load cycles.</td></tr>`;
+        console.error(err);
+    }
+}
+
+function startEditCycle(id, semester, year, startDate, endDate) {
+    const row = document.getElementById(`cycle-row-${id}`);
+    row.innerHTML = `
+        <td colspan="4" style="padding:12px 14px;border-bottom:1px solid #e5e7eb;background:#f8fbff;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px;align-items:end;">
+                <div>
+                    <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Semester</label>
+                    <select id="edit_semester_${id}" style="width:100%;padding:8px 10px;border:1.5px solid #bfdbfe;border-radius:7px;font-size:13px;outline:none;">
+                        <option value="First Semester" ${semester === 'First Semester' ? 'selected' : ''}>First Semester</option>
+                        <option value="Second Semester" ${semester === 'Second Semester' ? 'selected' : ''}>Second Semester</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Academic Year</label>
+                    <input type="text" id="edit_year_${id}" value="${year}" placeholder="e.g. 2025-2026"
+                        style="width:100%;padding:8px 10px;border:1.5px solid #bfdbfe;border-radius:7px;font-size:13px;outline:none;box-sizing:border-box;">
+                </div>
+                <div>
+                    <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Start Date</label>
+                    <input type="date" id="edit_start_${id}" value="${startDate}"
+                        style="width:100%;padding:8px 10px;border:1.5px solid #bfdbfe;border-radius:7px;font-size:13px;outline:none;box-sizing:border-box;">
+                </div>
+                <div>
+                    <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">End Date</label>
+                    <input type="date" id="edit_end_${id}" value="${endDate}"
+                        style="width:100%;padding:8px 10px;border:1.5px solid #bfdbfe;border-radius:7px;font-size:13px;outline:none;box-sizing:border-box;">
+                </div>
+                <div style="display:flex;gap:6px;">
+                    <button onclick="saveEditCycle(${id})"
+                        style="background:#1e40af;color:#fff;border:none;border-radius:7px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap;">
+                        <i class='bx bx-check'></i> Save
+                    </button>
+                    <button onclick="loadManageCycles()"
+                        style="background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:7px;padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+            <div id="edit-msg-${id}" style="display:none;margin-top:8px;font-size:12px;font-weight:600;padding:6px 10px;border-radius:6px;"></div>
+        </td>`;
+}
+
+async function saveEditCycle(id) {
+    const semester  = document.getElementById(`edit_semester_${id}`).value;
+    const year      = document.getElementById(`edit_year_${id}`).value.trim();
+    const startDate = document.getElementById(`edit_start_${id}`).value;
+    const endDate   = document.getElementById(`edit_end_${id}`).value;
+    const msgEl     = document.getElementById(`edit-msg-${id}`);
+
+    if (!semester || !year || !startDate || !endDate) {
+        msgEl.style.display = 'block';
+        msgEl.style.background = '#fef3c7'; msgEl.style.color = '#92400e';
+        msgEl.textContent = 'All fields are required.';
+        return;
+    }
+
+    try {
+        const res  = await fetch(`/api/hr/acadcalendar/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ semester, acadyear: year, start_date: startDate, end_date: endDate })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('Cycle updated successfully.', 'success');
+            fetchSemestersAndPopulate();
+            loadManageCycles();
+        } else {
+            msgEl.style.display = 'block';
+            msgEl.style.background = '#fef2f2'; msgEl.style.color = '#991b1b';
+            msgEl.textContent = data.error || 'Failed to save changes.';
+        }
+    } catch (err) {
+        msgEl.style.display = 'block';
+        msgEl.style.background = '#fef2f2'; msgEl.style.color = '#991b1b';
+        msgEl.textContent = 'Server error. Please try again.';
+    }
+}
+
+function updateCyclePreview() {
+    const sem   = $('#new_semester').val();
+    const year  = $('#new_acadyear').val().trim();
+    const start = $('#new_start_date').val();
+    const end   = $('#new_end_date').val();
+    if (sem && year) {
+        const chip = $('#cyclePreviewChip');
+        let preview = `${sem} — AY ${year}`;
+        if (start && end) {
+            const fmt = d => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            preview += ` &nbsp;·&nbsp; ${fmt(start)} – ${fmt(end)}`;
+        }
+        $('#cyclePreviewText').html(preview);
+        chip.show();
+    } else {
+        $('#cyclePreviewChip').hide();
+    }
+}
 
 // --- JQUERY INITIALIZATION AND EVENT ATTACHMENT ---
 $(document).ready(function() {
@@ -1001,7 +1763,7 @@ $(document).ready(function() {
         };
         
         button.prop('disabled', true).html('<i class="bx bx-loader-alt bx-spin"></i>&nbsp; Saving...');
-        messageBox.show().text('Creating term...').css('color', '#f59e0b');
+        messageBox.show().text('Creating term...').css({ 'background': '#fef3c7', 'color': '#92400e', 'border': '1px solid #fde68a' });
 
         $.ajax({
             url: '/api/hr/acadcalendar',
@@ -1010,22 +1772,20 @@ $(document).ready(function() {
             data: JSON.stringify(formData),
             success: function(response) {
                 if (response.success) {
-                    messageBox.text(`Success! New term created (ID: ${response.new_id}). Refreshing data...`).css('color', '#16a34a');
-                    
-                    window.CURRENT_TERM_ID = response.new_id; 
-                    fetchSemestersAndPopulate(); 
-                    
+                    messageBox.text(`Term created successfully!`).css({ 'background': '#f0fdf4', 'color': '#065f46', 'border': '1px solid #bbf7d0' });
+                    window.CURRENT_TERM_ID = response.new_id;
+                    fetchSemestersAndPopulate();
                     setTimeout(() => {
                         closeNewCycleModal();
                         button.prop('disabled', false).html(originalHtml);
-                    }, 2000);
+                    }, 1800);
                 } else {
-                    messageBox.text(`Error: ${response.error}`).css('color', '#dc2626');
+                    messageBox.text(`Error: ${response.error}`).css({ 'background': '#fef2f2', 'color': '#991b1b', 'border': '1px solid #fecaca' });
                     button.prop('disabled', false).html(originalHtml);
                 }
             },
             error: function(xhr) {
-                messageBox.text(`API Error: ${xhr.responseJSON?.error || 'Server error'}`).css('color', '#dc2626');
+                messageBox.text(`API Error: ${xhr.responseJSON?.error || 'Server error'}`).css({ 'background': '#fef2f2', 'color': '#991b1b', 'border': '1px solid #fecaca' });
                 button.prop('disabled', false).html(originalHtml);
             }
         });
@@ -1067,6 +1827,12 @@ $(document).ready(function() {
     $('#linkModal').click(function(event) {
         if (event.target === this) {
             closeLinkModal();
+        }
+    });
+
+    $('#facultyTrendModal').click(function(event) {
+        if (event.target === this) {
+            closeFacultyTrendModal();
         }
     });
     
@@ -1122,12 +1888,26 @@ $(document).ready(function() {
         }, 1500);
     });
 
-    // 9. Initial data load (Starts with fetching semesters)
+    // 9. Live preview for new cycle modal
+    $('#new_semester, #new_acadyear, #new_start_date, #new_end_date').on('change input', updateCyclePreview);
+
+    // 10. Initial data load (Starts with fetching semesters)
     fetchSemestersAndPopulate();
 });
 
+function clearEvalFilters() {
+    $('#deptFilter').val('');
+    $('#positionFilter').val('');
+    $('#statusFilter').val('');
+    $('#responseRateFilter').val('');
+    loadEvaluations();
+}
+
+// ── Peer Assignment Modal ──────────────────────────────────
+
 function openPeerAssignmentModal() {
     document.getElementById('peerAssignmentModal').style.display = 'flex';
+    switchPeerTab('generate');
     populatePeerModalDropdowns();
 }
 
@@ -1135,64 +1915,722 @@ function closePeerModal() {
     document.getElementById('peerAssignmentModal').style.display = 'none';
 }
 
+function switchPeerTab(tab) {
+    ['generate', 'view', 'manual'].forEach(t => {
+        document.getElementById(`peerTabContent-${t}`).style.display = t === tab ? 'block' : 'none';
+        document.getElementById(`peerTab-${t}`).classList.toggle('active', t === tab);
+    });
+    if (tab === 'view') loadHRPeerAssignments();
+}
+
+let PEER_MODAL_ALL_FACULTY = []; // cached faculty list for manual tab
+
 async function populatePeerModalDropdowns() {
-    const deptSelect = document.getElementById('assignment-dept');
-    const termSelect = document.getElementById('assignment-acad-id');
+    const deptSelect   = document.getElementById('assignment-dept');
+    const termSelect   = document.getElementById('assignment-acad-id');
+    const viewDeptSel  = document.getElementById('view-dept-filter');
+    const viewTermSel  = document.getElementById('view-term-filter');
+    const manualDept   = document.getElementById('manual-dept');
+    const manualTerm   = document.getElementById('manual-term');
 
-    // Fetch departments and academic terms in parallel
     try {
-        const [deptRes, termRes] = await Promise.all([
+        const [deptRes, termRes, facultyRes] = await Promise.all([
             fetch('/api/hr/colleges-list'),
-            fetch('/api/hr/acadcalendar')
+            fetch('/api/hr/acadcalendar'),
+            fetch('/api/hr/faculty-list')
         ]);
+        const deptData    = await deptRes.json();
+        const termData    = await termRes.json();
+        const facultyData = await facultyRes.json();
 
-        const deptData = await deptRes.json();
-        const termData = await termRes.json();
+        if (facultyData.success && facultyData.faculty_list) {
+            PEER_MODAL_ALL_FACULTY = facultyData.faculty_list;
+        }
 
-        // Populate departments
         if (deptData.success && deptData.colleges.length > 0) {
-            deptSelect.innerHTML = '<option value="" disabled selected>Select Department</option>';
-            deptData.colleges.forEach(college => {
-                const opt = document.createElement('option');
-                opt.value = college.collegename;
-                opt.textContent = college.collegename;
-                deptSelect.appendChild(opt);
-            });
+            const deptOpts = deptData.colleges.map(c =>
+                `<option value="${c.collegename}">${c.collegename}</option>`
+            ).join('');
+            deptSelect.innerHTML  = '<option value="" disabled selected>Select Department</option>' + deptOpts;
+            viewDeptSel.innerHTML = '<option value="">All Departments</option>' + deptOpts;
+            manualDept.innerHTML  = '<option value="" disabled selected>Select department...</option>' + deptOpts;
         } else {
             deptSelect.innerHTML = '<option value="" disabled selected>No departments found</option>';
         }
 
-        // Populate academic terms
         if (termData.success && termData.calendar_records.length > 0) {
-            termSelect.innerHTML = '<option value="" disabled selected>Select Academic Term</option>';
-            termData.calendar_records.forEach(term => {
-                const opt = document.createElement('option');
-                opt.value = term.id;
-                opt.textContent = `${term.year} — ${term.semester}`;
-                if (term.is_current) opt.textContent += ' (Current)';
-                termSelect.appendChild(opt);
-            });
+            const termOpts = termData.calendar_records.map(t => {
+                const label = `${t.year} — ${t.semester}${t.is_current ? ' (Current)' : ''}`;
+                return `<option value="${t.id}">${label}</option>`;
+            }).join('');
+            termSelect.innerHTML  = '<option value="" disabled selected>Select Academic Term</option>' + termOpts;
+            viewTermSel.innerHTML = '<option value="">All Terms</option>' + termOpts;
+            manualTerm.innerHTML  = '<option value="" disabled selected>Select term...</option>' + termOpts;
+            // Pre-select current term in view + manual filters
+            const currentTerm = termData.calendar_records.find(t => t.is_current);
+            if (currentTerm) {
+                viewTermSel.value = currentTerm.id;
+                manualTerm.value  = currentTerm.id;
+            }
         } else {
             termSelect.innerHTML = '<option value="" disabled selected>No terms found</option>';
         }
     } catch (err) {
         console.error('Failed to load peer modal data:', err);
-        deptSelect.innerHTML = '<option value="" disabled selected>Error loading departments</option>';
-        termSelect.innerHTML = '<option value="" disabled selected>Error loading terms</option>';
+        deptSelect.innerHTML = '<option value="" disabled selected>Error loading</option>';
+        termSelect.innerHTML = '<option value="" disabled selected>Error loading</option>';
     }
 }
 
-async function runAssignmentLogic() {
-    const dept = document.getElementById('assignment-dept').value;
-    const acadId = document.getElementById('assignment-acad-id').value;
-    const statusDiv = document.getElementById('assignment-status');
+async function loadHRPeerAssignments() {
+    const termId = document.getElementById('view-term-filter').value;
+    const dept   = document.getElementById('view-dept-filter').value;
+    const tbody  = document.getElementById('peer-assign-tbody');
 
-    if (!dept || !acadId) {
-        alert("Please select both a department and a term.");
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted);"><i class='bx bx-loader-alt bx-spin'></i> Loading...</td></tr>`;
+    document.getElementById('peer-assign-summary').style.display = 'none';
+
+    try {
+        const params = new URLSearchParams();
+        if (termId) params.append('term_id', termId);
+        if (dept)   params.append('dept', dept);
+
+        const res  = await fetch('/api/hr/peer-assignments?' + params.toString());
+        const data = await res.json();
+
+        if (!data.success) throw new Error(data.error || 'API error');
+
+        const assignments = data.assignments;
+        if (assignments.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted);">No assignments found for the selected filters.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = assignments.map(a => {
+            const statusBadge = a.is_completed
+                ? `<span style="background:#dcfce7;color:#065f46;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;"><i class='bx bx-check'></i> Completed</span>`
+                : `<span style="background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;"><i class='bx bx-time'></i> Pending</span>`;
+            const deleteBtn = !a.is_completed
+                ? `<button onclick="deletePeerAssignment(${a.assignment_id})" title="Delete assignment"
+                       style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:13px;line-height:1;">
+                       <i class='bx bx-trash'></i>
+                   </button>`
+                : `<span style="color:var(--muted);font-size:12px;">—</span>`;
+            return `<tr>
+                <td style="padding:9px 14px;border-bottom:1px solid #f1f3f7;"><i class='bx bx-user' style="color:var(--spc-maroon);margin-right:5px;"></i>${a.evaluator_name}</td>
+                <td style="padding:9px 14px;border-bottom:1px solid #f1f3f7;"><i class='bx bx-user-check' style="color:#3b82f6;margin-right:5px;"></i>${a.evaluatee_name}</td>
+                <td style="padding:9px 14px;border-bottom:1px solid #f1f3f7;font-size:12px;color:var(--muted);">${a.department}</td>
+                <td style="padding:9px 14px;border-bottom:1px solid #f1f3f7;font-size:12px;color:var(--muted);">${a.period}</td>
+                <td style="padding:9px 14px;border-bottom:1px solid #f1f3f7;text-align:center;">${statusBadge}</td>
+                <td style="padding:9px 14px;border-bottom:1px solid #f1f3f7;text-align:center;">${deleteBtn}</td>
+            </tr>`;
+        }).join('');
+
+        const summary = document.getElementById('peer-assign-summary');
+        summary.style.display = 'flex';
+        document.getElementById('pa-total').textContent     = data.total;
+        document.getElementById('pa-completed').textContent = data.completed;
+        document.getElementById('pa-pending').textContent   = data.total - data.completed;
+
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:#dc2626;">Failed to load assignments.</td></tr>`;
+        console.error(err);
+    }
+}
+
+async function deletePeerAssignment(assignmentId) {
+    if (!confirm('Delete this peer assignment? This cannot be undone.')) return;
+    try {
+        const res = await fetch(`/api/hr/peer-assignments/${assignmentId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+            showToast('Assignment deleted.', 'success');
+            loadHRPeerAssignments();
+        } else {
+            showToast(data.error || 'Failed to delete assignment.', 'error');
+        }
+    } catch (err) {
+        showToast('Server error while deleting.', 'error');
+    }
+}
+
+function loadFacultyForManualTab() {
+    const dept = document.getElementById('manual-dept').value;
+    const evaluatorSel  = document.getElementById('manual-evaluator');
+    const evaluateeSel  = document.getElementById('manual-evaluatee');
+
+    if (!dept) {
+        evaluatorSel.innerHTML  = '<option value="" disabled selected>Select term &amp; department first</option>';
+        evaluateeSel.innerHTML  = '<option value="" disabled selected>Select evaluator first</option>';
         return;
     }
 
-    statusDiv.style.display = 'block';
+    const filtered = PEER_MODAL_ALL_FACULTY.filter(f => f.college === dept && f.role_id === 20001);
+    if (filtered.length === 0) {
+        evaluatorSel.innerHTML = '<option value="" disabled selected>No faculty in this department</option>';
+        evaluateeSel.innerHTML = '<option value="" disabled selected>No faculty in this department</option>';
+        return;
+    }
+
+    const opts = filtered.map(f => `<option value="${f.personnel_id}">${f.name}</option>`).join('');
+    evaluatorSel.innerHTML = '<option value="" disabled selected>Select evaluator...</option>' + opts;
+    evaluateeSel.innerHTML = '<option value="" disabled selected>Select evaluator first</option>';
+}
+
+function updateManualEvaluateeOptions() {
+    const dept           = document.getElementById('manual-dept').value;
+    const evaluatorId    = document.getElementById('manual-evaluator').value;
+    const evaluateeSel   = document.getElementById('manual-evaluatee');
+
+    if (!dept || !evaluatorId) return;
+
+    const filtered = PEER_MODAL_ALL_FACULTY.filter(
+        f => f.college === dept && f.role_id === 20001 && String(f.personnel_id) !== String(evaluatorId)
+    );
+    if (filtered.length === 0) {
+        evaluateeSel.innerHTML = '<option value="" disabled selected>No other faculty in this department</option>';
+        return;
+    }
+    evaluateeSel.innerHTML = '<option value="" disabled selected>Select evaluatee...</option>' +
+        filtered.map(f => `<option value="${f.personnel_id}">${f.name}</option>`).join('');
+}
+
+async function submitManualAssignment() {
+    const termId      = document.getElementById('manual-term').value;
+    const evaluatorId = document.getElementById('manual-evaluator').value;
+    const evaluateeId = document.getElementById('manual-evaluatee').value;
+    const msgBox      = document.getElementById('manual-assign-msg');
+
+    if (!termId || !evaluatorId || !evaluateeId) {
+        msgBox.style.display = 'block';
+        msgBox.style.background = '#fef3c7';
+        msgBox.style.color = '#92400e';
+        msgBox.style.border = '1px solid #fde68a';
+        msgBox.textContent = 'Please fill in all fields before submitting.';
+        return;
+    }
+
+    msgBox.style.display = 'none';
+    try {
+        const res = await fetch('/api/hr/peer-assignments/manual', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ evaluator_id: evaluatorId, evaluatee_id: evaluateeId, acadcalendar_id: termId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('Assignment created successfully!', 'success');
+            document.getElementById('manual-evaluator').value = '';
+            document.getElementById('manual-evaluatee').value = '';
+            msgBox.style.display = 'none';
+        } else {
+            msgBox.style.display = 'block';
+            msgBox.style.background = '#fef2f2';
+            msgBox.style.color = '#991b1b';
+            msgBox.style.border = '1px solid #fecaca';
+            msgBox.textContent = data.error || 'Failed to create assignment.';
+        }
+    } catch (err) {
+        msgBox.style.display = 'block';
+        msgBox.style.background = '#fef2f2';
+        msgBox.style.color = '#991b1b';
+        msgBox.style.border = '1px solid #fecaca';
+        msgBox.textContent = 'Server error. Please try again.';
+    }
+}
+
+// ── Analytics Tab ──────────────────────────────────────────
+
+let AN_SORT_COL = 'overall';
+let AN_SORT_DIR = 'desc';
+let evalDistChartInstance = null;
+let evalDeptChartInstance = null;
+let facultyTrendChartInstance = null;
+
+function switchEvalTab(tab) {
+    ['evaluations', 'analytics'].forEach(t => {
+        document.getElementById(`evalTabContent-${t}`).style.display = t === tab ? 'block' : 'none';
+        document.getElementById(`evalPageTab-${t}`).classList.toggle('active', t === tab);
+    });
+    if (tab === 'analytics') {
+        // Reset both chart toggles to bar view
+        deptChartView = 'bar';
+        distChartView = 'bar';
+        document.getElementById('evalDeptChart').style.display = 'block';
+        document.getElementById('evalDeptTrendChart').style.display = 'none';
+        document.getElementById('deptChartToggle-bar').style.cssText  = 'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--spc-maroon);background:var(--spc-maroon);color:#fff;transition:all .15s;';
+        document.getElementById('deptChartToggle-line').style.cssText = 'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #e5e7eb;background:#fff;color:var(--muted);transition:all .15s;';
+        document.getElementById('evalDistChart').style.display = 'block';
+        document.getElementById('evalDistTrendChart').style.display = 'none';
+        document.getElementById('distChartToggle-bar').style.cssText  = 'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--spc-maroon);background:var(--spc-maroon);color:#fff;transition:all .15s;';
+        document.getElementById('distChartToggle-line').style.cssText = 'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #e5e7eb;background:#fff;color:var(--muted);transition:all .15s;';
+        renderAnalytics();
+    }
+}
+
+function renderAnalytics() {
+    if (!EVALUATIONS_DATA || EVALUATIONS_DATA.length === 0) {
+        document.getElementById('analyticsTableBody').innerHTML =
+            `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted);">No evaluation data for the selected term.</td></tr>`;
+        document.getElementById('an-avgRating').textContent = '—';
+        document.getElementById('an-coverage').textContent = '—';
+        document.getElementById('an-coverageDetail').textContent = '';
+        document.getElementById('an-aboveAvg').textContent = '—';
+        document.getElementById('an-belowAvg').textContent = '—';
+        return;
+    }
+
+    const data = EVALUATIONS_DATA;
+    const rated = data.filter(r => parseFloat(r.avgscore) > 0);
+    const aboveAvg = rated.filter(r => parseFloat(r.avgscore) >= 3).length;
+    const belowAvg = rated.filter(r => parseFloat(r.avgscore) < 3).length;
+    const coverage = data.length > 0 ? Math.round(rated.length / data.length * 100) + '%' : '0%';
+    const avgRating = rated.length > 0
+        ? (rated.reduce((s, r) => s + parseFloat(r.avgscore), 0) / rated.length).toFixed(2)
+        : '—';
+
+    document.getElementById('an-avgRating').textContent = avgRating;
+    document.getElementById('an-coverage').textContent = coverage;
+    document.getElementById('an-coverageDetail').textContent = `${rated.length} of ${data.length} faculty`;
+    document.getElementById('an-aboveAvg').textContent = aboveAvg;
+    document.getElementById('an-belowAvg').textContent = belowAvg;
+
+    renderDistributionChart(data);
+    renderDeptChart(data);
+    renderAnalyticsTable();
+}
+
+function renderDistributionChart(data) {
+    const buckets = ['0–1', '1–2', '2–3', '3–4'];
+    const counts = [0, 0, 0, 0];
+    data.forEach(r => {
+        const s = parseFloat(r.avgscore);
+        if (s <= 0) return;
+        if (s <= 1) counts[0]++;
+        else if (s <= 2) counts[1]++;
+        else if (s <= 3) counts[2]++;
+        else counts[3]++;
+    });
+
+    if (evalDistChartInstance) evalDistChartInstance.destroy();
+    const ctx = document.getElementById('evalDistChart').getContext('2d');
+    evalDistChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: buckets,
+            datasets: [{
+                label: 'Faculty Count',
+                data: counts,
+                backgroundColor: ['rgba(123,17,19,0.30)','rgba(123,17,19,0.50)','rgba(123,17,19,0.75)','rgba(123,17,19,1)'],
+                borderRadius: 6,
+                borderSkipped: false,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f1f5f9' } },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+}
+
+// ── Rating Distribution Toggle ────────────────────────────
+
+let evalDistTrendChartInstance = null;
+let distChartView = 'bar';
+
+function switchDistChartView(view) {
+    distChartView = view;
+    const barBtn  = document.getElementById('distChartToggle-bar');
+    const lineBtn = document.getElementById('distChartToggle-line');
+    const maroon  = 'var(--spc-maroon)';
+
+    if (view === 'bar') {
+        barBtn.style.cssText  = `padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${maroon};background:${maroon};color:#fff;transition:all .15s;`;
+        lineBtn.style.cssText = 'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #e5e7eb;background:#fff;color:var(--muted);transition:all .15s;';
+        document.getElementById('evalDistChart').style.display = 'block';
+        document.getElementById('evalDistTrendChart').style.display = 'none';
+        if (EVALUATIONS_DATA.length > 0) renderDistributionChart(EVALUATIONS_DATA);
+    } else {
+        lineBtn.style.cssText = `padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${maroon};background:${maroon};color:#fff;transition:all .15s;`;
+        barBtn.style.cssText  = 'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #e5e7eb;background:#fff;color:var(--muted);transition:all .15s;';
+        document.getElementById('evalDistChart').style.display = 'none';
+        document.getElementById('evalDistTrendChart').style.display = 'block';
+        loadDistTrendChart();
+    }
+}
+
+async function loadDistTrendChart() {
+    try {
+        const res  = await fetch('/api/hr/distribution-trends');
+        const data = await res.json();
+        if (data.success) renderDistTrendChart(data.semesters, data.buckets);
+    } catch (err) {
+        console.error('Failed to load distribution trends:', err);
+    }
+}
+
+function renderDistTrendChart(semesters, buckets) {
+    if (evalDistTrendChartInstance) evalDistTrendChartInstance.destroy();
+
+    const bucketNames  = ['0–1', '1–2', '2–3', '3–4'];
+    const bucketColors = [
+        'rgba(123,17,19,0.30)',
+        'rgba(123,17,19,0.50)',
+        'rgba(123,17,19,0.75)',
+        'rgba(123,17,19,1)',
+    ];
+
+    const datasets = bucketNames.map((name, i) => ({
+        label: name,
+        data: buckets[name] || [],
+        borderColor: bucketColors[i],
+        backgroundColor: bucketColors[i],
+        tension: 0.3,
+        borderWidth: 2,
+        pointRadius: 4,
+        pointBackgroundColor: bucketColors[i],
+        spanGaps: true,
+    }));
+
+    const ctx = document.getElementById('evalDistTrendChart').getContext('2d');
+    evalDistTrendChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { labels: semesters, datasets },
+        options: {
+            responsive: true,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 14, padding: 10 } }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { stepSize: 1 },
+                    grid: { color: '#f1f5f9' },
+                    title: { display: true, text: 'Faculty Count', font: { size: 11 } }
+                },
+                x: { grid: { display: false }, ticks: { font: { size: 10 } } }
+            }
+        }
+    });
+}
+
+// ── Faculty Trend Modal ────────────────────────────────────
+
+async function openFacultyTrend(personnelId, name) {
+    document.getElementById('facultyTrendTitle').textContent = name;
+    document.getElementById('facultyTrendLoader').style.display = 'block';
+    document.getElementById('facultyTrendChart').style.display = 'none';
+    document.getElementById('facultyTrendEmpty').style.display = 'none';
+    document.getElementById('facultyTrendModal').style.display = 'flex';
+
+    if (facultyTrendChartInstance) {
+        facultyTrendChartInstance.destroy();
+        facultyTrendChartInstance = null;
+    }
+
+    try {
+        const res = await fetch(`/api/hr/evaluation-trends?personnel_id=${personnelId}`);
+        const data = await res.json();
+
+        document.getElementById('facultyTrendLoader').style.display = 'none';
+
+        if (!data.success || !data.trends || data.trends.length === 0) {
+            document.getElementById('facultyTrendEmpty').style.display = 'block';
+            return;
+        }
+
+        const canvas = document.getElementById('facultyTrendChart');
+        canvas.style.display = 'block';
+        const ctx = canvas.getContext('2d');
+        const trends = data.trends;
+
+        facultyTrendChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: trends.map(t => t.label),
+                datasets: [
+                    {
+                        label: 'Overall',
+                        data: trends.map(t => t.overall),
+                        borderColor: '#7b1113',
+                        backgroundColor: '#7b1113',
+                        tension: 0.3,
+                        borderWidth: 2.5,
+                        pointRadius: 5,
+                        pointBackgroundColor: '#7b1113',
+                    },
+                    {
+                        label: 'Student',
+                        data: trends.map(t => t.student),
+                        borderColor: '#d97706',
+                        backgroundColor: '#d97706',
+                        borderDash: [5, 3],
+                        tension: 0.3,
+                        borderWidth: 1.5,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#d97706',
+                    },
+                    {
+                        label: 'Supervisor',
+                        data: trends.map(t => t.supervisor),
+                        borderColor: '#2563eb',
+                        backgroundColor: '#2563eb',
+                        borderDash: [5, 3],
+                        tension: 0.3,
+                        borderWidth: 1.5,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#2563eb',
+                    },
+                    {
+                        label: 'Peer',
+                        data: trends.map(t => t.peer),
+                        borderColor: '#16a34a',
+                        backgroundColor: '#16a34a',
+                        borderDash: [5, 3],
+                        tension: 0.3,
+                        borderWidth: 1.5,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#16a34a',
+                    },
+                ]
+            },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 18, padding: 12 } }
+                },
+                scales: {
+                    y: {
+                        min: 0, max: 4,
+                        grid: { color: '#f1f5f9' },
+                        title: { display: true, text: 'Score (0–4)', font: { size: 11 } },
+                        ticks: { stepSize: 1 }
+                    },
+                    x: { grid: { display: false }, ticks: { font: { size: 11 } } }
+                }
+            }
+        });
+    } catch (err) {
+        document.getElementById('facultyTrendLoader').style.display = 'none';
+        document.getElementById('facultyTrendEmpty').style.display = 'block';
+        document.getElementById('facultyTrendEmpty').textContent = 'Failed to load trend data.';
+        console.error(err);
+    }
+}
+
+function closeFacultyTrendModal() {
+    document.getElementById('facultyTrendModal').style.display = 'none';
+}
+
+function renderDeptChart(data) {
+    const deptMap = {};
+    data.forEach(r => {
+        const dept = r.department || 'Unknown';
+        const score = parseFloat(r.avgscore);
+        if (!deptMap[dept]) deptMap[dept] = { sum: 0, count: 0 };
+        if (score > 0) { deptMap[dept].sum += score; deptMap[dept].count++; }
+    });
+
+    const depts = Object.keys(deptMap).sort();
+    const avgs = depts.map(d => deptMap[d].count > 0
+        ? parseFloat((deptMap[d].sum / deptMap[d].count).toFixed(2))
+        : 0);
+
+    if (evalDeptChartInstance) evalDeptChartInstance.destroy();
+    const ctx = document.getElementById('evalDeptChart').getContext('2d');
+    evalDeptChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: depts,
+            datasets: [{
+                label: 'Avg Rating',
+                data: avgs,
+                backgroundColor: 'rgba(123,17,19,0.75)',
+                borderRadius: 6,
+                borderSkipped: false,
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { beginAtZero: true, max: 4, grid: { color: '#f1f5f9' } },
+                y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+            }
+        }
+    });
+}
+
+let evalDeptTrendChartInstance = null;
+let deptChartView = 'bar'; // 'bar' | 'line'
+
+function switchDeptChartView(view) {
+    deptChartView = view;
+
+    // Update toggle button styles
+    const barBtn  = document.getElementById('deptChartToggle-bar');
+    const lineBtn = document.getElementById('deptChartToggle-line');
+    if (view === 'bar') {
+        barBtn.style.cssText  = 'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--spc-maroon);background:var(--spc-maroon);color:#fff;transition:all .15s;';
+        lineBtn.style.cssText = 'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #e5e7eb;background:#fff;color:var(--muted);transition:all .15s;';
+        document.getElementById('evalDeptChart').style.display = 'block';
+        document.getElementById('evalDeptTrendChart').style.display = 'none';
+        if (EVALUATIONS_DATA.length > 0) renderDeptChart(EVALUATIONS_DATA);
+    } else {
+        lineBtn.style.cssText = 'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--spc-maroon);background:var(--spc-maroon);color:#fff;transition:all .15s;';
+        barBtn.style.cssText  = 'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #e5e7eb;background:#fff;color:var(--muted);transition:all .15s;';
+        document.getElementById('evalDeptChart').style.display = 'none';
+        document.getElementById('evalDeptTrendChart').style.display = 'block';
+        loadDeptTrendChart();
+    }
+}
+
+async function loadDeptTrendChart() {
+    try {
+        const res  = await fetch('/api/hr/dept-trends');
+        const data = await res.json();
+        if (!data.success) return;
+        renderDeptTrendChart(data.semesters, data.depts);
+    } catch (err) {
+        console.error('Failed to load dept trends:', err);
+    }
+}
+
+function renderDeptTrendChart(semesters, depts) {
+    if (evalDeptTrendChartInstance) evalDeptTrendChartInstance.destroy();
+
+    const palette = [
+        '#7b1113','#2563eb','#d97706','#16a34a','#7c3aed',
+        '#db2777','#0891b2','#65a30d','#ea580c','#6b7280'
+    ];
+    const deptNames = Object.keys(depts);
+    const datasets  = deptNames.map((name, i) => ({
+        label: name,
+        data: depts[name],
+        borderColor: palette[i % palette.length],
+        backgroundColor: palette[i % palette.length],
+        tension: 0.3,
+        borderWidth: 2,
+        pointRadius: 4,
+        pointBackgroundColor: palette[i % palette.length],
+        spanGaps: true,
+    }));
+
+    const ctx = document.getElementById('evalDeptTrendChart').getContext('2d');
+    evalDeptTrendChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { labels: semesters, datasets },
+        options: {
+            responsive: true,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { font: { size: 10 }, boxWidth: 14, padding: 10 }
+                }
+            },
+            scales: {
+                y: {
+                    min: 0, max: 4,
+                    grid: { color: '#f1f5f9' },
+                    title: { display: true, text: 'Score (0–4)', font: { size: 11 } },
+                    ticks: { stepSize: 1 }
+                },
+                x: { grid: { display: false }, ticks: { font: { size: 10 } } }
+            }
+        }
+    });
+}
+
+function sortAnalytics(col) {
+    if (AN_SORT_COL === col) {
+        AN_SORT_DIR = AN_SORT_DIR === 'asc' ? 'desc' : 'asc';
+    } else {
+        AN_SORT_COL = col;
+        AN_SORT_DIR = 'desc';
+    }
+    // Update sort icons
+    ['name','student','supervisor','peer','overall'].forEach(c => {
+        const el = document.getElementById(`an-sort-${c}`);
+        if (el) el.className = c === col ? (AN_SORT_DIR === 'asc' ? 'bx bx-sort-up' : 'bx bx-sort-down') : 'bx bx-sort';
+    });
+    renderAnalyticsTable();
+}
+
+function renderAnalyticsTable() {
+    const search = (document.getElementById('analyticsSearch').value || '').toLowerCase();
+    let rows = EVALUATIONS_DATA.filter(r =>
+        !search || r.name.toLowerCase().includes(search) || (r.department || '').toLowerCase().includes(search)
+    );
+
+    const colMap = {
+        name: r => r.name,
+        student: r => parseFloat(r.student_score) || 0,
+        supervisor: r => parseFloat(r.supervisor_score) || 0,
+        peer: r => parseFloat(r.peer_score) || 0,
+        overall: r => parseFloat(r.avgscore) || 0,
+    };
+    const getter = colMap[AN_SORT_COL] || colMap.overall;
+    rows.sort((a, b) => {
+        const va = getter(a), vb = getter(b);
+        if (typeof va === 'string') return AN_SORT_DIR === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+        return AN_SORT_DIR === 'asc' ? va - vb : vb - va;
+    });
+
+    const tbody = document.getElementById('analyticsTableBody');
+    if (rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted);">No results found.</td></tr>`;
+        return;
+    }
+
+    const fmt = v => { const n = parseFloat(v); return n > 0 ? n.toFixed(2) : '—'; };
+    tbody.innerHTML = rows.map(r => {
+        const score = parseFloat(r.avgscore);
+        let badgeStyle, badgeLabel;
+        if (score >= 3) { badgeStyle = 'background:#dcfce7;color:#166534;'; badgeLabel = 'Above Avg'; }
+        else if (score >= 2) { badgeStyle = 'background:#fef3c7;color:#92400e;'; badgeLabel = 'Average'; }
+        else if (score > 0) { badgeStyle = 'background:#fee2e2;color:#991b1b;'; badgeLabel = 'Below Avg'; }
+        else { badgeStyle = 'background:#f1f5f9;color:#6b7280;'; badgeLabel = 'Not Rated'; }
+
+        const safeName = r.name.replace(/'/g, "\\'");
+        return `<tr>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;font-weight:600;color:#111827;">${r.name}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;color:var(--muted);font-size:12px;">${r.department || '—'}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;text-align:center;">${fmt(r.student_score)}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;text-align:center;">${fmt(r.supervisor_score)}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;text-align:center;">${fmt(r.peer_score)}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;text-align:center;font-weight:700;color:var(--spc-maroon);">${fmt(r.avgscore)}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;text-align:center;">
+                <span style="${badgeStyle}padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;">${badgeLabel}</span>
+            </td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;text-align:center;">
+                <button onclick="openFacultyTrend(${r.personnelid}, '${safeName}')"
+                    style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px;">
+                    <i class='bx bx-line-chart'></i> Trend
+                </button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+async function runAssignmentLogic() {
+    const dept      = document.getElementById('assignment-dept').value;
+    const acadId    = document.getElementById('assignment-acad-id').value;
+    const statusDiv = document.getElementById('assignment-status');
+
+    if (!dept || !acadId) {
+        showToast('Please select both a department and a term.', 'warning');
+        return;
+    }
+
+    statusDiv.style.display = 'flex';
 
     try {
         const response = await fetch('/api/hr/generate-peer-assignments', {
@@ -1200,17 +2638,15 @@ async function runAssignmentLogic() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ acadcalendar_id: acadId, collegename: dept })
         });
-
         const result = await response.json();
         if (result.success) {
-            alert("Peer assignments successfully generated.");
-            closePeerModal();
-            location.reload();
+            showToast('Peer assignments successfully generated!', 'success');
+            switchPeerTab('view');
         } else {
-            alert("Error: " + result.message);
+            showToast('Error: ' + result.message, 'error');
         }
     } catch (error) {
-        alert("Failed to connect to server.");
+        showToast('Failed to connect to server.', 'error');
     } finally {
         statusDiv.style.display = 'none';
     }
