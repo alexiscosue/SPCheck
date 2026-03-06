@@ -7796,6 +7796,72 @@ def api_faculty_peer_assignments():
         print(f"Error fetching peer assignments: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/hr/peer-assignments')
+@require_auth([20003])
+def api_hr_peer_assignments():
+    """Returns all peer assignments for HR to view, filterable by term and department."""
+    try:
+        term_id = request.args.get('term_id', type=int)
+        dept = request.args.get('dept', '').strip()
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        query = """
+            SELECT
+                pa.assignment_id,
+                pa.is_completed,
+                ev.firstname || ' ' || ev.lastname AS evaluator_name,
+                ee.firstname || ' ' || ee.lastname AS evaluatee_name,
+                col.collegename,
+                c.acadyear,
+                c.semester,
+                c.acadcalendar_id
+            FROM peer_assignments pa
+            JOIN personnel ev ON pa.evaluator_id = ev.personnel_id
+            JOIN personnel ee ON pa.evaluatee_id = ee.personnel_id
+            JOIN college col ON ev.college_id = col.college_id
+            JOIN acadcalendar c ON pa.acadcalendar_id = c.acadcalendar_id
+        """
+        conditions = []
+        params = []
+        if term_id:
+            conditions.append("pa.acadcalendar_id = %s")
+            params.append(term_id)
+        if dept:
+            conditions.append("col.collegename = %s")
+            params.append(dept)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY col.collegename, ev.lastname, ee.lastname"
+
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        assignments = []
+        for row in rows:
+            assignment_id, is_completed, evaluator_name, evaluatee_name, collegename, acadyear, semester, acad_id = row
+            assignments.append({
+                'assignment_id': assignment_id,
+                'is_completed': is_completed,
+                'evaluator_name': evaluator_name,
+                'evaluatee_name': evaluatee_name,
+                'department': collegename,
+                'period': f"AY {acadyear} — {semester}",
+                'acadcalendar_id': acad_id,
+            })
+
+        total = len(assignments)
+        completed = sum(1 for a in assignments if a['is_completed'])
+        return jsonify(success=True, assignments=assignments, total=total, completed=completed)
+
+    except Exception as e:
+        print(f"Error fetching HR peer assignments: {e}")
+        return jsonify(success=False, error=str(e)), 500
+
+
 @app.route('/faculty/peer-evaluations')
 @require_auth([20001, 20002])
 def peer_evaluations_list():
