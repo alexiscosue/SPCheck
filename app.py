@@ -538,6 +538,7 @@ def check_and_record_absences():
                                         attendancestatus, timein, timeout
                                     )
                                     VALUES (%s, %s, %s, %s, NULL)
+                                    ON CONFLICT ON CONSTRAINT unique_attendance_per_day DO NOTHING
                                 """, (personnel_id, class_id, 'Absent', absence_timestamp))
                                 
                                 absences_recorded += 1
@@ -751,10 +752,12 @@ def campus_attendance_daily_sync():
             cursor.execute("""
                 WITH
                 active_dates AS (
-                    SELECT DISTINCT DATE(taptime AT TIME ZONE 'Asia/Manila') AS attendance_date
-                    FROM biometriclogs
-                    UNION
-                    SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Manila')::date
+                    SELECT d::date AS attendance_date
+                    FROM generate_series(
+                        '2026-01-05'::date,
+                        (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Manila')::date,
+                        INTERVAL '1 day'
+                    ) d
                 ),
                 all_faculty AS (
                     SELECT personnel_id FROM personnel
@@ -1614,6 +1617,17 @@ def api_biometric_logs():
         conn = db_pool.get_connection()
         cursor = conn.cursor()
 
+        semester_id = request.args.get('semester_id')
+        sem_start = sem_end = None
+        if semester_id:
+            cursor.execute("SELECT semesterstart, semesterend FROM acadcalendar WHERE acadcalendar_id = %s", (int(semester_id),))
+            row = cursor.fetchone()
+            if row:
+                sem_start, sem_end = row[0], row[1]
+
+        date_filter = "WHERE bl.taptime::date BETWEEN %s AND %s" if (sem_start and sem_end) else ""
+        params = [sem_start, sem_end] if (sem_start and sem_end) else []
+
         cursor.execute("""
             SELECT
                 bl.biometriclog_id,
@@ -1633,9 +1647,10 @@ def api_biometric_logs():
             LEFT JOIN personnel p ON b.personnel_id = p.personnel_id
             LEFT JOIN college c ON p.college_id = c.college_id
             LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            """ + date_filter + """
             ORDER BY bl.taptime DESC
             LIMIT 500
-        """)
+        """, params)
 
         logs = []
         for row in cursor.fetchall():
@@ -1679,6 +1694,17 @@ def api_campus_attendance():
         conn = db_pool.get_connection()
         cursor = conn.cursor()
 
+        semester_id = request.args.get('semester_id')
+        sem_start = sem_end = None
+        if semester_id:
+            cursor.execute("SELECT semesterstart, semesterend FROM acadcalendar WHERE acadcalendar_id = %s", (int(semester_id),))
+            row = cursor.fetchone()
+            if row:
+                sem_start, sem_end = row[0], row[1]
+
+        date_filter = "AND ca.attendance_date BETWEEN %s AND %s" if (sem_start and sem_end) else ""
+        params = [sem_start, sem_end] if (sem_start and sem_end) else []
+
         cursor.execute("""
             SELECT
                 ca.campus_attendance_id,
@@ -1697,8 +1723,10 @@ def api_campus_attendance():
             INNER JOIN personnel p ON ca.personnel_id = p.personnel_id
             LEFT JOIN college c ON p.college_id = c.college_id
             LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            WHERE 1=1
+            """ + date_filter + """
             ORDER BY ca.attendance_date DESC, person_name, ca.session
-        """)
+        """, params)
 
         records = []
         for row in cursor.fetchall():
@@ -1743,12 +1771,14 @@ def api_sync_campus_attendance():
 
         cursor.execute("""
             WITH
-            -- All distinct dates that have any biometric activity, plus today always
+            -- All dates from earliest biometric log to today (fills gaps with Absent)
             active_dates AS (
-                SELECT DISTINCT DATE(taptime AT TIME ZONE 'Asia/Manila') AS attendance_date
-                FROM biometriclogs
-                UNION
-                SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Manila')::date
+                SELECT d::date AS attendance_date
+                FROM generate_series(
+                    '2026-01-05'::date,
+                    (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Manila')::date,
+                    INTERVAL '1 day'
+                ) d
             ),
             -- All personnel (regardless of teaching load or biometric device)
             all_faculty AS (
@@ -2554,8 +2584,13 @@ def api_faculty_semesters():
         # Calendar-active semester takes priority; fall back to most recent with data
         effective_current_id = current_semester_id if current_semester_id else data_semester_id
 
+        # Deduplicate by display text (DB may have duplicate semester rows)
+        seen_texts = set()
         semester_options = []
         for item in raw_semesters:
+            if item['text'] in seen_texts:
+                continue
+            seen_texts.add(item['text'])
             semester_options.append({
                 'id': item['id'],
                 'text': item['text'],
@@ -3342,6 +3377,212 @@ def api_get_all_attendance_reports():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/faculty/campus-attendance')
+@require_auth([20001, 20002])
+def api_faculty_campus_attendance():
+    """Return campus attendance (biometric) records for the logged-in faculty."""
+    conn = None
+    cursor = None
+    try:
+        user_id = session['user_id']
+        personnel_info = get_personnel_info(user_id)
+        personnel_id = personnel_info.get('personnel_id')
+        if not personnel_id:
+            return jsonify({'success': False, 'error': 'Personnel record not found'}), 403
+
+        semester_id = request.args.get('semester_id')
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        date_filter = ""
+        params = [personnel_id]
+        if semester_id:
+            cursor.execute(
+                "SELECT semesterstart, semesterend FROM acadcalendar WHERE acadcalendar_id = %s",
+                (semester_id,)
+            )
+            sem = cursor.fetchone()
+            if sem:
+                date_filter = "AND ca.attendance_date BETWEEN %s AND %s"
+                params += [sem[0], sem[1]]
+
+        cursor.execute(f"""
+            SELECT
+                ca.campus_attendance_id,
+                ca.attendance_date,
+                ca.session,
+                ca.time_in  AT TIME ZONE 'Asia/Manila' AS time_in_local,
+                ca.time_out AT TIME ZONE 'Asia/Manila' AS time_out_local,
+                ca.status,
+                pr.employmentstatus
+            FROM campus_attendance ca
+            LEFT JOIN profile pr ON ca.personnel_id = pr.personnel_id
+            WHERE ca.personnel_id = %s {date_filter}
+            ORDER BY ca.attendance_date DESC, ca.session
+        """, params)
+
+        records = []
+        for row in cursor.fetchall():
+            def fmt_ts(ts):
+                if not ts:
+                    return None
+                return ts.strftime('%H:%M') if hasattr(ts, 'strftime') else str(ts)[:5]
+            records.append({
+                'id':                row[0],
+                'date':              row[1].isoformat() if row[1] else None,
+                'session':           row[2],
+                'time_in':           fmt_ts(row[3]),
+                'time_out':          fmt_ts(row[4]),
+                'status':            row[5],
+                'employment_status': row[6] or '---',
+            })
+
+        return jsonify({'success': True, 'records': records})
+
+    except Exception as e:
+        print(f"Error fetching faculty campus attendance: {e}")
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if cursor: cursor.close()
+        if conn: db_pool.return_connection(conn)
+
+
+@app.route('/api/faculty/campus-attendance-analytics')
+@require_auth([20001, 20002])
+def api_faculty_campus_attendance_analytics():
+    """Campus attendance analytics (biometric) for the logged-in faculty."""
+    conn = None
+    cursor = None
+    try:
+        from datetime import timedelta as _td
+        user_id = session['user_id']
+        personnel_info = get_personnel_info(user_id)
+        personnel_id = personnel_info.get('personnel_id')
+        if not personnel_id:
+            return jsonify({'success': False, 'error': 'Personnel record not found'}), 403
+
+        semester_id = request.args.get('semester_id')
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        # Resolve semester date range
+        sem_start = sem_end = None
+        if semester_id:
+            cursor.execute(
+                "SELECT semesterstart, semesterend FROM acadcalendar WHERE acadcalendar_id = %s",
+                (semester_id,)
+            )
+            sem = cursor.fetchone()
+            if sem:
+                sem_start, sem_end = sem[0], sem[1]
+
+        date_filter = ""
+        params_base = [personnel_id]
+        if sem_start and sem_end:
+            date_filter = "AND ca.attendance_date BETWEEN %s AND %s"
+            params_base += [sem_start, sem_end]
+
+        # KPIs
+        cursor.execute(f"""
+            SELECT
+                COUNT(*) FILTER (WHERE ca.status = 'Present')  AS present,
+                COUNT(*) FILTER (WHERE ca.status = 'Late')     AS late,
+                COUNT(*) FILTER (WHERE ca.status = 'Absent')   AS absent,
+                COUNT(*) FILTER (WHERE ca.status = 'Excused')  AS excused,
+                COUNT(*) AS total
+            FROM campus_attendance ca
+            WHERE ca.personnel_id = %s {date_filter}
+        """, params_base)
+        row = cursor.fetchone()
+        present, late, absent, excused, total = (row or (0, 0, 0, 0, 0))
+        avg_rate = round(((present + excused + late * 0.75) / total) * 100, 1) if total > 0 else 0.0
+
+        # Weekly trend — fill all weeks in range so graph is continuous
+        if sem_start and sem_end:
+            cursor.execute("""
+                WITH weeks AS (
+                    SELECT generate_series(
+                        DATE_TRUNC('week', %s::date),
+                        DATE_TRUNC('week', %s::date),
+                        INTERVAL '1 week'
+                    )::date AS week_start
+                ),
+                agg AS (
+                    SELECT
+                        DATE_TRUNC('week', ca.attendance_date)::date AS week_start,
+                        COUNT(*) FILTER (WHERE ca.status = 'Present')  AS present,
+                        COUNT(*) FILTER (WHERE ca.status = 'Late')     AS late,
+                        COUNT(*) FILTER (WHERE ca.status = 'Absent')   AS absent,
+                        COUNT(*) FILTER (WHERE ca.status = 'Excused')  AS excused,
+                        COUNT(*) AS total
+                    FROM campus_attendance ca
+                    WHERE ca.personnel_id = %s
+                      AND ca.attendance_date BETWEEN %s AND %s
+                    GROUP BY 1
+                )
+                SELECT w.week_start,
+                       COALESCE(a.present,0), COALESCE(a.late,0),
+                       COALESCE(a.absent,0),  COALESCE(a.excused,0),
+                       COALESCE(a.total,0)
+                FROM weeks w
+                LEFT JOIN agg a ON a.week_start = w.week_start
+                ORDER BY w.week_start
+            """, (sem_start, sem_end, personnel_id, sem_start, sem_end))
+        else:
+            cursor.execute(f"""
+                SELECT
+                    DATE_TRUNC('week', ca.attendance_date)::date AS week_start,
+                    COUNT(*) FILTER (WHERE ca.status = 'Present')  AS present,
+                    COUNT(*) FILTER (WHERE ca.status = 'Late')     AS late,
+                    COUNT(*) FILTER (WHERE ca.status = 'Absent')   AS absent,
+                    COUNT(*) FILTER (WHERE ca.status = 'Excused')  AS excused,
+                    COUNT(*) AS total
+                FROM campus_attendance ca
+                WHERE ca.personnel_id = %s {date_filter}
+                GROUP BY week_start
+                ORDER BY week_start
+            """, params_base)
+        trends = []
+        for r in cursor.fetchall():
+            wk_start, wp, wl, wa, we, wt = r
+            rate = round(((wp + we + wl * 0.75) / wt) * 100, 1) if wt > 0 else 0.0
+            trends.append({
+                'label': wk_start.strftime('%b %d') if wk_start else '',
+                'avg_rate': rate,
+                'total_present': wp,
+                'total_late': wl,
+                'total_absent': wa,
+            })
+
+        return jsonify({
+            'success': True,
+            'kpis': {
+                'avg_rate':      avg_rate,
+                'total_present': present,
+                'total_late':    late,
+                'total_absent':  absent,
+                'total_excused': excused,
+            },
+            'distribution': {
+                'present': present,
+                'late':    late,
+                'absent':  absent,
+                'excused': excused,
+            },
+            'trends': trends,
+        })
+
+    except Exception as e:
+        print(f"Error fetching faculty campus attendance analytics: {e}")
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if cursor: cursor.close()
+        if conn: db_pool.return_connection(conn)
+
 
 @app.route('/api/faculty/teaching-schedule/<int:semester_id>')
 @require_auth([20001, 20002, 20003])
@@ -4652,10 +4893,21 @@ def api_hr_faculty_attendance():
     try:
         conn = db_pool.get_connection()
         cursor = conn.cursor()
-        
+
         philippines_tz = pytz.timezone('Asia/Manila')
         today = datetime.now(philippines_tz).date()
-        
+
+        semester_id = request.args.get('semester_id')
+        sem_start = sem_end = None
+        if semester_id:
+            cursor.execute("SELECT semesterstart, semesterend FROM acadcalendar WHERE acadcalendar_id = %s", (int(semester_id),))
+            row = cursor.fetchone()
+            if row:
+                sem_start, sem_end = row[0], row[1]
+
+        date_filter = "AND a.timein::date BETWEEN %s AND %s" if (sem_start and sem_end) else ""
+        params = [sem_start, sem_end] if (sem_start and sem_end) else []
+
         cursor.execute("""
             SELECT
                 p.firstname,
@@ -4678,8 +4930,9 @@ def api_hr_faculty_attendance():
             LEFT JOIN college c ON p.college_id = c.college_id
             LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
             WHERE p.role_id IN (20001, 20002)
+            """ + date_filter + """
             ORDER BY a.timein DESC, p.lastname, p.firstname
-        """)
+        """, params)
         
         attendance_records = cursor.fetchall()
         
@@ -5508,7 +5761,18 @@ def api_hr_rfid_logs():
     try:
         conn = db_pool.get_connection()
         cursor = conn.cursor()
-        
+
+        semester_id = request.args.get('semester_id')
+        sem_start = sem_end = None
+        if semester_id:
+            cursor.execute("SELECT semesterstart, semesterend FROM acadcalendar WHERE acadcalendar_id = %s", (int(semester_id),))
+            row = cursor.fetchone()
+            if row:
+                sem_start, sem_end = row[0], row[1]
+
+        date_filter = "WHERE rl.taptime::date BETWEEN %s AND %s" if (sem_start and sem_end) else ""
+        params = [sem_start, sem_end] if (sem_start and sem_end) else []
+
         cursor.execute("""
             SELECT
                 rl.log_id,
@@ -5525,8 +5789,9 @@ def api_hr_rfid_logs():
             LEFT JOIN personnel p ON rl.personnel_id = p.personnel_id
             LEFT JOIN college c ON p.college_id = c.college_id
             LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            """ + date_filter + """
             ORDER BY rl.taptime DESC
-        """)
+        """, params)
         
         logs = cursor.fetchall()
         cursor.close()
@@ -5576,23 +5841,27 @@ def api_hr_rfid_logs():
 @require_auth([20003])
 def api_hr_faculty_list():
     """OPTIMIZED: Get all faculty and dean list with teaching load"""
-    cache_key = "hr_faculty_list"
+    semester_id = request.args.get('semester_id')
+    cache_key = f"hr_faculty_list_{semester_id or 'current'}"
     cached = get_cached(cache_key, ttl=300)
     if cached:
         return cached
-    
+
     try:
         conn = db_pool.get_connection()
         cursor = conn.cursor()
-        
-        cursor.execute("""
-            WITH current_calendar AS (
-                SELECT acadcalendar_id 
-                FROM acadcalendar 
+
+        if semester_id:
+            cal_cte = "SELECT %s::int AS acadcalendar_id"
+            params = [int(semester_id)]
+        else:
+            cal_cte = """SELECT acadcalendar_id FROM acadcalendar
                 WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
-                ORDER BY semesterstart DESC
-                LIMIT 1
-            )
+                ORDER BY semesterstart DESC LIMIT 1"""
+            params = []
+
+        cursor.execute("""
+            WITH current_calendar AS (""" + cal_cte + """)
             SELECT
                 p.personnel_id,
                 p.firstname,
@@ -5612,7 +5881,7 @@ def api_hr_faculty_list():
             WHERE p.role_id IN (20001, 20002)
             GROUP BY p.personnel_id, p.firstname, p.lastname, p.honorifics, p.role_id, c.collegename, pr.position, pr.employmentstatus
             ORDER BY p.lastname, p.firstname
-        """)
+        """, params)
         
         faculty_records = cursor.fetchall()
         cursor.close()

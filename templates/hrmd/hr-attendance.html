@@ -20,6 +20,12 @@
 
       <!-- All Faculty Logs -->
       <div id="logs" class="tab-content active">
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px">
+          <label for="logsSemesterSelect" style="font-size:13px;color:var(--muted);white-space:nowrap">Semester:</label>
+          <select id="logsSemesterSelect" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:var(--card);color:var(--text);cursor:pointer;min-width:220px">
+            <option value="">Loading...</option>
+          </select>
+        </div>
         <div class="search-filter">
           <input type="text" id="logSearch" placeholder="Search by name, date, class, or room...">
           <select id="logCollegeFilter"><option value="">All Colleges</option></select>
@@ -87,6 +93,12 @@
 
       <!-- Campus Attendance Tab -->
       <div id="campusattendance" class="tab-content">
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px">
+          <label for="campusAttSemesterSelect" style="font-size:13px;color:var(--muted);white-space:nowrap">Semester:</label>
+          <select id="campusAttSemesterSelect" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:var(--card);color:var(--text);cursor:pointer;min-width:220px">
+            <option value="">Loading...</option>
+          </select>
+        </div>
         <div class="search-filter">
           <input type="text" id="campusAttSearch" placeholder="Search by name or date...">
           <select id="campusAttCollegeFilter"><option value="">All Colleges</option></select>
@@ -157,6 +169,12 @@
 
       <!-- View Classes Tab -->
       <div id="classes" class="tab-content">
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px">
+          <label for="classesSemesterSelect" style="font-size:13px;color:var(--muted);white-space:nowrap">Semester:</label>
+          <select id="classesSemesterSelect" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:var(--card);color:var(--text);cursor:pointer;min-width:220px">
+            <option value="">Loading...</option>
+          </select>
+        </div>
         <div class="search-filter">
           <input type="text" id="facultySearch" placeholder="Search faculty...">
           <select id="classesCollegeFilter"><option value="">All Colleges</option></select>
@@ -207,6 +225,12 @@
 
       <!-- Attendance Logs Tab (RFID + Biometric) -->
       <div id="attendancelogs" class="tab-content">
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px">
+          <label for="attendanceLogsSemesterSelect" style="font-size:13px;color:var(--muted);white-space:nowrap">Semester:</label>
+          <select id="attendanceLogsSemesterSelect" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:var(--card);color:var(--text);cursor:pointer;min-width:220px">
+            <option value="">Loading...</option>
+          </select>
+        </div>
         <!-- Sub-tabs -->
         <div class="attendance-sub-tabs">
           <div class="attendance-sub-tab active" data-subtab="sub-rfidlogs">RFID Logs</div>
@@ -989,7 +1013,7 @@
       closeExcuseConfirmModal();
       closeExcuseModal();
       showNotification(result.message, 'success');
-      fetchFacultyAttendance().catch(e => console.error('Refresh error:', e));
+      fetchFacultyAttendance(document.getElementById('logsSemesterSelect')?.value).catch(e => console.error('Refresh error:', e));
     } else {
       showNotification('Failed to excuse absence: ' + result.error, 'error');
       closeExcuseConfirmModal();
@@ -1060,7 +1084,7 @@
         campusAttControlsContainer.style.display = 'block';
         rfidEditControlsContainer.style.display = 'none';
         campusEntryEditControlsContainer.style.display = 'none';
-        fetchCampusAttendance();
+        fetchCampusAttendance(document.getElementById('campusAttSemesterSelect')?.value);
       } else if (btn.dataset.tab === 'classes') {
         // View Classes - No buttons
         readerControlsContainer.style.display = 'none';
@@ -1235,7 +1259,7 @@
     if (data.person_name) {
         content += `<div class="notification-class"><strong>${data.person_name}</strong></div>`;
     }
-    
+
     if (data.rfid_uid && data.action === 'unknown_rfid') {
         content += `
             <div class="notification-class" style="margin-top: 8px;">
@@ -1340,6 +1364,11 @@
         content += `<div class="notification-class"><strong>${data.person_name}</strong></div>`;
     }
 
+    if (data.session) {
+        const sessionIcon = data.session === 'Morning' ? 'bx-sun' : 'bx-moon';
+        content += `<div class="notification-class" style="font-size:12px;color:#6b7280"><i class='bx ${sessionIcon}' style="vertical-align:middle;margin-right:3px"></i>${data.session} Session</div>`;
+    }
+
     content += `<div class="notification-message">${data.message}</div></div>`;
 
     notification.innerHTML = content;
@@ -1441,11 +1470,11 @@
     });
   }
 
-  async function fetchFacultyAttendance() {
+  async function fetchFacultyAttendance(semesterId) {
     try {
         console.log('🔄 Fetching fresh faculty attendance data...');
-        
-        const response = await fetch('/api/hr/faculty-attendance?t=' + new Date().getTime());
+        const semParam = semesterId ? 'semester_id=' + semesterId + '&' : '';
+        const response = await fetch('/api/hr/faculty-attendance?' + semParam + 't=' + new Date().getTime());
         const data = await response.json();
         
         if (data.success) {
@@ -1469,9 +1498,10 @@
     }
   }
 
-  async function fetchFacultyList() {
+  async function fetchFacultyList(semesterId) {
     try {
-      const response = await fetch('/api/hr/faculty-list');
+      const semParam = semesterId ? '?semester_id=' + semesterId : '';
+      const response = await fetch('/api/hr/faculty-list' + semParam);
       const data = await response.json();
       
       if (data.success) {
@@ -1724,8 +1754,8 @@
                     btnIcon.className = 'bx bx-time';
                     document.getElementById('logFilter').value = '';
 
-                    await fetchFacultyAttendance();
-                    
+                    await fetchFacultyAttendance(document.getElementById('logsSemesterSelect')?.value);
+
                 } else {
                     showNotification(result.error || 'Failed to update time records', 'error');
 
@@ -2207,7 +2237,7 @@
             if (result.success) {
                 updateRFIDUI(false);
                 showNotification('RFID reader stopped successfully.', 'success'); // REPLACED ALERT
-                await fetchFacultyAttendance(); 
+                await fetchFacultyAttendance(document.getElementById('logsSemesterSelect')?.value);
             } else {
                 showNotification('Failed to stop RFID reader: ' + result.error, 'error'); // REPLACED ALERT
             }
@@ -2371,7 +2401,7 @@
             btn.classList.remove('active');
             btnText.textContent = 'Edit Time In/Out';
             btnIcon.className = 'bx bx-time';
-            await fetchCampusAttendance();
+            await fetchCampusAttendance(document.getElementById('campusAttSemesterSelect')?.value);
           } else {
             showNotification(result.error || 'Failed to update campus attendance records', 'error');
             isEditingCampusTime = false;
@@ -2408,9 +2438,10 @@
   let isEditingBiometricRemarks = false;
   let biometricRemarksEditData = new Map();
 
-  async function fetchRFIDLogs() {
+  async function fetchRFIDLogs(semesterId) {
       try {
-          const response = await fetch('/api/hr/rfid-logs');
+          const semParam = semesterId ? '?semester_id=' + semesterId : '';
+          const response = await fetch('/api/hr/rfid-logs' + semParam);
           const data = await response.json();
           
           if (data.success) {
@@ -2550,9 +2581,10 @@
   let currentPageCampusEntry = 1;
   let filteredBiometricLogs = [];
 
-  async function fetchBiometricLogs() {
+  async function fetchBiometricLogs(semesterId) {
       try {
-          const response = await fetch('/api/biometric/logs');
+          const semParam = semesterId ? '?semester_id=' + semesterId : '';
+          const response = await fetch('/api/biometric/logs' + semParam);
           const data = await response.json();
 
           if (data.success) {
@@ -2706,9 +2738,10 @@
   let currentPageCampusAtt = 1;
 
   // Fast load — just reads from campus_attendance table, no sync
-  async function fetchCampusAttendance() {
+  async function fetchCampusAttendance(semesterId) {
     try {
-      const res  = await fetch('/api/hr/campus-attendance');
+      const semParam = semesterId ? '?semester_id=' + semesterId : '';
+      const res  = await fetch('/api/hr/campus-attendance' + semParam);
       const data = await res.json();
       if (data.success) {
         campusAttRecords = data.records || [];
@@ -2735,7 +2768,7 @@
     } catch (e) {
       console.warn('Sync warning:', e);
     }
-    await fetchCampusAttendance();
+    await fetchCampusAttendance(document.getElementById('campusAttSemesterSelect')?.value);
     if (btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
   }
 
@@ -2989,18 +3022,67 @@
     }
   });
 
+  // ==================== SEMESTER LOADER FOR TABS ====================
+  async function loadHRTabSemesters() {
+    try {
+      const resp = await fetch('/api/faculty/semesters');
+      const data = await resp.json();
+      if (!data.success) return;
+      const semesters = data.semesters || [];
+      const currentId = data.current_semester_id ? String(data.current_semester_id) : null;
+      const defaultId = currentId || (semesters.length > 0 ? String(semesters[0].id) : '');
+
+      ['logsSemesterSelect','campusAttSemesterSelect','classesSemesterSelect','attendanceLogsSemesterSelect'].forEach(selId => {
+        const sel = document.getElementById(selId);
+        if (!sel) return;
+        sel.innerHTML = '';
+        semesters.forEach(sem => {
+          const opt = document.createElement('option');
+          opt.value = String(sem.id);
+          opt.textContent = sem.text;
+          sel.appendChild(opt);
+        });
+        sel.value = defaultId;
+      });
+
+      fetchFacultyAttendance(defaultId);
+      fetchFacultyList(defaultId);
+      fetchRFIDLogs(defaultId);
+      fetchBiometricLogs(defaultId);
+      fetchCampusAttendance(defaultId);
+    } catch(e) {
+      console.error('Error loading HR tab semesters:', e);
+      fetchFacultyAttendance();
+      fetchFacultyList();
+      fetchRFIDLogs();
+      fetchBiometricLogs();
+      fetchCampusAttendance();
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     checkRFIDStatus();
     checkBiometricStatus();
-    fetchFacultyAttendance();
-    fetchFacultyList();
-    fetchRFIDLogs();
-    fetchBiometricLogs();
-    fetchCampusAttendance();
+    loadHRTabSemesters();
     loadAnalyticsSemesters();
     analyticsLoaded = true;
     startNotificationListener();
     fetchAndPopulateAllColleges();
+
+    // Semester change listeners for each tab
+    document.getElementById('logsSemesterSelect')?.addEventListener('change', function() {
+      fetchFacultyAttendance(this.value);
+    });
+    document.getElementById('campusAttSemesterSelect')?.addEventListener('change', function() {
+      fetchCampusAttendance(this.value);
+    });
+    document.getElementById('classesSemesterSelect')?.addEventListener('change', function() {
+      fetchFacultyList(this.value);
+    });
+    document.getElementById('attendanceLogsSemesterSelect')?.addEventListener('change', function() {
+      fetchRFIDLogs(this.value);
+      fetchBiometricLogs(this.value);
+    });
 
     // Filter listeners — Faculty Logs tab
     ['logCollegeFilter','logPositionFilter','logEmploymentFilter'].forEach(id => {
@@ -3065,7 +3147,7 @@
     
     autoRefreshInterval = setInterval(async () => {
       if (rfidReaderActive) {
-        await fetchFacultyAttendance();
+        await fetchFacultyAttendance(document.getElementById('logsSemesterSelect')?.value);
       } else {
         stopAutoRefresh();
       }
