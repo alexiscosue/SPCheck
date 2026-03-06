@@ -38,45 +38,88 @@
       </div>
 
       <div style="grid-column:1 / -1; margin-top:8px;">
-        <div class="controls">
-            <div class="right">
-            <button class="btn primary" onclick="openPeerAssignmentModal()">
-                <i class='bx bx-git-merge'></i> Manage Peer Assignments
+
+        <!-- Top bar: Search + Semester + Actions -->
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px;">
+
+          <!-- Search -->
+          <div style="position:relative; flex:1; min-width:180px;">
+            <i class='bx bx-search' style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:15px; pointer-events:none;"></i>
+            <input type="text" id="evalSearch" placeholder="Search faculty name..."
+              style="width:100%; box-sizing:border-box; padding:9px 12px 9px 34px; border:1.5px solid #e5e7eb; border-radius:8px; font-size:13px; color:#1f2937; outline:none; transition:border-color .15s;"
+              onfocus="this.style.borderColor='var(--spc-maroon)'" onblur="this.style.borderColor='#e5e7eb'">
+          </div>
+
+          <!-- Semester selector -->
+          <div style="position:relative; flex-shrink:0;">
+            <i class='bx bx-calendar' style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:14px; pointer-events:none;"></i>
+            <select id="semesterFilter"
+              style="padding:9px 12px 9px 30px; border:1.5px solid #e5e7eb; border-radius:8px; font-size:13px; color:#1f2937; background:#fff; outline:none; min-width:210px; cursor:pointer;">
+              <option value="">Loading Semesters...</option>
+            </select>
+          </div>
+
+          <!-- Divider -->
+          <div style="width:1px; height:30px; background:#e5e7eb; flex-shrink:0;"></div>
+
+          <!-- Action buttons -->
+          <div style="display:flex; gap:8px; flex-shrink:0; margin-left:auto;">
+            <button class="btn ghost" id="update-eval-btn"
+              style="display:flex; align-items:center; gap:6px; font-size:13px; border:1.5px solid #e5e7eb; color:#374151;">
+              <i class='bx bx-refresh'></i> Update Records
             </button>
-            <button class="btn primary" id="update-eval-btn" >
-              Update Evaluation Records
+            <button class="btn" onclick="openPeerAssignmentModal()"
+              style="display:flex; align-items:center; gap:6px; font-size:13px; border:1.5px solid var(--spc-maroon); color:var(--spc-maroon); background:#fff5f5;">
+              <i class='bx bx-git-merge'></i> Peer Assignments
             </button>
-            <button class="btn primary" id="newCycleBtn">
-              <i class='bx bx-refresh'></i>&nbsp; New Evaluation Cycle
+            <button class="btn primary" id="newCycleBtn"
+              style="display:flex; align-items:center; gap:6px; font-size:13px; background:#1e40af;">
+              <i class='bx bx-calendar-plus'></i> New Cycle
             </button>
           </div>
-          <div class="left">
-            <div class="search-filter">
-              <input type="text" id="evalSearch" placeholder="Search Faculty Name...">
-              <select id="semesterFilter">
-                <option value="">Loading Semesters...</option>
-              </select>
-              <select id="deptFilter">
-                <option value="">All Departments</option>
-              </select>
-              <select id="positionFilter">
-                <option value="">All Positions</option>
-              </select>
-              <select id="statusFilter">
-                <option value="">Rating</option>
-                <option value="above-average">Above Average (3–4)</option>
-                <option value="average">Average (2–3)</option>
-                <option value="below-average">Below Average (<2)</option>
-              </select>
-              <select id="responseRateFilter">
-                <option value="">All Response Rates</option>
-                <option value="met">Met (>= 10)</option>
-                <option value="not-met">Not Met (< 10)</option>
-              </select>
-              </div>
-          </div>
-          
+
         </div>
+
+        <!-- Secondary filter bar -->
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:#f8fafc; border:1px solid #e5e7eb; border-radius:10px; padding:10px 14px;">
+          <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted); white-space:nowrap; display:flex; align-items:center; gap:4px; flex-shrink:0;">
+            <i class='bx bx-filter-alt'></i> Filters
+          </span>
+          <div style="width:1px; height:20px; background:#e5e7eb; flex-shrink:0;"></div>
+
+          <select id="deptFilter"
+            style="padding:7px 10px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; flex:1; min-width:130px; cursor:pointer;">
+            <option value="">All Departments</option>
+          </select>
+
+          <select id="positionFilter"
+            style="padding:7px 10px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; flex:1; min-width:120px; cursor:pointer;">
+            <option value="">All Positions</option>
+          </select>
+
+          <select id="statusFilter"
+            style="padding:7px 10px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; flex:1; min-width:150px; cursor:pointer;">
+            <option value="">All Ratings</option>
+            <option value="above-average">Above Average (3–4)</option>
+            <option value="average">Average (2–3)</option>
+            <option value="below-average">Below Average (&lt;2)</option>
+          </select>
+
+          <select id="responseRateFilter"
+            style="padding:7px 10px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; flex:1; min-width:155px; cursor:pointer;">
+            <option value="">All Response Rates</option>
+            <option value="met">Met (&ge; 10)</option>
+            <option value="not-met">Not Met (&lt; 10)</option>
+          </select>
+
+          <button onclick="clearEvalFilters()"
+            style="padding:7px 12px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:12px; font-weight:700; color:var(--muted); background:#fff; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:4px; flex-shrink:0; transition:all .15s;"
+            onmouseover="this.style.borderColor='#ef4444';this.style.color='#ef4444';"
+            onmouseout="this.style.borderColor='#e5e7eb';this.style.color='var(--muted)';">
+            <i class='bx bx-x'></i> Clear
+          </button>
+        </div>
+
       </div>
 
       <div class="chart-large card" style="grid-column:1 / -1; padding:16px;">
@@ -1290,6 +1333,14 @@ $(document).ready(function() {
     // 10. Initial data load (Starts with fetching semesters)
     fetchSemestersAndPopulate();
 });
+
+function clearEvalFilters() {
+    $('#deptFilter').val('');
+    $('#positionFilter').val('');
+    $('#statusFilter').val('');
+    $('#responseRateFilter').val('');
+    loadEvaluations();
+}
 
 // ── Peer Assignment Modal ──────────────────────────────────
 
