@@ -64,16 +64,16 @@
 
           <!-- Action buttons -->
           <div style="display:flex; gap:8px; flex-shrink:0; margin-left:auto;">
-            <button class="btn ghost" id="update-eval-btn"
-              style="display:flex; align-items:center; gap:6px; font-size:13px; border:1.5px solid #e5e7eb; color:#374151;">
+            <button class="btn eval-btn-ghost" id="update-eval-btn"
+              style="display:flex; align-items:center; gap:6px; font-size:13px;">
               <i class='bx bx-refresh'></i> Update Records
             </button>
-            <button class="btn" onclick="openPeerAssignmentModal()"
-              style="display:flex; align-items:center; gap:6px; font-size:13px; border:1.5px solid var(--spc-maroon); color:var(--spc-maroon); background:#fff5f5;">
+            <button class="btn eval-btn-peer" onclick="openPeerAssignmentModal()"
+              style="display:flex; align-items:center; gap:6px; font-size:13px;">
               <i class='bx bx-git-merge'></i> Peer Assignments
             </button>
-            <button class="btn primary" id="newCycleBtn"
-              style="display:flex; align-items:center; gap:6px; font-size:13px; background:#1e40af;">
+            <button class="btn eval-btn-blue" id="newCycleBtn"
+              style="display:flex; align-items:center; gap:6px; font-size:13px;">
               <i class='bx bx-calendar-plus'></i> New Cycle
             </button>
           </div>
@@ -174,7 +174,7 @@
     </section>
 
     <div id="peerAssignmentModal" class="hr-modal-wrapper" style="display: none;">
-        <div class="hr-modal-content" style="max-width: 780px; padding: 0; overflow: hidden;">
+        <div class="hr-modal-content" style="max-width: 1200px; width: 95vw; padding: 0; overflow: hidden;">
             <!-- Modal Header -->
             <div style="background: linear-gradient(135deg, var(--spc-maroon), #a71d2a); padding: 20px 24px; display: flex; align-items: center; justify-content: space-between;">
                 <div style="display: flex; align-items: center; gap: 12px;">
@@ -196,6 +196,9 @@
                 </button>
                 <button id="peerTab-view" class="peer-modal-tab" onclick="switchPeerTab('view')">
                     <i class='bx bx-list-ul'></i> View Assignments
+                </button>
+                <button id="peerTab-manual" class="peer-modal-tab" onclick="switchPeerTab('manual')">
+                    <i class='bx bx-user-plus'></i> Manual Assign
                 </button>
             </div>
 
@@ -277,58 +280,156 @@
                                 <th style="padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid #e5e7eb;">Department</th>
                                 <th style="padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid #e5e7eb;">Term</th>
                                 <th style="padding: 10px 14px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid #e5e7eb;">Status</th>
+                                <th style="padding: 10px 14px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid #e5e7eb;">Action</th>
                             </tr>
                         </thead>
                         <tbody id="peer-assign-tbody">
-                            <tr><td colspan="5" style="text-align: center; padding: 24px; color: var(--muted);">Select filters and click Filter to view assignments.</td></tr>
+                            <tr><td colspan="6" style="text-align: center; padding: 24px; color: var(--muted);">Select filters and click Filter to view assignments.</td></tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- Tab: Manual Assign -->
+            <div id="peerTabContent-manual" class="peer-tab-content" style="display: none; padding: 24px;">
+                <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #3b82f6; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; display: flex; gap: 10px; align-items: flex-start;">
+                    <i class='bx bx-info-circle' style="color: #1e40af; font-size: 16px; margin-top: 1px; flex-shrink: 0;"></i>
+                    <p style="margin: 0; font-size: 13px; color: #1e3a8a; line-height: 1.5;">Use this form to manually create a single peer assignment. The evaluator and evaluatee must be from the <strong>same department</strong>. Employees cannot evaluate themselves.</p>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 6px;">
+                            <i class='bx bx-calendar' style="color: var(--spc-maroon);"></i> Academic Term
+                        </label>
+                        <select id="manual-term" style="width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 14px; color: #1f2937; background: #fff; outline: none;" onchange="loadFacultyForManualTab()">
+                            <option value="" disabled selected>Select term...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 6px;">
+                            <i class='bx bx-buildings' style="color: var(--spc-maroon);"></i> Department
+                        </label>
+                        <select id="manual-dept" style="width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 14px; color: #1f2937; background: #fff; outline: none;" onchange="loadFacultyForManualTab()">
+                            <option value="" disabled selected>Select department...</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 6px;">
+                            <i class='bx bx-user' style="color: var(--spc-maroon);"></i> Evaluator
+                        </label>
+                        <select id="manual-evaluator" style="width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 14px; color: #1f2937; background: #fff; outline: none;" onchange="updateManualEvaluateeOptions()">
+                            <option value="" disabled selected>Select term &amp; department first</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 6px;">
+                            <i class='bx bx-user-check' style="color: #3b82f6;"></i> Evaluatee
+                        </label>
+                        <select id="manual-evaluatee" style="width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 14px; color: #1f2937; background: #fff; outline: none;">
+                            <option value="" disabled selected>Select evaluator first</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="manual-assign-msg" style="display: none; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px; font-weight: 500;"></div>
+
+                <div style="display: flex; gap: 10px;">
+                    <button onclick="submitManualAssignment()" class="btn primary" style="flex: 1; justify-content: center; display: flex; align-items: center; gap: 6px;">
+                        <i class='bx bx-user-plus'></i> Add Assignment
+                    </button>
+                    <button onclick="closePeerModal()" class="btn secondary" style="padding: 8px 20px;">Cancel</button>
                 </div>
             </div>
         </div>
     </div>
 
     <div id="evaluationModal" class="hr-modal-wrapper" style="display: none;">
-      <div class="hr-modal-content" style="max-width: 800px; padding: 0;">
-          <div class="emp-modal-header" style="border-radius: 12px 12px 0 0; background: linear-gradient(90deg, #7b1113, #a71d2a);">
-              <h2 id="modalTitle" style="color: white; font-size: 1.25rem;">Evaluation Report: Faculty Name</h2>
-              <span class="emp-close" onclick="closeModal()" style="color: white;">&times;</span>
+      <div class="hr-modal-content" style="max-width: 860px; width: 95vw; padding: 0; overflow: hidden; display: flex; flex-direction: column; max-height: 90vh;">
+
+          <!-- Header -->
+          <div style="background: linear-gradient(135deg, var(--spc-maroon), #a71d2a); padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
+              <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+                  <div style="width: 44px; height: 44px; background: rgba(255,255,255,0.15); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                      <i class='bx bx-check-shield' style="font-size: 22px; color: #fff;"></i>
+                  </div>
+                  <div style="min-width: 0;">
+                      <h2 id="modalTitle" style="color: #fff; font-size: 1.05rem; margin: 0; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Evaluation Report</h2>
+                      <p id="reportSemester" style="color: rgba(255,255,255,0.75); font-size: 12px; margin: 3px 0 0;">Loading...</p>
+                  </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: 16px;">
+                  <button id="modalDownloadBtn" data-personnel-id="0"
+                      style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.35); color: #fff; border-radius: 8px; padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background .15s;"
+                      onmouseover="this.style.background='rgba(255,255,255,0.25)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
+                      <i class='bx bx-download'></i> Download PDF
+                  </button>
+                  <button onclick="closeModal()"
+                      style="background: rgba(255,255,255,0.15); border: none; color: #fff; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-size: 20px; display: flex; align-items: center; justify-content: center; line-height: 1; transition: background .15s;"
+                      onmouseover="this.style.background='rgba(255,255,255,0.25)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">&times;</button>
+              </div>
           </div>
-          <div class="emp-modal-body" style="padding: 24px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h3 style="margin: 0; font-size: 1.1rem; color: #333;">Summary for <span id="reportSemester">Semester 1, AY 2025-2026</span></h3>
-                <button class="btn primary" id="modalDownloadBtn" data-personnel-id="0">
-                    <i class='bx bx-download'></i>&nbsp; Download PDF
-                </button>
-              </div>
 
-              <div class="report-content" id="reportContent">
-                  <div class="card" style="margin-bottom: 20px;">
-                      <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 15px; color: var(--spc-maroon); font-weight: 700;">Overall Rating Breakdown</h4>
-                      <div style="display: flex; align-items: center; gap: 30px; flex-wrap: wrap;">
-                          <div class="progress-circle" id="overallRatingCircle" style="--percentage: 0;">
-                              <span id="overallRatingValue">0.00</span>
-                          </div>
-                          <div style="flex-grow: 1;">
-                              <div style="margin-bottom: 10px;">
-                                  <span style="font-weight: 600; font-size: 15px;">Final Status:</span>
-                                  <span class="status above-average" id="finalStatusBadge" style="margin-left: 8px;">N/A</span>
-                              </div>
-                              <table style="width: 100%; border-collapse: separate; border-spacing: 0 5px;">
-                                  <tbody id="ratingBreakdownBody">
-                                      </tbody>
-                              </table>
-                          </div>
+          <!-- Scrollable Body -->
+          <div id="reportContent" style="overflow-y: auto; padding: 24px; flex: 1;">
+
+              <!-- Score Summary: circle + breakdown side-by-side -->
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+
+                  <!-- Overall Circle -->
+                  <div style="background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+                      <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted);">Overall Rating</div>
+                      <div class="progress-circle" id="overallRatingCircle" style="--percentage: 0;">
+                          <span id="overallRatingValue">0.00</span>
                       </div>
+                      <span class="status above-average" id="finalStatusBadge">N/A</span>
                   </div>
 
-                  <div class="card" style="margin-bottom: 20px;">
-                      <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 15px; color: var(--spc-maroon); font-weight: 700;">Student Feedback (Total Responses: <span id="studentResponsesCount">0</span>)</h4>
-                      <ul id="feedbackList" style="list-style: none; padding: 0;">
-                          </ul>
-                      <div id="noFeedback" style="text-align: center; color: var(--muted); padding: 20px; border: 1px dashed #eee;">No qualitative feedback available.</div>
+                  <!-- Score Breakdown -->
+                  <div style="background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px;">
+                      <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 14px;">Score Breakdown</div>
+                      <table style="width: 100%; border-collapse: separate; border-spacing: 0 6px;">
+                          <tbody id="ratingBreakdownBody">
+                              <tr><td colspan="2" style="text-align:center; color:var(--muted); font-size:13px;">Loading...</td></tr>
+                          </tbody>
+                      </table>
+                  </div>
+
+              </div>
+
+              <!-- Student Feedback -->
+              <div style="border: 1px solid #fde68a; border-radius: 12px; overflow: hidden; margin-bottom: 16px;">
+                  <div style="background: #fffbea; border-bottom: 1px solid #fde68a; padding: 11px 16px; display: flex; align-items: center; gap: 8px;">
+                      <i class='bx bxs-graduation' style="color: #92400e; font-size: 15px;"></i>
+                      <span style="font-weight: 700; font-size: 13px; color: #78350f;">Student Feedback</span>
+                      <span style="margin-left: auto; background: #fef3c7; color: #92400e; border-radius: 999px; padding: 2px 10px; font-size: 11px; font-weight: 700; border: 1px solid #fde68a;">
+                          <span id="studentResponsesCount">0</span> responses
+                      </span>
+                  </div>
+                  <div style="padding: 14px 16px; background: #fff;">
+                      <ul id="feedbackList" style="list-style: none; padding: 0; margin: 0;"></ul>
+                      <div id="noFeedback" style="text-align: center; color: var(--muted); padding: 16px; font-size: 13px;">No qualitative feedback available.</div>
                   </div>
               </div>
+
+              <!-- Peer Feedback -->
+              <div id="peerFeedbackCard" style="border: 1px solid #bfdbfe; border-radius: 12px; overflow: hidden; margin-bottom: 8px;">
+                  <div style="background: #eff6ff; border-bottom: 1px solid #bfdbfe; padding: 11px 16px; display: flex; align-items: center; gap: 8px;">
+                      <i class='bx bx-group' style="color: #1d4ed8; font-size: 15px;"></i>
+                      <span style="font-weight: 700; font-size: 13px; color: #1e3a8a;">Peer Feedback</span>
+                      <span style="margin-left: auto; background: #dbeafe; color: #1e40af; border-radius: 999px; padding: 2px 10px; font-size: 11px; font-weight: 700; border: 1px solid #bfdbfe;">
+                          <span id="peerSubmissionsCount">0</span> submission(s)
+                      </span>
+                  </div>
+                  <div style="padding: 14px 16px; background: #fff;">
+                      <div id="peerFeedbackList"></div>
+                      <div id="noPeerFeedback" style="text-align: center; color: var(--muted); padding: 16px; font-size: 13px;">No peer evaluation feedback available.</div>
+                  </div>
+              </div>
+
           </div>
       </div>
     </div>
@@ -505,6 +606,60 @@
     background: #fff;
 }
 .peer-tab-content { animation: fadeIn .2s ease; }
+
+/* ── Toolbar Buttons ──────────────────────────────── */
+.eval-btn-ghost {
+    border: 1.5px solid #e5e7eb;
+    color: #374151;
+    background: #fff;
+    transition: border-color .15s, background .15s, color .15s;
+}
+.eval-btn-ghost:hover { border-color: #9ca3af; background: #f3f4f6; color: #111; }
+
+.eval-btn-peer {
+    border: 1.5px solid var(--spc-maroon);
+    color: var(--spc-maroon);
+    background: #fff5f5;
+    transition: background .15s, border-color .15s;
+}
+.eval-btn-peer:hover { background: #fee2e2; border-color: #991b1b; }
+
+.eval-btn-blue {
+    background: #1e40af;
+    color: #fff;
+    transition: background .15s;
+}
+.eval-btn-blue:hover { background: #1d4ed8; }
+
+/* ── Evaluations Table ────────────────────────────── */
+#evalTable {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: 100%;
+}
+#evalTable thead th {
+    background: #f8fafc;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    padding: 11px 14px;
+    border-top: 1px solid #e5e7eb;
+    border-bottom: 2px solid #e5e7eb;
+    white-space: nowrap;
+}
+#evalTable tbody tr { transition: background .1s; }
+#evalTable tbody tr:hover td { background: #f9fafb; }
+#evalTable tbody td {
+    padding: 11px 14px;
+    border-bottom: 1px solid #f1f3f5;
+    font-size: 13px;
+    vertical-align: middle;
+    color: #1f2937;
+}
+#evalTable tbody tr:last-child td { border-bottom: none; }
+#evalTable tbody td:first-child { font-weight: 600; color: #111827; }
 </style>
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script>
@@ -627,11 +782,7 @@ function renderTablePage(pageNumber) {
             
         // Check if this specific row is being edited (It shouldn't be if we use loadEvaluations() correctly, but good for rendering checks)
         
-        // Peer score is system-generated from peer_evaluation_submissions — read-only.
-        // Show a lock icon with tooltip to indicate it cannot be manually edited.
-        const peerScoreDisplay = parseFloat(row.peer_score) > 0
-            ? `${peerScore} <i class='bx bx-lock-alt' title="Auto-calculated from submitted peer evaluations" style="color:#9ca3af;font-size:12px;vertical-align:middle;cursor:help;"></i>`
-            : `— <i class='bx bx-lock-alt' title="No peer evaluations submitted yet" style="color:#d1d5db;font-size:12px;vertical-align:middle;cursor:help;"></i>`;
+        const peerScoreDisplay = parseFloat(row.peer_score) > 0 ? peerScore : '—';
 
         const actionButtons = `
             <button class="btn action" onclick="openModal(${row.personnelid}, '${row.name}', ${rating.toFixed(2)}, ${studentResponses})">
@@ -886,7 +1037,7 @@ function fetchSemestersAndPopulate() {
             data.semesters.forEach(function(sem) {
                 const isCurrent = sem.is_current;
                 const selectedAttr = (isCurrent && !currentTermSet) ? 'selected' : '';
-                const display = `${sem.text}`;
+                const display = isCurrent ? `${sem.text} (Current)` : sem.text;
 
                 semesterFilter.append(
                     `<option 
@@ -956,16 +1107,20 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
     const statusInfo = getStatusInfo(overallRating);
     $('#finalStatusBadge').text(statusInfo.label).removeClass().addClass(`status ${statusInfo.class}`);
     
-    $('#reportSemester').text('Loading...'); // Reset semester text temporarily
-    $('#ratingBreakdownBody').empty().append('<tr><td colspan="2" style="text-align:center;">Loading details...</td></tr>');
+    $('#reportSemester').text('Loading...');
+    $('#ratingBreakdownBody').html('<tr><td colspan="2" style="text-align:center;color:var(--muted);font-size:13px;">Loading...</td></tr>');
     $('#feedbackList').empty();
     $('#noFeedback').show();
+    $('#peerFeedbackList').empty();
+    $('#noPeerFeedback').show();
+    $('#peerSubmissionsCount').text(0);
     MODAL.style.display = 'flex';
 
     const selectedTermId = $('#semesterFilter').val() || window.CURRENT_TERM_ID;
     $.get(`/api/hr/faculty-evaluation-report/${personnelId}?term_id=${selectedTermId}`, function(data) {
         $('#ratingBreakdownBody').empty();
         $('#feedbackList').empty();
+        $('#peerFeedbackList').empty();
         
         if (data.success && data.report) {
             const report = data.report;
@@ -1056,6 +1211,33 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
                 $('#noFeedback').show().text('No qualitative feedback available.');
             }
             
+            // --- Peer Submissions ---
+            const peerSubs = report.peer_submissions || [];
+            $('#peerSubmissionsCount').text(peerSubs.length);
+            if (peerSubs.length > 0) {
+                $('#noPeerFeedback').hide();
+                peerSubs.forEach(function(sub) {
+                    let html = `<div style="margin-bottom: 14px; padding: 12px 14px; border: 1px solid #dbeafe; border-left: 3px solid #3b82f6; border-radius: 6px; background: #f8fbff;">`;
+                    html += `<div style="font-weight: 700; font-size: 13px; color: #1e40af; margin-bottom: 8px;"><i class='bx bx-user' style="margin-right: 5px;"></i>${sub.evaluator_name} <span style="font-weight: 400; color: var(--muted); font-size: 12px;">— Score: ${sub.final_score.toFixed(2)}</span></div>`;
+                    if (sub.strengths) {
+                        html += `<div style="margin-bottom: 6px;"><span style="font-weight: 600; font-size: 12px; color: #166534;">Strengths:</span> <span style="font-size: 13px; color: #374151;">${sub.strengths}</span></div>`;
+                    }
+                    if (sub.growth) {
+                        html += `<div style="margin-bottom: 6px;"><span style="font-weight: 600; font-size: 12px; color: #92400e;">Areas for Growth:</span> <span style="font-size: 13px; color: #374151;">${sub.growth}</span></div>`;
+                    }
+                    if (sub.comments) {
+                        html += `<div><span style="font-weight: 600; font-size: 12px; color: #374151;">Comments:</span> <span style="font-size: 13px; font-style: italic; color: #374151;">${sub.comments}</span></div>`;
+                    }
+                    if (!sub.strengths && !sub.growth && !sub.comments) {
+                        html += `<span style="font-size: 12px; color: var(--muted);">No written feedback provided.</span>`;
+                    }
+                    html += `</div>`;
+                    $('#peerFeedbackList').append(html);
+                });
+            } else {
+                $('#noPeerFeedback').show();
+            }
+
             let cleanedReportSemester = report.semester_display.replace('AY AY', 'AY').replace('  ', ' ').trim();
             $('#reportSemester').text(cleanedReportSemester);
         } else {
@@ -1355,33 +1537,44 @@ function closePeerModal() {
 }
 
 function switchPeerTab(tab) {
-    ['generate', 'view'].forEach(t => {
+    ['generate', 'view', 'manual'].forEach(t => {
         document.getElementById(`peerTabContent-${t}`).style.display = t === tab ? 'block' : 'none';
         document.getElementById(`peerTab-${t}`).classList.toggle('active', t === tab);
     });
     if (tab === 'view') loadHRPeerAssignments();
 }
 
+let PEER_MODAL_ALL_FACULTY = []; // cached faculty list for manual tab
+
 async function populatePeerModalDropdowns() {
-    const deptSelect  = document.getElementById('assignment-dept');
-    const termSelect  = document.getElementById('assignment-acad-id');
-    const viewDeptSel = document.getElementById('view-dept-filter');
-    const viewTermSel = document.getElementById('view-term-filter');
+    const deptSelect   = document.getElementById('assignment-dept');
+    const termSelect   = document.getElementById('assignment-acad-id');
+    const viewDeptSel  = document.getElementById('view-dept-filter');
+    const viewTermSel  = document.getElementById('view-term-filter');
+    const manualDept   = document.getElementById('manual-dept');
+    const manualTerm   = document.getElementById('manual-term');
 
     try {
-        const [deptRes, termRes] = await Promise.all([
+        const [deptRes, termRes, facultyRes] = await Promise.all([
             fetch('/api/hr/colleges-list'),
-            fetch('/api/hr/acadcalendar')
+            fetch('/api/hr/acadcalendar'),
+            fetch('/api/hr/faculty-list')
         ]);
-        const deptData = await deptRes.json();
-        const termData = await termRes.json();
+        const deptData    = await deptRes.json();
+        const termData    = await termRes.json();
+        const facultyData = await facultyRes.json();
+
+        if (facultyData.success && facultyData.faculty_list) {
+            PEER_MODAL_ALL_FACULTY = facultyData.faculty_list;
+        }
 
         if (deptData.success && deptData.colleges.length > 0) {
             const deptOpts = deptData.colleges.map(c =>
                 `<option value="${c.collegename}">${c.collegename}</option>`
             ).join('');
-            deptSelect.innerHTML = '<option value="" disabled selected>Select Department</option>' + deptOpts;
+            deptSelect.innerHTML  = '<option value="" disabled selected>Select Department</option>' + deptOpts;
             viewDeptSel.innerHTML = '<option value="">All Departments</option>' + deptOpts;
+            manualDept.innerHTML  = '<option value="" disabled selected>Select department...</option>' + deptOpts;
         } else {
             deptSelect.innerHTML = '<option value="" disabled selected>No departments found</option>';
         }
@@ -1391,11 +1584,15 @@ async function populatePeerModalDropdowns() {
                 const label = `${t.year} — ${t.semester}${t.is_current ? ' (Current)' : ''}`;
                 return `<option value="${t.id}">${label}</option>`;
             }).join('');
-            termSelect.innerHTML = '<option value="" disabled selected>Select Academic Term</option>' + termOpts;
+            termSelect.innerHTML  = '<option value="" disabled selected>Select Academic Term</option>' + termOpts;
             viewTermSel.innerHTML = '<option value="">All Terms</option>' + termOpts;
-            // Pre-select current term in view filter
+            manualTerm.innerHTML  = '<option value="" disabled selected>Select term...</option>' + termOpts;
+            // Pre-select current term in view + manual filters
             const currentTerm = termData.calendar_records.find(t => t.is_current);
-            if (currentTerm) viewTermSel.value = currentTerm.id;
+            if (currentTerm) {
+                viewTermSel.value = currentTerm.id;
+                manualTerm.value  = currentTerm.id;
+            }
         } else {
             termSelect.innerHTML = '<option value="" disabled selected>No terms found</option>';
         }
@@ -1411,7 +1608,7 @@ async function loadHRPeerAssignments() {
     const dept   = document.getElementById('view-dept-filter').value;
     const tbody  = document.getElementById('peer-assign-tbody');
 
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted);"><i class='bx bx-loader-alt bx-spin'></i> Loading...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted);"><i class='bx bx-loader-alt bx-spin'></i> Loading...</td></tr>`;
     document.getElementById('peer-assign-summary').style.display = 'none';
 
     try {
@@ -1426,7 +1623,7 @@ async function loadHRPeerAssignments() {
 
         const assignments = data.assignments;
         if (assignments.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--muted);">No assignments found for the selected filters.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted);">No assignments found for the selected filters.</td></tr>`;
             return;
         }
 
@@ -1434,12 +1631,19 @@ async function loadHRPeerAssignments() {
             const statusBadge = a.is_completed
                 ? `<span style="background:#dcfce7;color:#065f46;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;"><i class='bx bx-check'></i> Completed</span>`
                 : `<span style="background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;"><i class='bx bx-time'></i> Pending</span>`;
+            const deleteBtn = !a.is_completed
+                ? `<button onclick="deletePeerAssignment(${a.assignment_id})" title="Delete assignment"
+                       style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:13px;line-height:1;">
+                       <i class='bx bx-trash'></i>
+                   </button>`
+                : `<span style="color:var(--muted);font-size:12px;">—</span>`;
             return `<tr>
                 <td style="padding:9px 14px;border-bottom:1px solid #f1f3f7;"><i class='bx bx-user' style="color:var(--spc-maroon);margin-right:5px;"></i>${a.evaluator_name}</td>
                 <td style="padding:9px 14px;border-bottom:1px solid #f1f3f7;"><i class='bx bx-user-check' style="color:#3b82f6;margin-right:5px;"></i>${a.evaluatee_name}</td>
                 <td style="padding:9px 14px;border-bottom:1px solid #f1f3f7;font-size:12px;color:var(--muted);">${a.department}</td>
                 <td style="padding:9px 14px;border-bottom:1px solid #f1f3f7;font-size:12px;color:var(--muted);">${a.period}</td>
                 <td style="padding:9px 14px;border-bottom:1px solid #f1f3f7;text-align:center;">${statusBadge}</td>
+                <td style="padding:9px 14px;border-bottom:1px solid #f1f3f7;text-align:center;">${deleteBtn}</td>
             </tr>`;
         }).join('');
 
@@ -1450,8 +1654,109 @@ async function loadHRPeerAssignments() {
         document.getElementById('pa-pending').textContent   = data.total - data.completed;
 
     } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:20px;color:#dc2626;">Failed to load assignments.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:#dc2626;">Failed to load assignments.</td></tr>`;
         console.error(err);
+    }
+}
+
+async function deletePeerAssignment(assignmentId) {
+    if (!confirm('Delete this peer assignment? This cannot be undone.')) return;
+    try {
+        const res = await fetch(`/api/hr/peer-assignments/${assignmentId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+            showToast('Assignment deleted.', 'success');
+            loadHRPeerAssignments();
+        } else {
+            showToast(data.error || 'Failed to delete assignment.', 'error');
+        }
+    } catch (err) {
+        showToast('Server error while deleting.', 'error');
+    }
+}
+
+function loadFacultyForManualTab() {
+    const dept = document.getElementById('manual-dept').value;
+    const evaluatorSel  = document.getElementById('manual-evaluator');
+    const evaluateeSel  = document.getElementById('manual-evaluatee');
+
+    if (!dept) {
+        evaluatorSel.innerHTML  = '<option value="" disabled selected>Select term &amp; department first</option>';
+        evaluateeSel.innerHTML  = '<option value="" disabled selected>Select evaluator first</option>';
+        return;
+    }
+
+    const filtered = PEER_MODAL_ALL_FACULTY.filter(f => f.college === dept && f.role_id === 20001);
+    if (filtered.length === 0) {
+        evaluatorSel.innerHTML = '<option value="" disabled selected>No faculty in this department</option>';
+        evaluateeSel.innerHTML = '<option value="" disabled selected>No faculty in this department</option>';
+        return;
+    }
+
+    const opts = filtered.map(f => `<option value="${f.personnel_id}">${f.name}</option>`).join('');
+    evaluatorSel.innerHTML = '<option value="" disabled selected>Select evaluator...</option>' + opts;
+    evaluateeSel.innerHTML = '<option value="" disabled selected>Select evaluator first</option>';
+}
+
+function updateManualEvaluateeOptions() {
+    const dept           = document.getElementById('manual-dept').value;
+    const evaluatorId    = document.getElementById('manual-evaluator').value;
+    const evaluateeSel   = document.getElementById('manual-evaluatee');
+
+    if (!dept || !evaluatorId) return;
+
+    const filtered = PEER_MODAL_ALL_FACULTY.filter(
+        f => f.college === dept && f.role_id === 20001 && String(f.personnel_id) !== String(evaluatorId)
+    );
+    if (filtered.length === 0) {
+        evaluateeSel.innerHTML = '<option value="" disabled selected>No other faculty in this department</option>';
+        return;
+    }
+    evaluateeSel.innerHTML = '<option value="" disabled selected>Select evaluatee...</option>' +
+        filtered.map(f => `<option value="${f.personnel_id}">${f.name}</option>`).join('');
+}
+
+async function submitManualAssignment() {
+    const termId      = document.getElementById('manual-term').value;
+    const evaluatorId = document.getElementById('manual-evaluator').value;
+    const evaluateeId = document.getElementById('manual-evaluatee').value;
+    const msgBox      = document.getElementById('manual-assign-msg');
+
+    if (!termId || !evaluatorId || !evaluateeId) {
+        msgBox.style.display = 'block';
+        msgBox.style.background = '#fef3c7';
+        msgBox.style.color = '#92400e';
+        msgBox.style.border = '1px solid #fde68a';
+        msgBox.textContent = 'Please fill in all fields before submitting.';
+        return;
+    }
+
+    msgBox.style.display = 'none';
+    try {
+        const res = await fetch('/api/hr/peer-assignments/manual', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ evaluator_id: evaluatorId, evaluatee_id: evaluateeId, acadcalendar_id: termId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('Assignment created successfully!', 'success');
+            document.getElementById('manual-evaluator').value = '';
+            document.getElementById('manual-evaluatee').value = '';
+            msgBox.style.display = 'none';
+        } else {
+            msgBox.style.display = 'block';
+            msgBox.style.background = '#fef2f2';
+            msgBox.style.color = '#991b1b';
+            msgBox.style.border = '1px solid #fecaca';
+            msgBox.textContent = data.error || 'Failed to create assignment.';
+        }
+    } catch (err) {
+        msgBox.style.display = 'block';
+        msgBox.style.background = '#fef2f2';
+        msgBox.style.color = '#991b1b';
+        msgBox.style.border = '1px solid #fecaca';
+        msgBox.textContent = 'Server error. Please try again.';
     }
 }
 

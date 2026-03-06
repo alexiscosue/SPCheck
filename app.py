@@ -7691,6 +7691,16 @@ def generate_peer_assignments(acadcalendar_id, department):
         random.shuffle(faculty_ids)
         n = len(faculty_ids)
 
+        # Delete existing non-completed assignments for this dept+term before regenerating
+        cur.execute("""
+            DELETE FROM peer_assignments
+            WHERE acadcalendar_id = %s
+              AND evaluator_id IN (
+                  SELECT personnel_id FROM personnel WHERE college_id = %s
+              )
+              AND is_completed = FALSE
+        """, (acadcalendar_id, college_id))
+
         for i in range(n):
             evaluator = faculty_ids[i]
             # Use circular shift (i+1 and i+2) to pick 2 distinct peers
@@ -7862,6 +7872,100 @@ def api_hr_peer_assignments():
         return jsonify(success=False, error=str(e)), 500
 
 
+@app.route('/api/hr/peer-assignments/<int:assignment_id>', methods=['DELETE'])
+@require_auth([20003])
+def api_delete_peer_assignment(assignment_id):
+    """HR deletes a single non-completed peer assignment."""
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT is_completed FROM peer_assignments WHERE assignment_id = %s",
+            (assignment_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify(success=False, error="Assignment not found."), 404
+
+        if row[0]:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify(success=False, error="Cannot delete a completed assignment."), 400
+
+        cursor.execute(
+            "DELETE FROM peer_assignments WHERE assignment_id = %s",
+            (assignment_id,)
+        )
+        conn.commit()
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        hr_info = get_personnel_info(session['user_id'])
+        log_audit_action(
+            hr_info.get('personnel_id'),
+            "Deleted Peer Assignment",
+            f"Deleted peer assignment ID {assignment_id}."
+        )
+        return jsonify(success=True, message="Assignment deleted.")
+
+    except Exception as e:
+        print(f"Error deleting peer assignment: {e}")
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/hr/peer-assignments/manual', methods=['POST'])
+@require_auth([20003])
+def api_manual_peer_assignment():
+    """HR manually creates a single peer assignment."""
+    try:
+        data = request.get_json()
+        evaluator_id = data.get('evaluator_id')
+        evaluatee_id = data.get('evaluatee_id')
+        acadcalendar_id = data.get('acadcalendar_id')
+
+        if not all([evaluator_id, evaluatee_id, acadcalendar_id]):
+            return jsonify(success=False, error="Missing required fields."), 400
+
+        if int(evaluator_id) == int(evaluatee_id):
+            return jsonify(success=False, error="Evaluator and evaluatee cannot be the same person."), 400
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        # Prevent duplicate assignments
+        cursor.execute("""
+            SELECT 1 FROM peer_assignments
+            WHERE evaluator_id = %s AND evaluatee_id = %s AND acadcalendar_id = %s
+        """, (evaluator_id, evaluatee_id, acadcalendar_id))
+        if cursor.fetchone():
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify(success=False, error="This assignment already exists."), 409
+
+        cursor.execute("""
+            INSERT INTO peer_assignments (evaluator_id, evaluatee_id, acadcalendar_id, is_completed)
+            VALUES (%s, %s, %s, FALSE)
+        """, (evaluator_id, evaluatee_id, acadcalendar_id))
+        conn.commit()
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        hr_info = get_personnel_info(session['user_id'])
+        log_audit_action(
+            hr_info.get('personnel_id'),
+            "Manual Peer Assignment",
+            f"Manually assigned evaluator ID {evaluator_id} to evaluate ID {evaluatee_id} for term {acadcalendar_id}."
+        )
+        return jsonify(success=True, message="Assignment created.")
+
+    except Exception as e:
+        print(f"Error creating manual peer assignment: {e}")
+        return jsonify(success=False, error=str(e)), 500
+
+
 @app.route('/faculty/peer-evaluations')
 @require_auth([20001, 20002])
 def peer_evaluations_list():
@@ -7882,7 +7986,7 @@ def submit_peer_eval(evaluatee_id):
             cat2_avg = sum(scores[5:10]) / 5
             cat3_avg = sum(scores[10:15]) / 5
             cat4_avg = sum(scores[15:20]) / 5
-            final_score = (cat1_avg + cat2_avg + cat3_avg + cat4_avg) / 4
+            final_score = (cat1_avg * 0.30) + (cat2_avg * 0.30) + (cat3_avg * 0.20) + (cat4_avg * 0.20)
 
             evaluator_name = request.form.get('evaluator_name', '').strip() or None
             strengths = request.form.get('strengths', '').strip()
@@ -8975,6 +9079,25 @@ def api_hr_faculty_evaluation_report(personnel_id):
             qualitative_feedback.extend(type_feedback.get(eval_type, []))
 
 
+        # 4. Fetch peer evaluation submissions for richer feedback
+        cursor.execute("""
+            SELECT evaluator_name, strengths, growth, comments, final_score
+            FROM peer_evaluation_submissions
+            WHERE evaluatee_id = %s AND acadcalendar_id = %s
+            ORDER BY date_submitted
+        """, (personnel_id, term_id))
+        peer_submission_rows = cursor.fetchall()
+        peer_submissions = []
+        for row in peer_submission_rows:
+            ev_name, strengths, growth, comments, final_score = row
+            peer_submissions.append({
+                'evaluator_name': ev_name or 'Anonymous',
+                'strengths': (strengths or '').strip(),
+                'growth': (growth or '').strip(),
+                'comments': (comments or '').strip(),
+                'final_score': float(final_score) if final_score else 0.0
+            })
+
         cursor.close()
         db_pool.return_connection(conn)
 
@@ -8987,7 +9110,8 @@ def api_hr_faculty_evaluation_report(personnel_id):
                 'overall_rating': total_score,
                 'score_complete': score_complete,
                 'rating_breakdown': rating_breakdown,
-                'qualitative_feedback': qualitative_feedback
+                'qualitative_feedback': qualitative_feedback,
+                'peer_submissions': peer_submissions
             }
         })
 
