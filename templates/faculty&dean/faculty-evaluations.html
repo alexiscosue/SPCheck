@@ -1,239 +1,706 @@
 {% extends "faculty&dean/faculty-base.html" %}
 
 {% block title %}My Evaluations{% endblock %}
-
 {% block page_title %}My Evaluations{% endblock %}
 
 {% block content %}
-  <section class="grid">
-    <div class="kpis card" id="evaluation-kpis">
-      <div class="kpi card"><div class="icon eval"><i class='bx bx-star'></i></div><div><div class="title">Overall Average</div><div class="value" id="kpi-overall">--</div></div></div>
-      <div class="kpi card"><div class="icon fac"><i class='bx bx-user'></i></div><div><div class="title">Student Score</div><div class="value" id="kpi-student">--</div></div></div>
-      <div class="kpi card"><div class="icon att"><i class='bx bx-group'></i></div><div><div class="title">Peer Score</div><div class="value" id="kpi-peer">--</div></div></div>
-      <div class="kpi card"><div class="icon promo"><i class='bx bx-award'></i></div><div><div class="title">Supervisor Score</div><div class="value" id="kpi-supervisor">--</div></div></div>
+<section class="grid">
+
+  <!-- ── KPI Cards ── -->
+  <div class="kpis card" id="evaluation-kpis" style="flex-wrap:wrap; gap:12px;">
+    <div class="kpi card">
+      <div class="icon eval"><i class='bx bx-star'></i></div>
+      <div><div class="title">Overall Average</div><div class="value" id="kpi-overall">--</div></div>
+    </div>
+    <div class="kpi card">
+      <div class="icon fac"><i class='bx bx-user'></i></div>
+      <div><div class="title">Student Score</div><div class="value" id="kpi-student">--</div></div>
+    </div>
+    <div class="kpi card">
+      <div class="icon att"><i class='bx bx-group'></i></div>
+      <div><div class="title">Peer Score</div><div class="value" id="kpi-peer">--</div></div>
+    </div>
+    <div class="kpi card">
+      <div class="icon promo"><i class='bx bx-award'></i></div>
+      <div><div class="title">Supervisor Score</div><div class="value" id="kpi-supervisor">--</div></div>
     </div>
 
-    <div class="chart-large">
-      <div class="chart-card-f  card">
-        <div class="card-header">
-          <i class='bx bx-list-ul'></i>
-          <span>Peer Evaluation Tasks</span>
-        </div>
-        <div class="table">
-          <table aria-label="Peers I need to evaluate">
-            <thead>
-              <tr>
-                <th>Faculty Member</th>
-                <th>Department</th>
-                <th>Evaluation Period</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody id="peer-evaluations-body">
-              <tr>
-                <td colspan="4" style="text-align:center; padding:1.5rem; color:var(--muted);">
-                  Retrieving assigned peer reviews...
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+  </div>
+
+  <!-- ── Semester Filter ── -->
+  <div class="card" id="semester-filter-bar"
+       data-faculty-name="{{ session.get('full_name', session.get('name', '')) }}"
+       style="grid-column: 1 / -1; display:flex; align-items:center; justify-content:space-between; padding:10px 16px; flex-wrap:wrap; gap:8px;">
+    <div style="display:flex; align-items:center; gap:8px; font-size:13px;">
+      <i class='bx bx-calendar-check' style="color:var(--primary); font-size:16px;"></i>
+      <span id="filter-context-label" style="font-weight:600; color:#1f2937;">Loading...</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <select id="semesterFilter" style="padding:6px 12px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; cursor:pointer; min-width:220px;">
+        <option value="">Loading semesters...</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- ── Main Column ── -->
+  <div class="chart-large">
+
+    <!-- Peer Evaluation Tasks (urgent — first) -->
+    <div class="chart-card-f card">
+      <div class="card-header">
+        <i class='bx bx-list-ul'></i>
+        <span>Peer Evaluation Tasks</span>
+        <span id="peer-tasks-badge" style="display:none; margin-left:auto; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; background:#fee2e2; color:#dc2626;"></span>
       </div>
-
-      <div class="card chart-large">
-        <div class="tabs">
-          <button class="tab-btn active" data-tab="feedback">Student Feedback</button>
-          <button class="tab-btn" data-tab="trends">Evaluation Trends</button>
-        </div>
-
-        <div id="feedback" class="tab-content active">
-          <div class="table">
-            <table aria-label="Recent feedback from all evaluators">
-              <tbody id="feedback-body">
-                <tr><td style="text-align:center; padding:1.5rem; color:var(--muted);">Loading student feedback...</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div id="trends" class="tab-content">
-          <canvas id="trendChart" height="190"></canvas>
-        </div>
+      <div class="table">
+        <table aria-label="Peers I need to evaluate">
+          <thead>
+            <tr>
+              <th>Faculty Member</th>
+              <th>Department</th>
+              <th>Period</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="peer-evaluations-body">
+            <tr>
+              <td colspan="4" style="text-align:center; padding:1.5rem; color:var(--muted);">
+                <i class='bx bx-loader-alt bx-spin'></i> Loading...
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-
     </div>
 
-    <div class="chart-side">
-      <div class="chart-card card">
-        <div class="card-header"><i class='bx bx-pie-chart-alt'></i><span>Evaluator Weight Breakdown</span></div>
-        <canvas id="breakdownChart" height="170"></canvas>
-        <div id="breakdown-error" style="text-align:center; color:var(--muted); padding:20px; display:none;">No breakdown data.</div>
+    <!-- Evaluator Feedback (Student + Peer) -->
+    <div class="card" style="overflow:hidden; height:505px; display:flex; flex-direction:column;">
+      <div class="card-header" style="justify-content:space-between; flex-wrap:wrap; gap:8px; flex-shrink:0;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <i class='bx bx-message-square-detail'></i>
+          <span>Evaluator Feedback</span>
+        </div>
+        <div style="display:flex; gap:4px;">
+          <button class="tab-btn active" data-tab="tab-fb-student" data-group="fb"
+            style="padding:5px 14px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; border:1.5px solid var(--spc-gold); background:var(--spc-gold); color:#fff; transition:all .15s;">
+            Student
+          </button>
+          <button class="tab-btn" data-tab="tab-fb-peer" data-group="fb"
+            style="padding:5px 14px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; border:1.5px solid #e5e7eb; background:#fff; color:var(--muted); transition:all .15s;">
+            Peer
+          </button>
+        </div>
       </div>
 
-      <div class="chart-card-f card">
-        <div class="card-header"><i class='bx bx-bar-chart-square'></i><span>Department Comparison</span></div>
-        <div class="comparison-wrapper" id="comparison-wrapper">
-          <div style="text-align:center; color:var(--muted); padding:20px;">Loading comparison...</div>
+      <div id="tab-fb-student" class="tab-content active" style="padding:12px 20px 16px; flex:1; overflow-y:auto;">
+        <div id="student-feedback-list">
+          <div style="text-align:center; padding:1.5rem; color:var(--muted);"><i class='bx bx-loader-alt bx-spin'></i></div>
+        </div>
+      </div>
+      <div id="tab-fb-peer" class="tab-content" style="padding:12px 20px 0; flex:1; display:none; flex-direction:column; overflow:hidden;">
+        <!-- View mode toggle — shown once data loads -->
+        <div id="peer-view-controls" style="display:none; flex-shrink:0; gap:4px; padding-bottom:8px; border-bottom:1px solid #f1f3f7; margin-bottom:8px;">
+          <button id="peer-view-evaluator" onclick="setPeerView('evaluator')" style="padding:4px 11px; border-radius:5px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid #3b82f6; background:#3b82f6; color:#fff; transition:all .15s;">By Evaluator</button>
+          <button id="peer-view-type"      onclick="setPeerView('type')"      style="padding:4px 11px; border-radius:5px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid #e5e7eb; background:#fff; color:var(--muted); transition:all .15s;">By Type</button>
+          <button id="peer-view-single"    onclick="setPeerView('single')"    style="padding:4px 11px; border-radius:5px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid #e5e7eb; background:#fff; color:var(--muted); transition:all .15s;">Single Type</button>
+        </div>
+        <!-- Sub-controls for Single Type mode -->
+        <div id="peer-type-controls" style="display:none; flex-shrink:0; gap:4px; padding-bottom:8px; margin-bottom:8px;">
+          <button id="peer-single-strengths" onclick="setPeerSingle('strengths')" style="padding:3px 10px; border-radius:5px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid #16a34a; background:#16a34a; color:#fff; transition:all .15s;">Strengths</button>
+          <button id="peer-single-growth"    onclick="setPeerSingle('growth')"    style="padding:3px 10px; border-radius:5px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid #e5e7eb; background:#fff; color:var(--muted); transition:all .15s;">Areas for Growth</button>
+          <button id="peer-single-comments"  onclick="setPeerSingle('comments')"  style="padding:3px 10px; border-radius:5px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid #e5e7eb; background:#fff; color:var(--muted); transition:all .15s;">Comments</button>
+        </div>
+        <div id="peer-feedback-list" style="overflow-y:auto; flex:1; padding-bottom:16px;">
+          <div style="text-align:center; padding:1.5rem; color:var(--muted);"><i class='bx bx-loader-alt bx-spin'></i></div>
         </div>
       </div>
     </div>
-  </section>
+
+  </div>
+
+  <!-- ── Side Column ── -->
+  <div class="chart-side">
+
+    <!-- Score Trend -->
+    <div class="chart-card card">
+      <div class="card-header">
+        <i class='bx bx-line-chart'></i>
+        <span>Score Trend</span>
+      </div>
+      <div id="trend-loading" style="text-align:center; padding:24px 0; color:var(--muted); font-size:13px;">
+        <i class='bx bx-loader-alt bx-spin'></i>
+      </div>
+      <canvas id="trendChart" height="155" style="display:none;"></canvas>
+      <div id="trend-empty" style="display:none; text-align:center; padding:24px 0; color:var(--muted); font-size:13px;">
+        <i class='bx bx-info-circle' style="font-size:20px; display:block; margin-bottom:4px;"></i>
+        No historical data yet.
+      </div>
+    </div>
+
+    <!-- Score Breakdown Bar Chart -->
+    <div class="chart-card card">
+      <div class="card-header">
+        <i class='bx bx-bar-chart-alt-2'></i>
+        <span>Score Breakdown</span>
+        <span id="score-badge" style="display:none; margin-left:auto; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700;"></span>
+      </div>
+      <canvas id="scoresChart" height="160"></canvas>
+    </div>
+
+    <!-- Department Comparison -->
+    <div class="chart-card card">
+      <div class="card-header">
+        <i class='bx bx-bar-chart-square'></i>
+        <span>Department Comparison</span>
+      </div>
+      <canvas id="comparisonChart" height="120"></canvas>
+      <div id="comparison-scale" style="font-size:11px; color:var(--muted); text-align:right; margin-top:4px; padding-right:4px; display:none;">Scale: 0 – 4</div>
+    </div>
+
+  </div>
+
+</section>
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-  // Global reference for the chart instances
-  let trendChartInstance = null;
-  let breakdownChartInstance = null;
+  // ── Draw dashed min line only over the Overall bar ────────
+  const overallPromoPlugin = {
+    id: 'overallPromoLine',
+    afterDraw(chart) {
+      if (chart.canvas.id !== 'scoresChart') return;
+      const { ctx, scales: { y } } = chart;
+      const meta = chart.getDatasetMeta(0);
+      if (!meta?.data?.[0]) return;
+      const bar  = meta.data[0];
+      const yPx  = y.getPixelForValue(3.0);
+      const half = bar.width / 2 + 3;
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([7, 4]);
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth   = 2;
+      ctx.moveTo(bar.x - half, yPx);
+      ctx.lineTo(bar.x + half, yPx);
+      ctx.stroke();
+      ctx.restore();
+    }
+  };
+  Chart.register(overallPromoPlugin);
 
-  // --- Chart Initialization Functions ---
-  function initTrendChart(labels, data) {
-    if (trendChartInstance) trendChartInstance.destroy();
-    const trendCtx = document.getElementById('trendChart').getContext('2d');
-    trendChartInstance = new Chart(trendCtx, {
-      type: 'line',
-      data: {
-        labels: labels,
-        datasets: [{
-          label: 'Average Score',
-          data: data,
-          borderColor: '#7b1113',
-          backgroundColor: 'rgba(123,17,19,0.1)',
-          tension: 0.35,
-          fill: true,
-          pointRadius: 4,
-          pointBackgroundColor: '#7b1113'
-        }]
-      },
-      options: { responsive: true, plugins:{ legend:{ display:false } }, scales:{ y:{ min:3.5, max:5, ticks:{ stepSize:0.5 } } } }
-    });
+  const FACULTY_NAME = document.getElementById('semester-filter-bar')?.dataset.facultyName || '';
+  let currentDeptName = '';
+
+  let scoresChartInstance     = null;
+  let comparisonChartInstance = null;
+  let trendChartInstance      = null;
+  let currentTermId           = null;
+
+
+  // ── Filter Label ─────────────────────────────────────────
+  function updateFilterLabel() {
+    const sel = document.getElementById('semesterFilter');
+    const semText = sel?.options[sel.selectedIndex]?.text || '';
+    const parts = [FACULTY_NAME, currentDeptName, semText].filter(Boolean);
+    const el = document.getElementById('filter-context-label');
+    if (el) el.textContent = parts.join(' · ') || 'Loading...';
   }
 
-  function initBreakdownChart(labels, data) {
-    if (breakdownChartInstance) breakdownChartInstance.destroy();
-    const breakdownCtx = document.getElementById('breakdownChart').getContext('2d');
-    breakdownChartInstance = new Chart(breakdownCtx, {
-      type: 'doughnut',
-      data: {
-        labels: labels,
-        datasets:[{ data: data, backgroundColor:['#3b82f6','#7b1113','#f1c40f'], hoverOffset: 6 }]
-      },
-      options:{ cutout:'70%', plugins:{ legend:{ position:'bottom' } } }
-    });
-  }
-  
-  // --- Data Loading Function ---
-  async function loadEvaluationData() {
-    const apiURL = '/api/faculty/evaluations-data';
-    
-    // Set loading states
-    const kpiElements = ['kpi-overall', 'kpi-student', 'kpi-peer', 'kpi-supervisor'];
-    kpiElements.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = '...';
-    });
-    
+  // ── Semester Filter ──────────────────────────────────────
+  async function loadSemesters() {
     try {
-      const response = await fetch(apiURL);
-      const data = await response.json();
-      
-      if (data.success) {
-        const { kpis, breakdown_chart, comparison, recent_feedback } = data; 
-        
-        // 1. Update KPIs
-        document.getElementById('kpi-overall').textContent = kpis.overall_average > 0 ? kpis.overall_average.toFixed(2) : 'N/A';
-        document.getElementById('kpi-student').textContent = kpis.student_score > 0 ? kpis.student_score.toFixed(2) : 'N/A';
-        document.getElementById('kpi-peer').textContent = kpis.peer_score > 0 ? kpis.peer_score.toFixed(2) : 'N/A';
-        document.getElementById('kpi-supervisor').textContent = kpis.supervisor_score > 0 ? kpis.supervisor_score.toFixed(2) : 'N/A';
+      const res  = await fetch('/api/faculty/semesters');
+      const data = await res.json();
+      if (!data.success) { await loadEvaluationData(); return; }
 
-        // 2. Charts & Feedback
-        if (breakdown_chart.data) initBreakdownChart(breakdown_chart.labels, breakdown_chart.data);
-        populateComparison(comparison);
-        populateFeedback(recent_feedback);
-        initTrendChart(['Sem 1','Sem 2','Sem 3','Sem 4'], [4.1,4.3,4.2,4.4]);
+      const sel = document.getElementById('semesterFilter');
+      sel.innerHTML = '';
+      data.semesters.forEach(sem => {
+        const opt = document.createElement('option');
+        opt.value = sem.id;
+        opt.textContent = sem.text;
+        if (sem.is_current) { opt.selected = true; currentTermId = sem.id; }
+        sel.appendChild(opt);
+      });
+      if (!currentTermId && data.semesters.length > 0) {
+        currentTermId = data.semesters[0].id;
+        sel.value = currentTermId;
+      }
+      updateFilterLabel();
+      sel.addEventListener('change', () => { currentTermId = sel.value; updateFilterLabel(); loadEvaluationData(); });
+    } catch(e) { console.error('Semester load failed:', e); }
+    await loadEvaluationData();
+    loadPeerAssignments();
+    loadTrendChart();
+  }
+
+  // ── Main Data Load ───────────────────────────────────────
+  async function loadEvaluationData() {
+    if (!currentTermId) return;
+    setKpiLoading();
+    try {
+      const res  = await fetch(`/api/faculty/evaluations-data?term_id=${currentTermId}`);
+      const data = await res.json();
+      if (!data.success) { setKpiError(); return; }
+
+      const { kpis, comparison, recent_feedback, peer_feedback } = data;
+      const overall = parseFloat(kpis.overall_average) || 0;
+
+      document.getElementById('kpi-overall').textContent    = overall > 0 ? `${overall.toFixed(2)} / 4` : 'N/A';
+      document.getElementById('kpi-student').textContent    = kpis.student_score    > 0 ? kpis.student_score.toFixed(2)    : 'N/A';
+      document.getElementById('kpi-peer').textContent       = kpis.peer_score       > 0 ? kpis.peer_score.toFixed(2)       : 'N/A';
+      document.getElementById('kpi-supervisor').textContent = kpis.supervisor_score > 0 ? kpis.supervisor_score.toFixed(2) : 'N/A';
+
+      if (overall > 0) {
+        const badge = document.getElementById('score-badge');
+        const bc = overall >= 3.5 ? { bg:'#dcfce7', c:'#16a34a', t:'Above Average'  }
+                 : overall >= 3.0 ? { bg:'#fef9c3', c:'#ca8a04', t:'Average'        }
+                 :                  { bg:'#fee2e2', c:'#dc2626', t:'Below Average'   };
+        badge.textContent = bc.t;
+        badge.style.cssText = `display:inline-block; margin-left:auto; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700; background:${bc.bg}; color:${bc.c};`;
       }
 
-      // 3. Peer Evaluation Tasks — fetch from real API
-      await loadPeerAssignments();
-    } catch (error) {
-      console.error("Failed to load evaluation data:", error);
+      currentDeptName = comparison?.college_name || '';
+      updateFilterLabel();
+      renderScoresChart(kpis.student_score, kpis.peer_score, kpis.supervisor_score, overall);
+      renderComparisonChart(comparison);
+      renderStudentFeedback(recent_feedback);
+      renderPeerFeedback(peer_feedback);
+    } catch(e) {
+      console.error('Eval data load failed:', e);
+      setKpiError();
     }
-  } // End of loadEvaluationData
+  }
 
+  // ── Score Breakdown Chart ────────────────────────────────
+  function renderScoresChart(student, peer, supervisor, overall) {
+    if (scoresChartInstance) scoresChartInstance.destroy();
+    const ctx = document.getElementById('scoresChart').getContext('2d');
+    scoresChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: ['Overall', 'Student (55%)', 'Peer (10%)', 'Supervisor (35%)'],
+        datasets: [
+          {
+            label: '',
+            data: [overall || 0, student || 0, peer || 0, supervisor || 0],
+            backgroundColor: [
+              '#10b981',
+              '#3b82f6',
+              '#7b1113',
+              '#f1c40f'
+            ],
+            borderRadius: 4,
+            borderSkipped: false,
+            order: 2
+          },
+          {
+            label: 'Min. 3.0 (Promotion)',
+            data: [null, null, null, null],
+            type: 'line',
+            borderColor: '#ef4444',
+            borderWidth: 2,
+            borderDash: [8, 5],
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            fill: false,
+            order: 1
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'bottom',
+            labels: {
+              font: { size: 11 },
+              boxWidth: 16,
+              padding: 10,
+              filter: (item) => item.text !== '',
+              generateLabels(chart) {
+                const labels = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+                labels.forEach(l => {
+                  if (l.text === 'Min. 3.0 (Promotion)') {
+                    l.lineDash = [8, 5];
+                    l.fillStyle = 'transparent';
+                    l.strokeStyle = '#ef4444';
+                    l.lineWidth = 2;
+                  }
+                });
+                return labels;
+              }
+            }
+          },
+          tooltip: {
+            filter: item => item.datasetIndex === 0,
+            callbacks: { label: ctx => ` ${ctx.parsed.y.toFixed(2)} / 4` }
+          }
+        },
+        scales: {
+          y: { min: 0, max: 4, ticks: { stepSize: 1 }, grid: { color: 'rgba(0,0,0,0.05)' } },
+          x: { grid: { display: false } }
+        }
+      }
+    });
+  }
+
+  // ── Department Comparison Chart ──────────────────────────
+  function renderComparisonChart(comparison) {
+    if (!comparison) return;
+    if (comparisonChartInstance) comparisonChartInstance.destroy();
+
+    const { your_avg, dept_avg, college_avg, college_name } = comparison;
+    const deptLabel = (college_name || 'Dept') + ' Avg';
+    const ctx = document.getElementById('comparisonChart').getContext('2d');
+    comparisonChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: [''],
+        datasets: [
+          {
+            label: 'You',
+            data: [parseFloat(your_avg || 0)],
+            backgroundColor: 'rgba(123,17,19,1)',
+            borderRadius: 4,
+            borderSkipped: false,
+            barThickness: 22
+          },
+          {
+            label: deptLabel,
+            data: [parseFloat(dept_avg || 0)],
+            backgroundColor: '#94a3b8',
+            borderRadius: 4,
+            borderSkipped: false,
+            barThickness: 22
+          },
+          {
+            label: 'College Avg',
+            data: [parseFloat(college_avg || 0)],
+            backgroundColor: '#cbd5e1',
+            borderRadius: 4,
+            borderSkipped: false,
+            barThickness: 22
+          }
+        ]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'bottom',
+            labels: { font: { size: 11 }, boxWidth: 14, padding: 10 }
+          },
+          tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.x.toFixed(2)} / 4` } }
+        },
+        scales: {
+          x: { min: 0, max: 4, ticks: { stepSize: 1 }, grid: { color: 'rgba(0,0,0,0.05)' } },
+          y: { grid: { display: false }, ticks: { display: false } }
+        }
+      }
+    });
+  }
+
+  // ── Score Trend Chart ────────────────────────────────────
+  async function loadTrendChart() {
+    try {
+      const res  = await fetch('/api/faculty/evaluation-trends');
+      const data = await res.json();
+
+      document.getElementById('trend-loading').style.display = 'none';
+
+      if (!data.success || !data.trends || data.trends.length === 0) {
+        document.getElementById('trend-empty').style.display = 'block';
+        return;
+      }
+
+      const canvas = document.getElementById('trendChart');
+      canvas.style.display = 'block';
+
+      const trends = data.trends;
+
+      if (trendChartInstance) trendChartInstance.destroy();
+      const ctx = canvas.getContext('2d');
+      trendChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: trends.map(t => t.label),
+          datasets: [
+            {
+              label: 'Overall',
+              data: trends.map(t => t.overall),
+              borderColor: '#7b1113',
+              backgroundColor: '#7b1113',
+              tension: 0.3,
+              borderWidth: 2.5,
+              pointRadius: 5,
+              pointBackgroundColor: '#7b1113',
+              spanGaps: true
+            },
+            {
+              label: 'Student',
+              data: trends.map(t => t.student),
+              borderColor: '#d97706',
+              backgroundColor: '#d97706',
+              borderDash: [5, 3],
+              tension: 0.3,
+              borderWidth: 1.5,
+              pointRadius: 3,
+              pointBackgroundColor: '#d97706',
+              spanGaps: true
+            },
+            {
+              label: 'Supervisor',
+              data: trends.map(t => t.supervisor),
+              borderColor: '#2563eb',
+              backgroundColor: '#2563eb',
+              borderDash: [5, 3],
+              tension: 0.3,
+              borderWidth: 1.5,
+              pointRadius: 3,
+              pointBackgroundColor: '#2563eb',
+              spanGaps: true
+            },
+            {
+              label: 'Peer',
+              data: trends.map(t => t.peer),
+              borderColor: '#16a34a',
+              backgroundColor: '#16a34a',
+              borderDash: [5, 3],
+              tension: 0.3,
+              borderWidth: 1.5,
+              pointRadius: 3,
+              pointBackgroundColor: '#16a34a',
+              spanGaps: true
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 18, padding: 12 } },
+            tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y !== null ? ctx.parsed.y.toFixed(2) : 'N/A'}` } }
+          },
+          scales: {
+            y: {
+              min: 0, max: 4,
+              ticks: { stepSize: 1 },
+              grid: { color: '#f1f5f9' },
+              title: { display: true, text: 'Score (0–4)', font: { size: 11 } }
+            },
+            x: { grid: { display: false }, ticks: { font: { size: 11 } } }
+          }
+        }
+      });
+    } catch(e) {
+      document.getElementById('trend-loading').style.display = 'none';
+      document.getElementById('trend-empty').style.display = 'block';
+      console.error('Trend load failed:', e);
+    }
+  }
+
+  // ── Feedback Renderers ───────────────────────────────────
+  function renderStudentFeedback(feedbackList) {
+    const container = document.getElementById('student-feedback-list');
+    if (!container) return;
+    const comments = [];
+    (feedbackList || [])
+      .filter(f => f.evaluator_type?.toLowerCase() === 'student' && f.qualitative_feedback && f.evaluator_type?.toLowerCase() !== 'peer' && f.evaluator_type?.toLowerCase() !== 'supervisor')
+      .forEach(f => f.qualitative_feedback.split('---').forEach(c => { if (c.trim()) comments.push(c.trim()); }));
+    container.innerHTML = comments.length > 0
+      ? comments.map(c => `
+          <li style="list-style:none; margin-bottom:6px; padding:7px 12px; border-left:3px solid var(--spc-gold); background:#fcfcfd; border-radius:4px; font-size:13px; color:#333;">
+            ${c}
+          </li>`).join('')
+      : '<div style="text-align:center; padding:1.5rem; color:var(--muted);">No student feedback for this term.</div>';
+  }
+
+  let storedPeerFeedback = null;
+  let peerViewMode       = 'evaluator';
+  let peerSingleType     = 'strengths';
+
+  function renderPeerFeedback(peerFeedback) {
+    storedPeerFeedback = peerFeedback;
+    const controls     = document.getElementById('peer-view-controls');
+    const typeControls = document.getElementById('peer-type-controls');
+    const container    = document.getElementById('peer-feedback-list');
+    if (!container) return;
+
+    if (!peerFeedback || peerFeedback.length === 0) {
+      if (controls)     controls.style.display     = 'none';
+      if (typeControls) typeControls.style.display  = 'none';
+      container.innerHTML = '<div style="text-align:center; padding:1.5rem; color:var(--muted);">No peer feedback for this term.</div>';
+      return;
+    }
+    if (controls) controls.style.display = 'flex';
+    peerViewMode = 'evaluator';
+    _syncPeerViewButtons();
+    renderPeerByMode();
+  }
+
+  function setPeerView(mode) {
+    peerViewMode = mode;
+    _syncPeerViewButtons();
+    renderPeerByMode();
+  }
+
+  function setPeerSingle(type) {
+    peerSingleType = type;
+    _syncPeerSingleButtons();
+    renderPeerByMode();
+  }
+
+  function _syncPeerViewButtons() {
+    const active   = 'padding:4px 11px; border-radius:5px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid #3b82f6; background:#3b82f6; color:#fff; transition:all .15s;';
+    const inactive = 'padding:4px 11px; border-radius:5px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid #e5e7eb; background:#fff; color:var(--muted); transition:all .15s;';
+    ['evaluator','type','single'].forEach(m => {
+      const btn = document.getElementById(`peer-view-${m}`);
+      if (btn) btn.style.cssText = m === peerViewMode ? active : inactive;
+    });
+    const typeControls = document.getElementById('peer-type-controls');
+    if (typeControls) typeControls.style.display = peerViewMode === 'single' ? 'flex' : 'none';
+    if (peerViewMode === 'single') _syncPeerSingleButtons();
+  }
+
+  const SINGLE_COLORS = {
+    strengths: { color:'#16a34a', bg:'#f0fdf4', border:'#16a34a' },
+    growth:    { color:'#d97706', bg:'#fffbeb', border:'#d97706' },
+    comments:  { color:'#2563eb', bg:'#eff6ff', border:'#3b82f6' },
+  };
+
+  function _syncPeerSingleButtons() {
+    Object.entries(SINGLE_COLORS).forEach(([key, c]) => {
+      const btn = document.getElementById(`peer-single-${key}`);
+      if (!btn) return;
+      btn.style.cssText = key === peerSingleType
+        ? `padding:3px 10px; border-radius:5px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid ${c.color}; background:${c.color}; color:#fff; transition:all .15s;`
+        : 'padding:3px 10px; border-radius:5px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid #e5e7eb; background:#fff; color:var(--muted); transition:all .15s;';
+    });
+  }
+
+  function renderPeerByMode() {
+    const container = document.getElementById('peer-feedback-list');
+    if (!container || !storedPeerFeedback) return;
+
+    if (peerViewMode === 'evaluator') {
+      container.innerHTML = storedPeerFeedback.map(fb => `
+        <div style="padding:12px 14px; border:1px solid #dbeafe; border-left:3px solid #3b82f6; border-radius:8px; margin-bottom:10px; background:#eff6ff;">
+          ${fb.strengths ? `<div style="margin-bottom:6px;"><span style="font-size:10px; font-weight:700; color:#1d4ed8; text-transform:uppercase; letter-spacing:0.4px;">Strengths</span><p style="margin:3px 0 0; font-size:13px; color:#1f2937;">${fb.strengths}</p></div>` : ''}
+          ${fb.growth    ? `<div style="margin-bottom:6px;"><span style="font-size:10px; font-weight:700; color:#1d4ed8; text-transform:uppercase; letter-spacing:0.4px;">Areas for Growth</span><p style="margin:3px 0 0; font-size:13px; color:#1f2937;">${fb.growth}</p></div>` : ''}
+          ${fb.comments  ? `<div><span style="font-size:10px; font-weight:700; color:#1d4ed8; text-transform:uppercase; letter-spacing:0.4px;">Comments</span><p style="margin:3px 0 0; font-size:13px; color:#1f2937;">${fb.comments}</p></div>` : ''}
+        </div>`).join('');
+
+    } else if (peerViewMode === 'type') {
+      const s = storedPeerFeedback.filter(fb => fb.strengths).map(fb => fb.strengths);
+      const g = storedPeerFeedback.filter(fb => fb.growth).map(fb => fb.growth);
+      const c = storedPeerFeedback.filter(fb => fb.comments).map(fb => fb.comments);
+      const typeSection = (label, key, items) => {
+        if (!items.length) return '';
+        const col = SINGLE_COLORS[key];
+        return `<div style="margin-bottom:16px;">
+          <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+            <span style="display:inline-block; width:3px; height:14px; background:${col.color}; border-radius:2px;"></span>
+            <span style="font-size:11px; font-weight:700; color:${col.color}; text-transform:uppercase; letter-spacing:0.5px;">${label}</span>
+            <span style="font-size:11px; color:var(--muted);">(${items.length})</span>
+          </div>
+          ${items.map(t => `<div style="padding:9px 12px; background:${col.bg}; border-left:3px solid ${col.border}; border-radius:4px; margin-bottom:6px; font-size:13px; color:#1f2937;">${t}</div>`).join('')}
+        </div>`;
+      };
+      container.innerHTML =
+        typeSection('Strengths', 'strengths', s) +
+        typeSection('Areas for Growth', 'growth', g) +
+        typeSection('Comments', 'comments', c) ||
+        '<div style="text-align:center; padding:1.5rem; color:var(--muted);">No peer feedback for this term.</div>';
+
+    } else {
+      const col   = SINGLE_COLORS[peerSingleType];
+      const field = peerSingleType;
+      const items = storedPeerFeedback.filter(fb => fb[field]).map(fb => fb[field]);
+      container.innerHTML = items.length
+        ? items.map(t => `<div style="padding:9px 12px; background:${col.bg}; border-left:3px solid ${col.border}; border-radius:4px; margin-bottom:6px; font-size:13px; color:#1f2937;">${t}</div>`).join('')
+        : `<div style="text-align:center; padding:1.5rem; color:var(--muted);">No ${field} feedback for this term.</div>`;
+    }
+  }
+
+  // ── Peer Assignment Tasks ────────────────────────────────
   async function loadPeerAssignments() {
     const peerBody = document.getElementById('peer-evaluations-body');
     if (!peerBody) return;
-
     try {
-      const res = await fetch('/api/faculty/peer-assignments');
+      const res  = await fetch('/api/faculty/peer-assignments');
       const data = await res.json();
-
       if (!data.success || data.assignments.length === 0) {
         peerBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:1.5rem; color:var(--muted);">No peer evaluations assigned for this term.</td></tr>`;
         return;
       }
+      const pending = data.assignments.filter(a => !a.is_completed).length;
+      const badge   = document.getElementById('peer-tasks-badge');
+      if (badge && pending > 0) { badge.textContent = `${pending} pending`; badge.style.display = 'inline-block'; }
 
       peerBody.innerHTML = data.assignments.map(a => `
         <tr>
-          <td>${a.name}</td>
+          <td style="font-weight:600;">${a.name}</td>
           <td>${a.college}</td>
-          <td>${a.period}</td>
+          <td style="font-size:12px; color:var(--muted);">${a.period}</td>
           <td>
             ${a.is_completed
               ? `<span class="status completed"><i class='bx bx-check-circle'></i> Submitted</span>`
-              : `<a href="/faculty/evaluate/${a.evaluatee_id}" class="btn-action primary"><i class='bx bx-edit-alt'></i> Evaluate</a>`
+              : `<a href="/faculty/evaluate/${a.evaluatee_id}"
+                    style="display:inline-flex; align-items:center; gap:6px; padding:7px 16px; background:#f3f4f6; color:#374151; border:1.5px solid #d1d5db; border-radius:7px; font-size:12px; font-weight:700; text-decoration:none; transition:background .15s;"
+                    onmouseover="this.style.background='#e5e7eb'" onmouseout="this.style.background='#f3f4f6'">
+                   <i class='bx bx-edit-alt'></i> Evaluate
+                 </a>`
             }
           </td>
-        </tr>
-      `).join('');
-
-    } catch (err) {
-      console.error('Failed to load peer assignments:', err);
+        </tr>`).join('');
+    } catch(err) {
       peerBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:1.5rem; color:var(--muted);">Failed to load peer assignments.</td></tr>`;
     }
   }
 
-  function populateFeedback(feedbackList) {
-      const tbody = document.getElementById('feedback-body');
-      if (!tbody) return;
-      tbody.innerHTML = '';
-      if (!feedbackList || feedbackList.length === 0) {
-          tbody.innerHTML = '<tr><td>No student feedback available.</td></tr>';
-          return;
-      }
-      feedbackList.forEach(item => {
-          if (item.evaluator_type?.toLowerCase() === 'student' && item.qualitative_feedback) {
-              item.qualitative_feedback.split('---').forEach(comment => {
-                  if (comment.trim()) {
-                      const tr = document.createElement('tr');
-                      tr.innerHTML = `<td style="font-style: italic;">- ${comment.trim()}</td>`;
-                      tbody.appendChild(tr);
-                  }
-              });
-          }
+  // ── KPI State Helpers ────────────────────────────────────
+  function setKpiLoading() {
+    ['kpi-overall','kpi-student','kpi-peer','kpi-supervisor'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i>`;
+    });
+  }
+  function setKpiError() {
+    ['kpi-overall','kpi-student','kpi-peer','kpi-supervisor'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = `<i class='bx bx-error-circle' style='color:#ef4444'></i>`;
+    });
+  }
+
+  // ── Tab Logic ────────────────────────────────────────────
+  document.querySelectorAll('.tab-btn[data-group]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const group = btn.dataset.group;
+      // Reset all buttons in group to inactive style
+      document.querySelectorAll(`.tab-btn[data-group="${group}"]`).forEach(b => {
+        b.classList.remove('active');
+        b.style.cssText = 'padding:5px 14px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; border:1.5px solid #e5e7eb; background:#fff; color:var(--muted); transition:all .15s;';
+        const tc = document.getElementById(b.dataset.tab);
+        if (tc) { tc.classList.remove('active'); tc.style.display = 'none'; }
       });
-  }
-
-  function populateComparison(comparison) {
-    const wrapper = document.getElementById('comparison-wrapper');
-    if (!wrapper || !comparison) return;
-    const { your_avg, dept_avg, college_avg, college_name } = comparison;
-    const getWidth = (score) => Math.min(100, (score / 5.0) * 100);
-    wrapper.innerHTML = `
-      <div class="comparison-row"><span class="label">Your avg:</span><div class="comparison-bar"><div class="comparison-fill you" style="width:${getWidth(your_avg)}%">${your_avg.toFixed(2)}</div></div></div>
-      <div class="comparison-row"><span class="label">${college_name} avg:</span><div class="comparison-bar"><div class="comparison-fill dept" style="width:${getWidth(dept_avg)}%">${dept_avg.toFixed(2)}</div></div></div>
-      <div class="comparison-row"><span class="label">College avg:</span><div class="comparison-bar"><div class="comparison-fill college" style="width:${getWidth(college_avg)}%">${college_avg.toFixed(2)}</div></div></div>`;
-  }
-
-  // Tab Logic
-  document.querySelectorAll(".tab-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".tab-btn, .tab-content").forEach(el => el.classList.remove("active"));
-      btn.classList.add("active");
-      document.getElementById(btn.dataset.tab).classList.add("active");
+      // Activate clicked button
+      btn.classList.add('active');
+      const isPeer = btn.dataset.tab === 'tab-fb-peer';
+      const activeColor = isPeer ? '#3b82f6' : 'var(--spc-gold)';
+      btn.style.cssText = `padding:5px 14px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; border:1.5px solid ${activeColor}; background:${activeColor}; color:#fff; transition:all .15s;`;
+      const target = document.getElementById(btn.dataset.tab);
+      if (target) {
+        target.classList.add('active');
+        target.style.display = isPeer ? 'flex' : 'block';
+      }
     });
   });
 
-  document.addEventListener('DOMContentLoaded', loadEvaluationData);
+  document.addEventListener('DOMContentLoaded', loadSemesters);
 </script>
 {% endblock %}

@@ -5813,23 +5813,28 @@ def api_faculty_evaluations_data():
         conn = db_pool.get_connection()
         cursor = conn.cursor()
         
-        # 1. Determine the current academic calendar ID
-        cursor.execute("""
-            SELECT acadcalendar_id
-            FROM acadcalendar 
-            WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
-            ORDER BY semesterstart DESC LIMIT 1
-        """)
-        current_term_result = cursor.fetchone()
-        current_term_id = current_term_result[0] if current_term_result else '80001' # Fallback
-        
+        # 1. Determine the term to use (caller may pass ?term_id=)
+        term_id_param = request.args.get('term_id')
+        current_term_id = None
+        if term_id_param:
+            try:
+                current_term_id = int(term_id_param)
+            except (ValueError, TypeError):
+                current_term_id = None
+        if not current_term_id:
+            cursor.execute("""
+                SELECT acadcalendar_id
+                FROM acadcalendar
+                WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                ORDER BY semesterstart DESC LIMIT 1
+            """)
+            r = cursor.fetchone()
+            current_term_id = r[0] if r else 80001
+
         # 2. Fetch scores, comparison data, AND feedback
         cursor.execute("""
             WITH current_term AS (
-                SELECT acadcalendar_id
-                FROM acadcalendar 
-                WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
-                ORDER BY semesterstart DESC LIMIT 1
+                SELECT CAST(%s AS integer) AS acadcalendar_id
             ),
             faculty_scores AS (
                 -- Personal scores (Average score per type)
@@ -5889,9 +5894,23 @@ def api_faculty_evaluations_data():
                 (SELECT json_agg(row_to_json(fd)) FROM feedback_data fd) AS recent_feedback
             
             FROM faculty_scores
-        """, (personnel_id, personnel_id, personnel_id, personnel_id))
-        
+        """, (current_term_id, personnel_id, personnel_id, personnel_id, personnel_id))
+
         result = cursor.fetchone()
+
+        # 3. Fetch peer feedback (from peer_evaluation_submissions)
+        cursor.execute("""
+            SELECT strengths, growth, comments
+            FROM peer_evaluation_submissions
+            WHERE evaluatee_id = %s AND acadcalendar_id = %s
+              AND (strengths IS NOT NULL OR growth IS NOT NULL OR comments IS NOT NULL)
+            ORDER BY date_submitted DESC
+        """, (personnel_id, current_term_id))
+        peer_feedback = [
+            {'strengths': r[0], 'growth': r[1], 'comments': r[2]}
+            for r in cursor.fetchall()
+        ]
+
         cursor.close()
         db_pool.return_connection(conn)
 
@@ -5944,7 +5963,8 @@ def api_faculty_evaluations_data():
                 'college_name': faculty_college_name
             },
             'recent_feedback': recent_feedback or [],
-            'chart_data': chart_data_for_dashboard # <-- ADDED FOR DASHBOARD
+            'peer_feedback': peer_feedback,
+            'chart_data': chart_data_for_dashboard
         })
         
     except Exception as e:
@@ -8161,7 +8181,7 @@ def api_faculty_peer_assignments():
                 'evaluatee_id': evaluatee_id,
                 'name': f"{firstname} {lastname}",
                 'college': college,
-                'period': f"AY {acadyear} — {semester}",
+                'period': f"{acadyear if acadyear.startswith('AY') else 'AY ' + acadyear} — {semester}",
                 'is_completed': is_completed
             })
 
@@ -8170,6 +8190,73 @@ def api_faculty_peer_assignments():
     except Exception as e:
         print(f"Error fetching peer assignments: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/faculty/evaluation-trends')
+@require_auth([20001, 20002])
+def api_faculty_evaluation_trends():
+    """Returns the logged-in faculty's evaluation scores across all semesters."""
+    try:
+        user_id = session.get('user_id')
+        personnel_info = get_personnel_info(user_id)
+        personnel_id = personnel_info.get('personnel_id')
+        if not personnel_id:
+            return jsonify({'success': False, 'error': 'Personnel not found'}), 404
+
+        conn = db_pool.get_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT
+                ac.acadcalendar_id,
+                ac.semester,
+                ac.acadyear,
+                ac.semesterstart,
+                MAX(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END) AS avg_student,
+                MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END) AS avg_supervisor,
+                MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END) AS avg_peer
+            FROM faculty_evaluations fe
+            JOIN acadcalendar ac ON fe.acadcalendar_id = ac.acadcalendar_id
+            WHERE fe.personnel_id = %s
+            GROUP BY ac.acadcalendar_id, ac.semester, ac.acadyear, ac.semesterstart
+            ORDER BY ac.semesterstart ASC NULLS LAST
+        """, (personnel_id,))
+
+        trends = []
+        for row in cur.fetchall():
+            _, sem, year, _, avg_s, avg_sv, avg_p = row
+            short = '1st Sem' if 'First' in sem else ('2nd Sem' if 'Second' in sem else 'Summer')
+            year_str = (year or '').replace('AY ', '')
+            label = f"{short} AY {year_str}"
+
+            avg_s  = float(avg_s)  if avg_s  is not None else None
+            avg_sv = float(avg_sv) if avg_sv is not None else None
+            avg_p  = float(avg_p)  if avg_p  is not None else None
+
+            weights = []
+            if avg_s  is not None: weights.append((avg_s,  0.55))
+            if avg_sv is not None: weights.append((avg_sv, 0.35))
+            if avg_p  is not None: weights.append((avg_p,  0.10))
+
+            overall = None
+            if weights:
+                total_w = sum(w for _, w in weights)
+                overall = round(sum(v * w for v, w in weights) / total_w, 3)
+
+            trends.append({
+                'label':      label,
+                'overall':    overall,
+                'student':    round(avg_s,  3) if avg_s  is not None else None,
+                'supervisor': round(avg_sv, 3) if avg_sv is not None else None,
+                'peer':       round(avg_p,  3) if avg_p  is not None else None,
+            })
+
+        cur.close()
+        db_pool.return_connection(conn)
+        return jsonify({'success': True, 'trends': trends})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/hr/peer-assignments')
 @require_auth([20003])
@@ -8224,7 +8311,7 @@ def api_hr_peer_assignments():
                 'evaluator_name': evaluator_name,
                 'evaluatee_name': evaluatee_name,
                 'department': collegename,
-                'period': f"AY {acadyear} — {semester}",
+                'period': f"{acadyear if acadyear.startswith('AY') else 'AY ' + acadyear} — {semester}",
                 'acadcalendar_id': acad_id,
             })
 
@@ -9592,7 +9679,7 @@ def api_hr_dept_trends():
 @app.route('/api/hr/distribution-trends', methods=['GET'])
 @require_auth([20003])
 def api_hr_distribution_trends():
-    """Per-semester count of faculty in each rating bucket (0-1, 1-2, 2-3, 3-4, 4-5)."""
+    """Per-semester count of faculty in each rating bucket (0-1, 1-2, 2-3, 3-4)."""
     conn = None
     try:
         conn = get_db_connection()
@@ -9619,8 +9706,7 @@ def api_hr_distribution_trends():
                 COUNT(CASE WHEN fss.overall > 0 AND fss.overall <= 1 THEN 1 END) AS b01,
                 COUNT(CASE WHEN fss.overall > 1 AND fss.overall <= 2 THEN 1 END) AS b12,
                 COUNT(CASE WHEN fss.overall > 2 AND fss.overall <= 3 THEN 1 END) AS b23,
-                COUNT(CASE WHEN fss.overall > 3 AND fss.overall <= 4 THEN 1 END) AS b34,
-                COUNT(CASE WHEN fss.overall > 4                      THEN 1 END) AS b45
+                COUNT(CASE WHEN fss.overall > 3                      THEN 1 END) AS b34
             FROM faculty_sem_scores fss
             JOIN acadcalendar ac ON fss.acadcalendar_id = ac.acadcalendar_id
             WHERE fss.overall > 0
@@ -9630,7 +9716,7 @@ def api_hr_distribution_trends():
         rows = cur.fetchall()
 
         sem_labels = []
-        buckets = {'0–1': [], '1–2': [], '2–3': [], '3–4': [], '4–5': []}
+        buckets = {'0–1': [], '1–2': [], '2–3': [], '3–4': []}
 
         for row in rows:
             sem_name = row[1]
@@ -9641,7 +9727,6 @@ def api_hr_distribution_trends():
             buckets['1–2'].append(int(row[5]))
             buckets['2–3'].append(int(row[6]))
             buckets['3–4'].append(int(row[7]))
-            buckets['4–5'].append(int(row[8]))
 
         return jsonify({'success': True, 'semesters': sem_labels, 'buckets': buckets})
     except Exception as e:
