@@ -972,6 +972,30 @@ background:var(--spc-maroon);color:#fff;font-weight:600;cursor:pointer;
 .sub-tab-content { display: none; }
 .sub-tab-content.active { display: block; }
 
+.analytics-sub-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 12px;
+}
+.analytics-sub-tab {
+  padding: 7px 16px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 13px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.2s ease;
+  color: var(--muted);
+}
+.analytics-sub-tab:hover { color: var(--spc-maroon); }
+.analytics-sub-tab.active {
+  color: var(--spc-maroon);
+  border-color: var(--spc-maroon);
+}
+.analytics-sub-content { display: none; }
+.analytics-sub-content.active { display: block; }
+
 /* Campus Attendance — session badges */
 .campus-session-badge {
   display: inline-block;
