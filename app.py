@@ -349,6 +349,31 @@ def save_notification_to_db(target_audience, target_personnel_id, data):
         return None
 
 ensure_notifications_table()
+
+
+def migrate_campus_attendance_status_constraint():
+    """Allow 'Excused' in campus_attendance.status check constraint."""
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            ALTER TABLE campus_attendance
+                DROP CONSTRAINT IF EXISTS campus_attendance_status_check
+        """)
+        cursor.execute("""
+            ALTER TABLE campus_attendance
+                ADD CONSTRAINT campus_attendance_status_check
+                CHECK (status IN ('Present', 'Late', 'Absent', 'Excused'))
+        """)
+        conn.commit()
+        cursor.close()
+        db_pool.return_connection(conn)
+        print("campus_attendance status constraint updated.")
+    except Exception as e:
+        print(f"Error migrating campus_attendance constraint: {e}")
+
+
+migrate_campus_attendance_status_constraint()
 shared_serial = SharedSerialPort()
 rfid_reader = RFIDReader(db_pool, shared_serial)
 biometric_reader = BiometricReader(db_pool, shared_serial)
@@ -681,8 +706,6 @@ def check_license_expiry():
                            f'{" (No. " + license_number + ")" if license_number else ""}'
                            f' expires in {days} day(s) on {expiration_date}.')
 
-                print(f"🔔 License expiry logged → personnel {personnel_id}: {msg}")
-
         except Exception as e:
             print(f"Error in license expiry checker: {e}")
             if conn:
@@ -702,7 +725,6 @@ def start_license_expiry_checker():
     license_expiry_checker_running = True
     license_expiry_checker_thread = threading.Thread(target=check_license_expiry, daemon=True)
     license_expiry_checker_thread.start()
-    print("🔔 License expiry checker started (runs every 24 hours)")
 
 
 def stop_license_expiry_checker():
@@ -712,6 +734,127 @@ def stop_license_expiry_checker():
 
 start_license_expiry_checker()
 atexit.register(stop_license_expiry_checker)
+
+# ========== CAMPUS ATTENDANCE DAILY AUTO-SYNC ==========
+campus_sync_running = False
+campus_sync_thread = None
+
+def campus_attendance_daily_sync():
+    """Background thread: syncs campus attendance once at startup, then every 24 hours."""
+    global campus_sync_running
+    while campus_sync_running:
+        conn = None
+        cursor = None
+        try:
+            conn = db_pool.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                WITH
+                active_dates AS (
+                    SELECT DISTINCT DATE(taptime AT TIME ZONE 'Asia/Manila') AS attendance_date
+                    FROM biometriclogs
+                    UNION
+                    SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Manila')::date
+                ),
+                all_faculty AS (
+                    SELECT personnel_id FROM personnel
+                ),
+                all_combinations AS (
+                    SELECT
+                        d.attendance_date,
+                        p.personnel_id,
+                        s.session,
+                        s.window_start,
+                        s.window_end,
+                        s.late_threshold
+                    FROM active_dates d
+                    CROSS JOIN all_faculty p
+                    CROSS JOIN (VALUES
+                        ('Morning',   420,  764, 495),
+                        ('Afternoon', 765, 1065, 825)
+                    ) AS s(session, window_start, window_end, late_threshold)
+                ),
+                taps AS (
+                    SELECT
+                        b.personnel_id,
+                        DATE(bl.taptime AT TIME ZONE 'Asia/Manila')                    AS tap_date,
+                        bl.taptime AT TIME ZONE 'Asia/Manila'                          AS local_dt,
+                        EXTRACT(HOUR  FROM bl.taptime AT TIME ZONE 'Asia/Manila') * 60
+                      + EXTRACT(MINUTE FROM bl.taptime AT TIME ZONE 'Asia/Manila')     AS tap_mins
+                    FROM biometriclogs bl
+                    INNER JOIN biometric b ON bl.biometric_id = b.biometric_id
+                    WHERE b.personnel_id IS NOT NULL
+                ),
+                session_agg AS (
+                    SELECT
+                        ac.personnel_id,
+                        ac.attendance_date,
+                        ac.session,
+                        ac.late_threshold,
+                        MIN(t.local_dt) AS time_in,
+                        MAX(t.local_dt) AS time_out
+                    FROM all_combinations ac
+                    LEFT JOIN taps t
+                        ON  t.personnel_id = ac.personnel_id
+                        AND t.tap_date     = ac.attendance_date
+                        AND t.tap_mins BETWEEN ac.window_start AND ac.window_end
+                    GROUP BY ac.personnel_id, ac.attendance_date, ac.session, ac.late_threshold
+                )
+                INSERT INTO campus_attendance
+                    (personnel_id, attendance_date, session, time_in, time_out, status)
+                SELECT
+                    personnel_id,
+                    attendance_date,
+                    session,
+                    time_in,
+                    time_out,
+                    CASE
+                        WHEN time_in IS NULL THEN 'Absent'
+                        WHEN (EXTRACT(HOUR  FROM time_in) * 60
+                            + EXTRACT(MINUTE FROM time_in)) <= late_threshold THEN 'Present'
+                        ELSE 'Late'
+                    END AS status
+                FROM session_agg
+                ON CONFLICT (personnel_id, attendance_date, session)
+                DO UPDATE SET
+                    time_in  = EXCLUDED.time_in,
+                    time_out = EXCLUDED.time_out,
+                    status   = EXCLUDED.status
+            """)
+            conn.commit()
+        except Exception as e:
+            print(f"Error in campus attendance auto-sync: {e}")
+            if conn:
+                try:
+                    conn.rollback()
+                    cursor.close()
+                    db_pool.return_connection(conn)
+                except:
+                    pass
+        else:
+            if cursor:
+                cursor.close()
+            if conn:
+                db_pool.return_connection(conn)
+        time.sleep(86400)  # re-run every 24 hours
+
+
+def start_campus_sync():
+    global campus_sync_thread, campus_sync_running
+    if campus_sync_running:
+        return
+    campus_sync_running = True
+    campus_sync_thread = threading.Thread(target=campus_attendance_daily_sync, daemon=True)
+    campus_sync_thread.start()
+
+
+def stop_campus_sync():
+    global campus_sync_running
+    campus_sync_running = False
+
+
+start_campus_sync()
+atexit.register(stop_campus_sync)
 
 def get_db_connection():
     return db_pool.get_connection()
@@ -1600,10 +1743,12 @@ def api_sync_campus_attendance():
 
         cursor.execute("""
             WITH
-            -- All distinct dates that have any biometric activity
+            -- All distinct dates that have any biometric activity, plus today always
             active_dates AS (
                 SELECT DISTINCT DATE(taptime AT TIME ZONE 'Asia/Manila') AS attendance_date
                 FROM biometriclogs
+                UNION
+                SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Manila')::date
             ),
             -- All personnel (regardless of teaching load or biometric device)
             all_faculty AS (
@@ -1690,6 +1835,203 @@ def api_sync_campus_attendance():
             cursor.close()
         if conn:
             db_pool.return_connection(conn)
+
+@app.route('/api/hr/campus-attendance-analytics')
+@require_auth([20003])
+def api_hr_campus_attendance_analytics():
+    """Aggregate campus attendance (morning + afternoon) per faculty for a given semester."""
+    try:
+        semester_id = request.args.get('semester_id')
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        # Resolve semester date range
+        date_filter = ""
+        params = []
+        if semester_id:
+            cursor.execute("""
+                SELECT semesterstart, semesterend FROM acadcalendar
+                WHERE acadcalendar_id = %s
+            """, (semester_id,))
+            sem = cursor.fetchone()
+            if sem and sem[0] and sem[1]:
+                date_filter = "AND ca.attendance_date BETWEEN %s AND %s"
+                params = [sem[0], sem[1]]
+
+        cursor.execute(f"""
+            SELECT
+                p.personnel_id,
+                CONCAT(p.lastname, ', ', p.firstname,
+                       CASE WHEN p.honorifics IS NOT NULL AND p.honorifics <> ''
+                            THEN CONCAT(', ', p.honorifics) ELSE '' END) AS faculty_name,
+                c.collegename AS college,
+                pr.position,
+                pr.employmentstatus AS employment_status,
+                COALESCE(SUM(CASE WHEN ca.session = 'Morning'   AND ca.status = 'Present' THEN 1 ELSE 0 END), 0) AS morning_present,
+                COALESCE(SUM(CASE WHEN ca.session = 'Morning'   AND ca.status = 'Late'    THEN 1 ELSE 0 END), 0) AS morning_late,
+                COALESCE(SUM(CASE WHEN ca.session = 'Morning'   AND ca.status = 'Absent'  THEN 1 ELSE 0 END), 0) AS morning_absent,
+                COALESCE(SUM(CASE WHEN ca.session = 'Afternoon' AND ca.status = 'Present' THEN 1 ELSE 0 END), 0) AS afternoon_present,
+                COALESCE(SUM(CASE WHEN ca.session = 'Afternoon' AND ca.status = 'Late'    THEN 1 ELSE 0 END), 0) AS afternoon_late,
+                COALESCE(SUM(CASE WHEN ca.session = 'Afternoon' AND ca.status = 'Absent'  THEN 1 ELSE 0 END), 0) AS afternoon_absent
+            FROM personnel p
+            LEFT JOIN college c  ON p.college_id    = c.college_id
+            LEFT JOIN profile pr ON p.personnel_id  = pr.personnel_id
+            LEFT JOIN campus_attendance ca
+                ON ca.personnel_id = p.personnel_id {date_filter}
+            GROUP BY p.personnel_id, faculty_name, c.collegename, pr.position, pr.employmentstatus
+            ORDER BY p.lastname, p.firstname
+        """, params)
+
+        rows = cursor.fetchall()
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        campus_breakdown = []
+        for row in rows:
+            (personnel_id, faculty_name, college, position, employment_status,
+             mp, ml, ma, ap, al, aa) = row
+            campus_breakdown.append({
+                'personnel_id'     : personnel_id,
+                'faculty_name'     : faculty_name,
+                'college'          : college or '',
+                'position'         : position or '',
+                'employment_status': employment_status or '',
+                'morning_present'  : int(mp),
+                'morning_late'     : int(ml),
+                'morning_absent'   : int(ma),
+                'afternoon_present': int(ap),
+                'afternoon_late'   : int(al),
+                'afternoon_absent' : int(aa),
+            })
+
+        return jsonify({'success': True, 'campus_breakdown': campus_breakdown})
+
+    except Exception as e:
+        print(f"Error fetching campus attendance analytics: {e}")
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/hr/update-campus-attendance-time', methods=['POST'])
+@require_auth([20003])
+def api_update_campus_attendance_time():
+    """HR manual edit of campus attendance time_in / time_out."""
+    try:
+        data = request.get_json()
+        updates = data.get('updates', [])
+        if not updates:
+            return jsonify({'success': False, 'error': 'No updates provided'}), 400
+
+        # Session windows and late thresholds (minutes from midnight), matching sync logic
+        SESSION_WINDOWS = {
+            'Morning':   (420, 764, 495),   # 7:00 AM – 12:44 PM, late after 8:15 AM
+            'Afternoon': (765, 1065, 825),  # 12:45 PM – 5:45 PM, late after 1:45 PM
+        }
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+        updated_count = 0
+
+        for upd in updates:
+            campus_attendance_id = upd.get('campus_attendance_id')
+            time_in_str  = upd.get('time_in')   # "HH:MM" or "" or absent
+            time_out_str = upd.get('time_out')  # "HH:MM" or ""
+
+            # Fetch existing record to get date + session
+            cursor.execute("""
+                SELECT attendance_date, session, time_in, time_out
+                FROM campus_attendance
+                WHERE campus_attendance_id = %s
+            """, (campus_attendance_id,))
+            rec = cursor.fetchone()
+            if not rec:
+                continue
+
+            att_date, session, existing_timein, existing_timeout = rec
+            win_start, win_end, late_threshold = SESSION_WINDOWS.get(session, (420, 764, 495))
+            updates_applied = False
+            new_status = None
+
+            if 'time_in' in upd:
+                if time_in_str == '':
+                    # Clear → Absent
+                    cursor.execute("""
+                        UPDATE campus_attendance
+                        SET time_in = NULL, time_out = NULL
+                        WHERE campus_attendance_id = %s
+                    """, (campus_attendance_id,))
+                    new_status = 'Absent'
+                    updates_applied = True
+                else:
+                    h, m = map(int, time_in_str.split(':'))
+                    tap_mins = h * 60 + m
+                    # Reject times outside the session window
+                    if not (win_start <= tap_mins <= win_end):
+                        window_label = '7:00 AM – 12:44 PM' if session == 'Morning' else '12:45 PM – 5:45 PM'
+                        conn.rollback()
+                        cursor.close()
+                        db_pool.return_connection(conn)
+                        return jsonify({'success': False, 'error': f"Time {time_in_str} is outside the valid {session} window ({window_label})."})
+                    new_timein_ts = f"{att_date} {time_in_str}:00"
+                    cursor.execute("""
+                        UPDATE campus_attendance
+                        SET time_in = (%s::timestamp AT TIME ZONE 'Asia/Manila')
+                        WHERE campus_attendance_id = %s
+                    """, (new_timein_ts, campus_attendance_id))
+                    new_status = 'Present' if tap_mins <= late_threshold else 'Late'
+                    updates_applied = True
+
+            if 'time_out' in upd:
+                if time_out_str == '':
+                    cursor.execute("""
+                        UPDATE campus_attendance
+                        SET time_out = NULL
+                        WHERE campus_attendance_id = %s
+                    """, (campus_attendance_id,))
+                else:
+                    new_timeout_ts = f"{att_date} {time_out_str}:00"
+                    cursor.execute("""
+                        UPDATE campus_attendance
+                        SET time_out = (%s::timestamp AT TIME ZONE 'Asia/Manila')
+                        WHERE campus_attendance_id = %s
+                    """, (new_timeout_ts, campus_attendance_id))
+                updates_applied = True
+
+            if updates_applied:
+                if new_status is None:
+                    # Only time_out changed — re-derive from existing time_in
+                    if existing_timein:
+                        tz = pytz.timezone('Asia/Manila')
+                        if existing_timein.tzinfo is None:
+                            local_timein = tz.localize(existing_timein)
+                        else:
+                            local_timein = existing_timein.astimezone(tz)
+                        tap_mins = local_timein.hour * 60 + local_timein.minute
+                        new_status = 'Present' if tap_mins <= late_threshold else 'Late'
+                    else:
+                        new_status = 'Absent'
+
+                cursor.execute("""
+                    UPDATE campus_attendance SET status = %s
+                    WHERE campus_attendance_id = %s
+                """, (new_status, campus_attendance_id))
+                updated_count += 1
+
+        conn.commit()
+        cursor.close()
+        db_pool.return_connection(conn)
+        return jsonify({'success': True, 'updated_count': updated_count})
+
+    except Exception as e:
+        print(f"Error updating campus attendance time: {e}")
+        import traceback; traceback.print_exc()
+        try:
+            conn.rollback()
+            cursor.close()
+            db_pool.return_connection(conn)
+        except Exception:
+            pass
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 # ==================== END BIOMETRIC API ENDPOINTS ====================
 
@@ -2666,15 +3008,24 @@ def api_excuse_absence_bulk():
         
         for record in existing_records:
             attendance_id, class_id, current_status = record
-            
+
             if current_status in ['Absent', 'Present', 'Late']:
                 cursor.execute("""
-                    UPDATE attendance 
+                    UPDATE attendance
                     SET attendancestatus = 'Excused'
                     WHERE attendance_id = %s
                 """, (attendance_id,))
                 updated_count += 1
-        
+
+        # Also excuse both campus attendance sessions for this faculty on this date
+        cursor.execute("""
+            UPDATE campus_attendance
+            SET status = 'Excused'
+            WHERE personnel_id = %s
+              AND attendance_date = %s
+              AND status IN ('Absent', 'Present', 'Late')
+        """, (personnel_id, target_date))
+
         conn.commit()
 
         try:
@@ -4656,11 +5007,12 @@ def api_update_attendance_time():
             print(f"   Time-in: '{time_in}', Time-out: '{time_out}'")
             
             if name and date and class_name:
-                name_parts = name.split(' ')
+                # Name format from API is "Lastname, Firstname" or "Lastname, Firstname, Honorifics"
+                name_parts = name.split(', ')
                 if len(name_parts) >= 2:
-                    firstname = name_parts[0]
-                    lastname = name_parts[1].replace(',', '')
-                    
+                    lastname = name_parts[0].strip()
+                    firstname = name_parts[1].strip()
+
                     print(f"   Looking for: {lastname}, {firstname}, date: {date}, class: {class_name}")
                     
                     date_obj = datetime.strptime(date, '%Y-%m-%d')
@@ -4809,209 +5161,199 @@ def api_update_attendance_time():
                             print(f"     Late threshold: {late_threshold}")
                             print(f"     Time-out: {timeout_window_start} to {timeout_window_end}")
                             
-                            # === VALIDATE TIME-IN ===
+                            # === VALIDATE & UPDATE TIME-IN (RFID logic) ===
+                            validated_timein_time = None  # track for status calc
                             if 'time_in' in update:
                                 if time_in == '':
-                                    # Delete time-in (set to midnight)
+                                    # Clear time-in → marks as absent
                                     midnight_time = f"{date} 00:00:00"
                                     cursor.execute("""
-                                        UPDATE attendance 
+                                        UPDATE attendance
                                         SET timein = %s::timestamp AT TIME ZONE 'Asia/Manila'
                                         WHERE attendance_id = %s
                                     """, (midnight_time, attendance_id))
                                     changes_made.append("deleted time-in")
-                                    print(f"   ✅ Deleted time-in (set to midnight)")
                                     updates_applied = True
                                 else:
-                                    # Validate new time-in
                                     time_in_24hr = convert_to_24hour(time_in)
                                     new_timein_time = datetime.strptime(time_in_24hr, '%H:%M:%S').time()
-                                    
-                                    print(f"   🔍 Validating time-in: {new_timein_time}")
-                                    
-                                    # Check if within time-in window
+
+                                    # Validate: must be within time-in window (same as RFID)
                                     if timein_window_start <= new_timein_time <= timein_window_end:
                                         new_timein = f"{date} {time_in_24hr}"
                                         cursor.execute("""
-                                            UPDATE attendance 
+                                            UPDATE attendance
                                             SET timein = %s::timestamp AT TIME ZONE 'Asia/Manila'
                                             WHERE attendance_id = %s
                                         """, (new_timein, attendance_id))
                                         changes_made.append(f"set time-in to {time_in}")
-                                        print(f"   ✅ Set time-in to {time_in_24hr}")
                                         updates_applied = True
+                                        validated_timein_time = new_timein_time
                                     else:
-                                        print(f"   ❌ Time-in {new_timein_time} outside valid window")
-                                        # Do NOT update - reject this change
-                                        updates_applied = False
-                            
-                            # === VALIDATE TIME-OUT ===
+                                        conn.rollback()
+                                        cursor.close()
+                                        db_pool.return_connection(conn)
+                                        return {
+                                            'success': False,
+                                            'error': (
+                                                f"Time-in {time_in} is outside the valid window "
+                                                f"({timein_window_start.strftime('%H:%M')} – "
+                                                f"{timein_window_end.strftime('%H:%M')}) for this class."
+                                            )
+                                        }
+
+                            # === VALIDATE & UPDATE TIME-OUT (RFID logic) ===
                             if 'time_out' in update:
                                 if time_out == '':
-                                    # Delete time-out
                                     cursor.execute("""
-                                        UPDATE attendance 
+                                        UPDATE attendance
                                         SET timeout = NULL
                                         WHERE attendance_id = %s
                                     """, (attendance_id,))
                                     changes_made.append("deleted time-out")
-                                    print(f"   ✅ Deleted time-out")
                                     updates_applied = True
                                 else:
-                                    # Check if there's a valid time-in first
+                                    # Require a valid time-in
                                     current_timein_check = current_timein
                                     if 'time_in' in update and time_in != '':
                                         time_in_24hr = convert_to_24hour(time_in)
                                         current_timein_check = datetime.strptime(f"{date} {time_in_24hr}", "%Y-%m-%d %H:%M:%S")
-                                    
+
                                     if current_timein_check and current_timein_check.strftime('%H:%M:%S') != '00:00:00':
-                                        # Validate new time-out
                                         time_out_24hr = convert_to_24hour(time_out)
                                         new_timeout_time = datetime.strptime(time_out_24hr, '%H:%M:%S').time()
-                                        
-                                        print(f"   🔍 Validating time-out: {new_timeout_time}")
-                                        
-                                        # Check if within time-out window
+
+                                        # Validate: must be within time-out window (same as RFID)
                                         if timeout_window_start <= new_timeout_time <= timeout_window_end:
                                             new_timeout = f"{date} {time_out_24hr}"
                                             cursor.execute("""
-                                                UPDATE attendance 
+                                                UPDATE attendance
                                                 SET timeout = %s::timestamp AT TIME ZONE 'Asia/Manila'
                                                 WHERE attendance_id = %s
                                             """, (new_timeout, attendance_id))
                                             changes_made.append(f"set time-out to {time_out}")
-                                            print(f"   ✅ Set time-out to {time_out_24hr}")
                                             updates_applied = True
                                         else:
-                                            print(f"   ❌ Time-out {new_timeout_time} outside valid window")
-                                            # Do NOT update - reject this change
-                                            updates_applied = False
+                                            conn.rollback()
+                                            cursor.close()
+                                            db_pool.return_connection(conn)
+                                            return {
+                                                'success': False,
+                                                'error': (
+                                                    f"Time-out {time_out} is outside the valid window "
+                                                    f"({timeout_window_start.strftime('%H:%M')} – "
+                                                    f"{timeout_window_end.strftime('%H:%M')}) for this class."
+                                                )
+                                            }
                                     else:
                                         print(f"   ⚠️ Cannot add timeout - no valid timein exists")
                                         updates_applied = False
-                            
-                            # === UPDATE STATUS BASED ON NEW TIMES ===
+
+                            # === UPDATE STATUS (RFID logic: Present / Late / Absent) ===
                             if updates_applied:
-                                cursor.execute("""
-                                    SELECT timein, timeout FROM attendance WHERE attendance_id = %s
-                                """, (attendance_id,))
-                                updated_times = cursor.fetchone()
-                                
-                                if updated_times:
-                                    updated_timein, updated_timeout = updated_times
-                                    new_status = None
-                                    
-                                    if class_start and class_end and validation_day == day_of_week:
-                                        print(f"   📋 Validating against class schedule: {class_start}-{class_end}")
-                                        
-                                        if updated_timein and updated_timein.strftime('%H:%M:%S') != '00:00:00':
-                                            timein_dt = updated_timein.astimezone(pytz.timezone('Asia/Manila')).replace(tzinfo=None)
-                                            
-                                            print(f"   📊 Status determination:")
-                                            print(f"     Time-in: {timein_dt.time()}")
-                                            print(f"     Late threshold: {late_threshold}")
-                                            
-                                            # RULE: Present if before late threshold, Late if after
-                                            if timein_window_start <= timein_dt.time() <= timein_window_end:
-                                                if timein_dt.time() <= late_threshold:
-                                                    new_status = "Present"
-                                                    print(f"   ✅ Time-in within window: RECORDED AS PRESENT")
-                                                else:
-                                                    new_status = "Late"
-                                                    print(f"   ✅ Time-in within window: RECORDED AS LATE")
-                                            else:
-                                                new_status = "Absent"
-                                                print(f"   ❌ Time-in outside all windows: RECORDED AS ABSENT")
-                                        else:
-                                            new_status = "Absent"
-                                            print(f"   ❌ No time-in: RECORDED AS ABSENT")
-                                    
+                                new_status = None
+
+                                if validated_timein_time is not None:
+                                    # Time-in was just set — use RFID status logic
+                                    if validated_timein_time <= late_threshold:
+                                        new_status = "Present"
                                     else:
-                                        print(f"   ⚠️ No schedule validation possible, using basic logic")
-                                        if not updated_timein or updated_timein.strftime('%H:%M:%S') == '00:00:00':
-                                            new_status = "Absent"
-                                        elif updated_timein and not updated_timeout:
+                                        new_status = "Late"
+                                elif 'time_in' in update and time_in == '':
+                                    # Time-in was cleared
+                                    new_status = "Absent"
+                                else:
+                                    # Only time-out changed — re-derive status from existing time-in
+                                    cursor.execute("""
+                                        SELECT timein FROM attendance WHERE attendance_id = %s
+                                    """, (attendance_id,))
+                                    ti_row = cursor.fetchone()
+                                    if ti_row and ti_row[0] and ti_row[0].strftime('%H:%M:%S') != '00:00:00':
+                                        ti = ti_row[0].astimezone(pytz.timezone('Asia/Manila')).replace(tzinfo=None)
+                                        if ti.time() <= late_threshold:
                                             new_status = "Present"
-                                        elif updated_timein and updated_timeout:
-                                            new_status = "Present"
-                                    
-                                    if new_status:
-                                        cursor.execute("""
-                                            UPDATE attendance 
-                                            SET attendancestatus = %s
-                                            WHERE attendance_id = %s
-                                        """, (new_status, attendance_id))
-                                        print(f"   ✅ Updated status: {current_status} → {new_status}")
-                                    
-                                    updated_count += 1
-                                    
-                                    schedule_info = ""
-                                    if day1_matches and classday_1 and starttime_1 and endtime_1:
+                                        else:
+                                            new_status = "Late"
+                                    else:
+                                        new_status = "Absent"
+
+                                # Write the determined status to the DB (for ALL cases above)
+                                if new_status:
+                                    cursor.execute("""
+                                        UPDATE attendance
+                                        SET attendancestatus = %s
+                                        WHERE attendance_id = %s
+                                    """, (new_status, attendance_id))
+
+                                updated_count += 1
+
+                                schedule_info = ""
+                                if day1_matches and classday_1 and starttime_1 and endtime_1:
+                                    start1_str = str(starttime_1)[:8] if starttime_1 else 'N/A'
+                                    end1_str = str(endtime_1)[:8] if endtime_1 else 'N/A'
+                                    schedule_info = f"{classday_1} {start1_str} - {end1_str}"
+                                elif day2_matches and classday_2 and starttime_2 and endtime_2:
+                                    start2_str = str(starttime_2)[:8] if starttime_2 else 'N/A'
+                                    end2_str = str(endtime_2)[:8] if endtime_2 else 'N/A'
+                                    schedule_info = f"{classday_2} {start2_str} - {end2_str}"
+                                else:
+                                    schedule_parts = []
+                                    if classday_1 and starttime_1 and endtime_1:
                                         start1_str = str(starttime_1)[:8] if starttime_1 else 'N/A'
                                         end1_str = str(endtime_1)[:8] if endtime_1 else 'N/A'
-                                        schedule_info = f"{classday_1} {start1_str} - {end1_str}"
-                                    elif day2_matches and classday_2 and starttime_2 and endtime_2:
+                                        schedule_parts.append(f"{classday_1} {start1_str}-{end1_str}")
+                                    if classday_2 and starttime_2 and endtime_2:
                                         start2_str = str(starttime_2)[:8] if starttime_2 else 'N/A'
                                         end2_str = str(endtime_2)[:8] if endtime_2 else 'N/A'
-                                        schedule_info = f"{classday_2} {start2_str} - {end2_str}"
+                                        schedule_parts.append(f"{classday_2} {start2_str}-{end2_str}")
+                                    schedule_info = " / ".join(schedule_parts) if schedule_parts else "N/A"
+
+                                def clean_value(value):
+                                    if value is None or value == '' or value == '00:00:00':
+                                        return 'None'
+                                    return str(value)
+
+                                before_timein_str = clean_value(original_timein.strftime('%H:%M:%S') if original_timein and original_timein.strftime('%H:%M:%S') != '00:00:00' else None)
+                                before_timeout_str = clean_value(original_timeout.strftime('%H:%M:%S') if original_timeout and original_timeout.strftime('%H:%M:%S') != '00:00:00' else None)
+
+                                after_timein_str = "None"
+                                if 'time_in' in update:
+                                    if time_in == '':
+                                        after_timein_str = "None"
                                     else:
-                                        schedule_parts = []
-                                        if classday_1 and starttime_1 and endtime_1:
-                                            start1_str = str(starttime_1)[:8] if starttime_1 else 'N/A'
-                                            end1_str = str(endtime_1)[:8] if endtime_1 else 'N/A'
-                                            schedule_parts.append(f"{classday_1} {start1_str}-{end1_str}")
-                                        if classday_2 and starttime_2 and endtime_2:
-                                            start2_str = str(starttime_2)[:8] if starttime_2 else 'N/A'
-                                            end2_str = str(endtime_2)[:8] if endtime_2 else 'N/A'
-                                            schedule_parts.append(f"{classday_2} {start2_str}-{end2_str}")
-                                        schedule_info = " / ".join(schedule_parts) if schedule_parts else "N/A"
+                                        time_in_24hr = convert_to_24hour(time_in)
+                                        after_timein_str = time_in_24hr if time_in_24hr else "None"
+                                else:
+                                    after_timein_str = before_timein_str
 
-                                    def clean_value(value):
-                                        if value is None or value == '' or value == '00:00:00':
-                                            return 'None'
-                                        return str(value)
-
-                                    before_timein_str = clean_value(original_timein.strftime('%H:%M:%S') if original_timein and original_timein.strftime('%H:%M:%S') != '00:00:00' else None)
-                                    before_timeout_str = clean_value(original_timeout.strftime('%H:%M:%S') if original_timeout and original_timeout.strftime('%H:%M:%S') != '00:00:00' else None)
-
-                                    after_timein_str = "None"
-                                    if 'time_in' in update:
-                                        if time_in == '':
-                                            after_timein_str = "None"
-                                        else:
-                                            time_in_24hr = convert_to_24hour(time_in)
-                                            after_timein_str = time_in_24hr if time_in_24hr else "None"
+                                after_timeout_str = "None"
+                                if 'time_out' in update:
+                                    if time_out == '':
+                                        after_timeout_str = "None"
                                     else:
-                                        after_timein_str = before_timein_str
+                                        time_out_24hr = convert_to_24hour(time_out)
+                                        after_timeout_str = time_out_24hr if time_out_24hr else "None"
+                                else:
+                                    after_timeout_str = before_timeout_str
 
-                                    after_timeout_str = "None"
-                                    if 'time_out' in update:
-                                        if time_out == '':
-                                            after_timeout_str = "None"
-                                        else:
-                                            time_out_24hr = convert_to_24hour(time_out)
-                                            after_timeout_str = time_out_24hr if time_out_24hr else "None"
-                                    else:
-                                        after_timeout_str = before_timeout_str
+                                class_name_clean = class_name.replace('\n', ' ').replace('\r', ' ').strip()
+                                audit_details = f"HR updated attendance for {name}\nClass: {class_name_clean}\nDate: {date}\nSchedule: {schedule_info}\nSection: {class_section}\nClassroom: {classroom}"
 
-                                    class_name_clean = class_name.replace('\n', ' ').replace('\r', ' ').strip()
-                                    audit_details = f"HR updated attendance for {name}\nClass: {class_name_clean}\nDate: {date}\nSchedule: {schedule_info}\nSection: {class_section}\nClassroom: {classroom}"
+                                log_audit_action(
+                                    hr_personnel_id,
+                                    "Attendance time updated",
+                                    audit_details,
+                                    before_value=f"Time-in: {before_timein_str}, Time-out: {before_timeout_str}, Status: {original_status}",
+                                    after_value=f"Time-in: {after_timein_str}, Time-out: {after_timeout_str}, Status: {new_status}"
+                                )
 
-                                    log_audit_action(
-                                        hr_personnel_id,
-                                        "Attendance time updated",
-                                        audit_details,
-                                        before_value=f"Time-in: {before_timein_str}, Time-out: {before_timeout_str}, Status: {original_status}",
-                                        after_value=f"Time-in: {after_timein_str}, Time-out: {after_timeout_str}, Status: {new_status}"
-                                    )
-
-                                    try:
-                                        cursor.execute("SELECT acadcalendar_id FROM schedule WHERE class_id = %s", (class_id,))
-                                        acadcal_result = cursor.fetchone()
-                                        if acadcal_result:
-                                            update_attendance_report(personnel_id, class_id, acadcal_result[0], conn)
-                                    except Exception as e:
-                                        print(f"Warning: Could not update attendance report: {e}")
+                                try:
+                                    cursor.execute("SELECT acadcalendar_id FROM schedule WHERE class_id = %s", (class_id,))
+                                    acadcal_result = cursor.fetchone()
+                                    if acadcal_result:
+                                        update_attendance_report(personnel_id, class_id, acadcal_result[0], conn)
+                                except Exception as e:
+                                    print(f"Warning: Could not update attendance report: {e}")
                                     
                                 print(f"   ✅ Successfully updated attendance_id: {attendance_id}")
                     else:
@@ -7262,6 +7604,7 @@ def api_hr_delete_schedule():
             cursor.execute("SELECT COUNT(*) FROM attendancereport WHERE class_id = %s", (cid,))
             rep_count = cursor.fetchone()[0]
 
+            cursor.execute("UPDATE rfidlogs SET matched_class_id = NULL WHERE matched_class_id = %s", (cid,))
             cursor.execute("DELETE FROM attendancereport WHERE class_id = %s", (cid,))
             cursor.execute("DELETE FROM attendance      WHERE class_id = %s", (cid,))
             cursor.execute("DELETE FROM schedule        WHERE class_id = %s", (cid,))
@@ -9879,6 +10222,400 @@ def api_hr_faculty_class_attendance_pdf(personnel_id, class_id):
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/hr/faculty-attendance-report-pdf/<int:personnel_id>')
+@require_auth([20003])
+def api_hr_faculty_attendance_report_pdf(personnel_id):
+    """Generate a full-semester attendance report PDF for a faculty, listing all their classes."""
+    try:
+        semester_id = request.args.get('semester_id')
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        # 1. Faculty details
+        cursor.execute("""
+            SELECT p.firstname, p.lastname, p.honorifics, c.collegename
+            FROM personnel p
+            LEFT JOIN college c ON p.college_id = c.college_id
+            WHERE p.personnel_id = %s
+        """, (personnel_id,))
+        person = cursor.fetchone()
+        if not person:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify({'success': False, 'error': 'Faculty not found'}), 404
+
+        firstname, lastname, honorifics, collegename = person
+        faculty_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
+        department = collegename or 'N/A'
+
+        # 2. Resolve semester
+        if not semester_id:
+            cursor.execute("""
+                SELECT acadcalendar_id FROM acadcalendar
+                WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                ORDER BY semesterstart DESC LIMIT 1
+            """)
+            result = cursor.fetchone()
+            semester_id = result[0] if result else None
+
+        semester_display = 'N/A'
+        is_preliminary = False
+        if semester_id:
+            cursor.execute("""
+                SELECT semester, acadyear, semesterend FROM acadcalendar
+                WHERE acadcalendar_id = %s
+            """, (semester_id,))
+            cal = cursor.fetchone()
+            if cal:
+                sem_name, acad_year, semesterend = cal
+                if 'semester' not in sem_name.lower():
+                    sem_name = f"{sem_name} Semester"
+                acad_year_clean = acad_year.upper().lstrip('AY').strip()
+                semester_display = f"{sem_name}, AY {acad_year_clean}"
+                from datetime import date as _date
+                if semesterend and _date.today() <= semesterend:
+                    is_preliminary = True
+
+        # 3. All classes for this faculty in the semester
+        classes = []
+        if semester_id:
+            cursor.execute("""
+                SELECT sub.subjectcode, sub.subjectname, sch.classsection, sch.classroom,
+                       ar.presentcount, ar.latecount, ar.excusedcount, ar.absentcount,
+                       ar.totalclasses, ar.attendancerate
+                FROM attendancereport ar
+                JOIN schedule sch ON ar.class_id = sch.class_id
+                JOIN subjects sub ON sch.subject_id = sub.subject_id
+                WHERE ar.personnel_id = %s AND ar.acadcalendar_id = %s
+                ORDER BY sub.subjectcode, sch.classsection
+            """, (personnel_id, semester_id))
+            classes = cursor.fetchall()
+
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        # 4. Build PDF
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=(8.5 * inch, 11 * inch),
+            topMargin=0.75 * inch,
+            leftMargin=0.75 * inch,
+            rightMargin=0.75 * inch,
+            bottomMargin=0.5 * inch
+        )
+        styles = getSampleStyleSheet()
+        story = []
+
+        title_style = ParagraphStyle(
+            'Title',
+            parent=styles['h1'],
+            fontSize=16,
+            textColor=colors.HexColor('#7b1113'),
+            spaceAfter=6
+        )
+        preliminary_style = ParagraphStyle(
+            'Disclaimer',
+            parent=styles['h2'],
+            fontSize=14,
+            textColor=colors.red,
+            alignment=1,
+            spaceAfter=18,
+            spaceBefore=12
+        )
+
+        story.append(Paragraph("Saint Peter's College - Faculty Attendance Report", title_style))
+
+        if is_preliminary:
+            story.append(Paragraph(
+                "<b>*** PRELIMINARY REPORT - NOT FINALIZED ***</b>",
+                preliminary_style
+            ))
+            story.append(Paragraph(
+                "<font color='#FF0000' size='9'><i>Warning: This report is based on attendance recorded so far. "
+                "The semester is still in progress and the final figures may change.</i></font>",
+                styles['Normal']
+            ))
+
+        generated_date = datetime.now().strftime('%B %d, %Y %I:%M %p')
+        story.append(Paragraph(f"<b>Faculty:</b> {faculty_name}", styles['Normal']))
+        story.append(Paragraph(f"<b>Department:</b> {department}", styles['Normal']))
+        story.append(Paragraph(f"<b>Semester:</b> {semester_display}", styles['Normal']))
+        story.append(Paragraph(f"<b>Generated:</b> {generated_date}", styles['Normal']))
+        story.append(Spacer(1, 0.25 * inch))
+
+        # 5. Classes table
+        story.append(Paragraph("<b>Class Summary</b>", styles['h3']))
+
+        if not classes:
+            story.append(Paragraph("No attendance records found for this semester.", styles['Normal']))
+            total_present = total_late = total_excused = total_absent = total_classes = 0
+            overall_rate = 0.0
+        else:
+            header = ['Subject', 'Section', 'Room', 'Present', 'Late', 'Excused', 'Absent', 'Total', 'Rate']
+            table_data = [header]
+            total_present = total_late = total_excused = total_absent = total_classes = 0
+
+            for row in classes:
+                subjectcode, subjectname, section, classroom, present, late, excused, absent, total_cls, rate = row
+                present = present or 0; late = late or 0
+                excused = excused or 0; absent = absent or 0
+                total_cls = total_cls or 0
+                rate = round(float(rate), 2) if rate else 0.0
+                total_present  += present
+                total_late     += late
+                total_excused  += excused
+                total_absent   += absent
+                total_classes  += total_cls
+                table_data.append([
+                    f"{subjectcode}\n{subjectname}",
+                    section or '—',
+                    classroom or '—',
+                    str(present),
+                    str(late),
+                    str(excused),
+                    str(absent),
+                    str(total_cls),
+                    f"{rate:.1f}%"
+                ])
+
+            overall_rate = round((total_present + total_late) / total_classes * 100, 2) if total_classes else 0.0
+
+            col_widths = [2.2*inch, 0.7*inch, 0.7*inch, 0.55*inch, 0.55*inch, 0.65*inch, 0.65*inch, 0.55*inch, 0.65*inch]
+            tbl = Table(table_data, colWidths=col_widths, repeatRows=1)
+            tbl.setStyle(TableStyle([
+                ('BACKGROUND',    (0, 0), (-1, 0),  colors.HexColor('#F2F2F2')),
+                ('FONTNAME',      (0, 0), (-1, 0),  'Helvetica-Bold'),
+                ('FONTSIZE',      (0, 0), (-1, 0),  9),
+                ('ALIGN',         (3, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME',      (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE',      (0, 1), (-1, -1), 8),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9F9F9')]),
+                ('LINEBELOW',     (0, 0), (-1, -1), 0.5, colors.HexColor('#E0E0E0')),
+                ('LEFTPADDING',   (0, 0), (-1, -1), 5),
+                ('RIGHTPADDING',  (0, 0), (-1, -1), 5),
+                ('TOPPADDING',    (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ]))
+            story.append(tbl)
+
+        # 6. Faculty Summary
+        story.append(Spacer(1, 0.25 * inch))
+        story.append(Paragraph("<b>Faculty Summary</b>", styles['h3']))
+
+        summary_data = [
+            ['Present:',         str(total_present)],
+            ['Late:',            str(total_late)],
+            ['Excused:',         str(total_excused)],
+            ['Absent:',          str(total_absent)],
+            ['Total Classes:',   str(total_classes)],
+            ['Attendance Rate:', f"{overall_rate:.2f}%"],
+        ]
+        faculty_summary_tbl = Table(summary_data, colWidths=[2.5 * inch, 2.5 * inch])
+        faculty_summary_tbl.setStyle(TableStyle([
+            ('BACKGROUND',   (0, 0), (-1, 0),  colors.HexColor('#F2F2F2')),
+            ('LINEBELOW',    (0, 0), (-1, -1), 0.5, colors.HexColor('#E0E0E0')),
+            ('FONTNAME',     (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTNAME',     (0, 0), (0, -1),  'Helvetica-Bold'),
+            ('FONTSIZE',     (0, 0), (-1, -1), 10),
+            ('ALIGN',        (1, 0), (1, -1),  'RIGHT'),
+            ('LEFTPADDING',  (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING',   (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING',(0, 0), (-1, -1), 5),
+        ]))
+        story.append(faculty_summary_tbl)
+
+        doc.build(story)
+
+        buffer.seek(0)
+        response = make_response(buffer.getvalue())
+        response.headers['Content-Type'] = 'application/pdf'
+        safe_name = faculty_name.replace(' ', '_')
+        filename = f'Attendance_Report_{safe_name}.pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    except Exception as e:
+        print(f"Error generating faculty attendance report PDF: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/hr/campus-attendance-report-pdf/<int:personnel_id>')
+@require_auth([20003])
+def api_hr_campus_attendance_report_pdf(personnel_id):
+    """Generate a campus attendance report PDF for a faculty member."""
+    try:
+        semester_id = request.args.get('semester_id')
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        # 1. Faculty details
+        cursor.execute("""
+            SELECT p.firstname, p.lastname, p.honorifics, c.collegename
+            FROM personnel p
+            LEFT JOIN college c ON p.college_id = c.college_id
+            WHERE p.personnel_id = %s
+        """, (personnel_id,))
+        person = cursor.fetchone()
+        if not person:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify({'success': False, 'error': 'Faculty not found'}), 404
+
+        firstname, lastname, honorifics, collegename = person
+        faculty_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
+        department = collegename or 'N/A'
+
+        # 2. Resolve semester
+        date_start = date_end = None
+        semester_display = 'N/A'
+        is_preliminary = False
+        if semester_id:
+            cursor.execute("""
+                SELECT semester, acadyear, semesterstart, semesterend FROM acadcalendar
+                WHERE acadcalendar_id = %s
+            """, (semester_id,))
+            cal = cursor.fetchone()
+            if cal:
+                sem_name, acad_year, semesterstart, semesterend = cal
+                date_start = semesterstart
+                date_end   = semesterend
+                if 'semester' not in sem_name.lower():
+                    sem_name = f"{sem_name} Semester"
+                acad_year_clean = acad_year.upper().lstrip('AY').strip()
+                semester_display = f"{sem_name}, AY {acad_year_clean}"
+                from datetime import date as _date
+                if semesterend and _date.today() <= semesterend:
+                    is_preliminary = True
+
+        # 3. Aggregate campus attendance counts for this faculty
+        params = [personnel_id]
+        date_filter = ""
+        if date_start and date_end:
+            date_filter = "AND ca.attendance_date BETWEEN %s AND %s"
+            params += [date_start, date_end]
+
+        cursor.execute(f"""
+            SELECT
+                COALESCE(SUM(CASE WHEN ca.session = 'Morning'   AND ca.status = 'Present' THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN ca.session = 'Morning'   AND ca.status = 'Late'    THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN ca.session = 'Morning'   AND ca.status = 'Absent'  THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN ca.session = 'Afternoon' AND ca.status = 'Present' THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN ca.session = 'Afternoon' AND ca.status = 'Late'    THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN ca.session = 'Afternoon' AND ca.status = 'Absent'  THEN 1 ELSE 0 END), 0)
+            FROM campus_attendance ca
+            WHERE ca.personnel_id = %s {date_filter}
+        """, params)
+        row = cursor.fetchone()
+
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        mp, ml, ma, ap, al, aa = (int(v) for v in row) if row else (0, 0, 0, 0, 0, 0)
+
+        total_sessions = mp + ml + ma + ap + al + aa
+        present_late   = mp + ml + ap + al
+        rate = round(present_late / total_sessions * 100, 2) if total_sessions else 0.0
+
+        # 5. Build PDF
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=(8.5 * inch, 11 * inch),
+            topMargin=0.75 * inch,
+            leftMargin=0.75 * inch,
+            rightMargin=0.75 * inch,
+            bottomMargin=0.5 * inch
+        )
+        styles = getSampleStyleSheet()
+        story = []
+
+        title_style = ParagraphStyle(
+            'Title',
+            parent=styles['h1'],
+            fontSize=16,
+            textColor=colors.HexColor('#7b1113'),
+            spaceAfter=6
+        )
+        preliminary_style = ParagraphStyle(
+            'Disclaimer',
+            parent=styles['h2'],
+            fontSize=14,
+            textColor=colors.red,
+            alignment=1,
+            spaceAfter=18,
+            spaceBefore=12
+        )
+
+        story.append(Paragraph("Saint Peter's College - Campus Attendance Report", title_style))
+
+        if is_preliminary:
+            story.append(Paragraph(
+                "<b>*** PRELIMINARY REPORT - NOT FINALIZED ***</b>",
+                preliminary_style
+            ))
+            story.append(Paragraph(
+                "<font color='#FF0000' size='9'><i>Warning: This report is based on attendance recorded so far. "
+                "The semester is still in progress and the final figures may change.</i></font>",
+                styles['Normal']
+            ))
+
+        generated_date = datetime.now().strftime('%B %d, %Y %I:%M %p')
+        story.append(Paragraph(f"<b>Faculty:</b> {faculty_name}", styles['Normal']))
+        story.append(Paragraph(f"<b>Department:</b> {department}", styles['Normal']))
+        story.append(Paragraph(f"<b>Semester:</b> {semester_display}", styles['Normal']))
+        story.append(Paragraph(f"<b>Generated:</b> {generated_date}", styles['Normal']))
+        story.append(Spacer(1, 0.25 * inch))
+
+        # 6. Summary
+        story.append(Paragraph("<b>Summary</b>", styles['h3']))
+
+        summary_data = [
+            ['Morning Present:',   str(mp)],
+            ['Morning Late:',      str(ml)],
+            ['Morning Absent:',    str(ma)],
+            ['Afternoon Present:', str(ap)],
+            ['Afternoon Late:',    str(al)],
+            ['Afternoon Absent:',  str(aa)],
+            ['Total Sessions:',    str(total_sessions)],
+            ['Attendance Rate:',   f"{rate:.2f}%"],
+        ]
+        summary_tbl = Table(summary_data, colWidths=[2.5 * inch, 2.5 * inch])
+        summary_tbl.setStyle(TableStyle([
+            ('BACKGROUND',   (0, 0), (-1, 0),  colors.HexColor('#F2F2F2')),
+            ('LINEBELOW',    (0, 0), (-1, -1), 0.5, colors.HexColor('#E0E0E0')),
+            ('FONTNAME',     (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTNAME',     (0, 0), (0, -1),  'Helvetica-Bold'),
+            ('FONTSIZE',     (0, 0), (-1, -1), 10),
+            ('ALIGN',        (1, 0), (1, -1),  'RIGHT'),
+            ('LEFTPADDING',  (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING',   (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING',(0, 0), (-1, -1), 5),
+        ]))
+        story.append(summary_tbl)
+
+        doc.build(story)
+
+        buffer.seek(0)
+        response = make_response(buffer.getvalue())
+        response.headers['Content-Type'] = 'application/pdf'
+        safe_name = faculty_name.replace(' ', '_')
+        filename = f'Campus_Attendance_Report_{safe_name}.pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    except Exception as e:
+        print(f"Error generating campus attendance report PDF: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/hr/new-evaluation-cycle', methods=['POST'])
 @require_auth([20003])
