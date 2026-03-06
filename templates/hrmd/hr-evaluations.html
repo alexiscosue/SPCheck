@@ -229,12 +229,38 @@
           <!-- Charts Row -->
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px;">
             <div style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; padding:16px;">
-              <div style="font-weight:700; font-size:13px; color:#374151; margin-bottom:14px;"><i class='bx bx-bar-chart-alt-2' style="color:var(--spc-maroon); margin-right:5px;"></i>Rating Distribution</div>
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+                <div style="font-weight:700; font-size:13px; color:#374151;"><i class='bx bx-bar-chart-alt-2' style="color:var(--spc-maroon); margin-right:5px;"></i>Rating Distribution</div>
+                <div style="display:flex; gap:4px;">
+                  <button id="distChartToggle-bar" onclick="switchDistChartView('bar')"
+                    style="padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid var(--spc-maroon); background:var(--spc-maroon); color:#fff; transition:all .15s;">
+                    <i class='bx bx-bar-chart-alt-2'></i> Bar
+                  </button>
+                  <button id="distChartToggle-line" onclick="switchDistChartView('line')"
+                    style="padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid #e5e7eb; background:#fff; color:var(--muted); transition:all .15s;">
+                    <i class='bx bx-line-chart'></i> Trend
+                  </button>
+                </div>
+              </div>
               <canvas id="evalDistChart"></canvas>
+              <canvas id="evalDistTrendChart" style="display:none;"></canvas>
             </div>
             <div style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; padding:16px;">
-              <div style="font-weight:700; font-size:13px; color:#374151; margin-bottom:14px;"><i class='bx bx-buildings' style="color:#2563eb; margin-right:5px;"></i>Avg Rating by Department</div>
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+                <div style="font-weight:700; font-size:13px; color:#374151;"><i class='bx bx-buildings' style="color:var(--spc-maroon); margin-right:5px;"></i>Avg Rating by Department</div>
+                <div style="display:flex; gap:4px;">
+                  <button id="deptChartToggle-bar" onclick="switchDeptChartView('bar')"
+                    style="padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid var(--spc-maroon); background:var(--spc-maroon); color:#fff; transition:all .15s;">
+                    <i class='bx bx-bar-chart-alt-2'></i> Bar
+                  </button>
+                  <button id="deptChartToggle-line" onclick="switchDeptChartView('line')"
+                    style="padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid #e5e7eb; background:#fff; color:var(--muted); transition:all .15s;">
+                    <i class='bx bx-line-chart'></i> Trend
+                  </button>
+                </div>
+              </div>
               <canvas id="evalDeptChart"></canvas>
+              <canvas id="evalDeptTrendChart" style="display:none;"></canvas>
             </div>
           </div>
 
@@ -2108,7 +2134,20 @@ function switchEvalTab(tab) {
         document.getElementById(`evalTabContent-${t}`).style.display = t === tab ? 'block' : 'none';
         document.getElementById(`evalPageTab-${t}`).classList.toggle('active', t === tab);
     });
-    if (tab === 'analytics') renderAnalytics();
+    if (tab === 'analytics') {
+        // Reset both chart toggles to bar view
+        deptChartView = 'bar';
+        distChartView = 'bar';
+        document.getElementById('evalDeptChart').style.display = 'block';
+        document.getElementById('evalDeptTrendChart').style.display = 'none';
+        document.getElementById('deptChartToggle-bar').style.cssText  = 'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--spc-maroon);background:var(--spc-maroon);color:#fff;transition:all .15s;';
+        document.getElementById('deptChartToggle-line').style.cssText = 'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #e5e7eb;background:#fff;color:var(--muted);transition:all .15s;';
+        document.getElementById('evalDistChart').style.display = 'block';
+        document.getElementById('evalDistTrendChart').style.display = 'none';
+        document.getElementById('distChartToggle-bar').style.cssText  = 'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--spc-maroon);background:var(--spc-maroon);color:#fff;transition:all .15s;';
+        document.getElementById('distChartToggle-line').style.cssText = 'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #e5e7eb;background:#fff;color:var(--muted);transition:all .15s;';
+        renderAnalytics();
+    }
 }
 
 function renderAnalytics() {
@@ -2162,7 +2201,7 @@ function renderDistributionChart(data) {
             datasets: [{
                 label: 'Faculty Count',
                 data: counts,
-                backgroundColor: ['#fca5a5','#fcd34d','#6ee7b7','#60a5fa','#a78bfa'],
+                backgroundColor: ['rgba(123,17,19,0.25)','rgba(123,17,19,0.45)','rgba(123,17,19,0.65)','rgba(123,17,19,0.82)','rgba(123,17,19,1)'],
                 borderRadius: 6,
                 borderSkipped: false,
             }]
@@ -2173,6 +2212,89 @@ function renderDistributionChart(data) {
             scales: {
                 y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f1f5f9' } },
                 x: { grid: { display: false } }
+            }
+        }
+    });
+}
+
+// ── Rating Distribution Toggle ────────────────────────────
+
+let evalDistTrendChartInstance = null;
+let distChartView = 'bar';
+
+function switchDistChartView(view) {
+    distChartView = view;
+    const barBtn  = document.getElementById('distChartToggle-bar');
+    const lineBtn = document.getElementById('distChartToggle-line');
+    const maroon  = 'var(--spc-maroon)';
+
+    if (view === 'bar') {
+        barBtn.style.cssText  = `padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${maroon};background:${maroon};color:#fff;transition:all .15s;`;
+        lineBtn.style.cssText = 'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #e5e7eb;background:#fff;color:var(--muted);transition:all .15s;';
+        document.getElementById('evalDistChart').style.display = 'block';
+        document.getElementById('evalDistTrendChart').style.display = 'none';
+        if (EVALUATIONS_DATA.length > 0) renderDistributionChart(EVALUATIONS_DATA);
+    } else {
+        lineBtn.style.cssText = `padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${maroon};background:${maroon};color:#fff;transition:all .15s;`;
+        barBtn.style.cssText  = 'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #e5e7eb;background:#fff;color:var(--muted);transition:all .15s;';
+        document.getElementById('evalDistChart').style.display = 'none';
+        document.getElementById('evalDistTrendChart').style.display = 'block';
+        loadDistTrendChart();
+    }
+}
+
+async function loadDistTrendChart() {
+    try {
+        const res  = await fetch('/api/hr/distribution-trends');
+        const data = await res.json();
+        if (data.success) renderDistTrendChart(data.semesters, data.buckets);
+    } catch (err) {
+        console.error('Failed to load distribution trends:', err);
+    }
+}
+
+function renderDistTrendChart(semesters, buckets) {
+    if (evalDistTrendChartInstance) evalDistTrendChartInstance.destroy();
+
+    const bucketNames  = ['0–1', '1–2', '2–3', '3–4', '4–5'];
+    const bucketColors = [
+        'rgba(123,17,19,0.30)',
+        'rgba(123,17,19,0.50)',
+        'rgba(123,17,19,0.70)',
+        'rgba(123,17,19,0.87)',
+        'rgba(123,17,19,1)',
+    ];
+
+    const datasets = bucketNames.map((name, i) => ({
+        label: name,
+        data: buckets[name] || [],
+        borderColor: bucketColors[i],
+        backgroundColor: bucketColors[i],
+        tension: 0.3,
+        borderWidth: 2,
+        pointRadius: 4,
+        pointBackgroundColor: bucketColors[i],
+        spanGaps: true,
+    }));
+
+    const ctx = document.getElementById('evalDistTrendChart').getContext('2d');
+    evalDistTrendChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { labels: semesters, datasets },
+        options: {
+            responsive: true,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 14, padding: 10 } }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { stepSize: 1 },
+                    grid: { color: '#f1f5f9' },
+                    title: { display: true, text: 'Faculty Count', font: { size: 11 } }
+                },
+                x: { grid: { display: false }, ticks: { font: { size: 10 } } }
             }
         }
     });
@@ -2217,8 +2339,7 @@ async function openFacultyTrend(personnelId, name) {
                         label: 'Overall',
                         data: trends.map(t => t.overall),
                         borderColor: '#7b1113',
-                        backgroundColor: 'rgba(123,17,19,0.07)',
-                        fill: true,
+                        backgroundColor: '#7b1113',
                         tension: 0.3,
                         borderWidth: 2.5,
                         pointRadius: 5,
@@ -2228,6 +2349,7 @@ async function openFacultyTrend(personnelId, name) {
                         label: 'Student',
                         data: trends.map(t => t.student),
                         borderColor: '#d97706',
+                        backgroundColor: '#d97706',
                         borderDash: [5, 3],
                         tension: 0.3,
                         borderWidth: 1.5,
@@ -2238,6 +2360,7 @@ async function openFacultyTrend(personnelId, name) {
                         label: 'Supervisor',
                         data: trends.map(t => t.supervisor),
                         borderColor: '#2563eb',
+                        backgroundColor: '#2563eb',
                         borderDash: [5, 3],
                         tension: 0.3,
                         borderWidth: 1.5,
@@ -2248,6 +2371,7 @@ async function openFacultyTrend(personnelId, name) {
                         label: 'Peer',
                         data: trends.map(t => t.peer),
                         borderColor: '#16a34a',
+                        backgroundColor: '#16a34a',
                         borderDash: [5, 3],
                         tension: 0.3,
                         borderWidth: 1.5,
@@ -2320,6 +2444,87 @@ function renderDeptChart(data) {
             scales: {
                 x: { beginAtZero: true, max: 5, grid: { color: '#f1f5f9' } },
                 y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+            }
+        }
+    });
+}
+
+let evalDeptTrendChartInstance = null;
+let deptChartView = 'bar'; // 'bar' | 'line'
+
+function switchDeptChartView(view) {
+    deptChartView = view;
+
+    // Update toggle button styles
+    const barBtn  = document.getElementById('deptChartToggle-bar');
+    const lineBtn = document.getElementById('deptChartToggle-line');
+    if (view === 'bar') {
+        barBtn.style.cssText  = 'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--spc-maroon);background:var(--spc-maroon);color:#fff;transition:all .15s;';
+        lineBtn.style.cssText = 'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #e5e7eb;background:#fff;color:var(--muted);transition:all .15s;';
+        document.getElementById('evalDeptChart').style.display = 'block';
+        document.getElementById('evalDeptTrendChart').style.display = 'none';
+        if (EVALUATIONS_DATA.length > 0) renderDeptChart(EVALUATIONS_DATA);
+    } else {
+        lineBtn.style.cssText = 'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--spc-maroon);background:var(--spc-maroon);color:#fff;transition:all .15s;';
+        barBtn.style.cssText  = 'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #e5e7eb;background:#fff;color:var(--muted);transition:all .15s;';
+        document.getElementById('evalDeptChart').style.display = 'none';
+        document.getElementById('evalDeptTrendChart').style.display = 'block';
+        loadDeptTrendChart();
+    }
+}
+
+async function loadDeptTrendChart() {
+    try {
+        const res  = await fetch('/api/hr/dept-trends');
+        const data = await res.json();
+        if (!data.success) return;
+        renderDeptTrendChart(data.semesters, data.depts);
+    } catch (err) {
+        console.error('Failed to load dept trends:', err);
+    }
+}
+
+function renderDeptTrendChart(semesters, depts) {
+    if (evalDeptTrendChartInstance) evalDeptTrendChartInstance.destroy();
+
+    const palette = [
+        '#7b1113','#2563eb','#d97706','#16a34a','#7c3aed',
+        '#db2777','#0891b2','#65a30d','#ea580c','#6b7280'
+    ];
+    const deptNames = Object.keys(depts);
+    const datasets  = deptNames.map((name, i) => ({
+        label: name,
+        data: depts[name],
+        borderColor: palette[i % palette.length],
+        backgroundColor: palette[i % palette.length],
+        tension: 0.3,
+        borderWidth: 2,
+        pointRadius: 4,
+        pointBackgroundColor: palette[i % palette.length],
+        spanGaps: true,
+    }));
+
+    const ctx = document.getElementById('evalDeptTrendChart').getContext('2d');
+    evalDeptTrendChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { labels: semesters, datasets },
+        options: {
+            responsive: true,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { font: { size: 10 }, boxWidth: 14, padding: 10 }
+                }
+            },
+            scales: {
+                y: {
+                    min: 0, max: 5,
+                    grid: { color: '#f1f5f9' },
+                    title: { display: true, text: 'Score (0–5)', font: { size: 11 } },
+                    ticks: { stepSize: 1 }
+                },
+                x: { grid: { display: false }, ticks: { font: { size: 10 } } }
             }
         }
     });

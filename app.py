@@ -8723,8 +8723,28 @@ def api_hr_evaluations():
         except Exception:
             current_term_id = 80001
     
-    # Fetch academic calendar display information
-    acadcalendar_info = get_current_acadcalendar_info(current_term_id)
+    # Fetch academic calendar display information (reuse existing cursor)
+    cursor.execute("""
+        SELECT semester, acadyear, semesterend
+        FROM acadcalendar WHERE acadcalendar_id = %s
+    """, (current_term_id,))
+    cal_row = cursor.fetchone()
+    if cal_row:
+        sem_name, acad_year, sem_end = cal_row
+        if 'semester' not in sem_name.lower():
+            sem_name = f"{sem_name} Semester"
+        year_clean = acad_year.replace('AY ', '').replace('AY', '').strip()
+        acadcalendar_info = {
+            'semester_name': sem_name,
+            'acad_year': year_clean,
+            'deadline': sem_end.strftime('%b %d, %Y') if sem_end else 'N/A',
+            'display': f"📅 {sem_name} — AY {year_clean}",
+        }
+    else:
+        acadcalendar_info = {
+            'semester_name': 'N/A', 'acad_year': 'N/A',
+            'deadline': 'N/A', 'display': '📅 N/A — AY N/A',
+        }
 
     # --- KPI 1, 2, 3, & 4 Calculation (Combined Query) ---
     cursor.execute("""
@@ -9070,6 +9090,155 @@ def api_hr_evaluation_trends():
             })
 
         return jsonify({'success': True, 'trends': trends})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route('/api/hr/dept-trends', methods=['GET'])
+@require_auth([20003])
+def api_hr_dept_trends():
+    """Per-department weighted avg score per semester, ordered chronologically."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT
+                ac.acadcalendar_id,
+                ac.semester,
+                ac.acadyear,
+                ac.semesterstart,
+                c.collegename,
+                AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END) AS avg_s,
+                AVG(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END) AS avg_sv,
+                AVG(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END) AS avg_p
+            FROM faculty_evaluations fe
+            JOIN acadcalendar ac  ON fe.acadcalendar_id = ac.acadcalendar_id
+            JOIN personnel p      ON fe.personnel_id    = p.personnel_id
+            JOIN college c        ON p.college_id       = c.college_id
+            WHERE p.role_id = 20001
+            GROUP BY ac.acadcalendar_id, ac.semester, ac.acadyear, ac.semesterstart, c.collegename
+            ORDER BY ac.semesterstart ASC, c.collegename ASC
+        """)
+        rows = cur.fetchall()
+
+        # Build ordered semester label list and per-dept score map
+        sem_order = []
+        seen_sems = set()
+        dept_data = {}
+
+        for row in rows:
+            sem_id   = row[0]
+            sem_name = row[1]
+            year     = (row[2] or '').replace('AY ', '')
+            short    = '1st Sem' if 'First' in sem_name else ('2nd Sem' if 'Second' in sem_name else 'Summer')
+            label    = f"{short} AY {year}"
+            dept     = row[4]
+
+            if sem_id not in seen_sems:
+                seen_sems.add(sem_id)
+                sem_order.append({'id': sem_id, 'label': label})
+
+            avg_s  = float(row[5]) if row[5] is not None else None
+            avg_sv = float(row[6]) if row[6] is not None else None
+            avg_p  = float(row[7]) if row[7] is not None else None
+
+            weights = []
+            if avg_s  is not None: weights.append((avg_s,  0.55))
+            if avg_sv is not None: weights.append((avg_sv, 0.35))
+            if avg_p  is not None: weights.append((avg_p,  0.10))
+
+            overall = None
+            if weights:
+                total_w = sum(w for _, w in weights)
+                overall = round(sum(v * w for v, w in weights) / total_w, 3)
+
+            if dept not in dept_data:
+                dept_data[dept] = {}
+            dept_data[dept][sem_id] = overall
+
+        # Align each dept's scores to the global semester order (None for missing)
+        sem_labels = [s['label'] for s in sem_order]
+        sem_ids    = [s['id']    for s in sem_order]
+        depts_aligned = {
+            dept: [dept_data[dept].get(sid) for sid in sem_ids]
+            for dept in sorted(dept_data.keys())
+        }
+
+        return jsonify({'success': True, 'semesters': sem_labels, 'depts': depts_aligned})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route('/api/hr/distribution-trends', methods=['GET'])
+@require_auth([20003])
+def api_hr_distribution_trends():
+    """Per-semester count of faculty in each rating bucket (0-1, 1-2, 2-3, 3-4, 4-5)."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            WITH faculty_sem_scores AS (
+                SELECT
+                    fe.acadcalendar_id,
+                    fe.personnel_id,
+                    COALESCE(MAX(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END), 0) * 0.55 +
+                    COALESCE(MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END), 0) * 0.35 +
+                    COALESCE(MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END), 0) * 0.10
+                        AS overall
+                FROM faculty_evaluations fe
+                JOIN personnel p ON fe.personnel_id = p.personnel_id
+                WHERE p.role_id = 20001
+                GROUP BY fe.acadcalendar_id, fe.personnel_id
+            )
+            SELECT
+                ac.acadcalendar_id,
+                ac.semester,
+                ac.acadyear,
+                ac.semesterstart,
+                COUNT(CASE WHEN fss.overall > 0 AND fss.overall <= 1 THEN 1 END) AS b01,
+                COUNT(CASE WHEN fss.overall > 1 AND fss.overall <= 2 THEN 1 END) AS b12,
+                COUNT(CASE WHEN fss.overall > 2 AND fss.overall <= 3 THEN 1 END) AS b23,
+                COUNT(CASE WHEN fss.overall > 3 AND fss.overall <= 4 THEN 1 END) AS b34,
+                COUNT(CASE WHEN fss.overall > 4                      THEN 1 END) AS b45
+            FROM faculty_sem_scores fss
+            JOIN acadcalendar ac ON fss.acadcalendar_id = ac.acadcalendar_id
+            WHERE fss.overall > 0
+            GROUP BY ac.acadcalendar_id, ac.semester, ac.acadyear, ac.semesterstart
+            ORDER BY ac.semesterstart ASC
+        """)
+        rows = cur.fetchall()
+
+        sem_labels = []
+        buckets = {'0–1': [], '1–2': [], '2–3': [], '3–4': [], '4–5': []}
+
+        for row in rows:
+            sem_name = row[1]
+            year     = (row[2] or '').replace('AY ', '')
+            short    = '1st Sem' if 'First' in sem_name else ('2nd Sem' if 'Second' in sem_name else 'Summer')
+            sem_labels.append(f"{short} AY {year}")
+            buckets['0–1'].append(int(row[4]))
+            buckets['1–2'].append(int(row[5]))
+            buckets['2–3'].append(int(row[6]))
+            buckets['3–4'].append(int(row[7]))
+            buckets['4–5'].append(int(row[8]))
+
+        return jsonify({'success': True, 'semesters': sem_labels, 'buckets': buckets})
     except Exception as e:
         import traceback
         traceback.print_exc()
