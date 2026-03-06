@@ -6500,9 +6500,10 @@ def api_hr_add_schedule():
         endtime_2 = data.get('endtime_2')
         classroom = data.get('classroom')
         classsection = data.get('classsection')
-        
-        required_fields = ['semester_id', 'personnel_id', 'subject_id', 'units', 
-                          'classday_1', 'starttime_1', 'endtime_1', 'classroom', 'classsection']
+        student_count = data.get('student_count')
+
+        required_fields = ['semester_id', 'personnel_id', 'subject_id', 'units',
+                          'classday_1', 'starttime_1', 'endtime_1', 'classroom', 'classsection', 'student_count']
         
         for field in required_fields:
             if not data.get(field):
@@ -6532,14 +6533,14 @@ def api_hr_add_schedule():
                 class_id, personnel_id, subject_id,
                 classday_1, starttime_1, endtime_1,
                 classday_2, starttime_2, endtime_2,
-                classroom, acadcalendar_id, classsection
+                classroom, acadcalendar_id, classsection, student_count
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             new_class_id, personnel_id, subject_id,
             classday_1, starttime_1, endtime_1,
             classday_2, starttime_2, endtime_2,
-            classroom, semester_id, classsection
+            classroom, semester_id, classsection, student_count
         ))
 
         create_initial_attendance_report(personnel_id, new_class_id, semester_id, conn)
@@ -6602,9 +6603,9 @@ def api_hr_download_schedule_template():
     writer.writerow([])   # blank separator
     # Schedule table
     writer.writerow(['Subject Code', 'Day 1', 'Start Time 1', 'End Time 1',
-                     'Day 2', 'Start Time 2', 'End Time 2', 'Room', 'Section'])
-    writer.writerow(['ELS 100', 'Monday',    '07:30', '09:00', 'Wednesday', '07:30', '09:00', 'LR1',  '51001'])
-    writer.writerow(['ELS 102', 'Tuesday',   '10:00', '13:00', '',          '',      '',      'LR2',  '51002'])
+                     'Day 2', 'Start Time 2', 'End Time 2', 'Room', 'Section', 'Student Count'])
+    writer.writerow(['ELS 100', 'Monday',    '07:30', '09:00', 'Wednesday', '07:30', '09:00', 'LR1',  '51001', '35'])
+    writer.writerow(['ELS 102', 'Tuesday',   '10:00', '13:00', '',          '',      '',      'LR2',  '51002', '28'])
     output.seek(0)
     return Response(
         output.getvalue(),
@@ -6647,6 +6648,7 @@ def api_hr_validate_schedule_csv():
         header_row_index = None  # index of the "Subject Code,..." row
 
         SCHED_HEADER = ['subject code', 'day 1', 'start time 1', 'end time 1']
+        # docstring reference: full header is Subject Code,Day 1,Start Time 1,End Time 1,Day 2,Start Time 2,End Time 2,Room,Section,Student Count
 
         for i, row in enumerate(all_raw):
             if not row:
@@ -6800,11 +6802,11 @@ def api_hr_validate_schedule_csv():
 
         for idx, raw in enumerate(data_rows):
             # Pad short rows to avoid index errors
-            while len(raw) < 9:
+            while len(raw) < 10:
                 raw.append('')
             (subject_code_r, classday_1_r, starttime_1_r, endtime_1_r,
              classday_2_r, starttime_2_r, endtime_2_r,
-             classroom_r, classsection_r) = [c.strip() for c in raw[:9]]
+             classroom_r, classsection_r, student_count_r) = [c.strip() for c in raw[:10]]
 
             display_row = header_row_index + 2 + idx  # 1-based row number in file
             errors = []
@@ -6819,6 +6821,17 @@ def api_hr_validate_schedule_csv():
             classroom     = classroom_r
             classsection  = classsection_r
 
+            # Parse student_count
+            student_count = None
+            if student_count_r:
+                try:
+                    student_count = int(student_count_r)
+                    if student_count < 1:
+                        errors.append('Student Count must be a positive number')
+                        student_count = None
+                except ValueError:
+                    errors.append(f"Student Count '{student_count_r}' is not a valid number")
+
             # Required fields
             if not subject_code:  errors.append('Subject Code is required')
             if not classday_1:    errors.append('Day 1 is required')
@@ -6826,6 +6839,7 @@ def api_hr_validate_schedule_csv():
             if not endtime_1_r:   errors.append('End Time 1 is required')
             if not classroom:     errors.append('Room is required')
             if not classsection:  errors.append('Section is required')
+            if not student_count_r: errors.append('Student Count is required')
 
             # Section validation
             if classsection and not is_valid_section(classsection):
@@ -6999,6 +7013,7 @@ def api_hr_validate_schedule_csv():
                 'endtime_2': endtime_2_r or '',
                 'classroom': classroom,
                 'classsection': classsection,
+                'student_count': student_count,
             }
 
             if status == 'valid':
@@ -7013,6 +7028,7 @@ def api_hr_validate_schedule_csv():
                     'endtime_2': endtime_2,
                     'classroom': classroom,
                     'classsection': classsection,
+                    'student_count': student_count,
                 }
                 csv_schedules.append((display_row, classday_1, starttime_1, endtime_1,
                                       classday_2, starttime_2, endtime_2))
@@ -7071,14 +7087,14 @@ def api_hr_import_schedule_csv():
                     class_id, personnel_id, subject_id,
                     classday_1, starttime_1, endtime_1,
                     classday_2, starttime_2, endtime_2,
-                    classroom, acadcalendar_id, classsection
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    classroom, acadcalendar_id, classsection, student_count
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 new_class_id,
                 row['personnel_id'], row['subject_id'],
                 row['classday_1'], row['starttime_1'], row['endtime_1'],
                 row.get('classday_2'), row.get('starttime_2'), row.get('endtime_2'),
-                row['classroom'], semester_id, row['classsection'],
+                row['classroom'], semester_id, row['classsection'], row.get('student_count'),
             ))
             create_initial_attendance_report(row['personnel_id'], new_class_id, semester_id, conn)
 
@@ -8749,7 +8765,7 @@ def api_hr_evaluations():
     # --- KPI 1, 2, 3, & 4 Calculation (Combined Query) ---
     cursor.execute("""
         WITH faculty_data AS (
-            SELECT 
+            SELECT
                 p.personnel_id,
                 p.college_id,
                 -- Weighted Overall Score: partial if not all 3 components present
@@ -8764,34 +8780,53 @@ def api_hr_evaluations():
                        AND MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN 1 END) = 1
                   THEN TRUE ELSE FALSE END) AS score_complete,
                 -- Student Response Count
-                COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.total_responses ELSE 0 END), 0) AS student_responses_count
+                COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.total_responses ELSE 0 END), 0) AS student_responses_count,
+                -- Total enrolled students across all classes this term
+                COALESCE((
+                    SELECT SUM(s.student_count)
+                    FROM schedule s
+                    WHERE s.personnel_id = p.personnel_id
+                      AND s.acadcalendar_id = %s
+                      AND s.student_count IS NOT NULL
+                ), 0) AS total_students
             FROM personnel p
             LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s
             WHERE p.role_id = 20001
             GROUP BY p.personnel_id, p.college_id
         ),
         department_avg AS (
-            SELECT 
+            SELECT
                 fd.college_id,
                 AVG(fd.overall_score) AS dept_avg_score
             FROM faculty_data fd
-            WHERE fd.overall_score > 0 -- Only consider departments with non-zero evaluation scores
+            WHERE fd.overall_score > 0
             GROUP BY fd.college_id
             ORDER BY dept_avg_score DESC
             LIMIT 1
         )
-        SELECT 
+        SELECT
             -- General KPIs
             (SELECT COUNT(fd.personnel_id) FROM faculty_data fd) AS total_faculty,
             (SELECT COALESCE(AVG(fd.overall_score), 0) FROM faculty_data fd) AS average_rating,
-            (SELECT SUM(CASE WHEN fd.student_responses_count >= 10 THEN 1 ELSE 0 END) FROM faculty_data fd) AS met_response_rate_count,
-            (SELECT COUNT(CASE WHEN fd.student_responses_count > 0 THEN 1 ELSE NULL END) FROM faculty_data fd) AS faculty_with_data,
-            
-            -- Best Department KPI
+            -- Met response rate: faculty whose responses >= threshold based on total enrolled students
+            (SELECT SUM(CASE
+                WHEN fd.total_students = 0 THEN 0
+                WHEN fd.student_responses_count >= fd.total_students * CASE
+                    WHEN fd.total_students <= 25  THEN 0.80
+                    WHEN fd.total_students <= 50  THEN 0.66
+                    WHEN fd.total_students <= 100 THEN 0.50
+                    WHEN fd.total_students <= 200 THEN 0.33
+                    ELSE 0.25
+                END THEN 1
+                ELSE 0
+            END) FROM faculty_data fd) AS met_response_rate_count,
+            (SELECT COUNT(fd.personnel_id) FROM faculty_data fd) AS faculty_with_data,
+
+            -- Leading Department KPI
             c.collegename AS best_department_name
         FROM department_avg da
         JOIN college c ON da.college_id = c.college_id
-    """, (current_term_id,))
+    """, (current_term_id, current_term_id))
     
     kpi_results = cursor.fetchone()
     
@@ -8822,8 +8857,16 @@ def api_hr_evaluations():
             c.collegename,
             pr.position,
             
-            -- METRIC 1 (Response Rate): Student Response Count ONLY 
+            -- METRIC 1 (Response Rate): Student Response Count ONLY
             COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.total_responses ELSE 0 END), 0) AS student_responses_count,
+            -- Total enrolled students across all classes this term
+            COALESCE((
+                SELECT SUM(s.student_count)
+                FROM schedule s
+                WHERE s.personnel_id = p.personnel_id
+                  AND s.acadcalendar_id = %s
+                  AND s.student_count IS NOT NULL
+            ), 0) AS total_students,
             
             -- METRIC 2: Weighted Overall Score (partial if missing components)
             COALESCE(
@@ -8849,9 +8892,9 @@ def api_hr_evaluations():
         LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
         WHERE 1=1 AND p.role_id = 20001
     """
-    params = [current_term_id]
+    params = [current_term_id, current_term_id]  # [total_students subquery, fe.acadcalendar_id]
 
-    # Dynamic filtering 
+    # Dynamic filtering
     if dept:
         query += " AND c.collegename = %s"
         params.append(dept)
@@ -8880,17 +8923,35 @@ def api_hr_evaluations():
         elif status == 'below-average':
             query += " AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) > 0.0 AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) < 2.0"
             
-    # Response Rate Filter
-    if response_rate_filter == 'met':
-        query += " AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.total_responses ELSE 0 END), 0) >= 10"
-    elif response_rate_filter == 'not-met':
-        query += " AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.total_responses ELSE 0 END), 0) < 10"
+    # Response Rate Filter is applied in Python after fetch (dynamic threshold based on total_students)
             
     query += " ORDER BY overall_score DESC"
-    
+
     cursor.execute(query, tuple(params))
     evaluations = cursor.fetchall()
-    
+
+    # Dynamic response rate post-filter
+    def _response_threshold(total_students):
+        if total_students <= 25:  return 0.80
+        if total_students <= 50:  return 0.66
+        if total_students <= 100: return 0.50
+        if total_students <= 200: return 0.33
+        return 0.25
+
+    if response_rate_filter in ('met', 'not-met'):
+        filtered = []
+        for row in evaluations:
+            responses   = row[4]   # student_responses_count
+            total_stud  = row[5] or 0  # total_students
+            if total_stud > 0:
+                threshold = _response_threshold(total_stud)
+                met = responses >= total_stud * threshold
+            else:
+                met = False
+            if (response_rate_filter == 'met' and met) or (response_rate_filter == 'not-met' and not met):
+                filtered.append(row)
+        evaluations = filtered
+
     # Get all unique positions for the frontend filter dropdown
     cursor.execute("""
         SELECT DISTINCT pr.position
@@ -8912,11 +8973,12 @@ def api_hr_evaluations():
         "department": row[2],
         "position": row[3],
         "studentresponses": row[4],
-        "avgscore": row[5],
-        "student_score": row[6],
-        "supervisor_score": row[7],
-        "peer_score": row[8],
-        "score_complete": bool(row[9]),
+        "total_students": int(row[5]) if row[5] else 0,
+        "avgscore": row[6],
+        "student_score": row[7],
+        "supervisor_score": row[8],
+        "peer_score": row[9],
+        "score_complete": bool(row[10]),
     } for row in evaluations]
 
     # Combine table data and KPIs into the final JSON response

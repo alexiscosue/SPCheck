@@ -353,6 +353,13 @@
               <div class="emp-error-message" id="classsectionError"></div>
             </div>
           </div>
+          <div class="emp-form-row">
+            <div class="emp-form-group">
+              <label for="student_count">No. of Students *</label>
+              <input type="number" id="student_count" name="student_count" required min="1" placeholder="e.g., 35">
+              <div class="emp-error-message" id="studentCountError"></div>
+            </div>
+          </div>
         </div>
         
         <div class="emp-form-actions">
@@ -1835,11 +1842,12 @@ document.getElementById('addScheduleForm').addEventListener('submit', async func
         starttime_2: getValueOrNull(formData.get('starttime_2')),
         endtime_2: getValueOrNull(document.getElementById('endtime_2').value),
         classroom: getValueOrNull(formData.get('classroom')),
-        classsection: getValueOrNull(formData.get('classsection'))
+        classsection: getValueOrNull(formData.get('classsection')),
+        student_count: parseInt(formData.get('student_count')) || null
     };
-    
+
     let isValid = true;
-    
+
     const requiredFields = [
         { field: 'semester_id', name: 'Semester', errorId: 'semesterError' },
         { field: 'personnel_id', name: 'Faculty', errorId: 'personnelError' },
@@ -1849,7 +1857,8 @@ document.getElementById('addScheduleForm').addEventListener('submit', async func
         { field: 'starttime_1', name: 'Start Time for Day 1', errorId: 'starttime1Error' },
         { field: 'endtime_1', name: 'End Time for Day 1', errorId: null },
         { field: 'classroom', name: 'Classroom', errorId: 'classroomError' },
-        { field: 'classsection', name: 'Section', errorId: 'classsectionError' }
+        { field: 'classsection', name: 'Section', errorId: 'classsectionError' },
+        { field: 'student_count', name: 'No. of Students', errorId: 'studentCountError' }
     ];
     
     requiredFields.forEach(({ field, name, errorId }) => {
