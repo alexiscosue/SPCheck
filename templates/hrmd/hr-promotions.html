@@ -142,8 +142,12 @@
                 style="{% if is_action %}border-left:4px solid #7b1113;background:#fff8f8;{% endif %}transition:background .15s;">
               <td style="padding:14px 12px;">
                 <div style="display:flex;align-items:center;gap:12px;">
-                  <div style="width:40px;height:40px;border-radius:50%;background:{% if is_action %}linear-gradient(135deg,#7b1113,#9f1239){% else %}linear-gradient(135deg,#374151,#4b5563){% endif %};color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.2);">
-                    {{ promo.name[0]|upper if promo.name else '?' }}
+                  <div style="position:relative;width:40px;height:40px;border-radius:50%;flex-shrink:0;">
+                    <div style="width:40px;height:40px;border-radius:50%;background:{% if is_action %}linear-gradient(135deg,#7b1113,#9f1239){% else %}linear-gradient(135deg,#374151,#4b5563){% endif %};color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.2);">
+                      {{ promo.name[0]|upper if promo.name else '?' }}
+                    </div>
+                    <img class="faculty-photo" data-personnel-id="{{ promo.faculty_id }}"
+                         style="position:absolute;top:0;left:0;width:40px;height:40px;border-radius:50%;object-fit:cover;display:none;">
                   </div>
                   <div>
                     <div style="font-weight:700;font-size:13px;color:#111;line-height:1.3;">{{ promo.name }}</div>
@@ -233,32 +237,26 @@
     <div class="tab-content" id="regularizations">
 
       <!-- Faculty Tenure Overview -->
-      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px;">
-        <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:12px; padding:14px 16px; display:flex; align-items:center; gap:12px;">
-          <div style="width:42px; height:42px; background:#16a34a; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-            <i class='bx bx-check-shield' style="font-size:22px; color:#fff;"></i>
-          </div>
+      <div class="kpis" style="margin-bottom:20px;">
+        <div class="kpi card">
+          <div class="icon eval"><i class='bx bx-check-shield'></i></div>
           <div>
-            <div style="font-size:24px; font-weight:800; color:#14532d; line-height:1;">{{ regularizations|length }}</div>
-            <div style="font-size:12px; color:#166534; font-weight:600; margin-top:3px;">Eligible</div>
+            <div class="title">Eligible</div>
+            <div class="value">{{ regularizations|length }}</div>
           </div>
         </div>
-        <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:14px 16px; display:flex; align-items:center; gap:12px;">
-          <div style="width:42px; height:42px; background:#2563eb; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-            <i class='bx bx-time-five' style="font-size:22px; color:#fff;"></i>
-          </div>
+        <div class="kpi card">
+          <div class="icon fac"><i class='bx bx-time-five'></i></div>
           <div>
-            <div style="font-size:24px; font-weight:800; color:#1e3a8a; line-height:1;">{{ probationary_faculty|length }}</div>
-            <div style="font-size:12px; color:#1d4ed8; font-weight:600; margin-top:3px;">Probationary</div>
+            <div class="title">Probationary</div>
+            <div class="value">{{ probationary_faculty|length }}</div>
           </div>
         </div>
-        <div style="background:#f9fafb; border:1px solid #e5e7eb; border-radius:12px; padding:14px 16px; display:flex; align-items:center; gap:12px;">
-          <div style="width:42px; height:42px; background:#6b7280; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-            <i class='bx bx-file-blank' style="font-size:22px; color:#fff;"></i>
-          </div>
+        <div class="kpi card">
+          <div class="icon" style="background:linear-gradient(135deg,#6b7280,#4b5563);"><i class='bx bx-file-blank'></i></div>
           <div>
-            <div style="font-size:24px; font-weight:800; color:#111827; line-height:1;">{{ contractual_faculty|length }}</div>
-            <div style="font-size:12px; color:#6b7280; font-weight:600; margin-top:3px;">Contractual</div>
+            <div class="title">Contractual</div>
+            <div class="value">{{ contractual_faculty|length }}</div>
           </div>
         </div>
       </div>
@@ -297,11 +295,15 @@
             {% set threshold = 7 if reg.eligible_for == 'Tenured' else 3 %}
             {% set pct = [[(reg.years_of_service / threshold * 100) | round(0) | int, 0] | max, 100] | min %}
             <tr data-dept="{{ reg.department }}" data-tenure="{{ reg.eligible_for }}" data-status="{{ reg.reg_status }}"
-                style="{% if needs_action %}border-left:4px solid #16a34a;background:#f0fdf4;{% endif %}transition:background .15s;">
+                style="transition:background .15s;">
               <td style="padding:14px 12px;">
                 <div style="display:flex;align-items:center;gap:12px;">
-                  <div style="width:40px;height:40px;border-radius:50%;background:{% if needs_action %}linear-gradient(135deg,#16a34a,#15803d){% else %}linear-gradient(135deg,#374151,#4b5563){% endif %};color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0;box-shadow:0 2px 6px rgba(22,163,74,.35);">
-                    {{ reg.name[0]|upper if reg.name else '?' }}
+                  <div style="position:relative;width:40px;height:40px;border-radius:50%;flex-shrink:0;">
+                    <div style="width:40px;height:40px;border-radius:50%;background:{% if needs_action %}linear-gradient(135deg,#16a34a,#15803d){% else %}linear-gradient(135deg,#374151,#4b5563){% endif %};color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;box-shadow:0 2px 6px rgba(22,163,74,.35);">
+                      {{ reg.name[0]|upper if reg.name else '?' }}
+                    </div>
+                    <img class="faculty-photo" data-personnel-id="{{ reg.personnel_id }}"
+                         style="position:absolute;top:0;left:0;width:40px;height:40px;border-radius:50%;object-fit:cover;display:none;">
                   </div>
                   <div>
                     <div style="font-weight:700;font-size:13px;color:#111;line-height:1.3;">{{ reg.name }}</div>
@@ -403,8 +405,12 @@
             <tr style="transition:background .15s;{% if near_eligible %}background:#fffbeb;border-left:4px solid #d97706;{% endif %}">
               <td style="padding:14px 12px;">
                 <div style="display:flex;align-items:center;gap:12px;">
-                  <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,{% if near_eligible %}#d97706,#f59e0b{% else %}#2563eb,#1d4ed8{% endif %});color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0;box-shadow:0 2px 6px rgba({% if near_eligible %}217,119,6{% else %}37,99,235{% endif %},.35);">
-                    {{ pf.name[0]|upper if pf.name else '?' }}
+                  <div style="position:relative;width:40px;height:40px;border-radius:50%;flex-shrink:0;">
+                    <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,{% if near_eligible %}#d97706,#f59e0b{% else %}#2563eb,#1d4ed8{% endif %});color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;box-shadow:0 2px 6px rgba({% if near_eligible %}217,119,6{% else %}37,99,235{% endif %},.35);">
+                      {{ pf.name[0]|upper if pf.name else '?' }}
+                    </div>
+                    <img class="faculty-photo" data-personnel-id="{{ pf.personnel_id }}"
+                         style="position:absolute;top:0;left:0;width:40px;height:40px;border-radius:50%;object-fit:cover;display:none;">
                   </div>
                   <div>
                     <div style="font-weight:700;font-size:13px;color:#111;line-height:1.3;">{{ pf.name }}</div>
@@ -484,8 +490,12 @@
             <tr style="transition:background .15s;">
               <td style="padding:14px 12px;">
                 <div style="display:flex;align-items:center;gap:12px;">
-                  <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#6b7280,#4b5563);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0;box-shadow:0 2px 6px rgba(107,114,128,.3);">
-                    {{ cf.name[0]|upper if cf.name else '?' }}
+                  <div style="position:relative;width:40px;height:40px;border-radius:50%;flex-shrink:0;">
+                    <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#6b7280,#4b5563);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;box-shadow:0 2px 6px rgba(107,114,128,.3);">
+                      {{ cf.name[0]|upper if cf.name else '?' }}
+                    </div>
+                    <img class="faculty-photo" data-personnel-id="{{ cf.personnel_id }}"
+                         style="position:absolute;top:0;left:0;width:40px;height:40px;border-radius:50%;object-fit:cover;display:none;">
                   </div>
                   <div>
                     <div style="font-weight:700;font-size:13px;color:#111;line-height:1.3;">{{ cf.name }}</div>
@@ -767,6 +777,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
           if (data.success && data.image) {
             photo.src = data.image;
+            photo.style.display = 'block';
           } else {
             photo.style.display = 'none';
           }
