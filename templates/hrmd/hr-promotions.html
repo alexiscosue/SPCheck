@@ -47,7 +47,7 @@
   <select id="filterPromotionStatus">
     <option value="">All Status</option>
     <option value="Hrmd">For HRMD Checking</option>
-    <option value="Vpa">For VPAA Checking</option>
+    <option value="Vpa">For VPA Checking</option>
     <option value="Pres">For President Checking</option>
     <option value="approved">Approved</option>
     <option value="rejected">Rejected</option>
@@ -75,11 +75,14 @@
   <select id="filterRegularizationStatus">
     <option value="">All Status</option>
     <option value="eligible">Eligible (Not Yet Initiated)</option>
-    <option value="vpa">For VPAA Review</option>
+    <option value="vpa">For VPA Review</option>
     <option value="pres">For President Review</option>
     <option value="approved">Approved</option>
     <option value="rejected">Rejected</option>
   </select>
+  <button class="btn-action" style="background:#7b1113;color:#fff;white-space:nowrap;" onclick="openDegreeModal()">
+    <i class='bx bx-book-alt'></i> Set Degree Info
+  </button>
 </div>
 
 
@@ -87,12 +90,32 @@
   <div class="card" style="grid-column:1 / -1; padding:20px">
     <div class="tabs_profile">
       <div class="tab active" data-tab="promotions">Promotions</div>
-      <div class="tab" data-tab="regularizations">Regularizations</div>
+      <div class="tab" data-tab="regularizations" style="display:inline-flex; align-items:center; gap:6px;">
+        Regularizations
+        <span style="display:inline-flex; align-items:center; gap:3px;">
+          <span style="background:#16a34a; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:99px; line-height:1.6;">{{ regularizations|length }}</span>
+          <span style="background:#2563eb; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:99px; line-height:1.6;">{{ probationary_faculty|length }}</span>
+          <span style="background:#6b7280; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:99px; line-height:1.6;">{{ contractual_faculty|length }}</span>
+        </span>
+      </div>
       <div class="tab" data-tab="auditlogs">Audit Logs</div>
     </div>
 
-    <!-- Promotions Table -->
+    <!-- Promotions Tab -->
     <div class="tab-content active" id="promotions">
+
+      <!-- Section Banner -->
+      <div style="border-left:4px solid #7b1113;border-radius:0 10px 10px 0;background:#fff8f8;padding:14px 18px;margin-bottom:6px;display:flex;align-items:center;gap:12px;">
+        <i class='bx bx-award' style="font-size:22px;color:#7b1113;flex-shrink:0;"></i>
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:700;color:#7b1113;">Promotion Applications</div>
+          <div style="font-size:11px;color:#9f1239;margin-top:1px;">All faculty rank promotion requests — pending HR review are shown first.</div>
+        </div>
+        <span style="background:#fee2e2;color:#7b1113;font-size:13px;font-weight:700;padding:4px 14px;border-radius:20px;flex-shrink:0;">
+          {{ promotions|length }}
+        </span>
+      </div>
+
       <div class="table">
         <table>
           <thead>
@@ -105,7 +128,6 @@
             </tr>
           </thead>
           <tbody id="promotionsBody">
-            {# Action-required rows first #}
             {% set ns = namespace(action_rows=[], other_rows=[]) %}
             {% for promo in promotions %}
               {% if 'hrmd' in promo.status|lower %}
@@ -117,57 +139,88 @@
             {% for promo in ns.action_rows + ns.other_rows %}
             {% set is_action = 'hrmd' in promo.status|lower %}
             <tr data-status="{{ promo.status }}" data-dept="{{ promo.department }}" data-faculty-id="{{ promo.faculty_id }}"
-                style="{% if is_action %}border-left:3px solid #7b1113;background:#fff8f8;{% endif %}">
-              <td>
-                <div style="display:flex;align-items:center;gap:10px">
-                  <div style="width:34px;height:34px;border-radius:50%;background:#7b1113;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">
-                    {{ promo.name[0] | upper if promo.name else '?' }}
+                style="{% if is_action %}border-left:4px solid #7b1113;background:#fff8f8;{% endif %}transition:background .15s;">
+              <td style="padding:14px 12px;">
+                <div style="display:flex;align-items:center;gap:12px;">
+                  <div style="width:40px;height:40px;border-radius:50%;background:{% if is_action %}linear-gradient(135deg,#7b1113,#9f1239){% else %}linear-gradient(135deg,#374151,#4b5563){% endif %};color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.2);">
+                    {{ promo.name[0]|upper if promo.name else '?' }}
                   </div>
                   <div>
-                    <div style="font-weight:600;font-size:13px;line-height:1.3">{{ promo.name }}</div>
-                    <div style="font-size:11px;color:#6b7280">{{ promo.department }}</div>
+                    <div style="font-weight:700;font-size:13px;color:#111;line-height:1.3;">{{ promo.name }}</div>
+                    <div style="font-size:11px;color:#6b7280;margin-top:1px;">{{ promo.department }}</div>
+                    {% if is_action %}
+                    <span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;background:#7b1113;color:#fff;border-radius:8px;padding:2px 8px;font-weight:700;margin-top:3px;">
+                      <i class='bx bx-bell' style="font-size:10px;"></i> Action Required
+                    </span>
+                    {% endif %}
                   </div>
-                  {% if is_action %}
-                  <span style="font-size:10px;background:#7b1113;color:#fff;border-radius:8px;padding:1px 7px;font-weight:700;white-space:nowrap;margin-left:4px">Action Required</span>
-                  {% endif %}
                 </div>
               </td>
-              <td>
-                <div style="font-size:12px;color:#6b7280">{{ promo.currentrank }}</div>
-                <div style="font-size:11px;color:#9ca3af;line-height:1">↓</div>
-                <div style="font-weight:600;font-size:13px;color:#166534">{{ promo.requestedrank }}</div>
+              <td style="padding:14px 12px;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <div>
+                    <div style="font-size:11px;color:#6b7280;font-weight:500;">{{ promo.currentrank }}</div>
+                    <div style="font-size:10px;color:#d1d5db;text-align:center;line-height:1.2;">↓</div>
+                    <div style="font-size:13px;font-weight:700;color:#166534;">{{ promo.requestedrank }}</div>
+                  </div>
+                </div>
               </td>
-              <td>
+              <td style="padding:14px 12px;">
                 {% if 'hrmd' in promo.status|lower %}
-                <span class="status pending">HR Review</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#fef9c3;color:#713f12;padding:4px 10px;border-radius:10px;border:1px solid #fde68a;">
+                  <i class='bx bx-time-five' style="font-size:12px;"></i> HR Review
+                </span>
                 {% elif 'vpa' in promo.status|lower %}
-                <span class="status warn">VPAA Review</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#eff6ff;color:#1d4ed8;padding:4px 10px;border-radius:10px;border:1px solid #bfdbfe;">
+                  <i class='bx bx-time-five' style="font-size:12px;"></i> VPA Review
+                </span>
                 {% elif 'pres' in promo.status|lower %}
-                <span class="status warn">President Review</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#f5f3ff;color:#6d28d9;padding:4px 10px;border-radius:10px;border:1px solid #ddd6fe;">
+                  <i class='bx bx-time-five' style="font-size:12px;"></i> President Review
+                </span>
                 {% elif 'approved' in promo.status|lower %}
-                <span class="status ok">✓ Approved</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#f0fdf4;color:#166534;padding:4px 10px;border-radius:10px;border:1px solid #bbf7d0;">
+                  <i class='bx bx-check-circle' style="font-size:12px;"></i> Approved
+                </span>
                 {% elif 'rejected' in promo.status|lower %}
-                <span class="status nu">✗ Rejected</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#fef2f2;color:#991b1b;padding:4px 10px;border-radius:10px;border:1px solid #fecaca;">
+                  <i class='bx bx-x-circle' style="font-size:12px;"></i> Rejected
+                </span>
                 {% else %}
-                <span class="status pending">{{ promo.status }}</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#f3f4f6;color:#374151;padding:4px 10px;border-radius:10px;border:1px solid #e5e7eb;">
+                  {{ promo.status }}
+                </span>
                 {% endif %}
               </td>
-              <td style="font-size:12px;color:#6b7280;white-space:nowrap">
-                <i class='bx bx-calendar' style="vertical-align:middle;margin-right:3px"></i>{{ promo.submitteddate }}
+              <td style="padding:14px 12px;">
+                <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:#374151;font-weight:600;white-space:nowrap;">
+                  <i class='bx bx-calendar' style="font-size:14px;color:#9ca3af;"></i>
+                  {{ promo.submitteddate }}
+                </div>
               </td>
-              <td>
-                <button class="btn-action review-promotion-btn"
-                        style="{% if is_action %}background:#7b1113;color:#fff;{% else %}background:#f1c40f;color:#111;{% endif %}"
+              <td style="padding:14px 12px;">
+                {% if is_action %}
+                <button class="review-promotion-btn"
+                        style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:#7b1113;color:#fff;border-radius:7px;font-size:12px;font-weight:700;border:none;cursor:pointer;box-shadow:0 1px 4px rgba(123,17,19,.3);"
                         data-application-id="{{ promo.application_id }}">
-                  {% if is_action %}<i class='bx bx-check-circle'></i> Review Now{% else %}<i class='bx bx-show'></i> View{% endif %}
+                  <i class='bx bx-check-circle' style="font-size:14px;"></i> Review Now
                 </button>
+                {% else %}
+                <button class="review-promotion-btn"
+                        style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:#f3f4f6;color:#374151;border-radius:7px;font-size:12px;font-weight:600;border:1px solid #e5e7eb;cursor:pointer;"
+                        data-application-id="{{ promo.application_id }}"
+                        onmouseover="this.style.background='#e5e7eb'" onmouseout="this.style.background='#f3f4f6'">
+                  <i class='bx bx-show' style="font-size:14px;"></i> View
+                </button>
+                {% endif %}
               </td>
             </tr>
             {% else %}
             <tr>
-              <td colspan="5" style="text-align:center;padding:2rem;color:#6b7280">
-                <i class='bx bx-inbox' style="font-size:32px;display:block;margin-bottom:8px"></i>
-                No promotion requests found
+              <td colspan="5" style="text-align:center;padding:3rem;color:#9ca3af;">
+                <i class='bx bx-inbox' style="font-size:40px;display:block;margin-bottom:10px;color:#fecaca;"></i>
+                <div style="font-weight:600;color:#6b7280;">No promotion requests found</div>
+                <div style="font-size:12px;margin-top:4px;">Faculty promotion applications will appear here once submitted.</div>
               </td>
             </tr>
             {% endfor %}
@@ -176,9 +229,53 @@
       </div>
     </div>
 
-    <!-- Regularizations Table -->
+    <!-- Regularizations Tab -->
     <div class="tab-content" id="regularizations">
-      <div class="table">
+
+      <!-- Faculty Tenure Overview -->
+      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px;">
+        <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:12px; padding:14px 16px; display:flex; align-items:center; gap:12px;">
+          <div style="width:42px; height:42px; background:#16a34a; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <i class='bx bx-check-shield' style="font-size:22px; color:#fff;"></i>
+          </div>
+          <div>
+            <div style="font-size:24px; font-weight:800; color:#14532d; line-height:1;">{{ regularizations|length }}</div>
+            <div style="font-size:12px; color:#166534; font-weight:600; margin-top:3px;">Eligible</div>
+          </div>
+        </div>
+        <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:14px 16px; display:flex; align-items:center; gap:12px;">
+          <div style="width:42px; height:42px; background:#2563eb; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <i class='bx bx-time-five' style="font-size:22px; color:#fff;"></i>
+          </div>
+          <div>
+            <div style="font-size:24px; font-weight:800; color:#1e3a8a; line-height:1;">{{ probationary_faculty|length }}</div>
+            <div style="font-size:12px; color:#1d4ed8; font-weight:600; margin-top:3px;">Probationary</div>
+          </div>
+        </div>
+        <div style="background:#f9fafb; border:1px solid #e5e7eb; border-radius:12px; padding:14px 16px; display:flex; align-items:center; gap:12px;">
+          <div style="width:42px; height:42px; background:#6b7280; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <i class='bx bx-file-blank' style="font-size:22px; color:#fff;"></i>
+          </div>
+          <div>
+            <div style="font-size:24px; font-weight:800; color:#111827; line-height:1;">{{ contractual_faculty|length }}</div>
+            <div style="font-size:12px; color:#6b7280; font-weight:600; margin-top:3px;">Contractual</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── ELIGIBLE / ACTIVE APPLICATIONS ─────────────────────────────── -->
+      <div style="border-left:4px solid #16a34a;border-radius:0 10px 10px 0;background:#f0fdf4;padding:14px 18px;margin-bottom:6px;display:flex;align-items:center;gap:12px;">
+        <i class='bx bx-check-shield' style="font-size:22px;color:#16a34a;flex-shrink:0;"></i>
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:700;color:#14532d;">Eligible for Regularization</div>
+          <div style="font-size:11px;color:#166534;margin-top:1px;">Has aligned Master's &amp; completed ≥ 3 years of probation. Ready to initiate.</div>
+        </div>
+        <span style="background:#dcfce7;color:#166534;font-size:13px;font-weight:700;padding:4px 14px;border-radius:20px;flex-shrink:0;">
+          {{ regularizations|length }}
+        </span>
+      </div>
+
+      <div class="table" style="margin-bottom:32px;">
         <table>
           <thead>
             <tr>
@@ -190,63 +287,243 @@
             </tr>
           </thead>
           <tbody id="regularizationsBody">
+            {% set ns = namespace(reg_action=[], reg_other=[]) %}
             {% for reg in regularizations %}
+              {% if not reg.has_application %}{% set ns.reg_action = ns.reg_action + [reg] %}
+              {% else %}{% set ns.reg_other = ns.reg_other + [reg] %}{% endif %}
+            {% endfor %}
+            {% for reg in ns.reg_action + ns.reg_other %}
+            {% set needs_action = not reg.has_application %}
             {% set threshold = 7 if reg.eligible_for == 'Tenured' else 3 %}
             {% set pct = [[(reg.years_of_service / threshold * 100) | round(0) | int, 0] | max, 100] | min %}
-            <tr data-dept="{{ reg.department }}" data-tenure="{{ reg.eligible_for }}" data-status="{{ reg.reg_status }}">
-              <td>
-                <div style="display:flex;align-items:center;gap:10px">
-                  <div style="width:34px;height:34px;border-radius:50%;background:#1e40af;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">
-                    {{ reg.name[0] | upper if reg.name else '?' }}
+            <tr data-dept="{{ reg.department }}" data-tenure="{{ reg.eligible_for }}" data-status="{{ reg.reg_status }}"
+                style="{% if needs_action %}border-left:4px solid #16a34a;background:#f0fdf4;{% endif %}transition:background .15s;">
+              <td style="padding:14px 12px;">
+                <div style="display:flex;align-items:center;gap:12px;">
+                  <div style="width:40px;height:40px;border-radius:50%;background:{% if needs_action %}linear-gradient(135deg,#16a34a,#15803d){% else %}linear-gradient(135deg,#374151,#4b5563){% endif %};color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0;box-shadow:0 2px 6px rgba(22,163,74,.35);">
+                    {{ reg.name[0]|upper if reg.name else '?' }}
                   </div>
                   <div>
-                    <div style="font-weight:600;font-size:13px;line-height:1.3">
-                      {{ reg.name }}
-                    </div>
-                    <div style="font-size:11px;color:#6b7280">{{ reg.department }}</div>
-                    <a href="/hr_employee_profile/{{ reg.personnel_id }}" style="font-size:10px;color:#7b1113;text-decoration:none;font-weight:600">
-                      <i class='bx bx-link-external'></i> View Profile
-                    </a>
+                    <div style="font-weight:700;font-size:13px;color:#111;line-height:1.3;">{{ reg.name }}</div>
+                    <div style="font-size:11px;color:#6b7280;margin-top:1px;">{{ reg.department }}</div>
+                    {% if needs_action %}
+                    <span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;background:#16a34a;color:#fff;border-radius:8px;padding:2px 8px;font-weight:700;margin-top:3px;">
+                      <i class='bx bx-bell' style="font-size:10px;"></i> Action Required
+                    </span>
+                    {% endif %}
                   </div>
                 </div>
               </td>
-              <td>
-                <div style="font-weight:600;font-size:13px">{{ reg.current_rank }}</div>
-                <span class="status pending" style="font-size:10px;padding:1px 6px">{{ reg.current_tenure }}</span>
+              <td style="padding:14px 12px;">
+                <div style="font-weight:600;font-size:13px;color:#111;">{{ reg.current_rank }}</div>
+                <span style="font-size:10px;background:#f0fdf4;color:#166534;padding:2px 8px;border-radius:10px;font-weight:600;border:1px solid #bbf7d0;">{{ reg.current_tenure }}</span>
               </td>
-              <td style="min-width:130px">
-                <div style="font-size:12px;font-weight:600;margin-bottom:4px">{{ reg.years_of_service }} / {{ threshold }} yrs</div>
-                <div style="height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden">
-                  <div style="height:100%;width:{{ pct }}%;background:{% if pct >= 100 %}#16a34a{% elif pct >= 75 %}#d97706{% else %}#3b82f6{% endif %};border-radius:3px;transition:width .3s"></div>
+              <td style="padding:14px 12px;min-width:160px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                  <span style="font-size:12px;font-weight:600;color:#111;">{{ reg.years_of_service }} / {{ threshold }} yrs</span>
+                  <span style="font-size:11px;font-weight:700;color:{% if pct >= 100 %}#16a34a{% elif pct >= 75 %}#d97706{% else %}#2563eb{% endif %};">{{ pct }}%</span>
                 </div>
-                <div style="font-size:10px;color:#6b7280;margin-top:2px">{{ pct }}% complete</div>
+                <div style="height:10px;background:#e5e7eb;border-radius:99px;overflow:hidden;">
+                  <div style="height:100%;width:{{ pct }}%;background:{% if pct >= 100 %}linear-gradient(90deg,#16a34a,#22c55e){% elif pct >= 75 %}linear-gradient(90deg,#d97706,#f59e0b){% else %}linear-gradient(90deg,#2563eb,#60a5fa){% endif %};border-radius:99px;transition:width .4s ease;"></div>
+                </div>
               </td>
-              <td><span class="status ok" style="font-weight:700">{{ reg.eligible_for }}</span></td>
-              <td>
-                {% if reg.has_application %}
-                  <span class="status {{ reg.status_class }}">{{ reg.status }}</span>
-                {% else %}
-                  <button class="btn-action initiate-reg-btn"
-                          style="background:#7b1113;color:#fff"
-                          data-personnel-id="{{ reg.personnel_id }}"
-                          data-faculty-name="{{ reg.name }}"
-                          data-eligible-for="{{ reg.eligible_for }}">
-                    <i class='bx bx-plus-circle'></i> Initiate
-                  </button>
-                {% endif %}
+              <td style="padding:14px 12px;">
+                <span style="font-size:12px;font-weight:700;background:{% if reg.eligible_for == 'Tenured' %}#fefce8{% else %}#f0fdf4{% endif %};color:{% if reg.eligible_for == 'Tenured' %}#854d0e{% else %}#166534{% endif %};padding:4px 10px;border-radius:10px;border:1px solid {% if reg.eligible_for == 'Tenured' %}#fde68a{% else %}#bbf7d0{% endif %};">
+                  {{ reg.eligible_for }}
+                </span>
+              </td>
+              <td style="padding:14px 12px;">
+                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                  <a href="/hr_employee_profile/{{ reg.personnel_id }}"
+                     style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#f3f4f6;color:#374151;border-radius:7px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid #e5e7eb;transition:background .15s;"
+                     onmouseover="this.style.background='#e5e7eb'" onmouseout="this.style.background='#f3f4f6'">
+                    <i class='bx bx-user-circle' style="font-size:14px;"></i> View Profile
+                  </a>
+                  {% if reg.has_application %}
+                    <span class="status {{ reg.status_class }}" style="font-size:11px;">{{ reg.status }}</span>
+                  {% else %}
+                    <button class="btn-action initiate-reg-btn"
+                            style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#7b1113;color:#fff;border-radius:7px;font-size:12px;font-weight:600;border:none;cursor:pointer;"
+                            data-personnel-id="{{ reg.personnel_id }}"
+                            data-faculty-name="{{ reg.name }}"
+                            data-eligible-for="{{ reg.eligible_for }}">
+                      <i class='bx bx-plus-circle' style="font-size:14px;"></i> Initiate
+                    </button>
+                  {% endif %}
+                </div>
               </td>
             </tr>
             {% else %}
             <tr>
-              <td colspan="5" style="text-align:center;padding:2rem;color:#6b7280">
-                <i class='bx bx-user-check' style="font-size:32px;display:block;margin-bottom:8px"></i>
-                No eligible faculty found
+              <td colspan="5" style="text-align:center;padding:3rem;color:#9ca3af;">
+                <i class='bx bx-user-check' style="font-size:40px;display:block;margin-bottom:10px;color:#d1fae5;"></i>
+                <div style="font-weight:600;color:#6b7280;">No eligible faculty found</div>
+                <div style="font-size:12px;margin-top:4px;">Faculty will appear here after completing 3 years of probation.</div>
               </td>
             </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
+
+      <!-- ── PROBATIONARY IN PROGRESS ────────────────────────────────────── -->
+      <div style="border-left:4px solid #2563eb;border-radius:0 10px 10px 0;background:#eff6ff;padding:14px 18px;margin-bottom:6px;display:flex;align-items:center;gap:12px;">
+        <i class='bx bx-time-five' style="font-size:22px;color:#2563eb;flex-shrink:0;"></i>
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:700;color:#1e3a8a;">Probationary — In Progress</div>
+          <div style="font-size:11px;color:#1d4ed8;margin-top:1px;">Has aligned Master's Degree; currently serving the 3-year probationary period.</div>
+        </div>
+        <span style="background:#dbeafe;color:#1d4ed8;font-size:13px;font-weight:700;padding:4px 14px;border-radius:20px;flex-shrink:0;">
+          {{ probationary_faculty|length }}
+        </span>
+      </div>
+
+      {% if probationary_faculty %}
+      {% set ns3 = namespace(prob_near=[], prob_other=[]) %}
+      {% for pf in probationary_faculty %}
+        {% if pf.days_done >= 1065 %}{% set ns3.prob_near = ns3.prob_near + [pf] %}
+        {% else %}{% set ns3.prob_other = ns3.prob_other + [pf] %}{% endif %}
+      {% endfor %}
+      <div class="table" style="margin-bottom:32px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Faculty</th>
+              <th>Rank</th>
+              <th>Probation Started</th>
+              <th>Progress</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for pf in ns3.prob_near + ns3.prob_other %}
+            {% set pct = pf.pct | int %}
+            {% set near_eligible = pf.days_done >= 1065 %}
+            {% set days_left = 1095 - pf.days_done %}
+            <tr style="transition:background .15s;{% if near_eligible %}background:#fffbeb;border-left:4px solid #d97706;{% endif %}">
+              <td style="padding:14px 12px;">
+                <div style="display:flex;align-items:center;gap:12px;">
+                  <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,{% if near_eligible %}#d97706,#f59e0b{% else %}#2563eb,#1d4ed8{% endif %});color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0;box-shadow:0 2px 6px rgba({% if near_eligible %}217,119,6{% else %}37,99,235{% endif %},.35);">
+                    {{ pf.name[0]|upper if pf.name else '?' }}
+                  </div>
+                  <div>
+                    <div style="font-weight:700;font-size:13px;color:#111;line-height:1.3;">{{ pf.name }}</div>
+                    <div style="font-size:11px;color:#6b7280;margin-top:1px;">{{ pf.department }}</div>
+                    {% if near_eligible %}
+                    <span style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-weight:700;border:1px solid #fcd34d;">
+                      <i class='bx bx-bell' style="font-size:10px;vertical-align:middle;"></i> Almost Eligible
+                    </span>
+                    {% else %}
+                    <span style="font-size:10px;background:#eff6ff;color:#1d4ed8;padding:2px 8px;border-radius:10px;font-weight:600;border:1px solid #bfdbfe;">Probationary</span>
+                    {% endif %}
+                  </div>
+                </div>
+              </td>
+              <td style="padding:14px 12px;font-size:13px;font-weight:600;color:#111;">{{ pf.current_rank }}</td>
+              <td style="padding:14px 12px;">
+                <div style="font-size:12px;color:#374151;font-weight:600;">{{ pf.prob_start }}</div>
+                <div style="font-size:11px;color:#9ca3af;margin-top:2px;">Probation start date</div>
+              </td>
+              <td style="padding:14px 12px;min-width:180px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                  <span style="font-size:12px;font-weight:600;color:#111;">{{ pf.years_of_service }} / 3 yrs</span>
+                  <span style="font-size:11px;font-weight:700;color:{% if pct >= 75 %}#d97706{% else %}#2563eb{% endif %};">{{ pct }}%</span>
+                </div>
+                <div style="height:10px;background:#e5e7eb;border-radius:99px;overflow:hidden;">
+                  <div style="height:100%;width:{{ pct }}%;background:{% if pct >= 75 %}linear-gradient(90deg,#d97706,#f59e0b){% else %}linear-gradient(90deg,#2563eb,#60a5fa){% endif %};border-radius:99px;transition:width .4s ease;"></div>
+                </div>
+                <div style="font-size:11px;color:#6b7280;margin-top:4px;">{{ pf.days_done }} of 1,095 days
+                  {% if near_eligible %}<span style="color:#d97706;font-weight:700;margin-left:6px;">{{ days_left }} day(s) left</span>{% endif %}
+                </div>
+              </td>
+              <td style="padding:14px 12px;">
+                <a href="/hr_employee_profile/{{ pf.personnel_id }}"
+                   style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#f3f4f6;color:#374151;border-radius:7px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid #e5e7eb;transition:background .15s;"
+                   onmouseover="this.style.background='#e5e7eb'" onmouseout="this.style.background='#f3f4f6'">
+                  <i class='bx bx-user-circle' style="font-size:14px;"></i> View Profile
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div style="text-align:center;padding:2.5rem;color:#9ca3af;margin-bottom:32px;background:#f9fafb;border-radius:10px;border:1px dashed #e5e7eb;">
+        <i class='bx bx-time' style="font-size:36px;display:block;margin-bottom:8px;color:#bfdbfe;"></i>
+        <div style="font-weight:600;color:#6b7280;">No faculty in probationary period</div>
+        <div style="font-size:12px;margin-top:4px;">Faculty appear here after their aligned Master's Degree is recorded.</div>
+      </div>
+      {% endif %}
+
+      <!-- ── CONTRACTUAL FACULTY ─────────────────────────────────────────── -->
+      <div style="border-left:4px solid #9ca3af;border-radius:0 10px 10px 0;background:#f9fafb;padding:14px 18px;margin-bottom:6px;display:flex;align-items:center;gap:12px;">
+        <i class='bx bx-file-blank' style="font-size:22px;color:#6b7280;flex-shrink:0;"></i>
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:700;color:#111;">Contractual Faculty</div>
+          <div style="font-size:11px;color:#6b7280;margin-top:1px;">No aligned Master's Degree yet. Contractual time does <strong>not</strong> count toward probation.</div>
+        </div>
+        <span style="background:#f3f4f6;color:#374151;font-size:13px;font-weight:700;padding:4px 14px;border-radius:20px;flex-shrink:0;border:1px solid #e5e7eb;">
+          {{ contractual_faculty|length }}
+        </span>
+      </div>
+
+      {% if contractual_faculty %}
+      <div class="table">
+        <table>
+          <thead>
+            <tr>
+              <th>Faculty</th>
+              <th>Rank</th>
+              <th>Hire Date</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for cf in contractual_faculty %}
+            <tr style="transition:background .15s;">
+              <td style="padding:14px 12px;">
+                <div style="display:flex;align-items:center;gap:12px;">
+                  <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#6b7280,#4b5563);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0;box-shadow:0 2px 6px rgba(107,114,128,.3);">
+                    {{ cf.name[0]|upper if cf.name else '?' }}
+                  </div>
+                  <div>
+                    <div style="font-weight:700;font-size:13px;color:#111;line-height:1.3;">{{ cf.name }}</div>
+                    <div style="font-size:11px;color:#6b7280;margin-top:1px;">{{ cf.department }}</div>
+                    <span style="font-size:10px;background:#f3f4f6;color:#374151;padding:2px 8px;border-radius:10px;font-weight:600;border:1px solid #e5e7eb;">Contractual</span>
+                  </div>
+                </div>
+              </td>
+              <td style="padding:14px 12px;font-size:13px;font-weight:600;color:#111;">{{ cf.current_rank }}</td>
+              <td style="padding:14px 12px;">
+                <div style="font-size:12px;color:#374151;font-weight:600;">{{ cf.hiredate }}</div>
+                <div style="font-size:11px;color:#9ca3af;margin-top:2px;">Hire date</div>
+              </td>
+              <td style="padding:14px 12px;">
+                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                  <a href="/hr_employee_profile/{{ cf.personnel_id }}"
+                     style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#f3f4f6;color:#374151;border-radius:7px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid #e5e7eb;transition:background .15s;"
+                     onmouseover="this.style.background='#e5e7eb'" onmouseout="this.style.background='#f3f4f6'">
+                    <i class='bx bx-user-circle' style="font-size:14px;"></i> View Profile
+                  </a>
+                  <button onclick="openDegreeForFaculty({{ cf.personnel_id }}, '{{ cf.name|replace("'", "\\'") }}')"
+                          style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#7b1113;color:#fff;border-radius:7px;font-size:12px;font-weight:600;border:none;cursor:pointer;">
+                    <i class='bx bx-book-add' style="font-size:14px;"></i> Set Degree
+                  </button>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div style="text-align:center;padding:2.5rem;color:#9ca3af;background:#f9fafb;border-radius:10px;border:1px dashed #e5e7eb;">
+        <i class='bx bx-check-circle' style="font-size:36px;display:block;margin-bottom:8px;color:#86efac;"></i>
+        <div style="font-weight:600;color:#6b7280;">All faculty have an aligned Master's Degree</div>
+      </div>
+      {% endif %}
+
     </div>
 
     <div class="tab-content" id="auditlogs" style="display: none;">
@@ -273,70 +550,143 @@
 
 <!-- Promotion Review Modal -->
 <div class="hr-modal-wrapper" id="hrReviewModal">
-  <div class="hr-modal-content">
-    <div class="hr-banner"></div>
-    
-    <div class="hr-profile-header">
-      <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Faculty" class="profile-img" id="modalProfileImage" style="width:80px;height:80px;border-radius:8px;object-fit:cover;background:#f0f0f0;">
-      <div class="hr-profile-info">
-        <h2 id="modalFacultyName">Loading...</h2>
-        <p id="modalFacultyPosition">Loading...</p>
-        <p id="modalFacultyRequest">Loading...</p>
-        
-        <div class="hr-profile-contact">
-          <span><i class='bx bx-envelope'></i> Email: <span id="modalFacultyEmail">N/A</span></span>
-          <span><i class='bx bx-phone'></i> Contact: <span id="modalFacultyPhone">N/A</span></span>
-        </div>
-        
-        <div class="hr-profile-status">
-          <strong>Submission Status:</strong> 
-          <span id="modalSubmissionStatus">Loading...</span>
-        </div>
-      </div>
-    </div>
-    
-    <div class="hr-documents">
-      <h3>Uploaded Documents</h3>
-      <div class="hr-stats" id="documentLinks" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
-        <div class="hr-stat-card" id="resumeContainer">
-            <a href="#" id="resumeLink"><i class='bx bx-file'></i> <span id="labelResume">Resume / CV</span></a>
-        </div>
-        <div class="hr-stat-card" id="torContainer">
-            <a href="#" id="torLink"><i class='bx bxs-graduation'></i> <span id="labelTor">Official TOR</span></a>
-        </div>
-        <div class="hr-stat-card" id="diplomaContainer">
-            <a href="#" id="diplomaLink"><i class='bx bx-award'></i> <span id="labelDiploma">Diploma / Cert</span></a>
-        </div>
-        <div class="hr-stat-card" id="coverLetterContainer">
-            <a href="#" id="coverLetterLink"><i class='bx bx-envelope'></i> <span id="labelCoverLetter">Cover Letter</span></a>
-        </div>
-      </div>
-      
-      <div id="pdfViewer" style="margin-top:20px;display:none;">
-        <h4 id="pdfTitle">Document Preview</h4>
-        <iframe id="pdfFrame" style="width:100%;height:500px;border:1px solid #ddd;border-radius:8px;"></iframe>
-      </div>
-      
-      <div id="hrNotesSection" style="margin-top:24px; display:none;">
-          <label for="hrNotes" style="font-size:14px;font-weight:600;margin-bottom:8px;display:block;">Add HRMD Notes (visible to VPAA/President):</label>
-          <textarea id="hrNotes" placeholder="Add HRMD notes (optional - will be visible to VPAA and President)"
-                    style="width:100%;min-height:80px;border-radius:8px;border:1px solid #ccc;padding:10px; resize:vertical;"></textarea>
-      </div>
+  <div style="width:700px;max-width:96%;max-height:92vh;overflow-y:auto;background:#fff;border-radius:16px;border-top:4px solid #7b1113;box-shadow:0 24px 64px rgba(0,0,0,.35);animation:hrFadeIn .2s ease;">
 
-      <div id="previousNotes" style="margin-top:25px;display:none;">
-        <h3 style="color:#333;font-size:16px;font-weight:600;margin-bottom:15px;border-bottom:2px solid #f0f0f0;padding-bottom:10px;">
-          <i class='bx bx-time-five' style="vertical-align:middle;margin-right:5px;"></i>Review History
-        </h3>
-        <div id="notesContainer" class="review-timeline"></div>
+    <!-- ── Header ─────────────────────────────────── -->
+    <div style="padding:22px 24px 0;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;">
+      <div style="display:flex;align-items:center;gap:16px;flex:1;min-width:0;">
+        <!-- Avatar (gradient fallback + real photo) -->
+        <div style="position:relative;flex-shrink:0;">
+          <div id="modalAvatarInitial"
+               style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#7b1113,#9f1239);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;box-shadow:0 3px 10px rgba(123,17,19,.35);">?</div>
+          <img id="modalProfileImage" alt="Faculty"
+               style="display:none;position:absolute;inset:0;width:64px;height:64px;border-radius:50%;object-fit:cover;box-shadow:0 3px 10px rgba(0,0,0,.2);">
+        </div>
+        <!-- Name / position / status -->
+        <div style="min-width:0;">
+          <h2 id="modalFacultyName" style="margin:0;font-size:18px;font-weight:700;color:#111;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Loading...</h2>
+          <div id="modalFacultyPosition" style="font-size:12px;color:#6b7280;margin-top:2px;">Loading...</div>
+          <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span id="modalStatusPill" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;"></span>
+            <span id="modalFacultyRequest" style="font-size:11px;color:#6b7280;font-style:italic;"></span>
+          </div>
+        </div>
+      </div>
+      <!-- Close -->
+      <button id="closeModal"
+              style="border:none;background:#f3f4f6;color:#6b7280;cursor:pointer;width:32px;height:32px;border-radius:50%;font-size:18px;line-height:1;flex-shrink:0;display:flex;align-items:center;justify-content:center;"
+              onmouseover="this.style.background='#e5e7eb'" onmouseout="this.style.background='#f3f4f6'">&times;</button>
+    </div>
+
+    <!-- ── Contact + Rank strip ───────────────────── -->
+    <div style="margin:14px 24px 0;padding:12px 16px;background:#f9fafb;border-radius:10px;border:1px solid #f0f0f0;display:flex;align-items:center;gap:0;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:7px;padding:4px 16px 4px 0;">
+        <i class='bx bx-transfer' style="font-size:15px;color:#7b1113;flex-shrink:0;"></i>
+        <div>
+          <div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Rank Change</div>
+          <div id="modalRankChange" style="font-size:13px;font-weight:700;color:#111;">—</div>
+        </div>
+      </div>
+      <div style="width:1px;height:34px;background:#e5e7eb;margin-right:16px;flex-shrink:0;"></div>
+      <div style="display:flex;align-items:center;gap:7px;padding:4px 16px 4px 0;">
+        <i class='bx bx-envelope' style="font-size:15px;color:#9ca3af;flex-shrink:0;"></i>
+        <div>
+          <div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Email</div>
+          <span id="modalFacultyEmail" style="font-size:12px;color:#374151;font-weight:500;">N/A</span>
+        </div>
+      </div>
+      <div style="width:1px;height:34px;background:#e5e7eb;margin-right:16px;flex-shrink:0;"></div>
+      <div style="display:flex;align-items:center;gap:7px;">
+        <i class='bx bx-phone' style="font-size:15px;color:#9ca3af;flex-shrink:0;"></i>
+        <div>
+          <div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Contact</div>
+          <span id="modalFacultyPhone" style="font-size:12px;color:#374151;font-weight:500;">N/A</span>
+        </div>
       </div>
     </div>
-    
-    <div class="hr-modal-footer">
-      <button id="rejectBtn" class="btn reject">Reject</button>
-      <button id="forwardBtn" class="btn forward">Forward to VPAA</button>
-      <button id="viewProfileBtn" class="btn btn-view">View Profile</button>
-      <button id="closeModal" class="btn close" style="font-size: 18px;">Close</button>
+
+    <!-- ── Documents ──────────────────────────────── -->
+    <div style="margin:18px 24px 0;">
+      <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;display:flex;align-items:center;gap:5px;">
+        <i class='bx bx-folder-open' style="font-size:14px;color:#7b1113;"></i> Submitted Documents
+      </div>
+      <div id="documentLinks" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
+        <div id="resumeContainer" style="border-radius:10px;overflow:hidden;">
+          <a href="#" id="resumeLink" style="display:flex;align-items:center;gap:10px;padding:12px 14px;text-decoration:none;color:#374151;font-size:13px;font-weight:600;transition:opacity .15s;">
+            <i class='bx bx-file' style="font-size:22px;color:#7b1113;flex-shrink:0;"></i>
+            <span id="labelResume">Resume / CV</span>
+          </a>
+        </div>
+        <div id="torContainer" style="border-radius:10px;overflow:hidden;">
+          <a href="#" id="torLink" style="display:flex;align-items:center;gap:10px;padding:12px 14px;text-decoration:none;color:#374151;font-size:13px;font-weight:600;transition:opacity .15s;">
+            <i class='bx bxs-graduation' style="font-size:22px;color:#7b1113;flex-shrink:0;"></i>
+            <span id="labelTor">Official TOR</span>
+          </a>
+        </div>
+        <div id="diplomaContainer" style="border-radius:10px;overflow:hidden;">
+          <a href="#" id="diplomaLink" style="display:flex;align-items:center;gap:10px;padding:12px 14px;text-decoration:none;color:#374151;font-size:13px;font-weight:600;transition:opacity .15s;">
+            <i class='bx bx-award' style="font-size:22px;color:#7b1113;flex-shrink:0;"></i>
+            <span id="labelDiploma">Diploma / Cert</span>
+          </a>
+        </div>
+        <div id="coverLetterContainer" style="border-radius:10px;overflow:hidden;">
+          <a href="#" id="coverLetterLink" style="display:flex;align-items:center;gap:10px;padding:12px 14px;text-decoration:none;color:#374151;font-size:13px;font-weight:600;transition:opacity .15s;">
+            <i class='bx bx-envelope' style="font-size:22px;color:#7b1113;flex-shrink:0;"></i>
+            <span id="labelCoverLetter">Cover Letter</span>
+          </a>
+        </div>
+      </div>
     </div>
+
+    <!-- ── PDF Viewer ─────────────────────────────── -->
+    <div id="pdfViewer" style="margin:16px 24px 0;display:none;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <h4 id="pdfTitle" style="margin:0;font-size:13px;font-weight:700;color:#374151;display:flex;align-items:center;gap:5px;">
+          <i class='bx bx-file-blank' style="font-size:16px;color:#7b1113;"></i> Document Preview
+        </h4>
+        <button onclick="pdfViewer.style.display='none';pdfFrame.src='';"
+                style="border:none;background:#f3f4f6;color:#6b7280;cursor:pointer;width:26px;height:26px;border-radius:50%;font-size:15px;display:flex;align-items:center;justify-content:center;">&times;</button>
+      </div>
+      <iframe id="pdfFrame" style="width:100%;height:460px;border:1px solid #e5e7eb;border-radius:10px;"></iframe>
+    </div>
+
+    <!-- ── HR Notes ───────────────────────────────── -->
+    <div id="hrNotesSection" style="margin:18px 24px 0;display:none;">
+      <label style="display:block;font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;">
+        <i class='bx bx-edit' style="font-size:14px;vertical-align:middle;color:#7b1113;"></i> HRMD Notes
+        <span style="font-weight:400;font-size:11px;color:#9ca3af;text-transform:none;letter-spacing:0;"> — optional, visible to VPA &amp; President</span>
+      </label>
+      <textarea id="hrNotes" placeholder="Enter review notes..."
+                style="width:100%;min-height:80px;border-radius:8px;border:1px solid #d1d5db;padding:10px 12px;font-size:13px;resize:vertical;box-sizing:border-box;font-family:inherit;color:#111;"></textarea>
+    </div>
+
+    <!-- ── Review History ─────────────────────────── -->
+    <div id="previousNotes" style="margin:18px 24px 0;display:none;">
+      <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px;display:flex;align-items:center;gap:6px;">
+        <i class='bx bx-history' style="font-size:15px;color:#7b1113;"></i> Review History
+      </div>
+      <div id="notesContainer" class="review-timeline"></div>
+    </div>
+
+    <!-- ── Footer ─────────────────────────────────── -->
+    <div style="margin-top:20px;padding:16px 24px;border-top:1px solid #f3f4f6;display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+      <!-- hidden status span (used by JS) -->
+      <span id="modalSubmissionStatus" style="display:none;"></span>
+      <button id="rejectBtn"
+              style="display:none;align-items:center;gap:5px;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:#fef2f2;color:#991b1b;border:1px solid #fecaca;">
+        <i class='bx bx-x-circle' style="font-size:15px;"></i> Reject
+      </button>
+      <button id="forwardBtn"
+              style="display:none;align-items:center;gap:5px;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;background:#7b1113;color:#fff;border:none;box-shadow:0 2px 6px rgba(123,17,19,.3);">
+        <i class='bx bx-send' style="font-size:15px;"></i> Forward to VPA
+      </button>
+      <button id="viewProfileBtn"
+              style="display:inline-flex;align-items:center;gap:5px;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;"
+              onmouseover="this.style.background='#e5e7eb'" onmouseout="this.style.background='#f3f4f6'">
+        <i class='bx bx-user-circle' style="font-size:15px;"></i> View Profile
+      </button>
+    </div>
+
   </div>
 </div>
 
@@ -348,6 +698,60 @@
 </div>
 
 
+<!-- Set Degree Info Modal -->
+<div id="degreeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;width:100%;max-width:480px;margin:16px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+    <div style="padding:20px 24px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;">
+      <h2 style="margin:0;font-size:17px;font-weight:700;color:#111">Set Academic Degree Info</h2>
+      <span onclick="closeDegreeModal()" style="cursor:pointer;font-size:22px;color:#6b7280;line-height:1">&times;</span>
+    </div>
+    <div style="padding:20px 24px;">
+      <!-- Faculty picker -->
+      <div style="margin-bottom:16px;">
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Faculty Member *</label>
+        <select id="degreeFacultySelect" onchange="onDegreeFacultyChange()" style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;">
+          <option value="">-- Select Faculty --</option>
+        </select>
+        <p id="degreeFacultyLabel" style="display:none;font-weight:600;font-size:14px;color:#7b1113;margin:4px 0 0;"></p>
+      </div>
+      <!-- Fields (hidden until faculty is selected) -->
+      <div id="degreeFields" style="display:none;">
+        <div style="margin-bottom:14px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:500;">
+            <input type="checkbox" id="degreeHasAlignedMaster" onchange="toggleProbStart()" style="width:15px;height:15px;">
+            Has Aligned Master's Degree
+          </label>
+        </div>
+        <div id="probStartGroup" style="display:none;margin-bottom:14px;">
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Date Master's Degree was obtained *</label>
+          <input type="date" id="degreeProbStart" style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;box-sizing:border-box;">
+          <p id="degreeProbStartError" style="color:#ef4444;font-size:12px;margin:4px 0 0;display:none;"></p>
+        </div>
+        <div style="margin-bottom:14px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:500;">
+            <input type="checkbox" id="degreeHasDoctorate" style="width:15px;height:15px;">
+            Has Doctorate Degree
+          </label>
+        </div>
+        <div style="margin-bottom:4px;">
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Highest Degree Level</label>
+          <select id="degreeHighestLevel" style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;">
+            <option value="">-- Select --</option>
+            <option value="Bachelor's">Bachelor's</option>
+            <option value="Master's">Master's</option>
+            <option value="Doctorate">Doctorate</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <p id="degreeModalError" style="color:#ef4444;font-size:12px;margin:8px 0 0;display:none;"></p>
+      </div>
+    </div>
+    <div style="padding:16px 24px;border-top:1px solid #e5e7eb;display:flex;justify-content:flex-end;gap:10px;">
+      <button onclick="closeDegreeModal()" style="padding:8px 18px;border:1px solid #d1d5db;border-radius:8px;background:#fff;cursor:pointer;font-size:13px;">Cancel</button>
+      <button id="saveDegreeBtn" onclick="saveDegreeInfo()" style="padding:8px 18px;border:none;border-radius:8px;background:#7b1113;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">Save</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -563,27 +967,53 @@ function loadPromotionDetails(applicationId) {
 
         document.getElementById('modalFacultyName').textContent = data.name;
         document.getElementById('modalFacultyPosition').textContent = `${data.currentrank} • ${data.department}`;
-        document.getElementById('modalFacultyRequest').textContent = `Applied for promotion to ${data.requestedrank || 'Not specified'}.`;
-        document.getElementById('modalFacultyEmail').textContent = data.email;
-        document.getElementById('modalFacultyPhone').textContent = data.phone;
+        document.getElementById('modalFacultyRequest').textContent = `Applying for promotion to ${data.requestedrank || 'Not specified'}`;
+        document.getElementById('modalFacultyEmail').textContent = data.email || 'N/A';
+        document.getElementById('modalFacultyPhone').textContent = data.phone || 'N/A';
         document.getElementById('modalSubmissionStatus').textContent = data.status;
 
-        const profileImg = document.getElementById('modalProfileImage');
-        profileImg.src = "/static/img/logo.png"; // Set default logo first
-        profileImg.style.display = 'block';
-        profileImg.style.backgroundColor = '#f0f0f0';
-        profileImg.alt = 'Faculty Profile';
+        // Avatar initial — reset visibility before loading photo
+        const avatarEl = document.getElementById('modalAvatarInitial');
+        avatarEl.textContent = (data.name || '?')[0].toUpperCase();
+        avatarEl.style.visibility = 'visible';
 
+        // Rank change
+        document.getElementById('modalRankChange').textContent =
+          `${data.currentrank || '—'} → ${data.requestedrank || '—'}`;
+
+        // Status pill
+        const pill = document.getElementById('modalStatusPill');
+        const statusLower = (data.status || '').toLowerCase();
+        const pillMap = {
+          hrmd:     { bg:'#fef9c3', color:'#713f12', border:'#fde68a', icon:'bx-time-five',   label:'HR Review'        },
+          vpa:      { bg:'#eff6ff', color:'#1d4ed8', border:'#bfdbfe', icon:'bx-time-five',   label:'VPA Review'      },
+          pres:     { bg:'#f5f3ff', color:'#6d28d9', border:'#ddd6fe', icon:'bx-time-five',   label:'President Review' },
+          approved: { bg:'#f0fdf4', color:'#166534', border:'#bbf7d0', icon:'bx-check-circle',label:'Approved'         },
+          rejected: { bg:'#fef2f2', color:'#991b1b', border:'#fecaca', icon:'bx-x-circle',    label:'Rejected'         },
+        };
+        const pm = Object.entries(pillMap).find(([k]) => statusLower.includes(k));
+        if (pm) {
+          const s = pm[1];
+          pill.style.cssText = `display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:${s.bg};color:${s.color};border:1px solid ${s.border};`;
+          pill.innerHTML = `<i class='bx ${s.icon}' style="font-size:12px;"></i>${s.label}`;
+        } else {
+          pill.style.cssText = `display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;`;
+          pill.textContent = data.status;
+        }
+
+        // Profile photo (hide avatar fallback if photo loads)
+        const profileImg = document.getElementById('modalProfileImage');
+        profileImg.style.display = 'none';
         fetch(`/api/profile/image-base64/${data.faculty_id}`)
           .then(resp => resp.json())
           .then(imageData => {
             if (imageData.success && imageData.image) {
               profileImg.src = imageData.image;
+              profileImg.style.display = 'block';
+              avatarEl.style.visibility = 'hidden';
             }
           })
-          .catch(() => {
-            profileImg.src = "/static/img/logo.png";
-          });
+          .catch(() => {});
 
         // ====== Display existing notes in timeline format ======
         const notesContainer = document.getElementById('notesContainer');
@@ -608,7 +1038,7 @@ function loadPromotionDetails(applicationId) {
             <div class="review-note-card vpa">
               <div class="review-note-header">
                 <span class="review-note-role vpa">
-                  <i class='bx bx-shield-quarter'></i>VPAA Review
+                  <i class='bx bx-shield-quarter'></i>VPA Review
                 </span>
               </div>
               <div class="review-note-content">${data.vpa_remarks}</div>
@@ -656,13 +1086,13 @@ function loadPromotionDetails(applicationId) {
         const hrNotesSection = document.getElementById('hrNotesSection'); 
 
         if (data.status.toLowerCase() === 'hrmd') {
-          rejectBtn.style.display = 'inline-block';
-          forwardBtn.style.display = 'inline-block';
-          hrNotesSection.style.display = 'block'; // Show notes for HRMD
+          rejectBtn.style.display = 'inline-flex';
+          forwardBtn.style.display = 'inline-flex';
+          hrNotesSection.style.display = 'block';
         } else {
           rejectBtn.style.display = 'none';
           forwardBtn.style.display = 'none';
-          hrNotesSection.style.display = 'none'; // Hide notes for other statuses
+          hrNotesSection.style.display = 'none';
         }
         // ====== END FIXED LOGIC ======
 
@@ -738,13 +1168,13 @@ document.getElementById('viewProfileBtn').addEventListener('click', () => {
   window.location.href = `/hr_employee_profile/${currentFacultyId}`;
 });
 
-// FORWARD TO VPAA (MODIFIED)
+// FORWARD TO VPA (MODIFIED)
 document.getElementById('forwardBtn').addEventListener('click', () => {
   if (!currentApplicationId) return alert('No application selected');
   
   const hrNotes = document.getElementById('hrNotes').value.trim();
   
-  if (!confirm('Forward this application to VPAA for review?')) return;
+  if (!confirm('Forward this application to VPA for review?')) return;
   
   fetch('/api/promotion/forward-to-vpaa', {
     method: 'POST',
@@ -757,7 +1187,7 @@ document.getElementById('forwardBtn').addEventListener('click', () => {
   .then(response => response.json())
   .then(result => {
     if (result.success) {
-      alert('Application forwarded to VPAA successfully');
+      alert('Application forwarded to VPA successfully');
       location.reload();
     } else {
       alert('Error: ' + result.error);
@@ -830,8 +1260,21 @@ function loadAuditLogs() {
             statusClass = 'pending'; // Submitted/Initial (Blue/Grey)
           }
 
+          // Format details: render Before/After lines with color, rest as plain text
+          function formatAuditDetails(raw) {
+            if (!raw) return '<em style="color:#a1a1aa;">No remarks recorded</em>';
+            return raw.split('\n').map(line => {
+              if (line.startsWith('Before:')) {
+                return `<span style="color:#dc2626;font-size:12px;">&#x2212; ${line}</span>`;
+              } else if (line.startsWith('After:')) {
+                return `<span style="color:#16a34a;font-size:12px;">&#x2b; ${line}</span>`;
+              }
+              return `<span style="font-size:13px;">${line}</span>`;
+            }).join('<br>');
+          }
+
           const tr = document.createElement('tr');
-          tr.style.verticalAlign = 'top'; // Align content to the top
+          tr.style.verticalAlign = 'top';
           tr.innerHTML = `
             <td style="white-space:nowrap; font-size:13px; color:#6b7280; padding: 12px 10px;">
               ${new Date(evt.timestamp).toLocaleString()}
@@ -839,7 +1282,7 @@ function loadAuditLogs() {
             <td style="padding: 12px 10px;">
               <span class="status ${statusClass}" style="font-weight: 600;">${evt.type} - ${evt.event}</span>
             </td>
-            <td style="font-size:14px; padding: 12px 10px; color:#374151;">${evt.notes || '<em style="color:#a1a1aa;">No remarks recorded</em>'}</td>
+            <td style="padding: 12px 10px; color:#374151; line-height:1.6;">${formatAuditDetails(evt.notes)}</td>
             <td style="font-weight:500; white-space:nowrap; padding: 12px 10px;">${evt.performed_by || 'System'}</td>
           `;
           tbody.appendChild(tr);
@@ -853,6 +1296,181 @@ function loadAuditLogs() {
       tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:#dc2626;">Error loading audit logs</td></tr>';
     });
 }
+
+/* ===== Set Degree Info Modal ===== */
+let currentDegreePersonnelId = null;
+
+async function openDegreeForFaculty(personnelId, name) {
+  // Open modal pre-loaded for a specific contractual faculty — skips the dropdown
+  document.getElementById('degreeModal').style.display = 'flex';
+  document.getElementById('degreeFacultySelect').style.display = 'none';
+  document.getElementById('degreeFacultyLabel').style.display = '';
+  document.getElementById('degreeFacultyLabel').textContent = name;
+  document.getElementById('degreeFields').style.display = 'none';
+  currentDegreePersonnelId = personnelId;
+
+  try {
+    const res = await fetch(`/api/hr/faculty-degree-info/${personnelId}`);
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('degreeHasAlignedMaster').checked = data.has_aligned_master;
+      document.getElementById('degreeHasDoctorate').checked = data.has_doctorate;
+      document.getElementById('degreeHighestLevel').value = data.highest_degree_level || '';
+      document.getElementById('degreeProbStart').value = data.probationary_start_date || '';
+      document.getElementById('probStartGroup').style.display = data.has_aligned_master ? '' : 'none';
+      document.getElementById('degreeProbStartError').style.display = 'none';
+      document.getElementById('degreeModalError').style.display = 'none';
+      document.getElementById('degreeFields').style.display = '';
+    }
+  } catch (e) {
+    console.error('Failed to load degree info', e);
+  }
+}
+
+async function openDegreeModal() {
+  // Restore dropdown mode (reset from any prior openDegreeForFaculty call)
+  document.getElementById('degreeFacultySelect').style.display = '';
+  document.getElementById('degreeFacultyLabel').style.display = 'none';
+
+  // Populate faculty dropdown
+  const select = document.getElementById('degreeFacultySelect');
+  select.innerHTML = '<option value="">-- Select Faculty --</option>';
+  document.getElementById('degreeFields').style.display = 'none';
+  document.getElementById('degreeModal').style.display = 'flex';
+
+  try {
+    const res = await fetch('/api/hr/faculty-list');
+    const data = await res.json();
+    if (data.success) {
+      data.faculty_list.forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f.personnel_id;
+        opt.textContent = f.name + ' — ' + f.college;
+        select.appendChild(opt);
+      });
+    }
+  } catch (e) {
+    console.error('Failed to load faculty list', e);
+  }
+}
+
+async function onDegreeFacultyChange() {
+  const personnelId = document.getElementById('degreeFacultySelect').value;
+  const fields = document.getElementById('degreeFields');
+  if (!personnelId) { fields.style.display = 'none'; return; }
+
+  currentDegreePersonnelId = personnelId;
+  try {
+    const res = await fetch(`/api/hr/faculty-degree-info/${personnelId}`);
+    const data = await res.json();
+    if (!data.success) { fields.style.display = 'none'; return; }
+
+    document.getElementById('degreeHasAlignedMaster').checked = data.has_aligned_master;
+    document.getElementById('degreeHasDoctorate').checked = data.has_doctorate;
+    document.getElementById('degreeHighestLevel').value = data.highest_degree_level || '';
+    document.getElementById('degreeProbStart').value = data.probationary_start_date || '';
+    document.getElementById('probStartGroup').style.display = data.has_aligned_master ? '' : 'none';
+    document.getElementById('degreeProbStartError').style.display = 'none';
+    document.getElementById('degreeModalError').style.display = 'none';
+    fields.style.display = '';
+  } catch (e) {
+    console.error('Failed to load degree info', e);
+  }
+}
+
+function toggleProbStart() {
+  const checked = document.getElementById('degreeHasAlignedMaster').checked;
+  document.getElementById('probStartGroup').style.display = checked ? '' : 'none';
+  if (!checked) {
+    document.getElementById('degreeProbStart').value = '';
+    document.getElementById('degreeProbStartError').style.display = 'none';
+  }
+}
+
+function closeDegreeModal() {
+  document.getElementById('degreeModal').style.display = 'none';
+  document.getElementById('degreeFacultySelect').style.display = '';
+  document.getElementById('degreeFacultyLabel').style.display = 'none';
+  document.getElementById('degreeFields').style.display = 'none';
+  currentDegreePersonnelId = null;
+}
+
+async function saveDegreeInfo() {
+  const hasAlignedMaster = document.getElementById('degreeHasAlignedMaster').checked;
+  const probStart = document.getElementById('degreeProbStart').value;
+  const errDate = document.getElementById('degreeProbStartError');
+  const errModal = document.getElementById('degreeModalError');
+  errDate.style.display = 'none';
+  errModal.style.display = 'none';
+
+  if (!currentDegreePersonnelId) return;
+
+  if (hasAlignedMaster && !probStart) {
+    errDate.textContent = 'Please enter the date the Master\'s Degree was obtained.';
+    errDate.style.display = 'block';
+    return;
+  }
+
+  const btn = document.getElementById('saveDegreeBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  try {
+    const res = await fetch('/api/hr/update-degree-info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        personnel_id: currentDegreePersonnelId,
+        has_aligned_master: hasAlignedMaster,
+        has_doctorate: document.getElementById('degreeHasDoctorate').checked,
+        highest_degree_level: document.getElementById('degreeHighestLevel').value,
+        probationary_start_date: hasAlignedMaster ? probStart : null
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      closeDegreeModal();
+      location.reload();
+    } else {
+      errModal.textContent = data.error || 'Failed to save.';
+      errModal.style.display = 'block';
+    }
+  } catch (e) {
+    errModal.textContent = 'Request failed: ' + e.message;
+    errModal.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save';
+  }
+}
+
+// Inject near-eligibility notifications for probationary faculty
+(function () {
+  var nearEligible = {{ nearly_eligible_faculty | tojson }};
+  if (!nearEligible || nearEligible.length === 0) return;
+
+  // Wait until NotifSystem is ready (it initialises inside DOMContentLoaded in hr-base.html)
+  document.addEventListener('DOMContentLoaded', function () {
+    var today = new Date().toDateString();
+    nearEligible.forEach(function (fac) {
+      var daysLeft = 1095 - fac.days_done;
+      window.dispatchEvent(new CustomEvent('spcheck-notification', {
+        detail: {
+          notification_type : 'probationary',
+          local_key         : 'prob_near_' + fac.personnel_id + '_' + today,
+          person_name       : fac.name,
+          personnel_id      : fac.personnel_id,
+          action            : 'near_eligible',
+          message           : daysLeft + ' day(s) until regularization eligibility',
+          tap_time          : new Date().toLocaleString('en-US', {
+            weekday: 'long', year: 'numeric', month: 'long',
+            day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+          })
+        }
+      }));
+    });
+  });
+})();
 
 </script>
 {% endblock %}

@@ -56,28 +56,14 @@
       <!-- Licenses -->
       <div style="grid-column: span 2;">
         <div class="document-section">
-          <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-certificate"></i> Licenses</h4>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
-            <div>
-              <label style="font-size:13px;color:var(--muted);display:block;margin-bottom:4px;">License Type</label>
-              <input type="text" id="license_type" name="license_type" placeholder="e.g. PRC, Bar, CPA" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
-            </div>
-            <div>
-              <label style="font-size:13px;color:var(--muted);display:block;margin-bottom:4px;">License Number</label>
-              <input type="text" id="license_number" name="license_number" placeholder="Enter license number" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
-            </div>
-            <div>
-              <label style="font-size:13px;color:var(--muted);display:block;margin-bottom:4px;">Expiration Date</label>
-              <input type="date" id="license_expiration_date" name="license_expiration_date" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
-            </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:15px;">
+            <h4 style="margin:0;color:var(--primary);"><i class="fas fa-certificate"></i> Licenses</h4>
+            <button type="button" onclick="addLicenseEntry()"
+                    style="display:inline-flex;align-items:center;gap:6px;padding:7px 15px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">
+              <i class="fas fa-plus"></i> Add License
+            </button>
           </div>
-          <div class="upload-field">
-            <label for="licenses" style="cursor: pointer;">
-              <i class="fas fa-file-upload"></i>
-              <span>Upload licenses (PDF, images)...</span>
-            </label>
-            <input type="file" id="licenses" name="licenses" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'licenses-list', 'licenses')">
-          </div>
+          <div id="license-entries-container" style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px;"></div>
           <div id="licenses-display" class="documents-grid">
             <p style="color:var(--muted);">No licenses uploaded yet.</p>
           </div>
@@ -262,6 +248,88 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<style>
+.license-entry {
+  display: grid;
+  grid-template-columns: 104px 1fr auto;
+  gap: 14px;
+  align-items: start;
+  background: #fafafa;
+  border: 1.5px dashed #d1d5db;
+  border-radius: 10px;
+  padding: 14px;
+  transition: border-color .2s, background .2s;
+}
+.license-entry.has-file {
+  border-style: solid;
+  border-color: var(--primary);
+  background: #fff;
+}
+.license-drop-zone {
+  width: 104px;
+  height: 104px;
+  border: 1.5px dashed #d1d5db;
+  border-radius: 8px;
+  background: #f9fafb;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  cursor: pointer;
+  font-size: 11px;
+  color: #9ca3af;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  transition: border-color .2s, background .2s, color .2s;
+}
+.license-drop-zone:hover, .license-drop-zone.drag-over {
+  border-color: var(--primary);
+  background: #fff5f5;
+  color: var(--primary);
+}
+.license-drop-zone .drop-icon { font-size: 22px; }
+.license-drop-zone input[type=file] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+.license-drop-zone .file-preview-inner {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  background: #fff; gap: 4px; padding: 6px;
+  pointer-events: none;
+}
+.license-drop-zone .file-preview-inner img {
+  max-width: 66px; max-height: 66px; object-fit: contain; border-radius: 4px;
+}
+.license-drop-zone .file-preview-inner span {
+  font-size: 10px; color: #374151; word-break: break-all;
+  text-align: center; max-width: 90px; line-height: 1.3;
+}
+.license-meta-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.license-meta-fields label {
+  font-size: 11px; color: #6b7280; display: block;
+  margin-bottom: 3px; font-weight: 500; letter-spacing: .3px;
+}
+.license-meta-fields input {
+  width: 100%; padding: 7px 9px; border: 1px solid #e5e7eb;
+  border-radius: 6px; font-size: 13px;
+  transition: border-color .15s; box-sizing: border-box;
+}
+.license-meta-fields input:focus { outline: none; border-color: var(--primary); }
+.license-meta-full { grid-column: span 2; }
+.license-remove-btn {
+  background: none; border: none; color: #9ca3af; font-size: 20px;
+  cursor: pointer; padding: 0 4px; line-height: 1;
+  transition: color .15s; align-self: start;
+}
+.license-remove-btn:hover { color: #ef4444; }
+</style>
 <script>
 let currentProfile = {};
 let documentFileNames = {
@@ -853,10 +921,11 @@ document.getElementById('documentsForm').addEventListener('submit', async (e) =>
     showLoading(true, 'Processing documents...');
     showToast('Processing documents...', 'info');
 
-    const hasNewUploads = ['profilepic', 'licenses', 'degrees', 'certificates', 'publications', 'awards'].some(docType => {
+    const hasLicenseEntries = Object.values(licenseEntries).some(e => e.file);
+    const hasNewUploads = ['profilepic', 'degrees', 'certificates', 'publications', 'awards'].some(docType => {
       const input = document.getElementById(docType);
-      return input.files && input.files.length > 0;
-    });
+      return input && input.files && input.files.length > 0;
+    }) || hasLicenseEntries;
     
     const hasDeletions = Object.values(documentsToDelete).some(arr => arr.length > 0);
     
@@ -890,17 +959,16 @@ document.getElementById('documentsForm').addEventListener('submit', async (e) =>
       formData.append('profilepic', profilepicInput.files[0]);
     }
 
-    const licenseFiles = document.getElementById('licenses').files;
-    if (licenseFiles.length > 0) {
-      const licenseType = document.getElementById('license_type').value.trim();
-      const licenseNumber = document.getElementById('license_number').value.trim();
-      const licenseExpirationDate = document.getElementById('license_expiration_date').value;
-      formData.append('license_type', licenseType);
-      formData.append('license_number', licenseNumber);
-      formData.append('license_expiration_date', licenseExpirationDate);
-      for (let file of licenseFiles) {
-        formData.append('licenses', file);
-      }
+    for (const [id, entry] of Object.entries(licenseEntries)) {
+      if (!entry.file) continue;
+      const licFormData = new FormData();
+      licFormData.append('licenses', entry.file);
+      licFormData.append('license_type', document.getElementById(`lt-type-${id}`).value.trim());
+      licFormData.append('license_number', document.getElementById(`lt-num-${id}`).value.trim());
+      licFormData.append('license_expiration_date', document.getElementById(`lt-exp-${id}`).value);
+      const licRes = await fetch('/api/faculty/profile/documents', { method: 'POST', body: licFormData });
+      const licData = await licRes.json();
+      if (!licData.success) throw new Error(`Failed to upload license: ${licData.error}`);
     }
 
     ['degrees', 'certificates', 'publications', 'awards'].forEach(docType => {
@@ -919,18 +987,16 @@ document.getElementById('documentsForm').addEventListener('submit', async (e) =>
     
     if (data.success) {
       showToast('Documents updated successfully', 'success');
-      
-      documentsToDelete = {
-        licenses: [],
-        degrees: [],
-        certificates: [],
-        publications: [],
-        awards: []
-      };
-      
+
+      documentsToDelete = { licenses: [], degrees: [], certificates: [], publications: [], awards: [] };
+
+      document.getElementById('license-entries-container').innerHTML = '';
+      Object.keys(licenseEntries).forEach(k => delete licenseEntries[k]);
+      licenseEntryCount = 0;
+
       await loadProfileData();
-      
-      ['profilepic', 'licenses', 'degrees', 'certificates', 'publications', 'awards'].forEach(id => {
+
+      ['profilepic', 'degrees', 'certificates', 'publications', 'awards'].forEach(id => {
         const input = document.getElementById(id);
         if (input) {
           input.value = '';
@@ -1049,5 +1115,94 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 });
+
+// ── License entry card system ──────────────────────────────────────────────
+let licenseEntryCount = 0;
+const licenseEntries = {};
+
+function addLicenseEntry() {
+  const id = ++licenseEntryCount;
+  licenseEntries[id] = { file: null };
+
+  const container = document.getElementById('license-entries-container');
+  const div = document.createElement('div');
+  div.className = 'license-entry';
+  div.id = `license-entry-${id}`;
+  div.innerHTML = `
+    <div class="license-drop-zone" id="drop-${id}"
+         ondragover="event.preventDefault();this.classList.add('drag-over')"
+         ondragleave="this.classList.remove('drag-over')"
+         ondrop="handleLicenseDrop(event,${id})">
+      <i class="fas fa-cloud-upload-alt drop-icon"></i>
+      <span>Drop file<br>or click</span>
+      <input type="file" accept=".pdf,.jpg,.jpeg,.png" onchange="handleLicenseFileSelect(this,${id})">
+    </div>
+    <div class="license-meta-fields">
+      <div>
+        <label>License Type</label>
+        <input type="text" id="lt-type-${id}" placeholder="e.g. PRC, Bar, CPA">
+      </div>
+      <div>
+        <label>License Number</label>
+        <input type="text" id="lt-num-${id}" placeholder="License number">
+      </div>
+      <div class="license-meta-full">
+        <label>Expiration Date</label>
+        <input type="date" id="lt-exp-${id}">
+      </div>
+    </div>
+    <button type="button" class="license-remove-btn" onclick="removeLicenseEntry(${id})" title="Remove">×</button>
+  `;
+  container.appendChild(div);
+  setTimeout(() => div.querySelector('input[type=text]').focus(), 50);
+}
+
+function removeLicenseEntry(id) {
+  const el = document.getElementById(`license-entry-${id}`);
+  if (el) el.remove();
+  delete licenseEntries[id];
+}
+
+function handleLicenseDrop(event, id) {
+  event.preventDefault();
+  document.getElementById(`drop-${id}`).classList.remove('drag-over');
+  const file = event.dataTransfer.files[0];
+  if (file) setLicenseFile(id, file);
+}
+
+function handleLicenseFileSelect(input, id) {
+  if (input.files[0]) setLicenseFile(id, input.files[0]);
+}
+
+function setLicenseFile(id, file) {
+  licenseEntries[id].file = file;
+  const drop = document.getElementById(`drop-${id}`);
+  document.getElementById(`license-entry-${id}`).classList.add('has-file');
+
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (['jpg', 'jpeg', 'png'].includes(ext)) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      drop.innerHTML = `
+        <div class="file-preview-inner">
+          <img src="${e.target.result}" alt="preview">
+          <span>${file.name}</span>
+        </div>
+        <input type="file" accept=".pdf,.jpg,.jpeg,.png" onchange="handleLicenseFileSelect(this,${id})">
+      `;
+    };
+    reader.readAsDataURL(file);
+  } else {
+    const color = ext === 'pdf' ? '#dc2626' : '#6b7280';
+    const icon  = ext === 'pdf' ? 'fa-file-pdf' : 'fa-file';
+    drop.innerHTML = `
+      <div class="file-preview-inner">
+        <i class="fas ${icon}" style="font-size:32px;color:${color};"></i>
+        <span>${file.name}</span>
+      </div>
+      <input type="file" accept=".pdf,.jpg,.jpeg,.png" onchange="handleLicenseFileSelect(this,${id})">
+    `;
+  }
+}
 </script>
 {% endblock %}

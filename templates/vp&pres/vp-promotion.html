@@ -11,14 +11,14 @@
       <div class="icon promo"><i class='bx bx-award'></i></div>
       <div>
         <div class="title">Pending Promotion Review</div>
-        <div class="value">{{ promotions|selectattr('status', 'equalto', 'Vpa')|list|length if user_role == 20004 else promotions|selectattr('status', 'equalto', 'Pres')|list|length }}</div>
+        <div class="value">{{ promotions|selectattr('status', 'equalto', 'Vpa')|list|length if is_vpaa else promotions|selectattr('status', 'equalto', 'Pres')|list|length }}</div>
       </div>
     </div>
   <div class="kpi card">
    <div class="icon eval"><i class='bx bx-file-find'></i></div>
     <div>
       <div class="title">Pending Regularization Review</div>
-      <div class="value">{{ regularizations|selectattr('reg_status', 'equalto', 'vpa')|list|length if user_role == 20004 else regularizations|selectattr('reg_status', 'equalto', 'pres')|list|length }}</div>
+      <div class="value">{{ regularizations|selectattr('reg_status', 'equalto', 'vpa')|list|length if is_vpaa else regularizations|selectattr('reg_status', 'equalto', 'pres')|list|length }}</div>
     </div>
   </div>
     <div class="kpi card">
@@ -46,7 +46,7 @@
     <select id="filterPromotionStatus">
       <option value="">All Status</option>
       <option value="Hrmd">For HRMD Checking</option>
-      <option value="Vpa">For VPAA Checking</option>
+      <option value="Vpa">For VPA Checking</option>
       <option value="Pres">For President Checking</option>
       <option value="approved">Approved</option>
       <option value="rejected">Rejected</option>
@@ -73,7 +73,7 @@
     </select>
     <select id="filterRegularizationStatus">
       <option value="">All Status</option>
-      <option value="vpa">For VPAA Review</option>
+      <option value="vpa">For VPA Review</option>
       <option value="pres">For President Review</option>
     </select>
   </div>
@@ -82,73 +82,128 @@
   <div class="card" style="grid-column:1 / -1; padding:20px">
     <div class="tabs_profile">
       <div class="tab active" data-tab="promotions">Promotions</div>
-      <div class="tab" data-tab="regularizations">Regularizations</div>
+      <div class="tab" data-tab="regularizations" style="display:inline-flex; align-items:center; gap:6px;">
+        Regularizations
+        {% set forwarded_count = regularizations|selectattr('reg_status','equalto','vpa')|list|length if is_vpaa else regularizations|selectattr('reg_status','equalto','pres')|list|length %}
+        {% if forwarded_count > 0 %}
+        <span style="background:#7b1113; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:99px; line-height:1.6;">{{ forwarded_count }}</span>
+        {% endif %}
+      </div>
     </div>
 
     <!-- Promotions Table -->
     <div class="tab-content active" id="promotions">
+
+      <!-- Section Banner -->
+      <div style="border-left:4px solid #7b1113;border-radius:0 10px 10px 0;background:#fff8f8;padding:14px 18px;margin-bottom:6px;display:flex;align-items:center;gap:12px;">
+        <i class='bx bx-award' style="font-size:22px;color:#7b1113;flex-shrink:0;"></i>
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:700;color:#7b1113;">Promotion Applications</div>
+          <div style="font-size:11px;color:#9f1239;margin-top:1px;">Items requiring your action are shown first.</div>
+        </div>
+        <span style="background:#fee2e2;color:#7b1113;font-size:13px;font-weight:700;padding:4px 14px;border-radius:20px;flex-shrink:0;">{{ promotions|length }}</span>
+      </div>
+
       <div class="table">
         <table>
           <thead>
             <tr>
               <th>Faculty</th>
-              <th>Department</th>
-              <th>Current Rank</th>
-              <th>Requested</th>
+              <th>Rank Change</th>
               <th>Status</th>
               <th>Submitted</th>
               <th>Action</th>
             </tr>
           </thead>
           <tbody id="promotionsBody">
-            {# Which status key means "needs my action": VPAA sees 'vpa', President sees 'pres' #}
-            {% if user_role == 20004 %}
-              {% set my_status_key = 'vpa' %}
-            {% else %}
-              {% set my_status_key = 'pres' %}
-            {% endif %}
-            {# Split into action-required vs the rest, then render action-required first #}
+            {% if is_vpaa %}{% set my_status_key = 'vpa' %}{% else %}{% set my_status_key = 'pres' %}{% endif %}
             {% set ns = namespace(action_rows=[], other_rows=[]) %}
             {% for promo in promotions %}
-              {% if my_status_key in promo.status|lower %}
-                {% set ns.action_rows = ns.action_rows + [promo] %}
-              {% else %}
-                {% set ns.other_rows = ns.other_rows + [promo] %}
-              {% endif %}
+              {% if my_status_key in promo.status|lower %}{% set ns.action_rows = ns.action_rows + [promo] %}
+              {% else %}{% set ns.other_rows = ns.other_rows + [promo] %}{% endif %}
             {% endfor %}
             {% for promo in ns.action_rows + ns.other_rows %}
             {% set is_my_turn = my_status_key in promo.status|lower %}
             <tr data-status="{{ promo.status }}" data-dept="{{ promo.department }}" data-faculty-id="{{ promo.faculty_id }}"
-                {% if is_my_turn %}style="border-left:3px solid #7b1113; background:#fff5f5;"{% endif %}>
-              <td style="display:flex;gap:10px;align-items:center">
-                <img class="faculty-photo" data-personnel-id="{{ promo.faculty_id }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#f0f0f0;" alt="Loading...">
-                {{ promo.name }}
-                {% if is_my_turn %}<span style="font-size:10px;background:#7b1113;color:#fff;border-radius:10px;padding:1px 6px;margin-left:6px;font-weight:600;">Action Required</span>{% endif %}
+                style="{% if is_my_turn %}border-left:4px solid #7b1113;background:#fff8f8;{% endif %}transition:background .15s;">
+              <td style="padding:14px 12px;">
+                <div style="display:flex;align-items:center;gap:12px;">
+                  <div style="width:40px;height:40px;border-radius:50%;background:{% if is_my_turn %}linear-gradient(135deg,#7b1113,#9f1239){% else %}linear-gradient(135deg,#374151,#4b5563){% endif %};color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.2);">
+                    {{ promo.name[0]|upper if promo.name else '?' }}
+                  </div>
+                  <div>
+                    <div style="font-weight:700;font-size:13px;color:#111;line-height:1.3;">{{ promo.name }}</div>
+                    <div style="font-size:11px;color:#6b7280;margin-top:1px;">{{ promo.department }}</div>
+                    {% if is_my_turn %}
+                    <span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;background:#7b1113;color:#fff;border-radius:8px;padding:2px 8px;font-weight:700;margin-top:3px;">
+                      <i class='bx bx-bell' style="font-size:10px;"></i> Action Required
+                    </span>
+                    {% endif %}
+                  </div>
+                </div>
               </td>
-              <td>{{ promo.department }}</td>
-              <td>{{ promo.currentrank }}</td>
-              <td><strong>{{ promo.requestedrank }}</strong></td>
-              <td>
+              <td style="padding:14px 12px;">
+                <div style="font-size:11px;color:#6b7280;font-weight:500;">{{ promo.currentrank }}</div>
+                <div style="font-size:10px;color:#d1d5db;line-height:1.2;">↓</div>
+                <div style="font-size:13px;font-weight:700;color:#166534;">{{ promo.requestedrank }}</div>
+              </td>
+              <td style="padding:14px 12px;">
                 {% if 'hrmd' in promo.status|lower %}
-                <span class="status pending">For HRMD Approval</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#fef9c3;color:#713f12;padding:4px 10px;border-radius:10px;border:1px solid #fde68a;">
+                  <i class='bx bx-time-five' style="font-size:12px;"></i> HR Review
+                </span>
                 {% elif 'vpa' in promo.status|lower %}
-                <span class="status warn">For VPAA Approval</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#eff6ff;color:#1d4ed8;padding:4px 10px;border-radius:10px;border:1px solid #bfdbfe;">
+                  <i class='bx bx-time-five' style="font-size:12px;"></i> VPA Review
+                </span>
                 {% elif 'pres' in promo.status|lower %}
-                <span class="status warn">For President Approval</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#f5f3ff;color:#6d28d9;padding:4px 10px;border-radius:10px;border:1px solid #ddd6fe;">
+                  <i class='bx bx-time-five' style="font-size:12px;"></i> President Review
+                </span>
                 {% elif 'approved' in promo.status|lower %}
-                <span class="status ok">Approved</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#f0fdf4;color:#166534;padding:4px 10px;border-radius:10px;border:1px solid #bbf7d0;">
+                  <i class='bx bx-check-circle' style="font-size:12px;"></i> Approved
+                </span>
                 {% elif 'rejected' in promo.status|lower %}
-                <span class="status nu">Rejected</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#fef2f2;color:#991b1b;padding:4px 10px;border-radius:10px;border:1px solid #fecaca;">
+                  <i class='bx bx-x-circle' style="font-size:12px;"></i> Rejected
+                </span>
                 {% else %}
-                <span class="status pending">{{ promo.status|title }}</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#f3f4f6;color:#374151;padding:4px 10px;border-radius:10px;border:1px solid #e5e7eb;">
+                  {{ promo.status }}
+                </span>
                 {% endif %}
               </td>
-              <td>{{ promo.submitteddate }}</td>
-              <td><button class="btn-action review-promotion-btn" style="background:#f1c40f;color:#111" data-application-id="{{ promo.application_id }}">Approve</button></td>
+              <td style="padding:14px 12px;">
+                <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:#374151;font-weight:600;white-space:nowrap;">
+                  <i class='bx bx-calendar' style="font-size:14px;color:#9ca3af;"></i>
+                  {{ promo.submitteddate }}
+                </div>
+              </td>
+              <td style="padding:14px 12px;">
+                {% if is_my_turn %}
+                <button class="review-promotion-btn"
+                        style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:#7b1113;color:#fff;border-radius:7px;font-size:12px;font-weight:700;border:none;cursor:pointer;box-shadow:0 1px 4px rgba(123,17,19,.3);"
+                        data-application-id="{{ promo.application_id }}">
+                  <i class='bx bx-check-circle' style="font-size:14px;"></i> Review Now
+                </button>
+                {% else %}
+                <button class="review-promotion-btn"
+                        style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:#f3f4f6;color:#374151;border-radius:7px;font-size:12px;font-weight:600;border:1px solid #e5e7eb;cursor:pointer;"
+                        data-application-id="{{ promo.application_id }}"
+                        onmouseover="this.style.background='#e5e7eb'" onmouseout="this.style.background='#f3f4f6'">
+                  <i class='bx bx-show' style="font-size:14px;"></i> View
+                </button>
+                {% endif %}
+              </td>
             </tr>
             {% else %}
             <tr>
-              <td colspan="7" style="text-align:center">No promotion requests found</td>
+              <td colspan="5" style="text-align:center;padding:3rem;color:#9ca3af;">
+                <i class='bx bx-inbox' style="font-size:40px;display:block;margin-bottom:10px;color:#fecaca;"></i>
+                <div style="font-weight:600;color:#6b7280;">No promotion requests found</div>
+                <div style="font-size:12px;margin-top:4px;">Faculty promotion applications will appear here once submitted.</div>
+              </td>
             </tr>
             {% endfor %}
           </tbody>
@@ -158,52 +213,135 @@
 
     <!-- Regularizations Table -->
     <div class="tab-content" id="regularizations">
+
+      <!-- Section Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:40px;height:40px;background:linear-gradient(135deg,#7b1113,#9b1b1d);border-radius:10px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(123,17,19,.25);">
+            <i class='bx bx-user-check' style="font-size:20px;color:#fff;"></i>
+          </div>
+          <div>
+            <div style="font-size:15px;font-weight:800;color:#111;">Regularization Applications</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:1px;">
+              {% if is_vpaa %}Faculty applications awaiting VPAA endorsement to President.
+              {% else %}Faculty applications forwarded for Presidential approval. You may also act on applications still at VPAA stage.{% endif %}
+            </div>
+          </div>
+        </div>
+        {% set actionable_count = regularizations|selectattr('reg_status','equalto','vpa')|list|length + regularizations|selectattr('reg_status','equalto','pres')|list|length if not is_vpaa else regularizations|selectattr('reg_status','equalto','vpa')|list|length %}
+        {% if actionable_count > 0 %}
+        <span style="display:inline-flex;align-items:center;gap:5px;background:#fef2f2;color:#991b1b;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;border:1px solid #fecaca;">
+          <i class='bx bx-bell' style="font-size:13px;"></i> {{ actionable_count }} Pending Your Action
+        </span>
+        {% endif %}
+      </div>
+
       <div class="table">
         <table>
           <thead>
             <tr>
               <th>Faculty</th>
-              <th>Department</th>
-              <th>Current Rank</th>
-              <th>Current Tenure</th>
-              <th>Years of Service</th>
+              <th>Rank &amp; Tenure</th>
+              <th>Service</th>
               <th>Eligible For</th>
+              <th>Status</th>
               <th>Action</th>
             </tr>
           </thead>
-            <tbody id="regularizationsBody">
-              {% for reg in regularizations %}
-              <tr data-dept="{{ reg.department }}" data-tenure="{{ reg.eligible_for }}" data-status="{{ reg.reg_status }}">
-                <td style="display:flex;gap:10px;align-items:center">
-                  <img class="faculty-photo" data-personnel-id="{{ reg.personnel_id }}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#f0f0f0;" alt="Loading...">
-                  {{ reg.name }}
-                </td>
-                <td>{{ reg.department }}</td>
-                <td>{{ reg.current_rank }}</td>
-                <td><span class="status pending">{{ reg.current_tenure }}</span></td>
-                <td>{{ reg.years_of_service }} years</td>
-                <td><span class="status ok">{{ reg.eligible_for }}</span></td>
-                <td>
-                  {% if reg.reg_status == 'vpa' or reg.reg_status == 'pres' %}
-                    <button class="btn-action review-regularization-btn" 
-                            style="background:#3b82f6;color:#fff" 
-                            data-regularization-id="{{ reg.regularization_id }}"
-                            data-faculty-name="{{ reg.name }}"
-                            data-status="{{ reg.reg_status }}"
-                            data-eligible-for="{{ reg.eligible_for }}">
-                      Approve
-                    </button>
+          <tbody id="regularizationsBody">
+            {% set ns2 = namespace(reg_action=[], reg_other=[]) %}
+            {% for reg in regularizations %}
+              {% if (is_vpaa and reg.reg_status == 'vpa') or (not is_vpaa and reg.reg_status in ['vpa', 'pres']) %}
+                {% set ns2.reg_action = ns2.reg_action + [reg] %}
+              {% else %}{% set ns2.reg_other = ns2.reg_other + [reg] %}{% endif %}
+            {% endfor %}
+            {% for reg in ns2.reg_action + ns2.reg_other %}
+            {% set is_my_reg_turn = (is_vpaa and reg.reg_status == 'vpa') or (not is_vpaa and reg.reg_status in ['vpa', 'pres']) %}
+            <tr data-dept="{{ reg.department }}" data-tenure="{{ reg.eligible_for }}" data-status="{{ reg.reg_status }}"
+                style="{% if is_my_reg_turn %}border-left:4px solid #16a34a;background:#f0fdf4;{% endif %}transition:background .15s;">
+              <td style="padding:14px 12px;">
+                <div style="display:flex;align-items:center;gap:12px;">
+                  <div style="width:40px;height:40px;border-radius:50%;background:{% if is_my_reg_turn %}linear-gradient(135deg,#16a34a,#15803d){% else %}linear-gradient(135deg,#374151,#4b5563){% endif %};color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.2);">
+                    {{ reg.name[0]|upper if reg.name else '?' }}
+                  </div>
+                  <div>
+                    <div style="font-weight:700;font-size:13px;color:#111;line-height:1.3;">{{ reg.name }}</div>
+                    <div style="font-size:11px;color:#6b7280;margin-top:1px;">{{ reg.department }}</div>
+                    {% if is_my_reg_turn %}
+                    <span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;background:#16a34a;color:#fff;border-radius:8px;padding:2px 8px;font-weight:700;margin-top:3px;">
+                      <i class='bx bx-bell' style="font-size:10px;"></i> Action Required
+                    </span>
+                    {% endif %}
+                  </div>
+                </div>
+              </td>
+              <td style="padding:14px 12px;">
+                <div style="font-weight:600;font-size:13px;color:#111;">{{ reg.current_rank }}</div>
+                <span style="font-size:10px;background:#f0fdf4;color:#166534;padding:2px 8px;border-radius:10px;font-weight:600;border:1px solid #bbf7d0;">{{ reg.current_tenure }}</span>
+              </td>
+              <td style="padding:14px 12px;font-size:13px;font-weight:600;color:#111;white-space:nowrap;">{{ reg.years_of_service }} yrs</td>
+              <td style="padding:14px 12px;">
+                <span style="font-size:12px;font-weight:700;background:{% if reg.eligible_for == 'Tenured' %}#fefce8{% else %}#f0fdf4{% endif %};color:{% if reg.eligible_for == 'Tenured' %}#854d0e{% else %}#166534{% endif %};padding:4px 10px;border-radius:10px;border:1px solid {% if reg.eligible_for == 'Tenured' %}#fde68a{% else %}#bbf7d0{% endif %};">
+                  {{ reg.eligible_for }}
+                </span>
+              </td>
+              <td style="padding:14px 12px;">
+                {% if reg.reg_status == 'vpa' %}
+                  {% if not is_vpaa %}
+                  <div style="display:flex;flex-direction:column;gap:4px;">
+                    <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#eff6ff;color:#1d4ed8;padding:4px 10px;border-radius:10px;border:1px solid #bfdbfe;">
+                      <i class='bx bx-time-five' style="font-size:12px;"></i> VPA Stage
+                    </span>
+                    <span style="font-size:10px;color:#d97706;font-weight:600;">President override available</span>
+                  </div>
                   {% else %}
-                    <span class="status {{ reg.status_class }}">{{ reg.status }}</span>
+                  <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#eff6ff;color:#1d4ed8;padding:4px 10px;border-radius:10px;border:1px solid #bfdbfe;">
+                    <i class='bx bx-time-five' style="font-size:12px;"></i> VPA Review
+                  </span>
                   {% endif %}
-                </td>
-              </tr>
-              {% else %}
-              <tr>
-                <td colspan="7" style="text-align:center">No regularization applications found</td>
-              </tr>
-              {% endfor %}
-            </tbody>
+                {% elif reg.reg_status == 'pres' %}
+                <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#f5f3ff;color:#6d28d9;padding:4px 10px;border-radius:10px;border:1px solid #ddd6fe;">
+                  <i class='bx bx-time-five' style="font-size:12px;"></i> President Review
+                </span>
+                {% elif reg.reg_status == 'approved' %}
+                <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#f0fdf4;color:#166534;padding:4px 10px;border-radius:10px;border:1px solid #bbf7d0;">
+                  <i class='bx bx-check-circle' style="font-size:12px;"></i> Approved
+                </span>
+                {% else %}
+                <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#f3f4f6;color:#374151;padding:4px 10px;border-radius:10px;border:1px solid #e5e7eb;">
+                  {{ reg.status if reg.status else reg.reg_status }}
+                </span>
+                {% endif %}
+              </td>
+              <td style="padding:14px 12px;">
+                {% if is_my_reg_turn %}
+                <button class="review-regularization-btn"
+                        style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:{% if not is_vpaa and reg.reg_status == 'vpa' %}#92400e{% else %}#7b1113{% endif %};color:#fff;border-radius:7px;font-size:12px;font-weight:700;border:none;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.2);"
+                        data-regularization-id="{{ reg.regularization_id }}"
+                        data-faculty-name="{{ reg.name }}"
+                        data-status="{{ reg.reg_status }}"
+                        data-eligible-for="{{ reg.eligible_for }}"
+                        data-is-vpaa="{{ 'true' if is_vpaa else 'false' }}">
+                  <i class='bx {% if not is_vpaa and reg.reg_status == 'vpa' %}bx-fast-forward{% else %}bx-check-circle{% endif %}' style="font-size:14px;"></i>
+                  {% if not is_vpaa and reg.reg_status == 'vpa' %}Override & Approve{% else %}Review Now{% endif %}
+                </button>
+                {% else %}
+                <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;background:#f3f4f6;color:#374151;padding:5px 10px;border-radius:8px;border:1px solid #e5e7eb;">
+                  {{ reg.status if reg.status else '—' }}
+                </span>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="6" style="text-align:center;padding:3rem;color:#9ca3af;">
+                <i class='bx bx-user-check' style="font-size:40px;display:block;margin-bottom:10px;color:#d1fae5;"></i>
+                <div style="font-weight:600;color:#6b7280;">No regularization applications found</div>
+                <div style="font-size:12px;margin-top:4px;">Applications will appear here once initiated by HR.</div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
         </table>
       </div>
     </div>
@@ -212,71 +350,141 @@
 
 <!-- VP/President Review Modal -->
 <div class="hr-modal-wrapper" id="hrReviewModal">
-  <div class="hr-modal-content">
-    <div class="hr-banner"></div>
+  <div style="width:700px;max-width:96%;max-height:92vh;overflow-y:auto;background:#fff;border-radius:16px;border-top:4px solid #7b1113;box-shadow:0 24px 64px rgba(0,0,0,.35);animation:hrFadeIn .2s ease;">
 
-    <div class="hr-profile-header">
-      <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Faculty" class="hr-profile-img" id="modalProfileImage" style="width:80px;height:80px;border-radius:8px;object-fit:cover;background:#f0f0f0;">
-      <div class="hr-profile-info">
-        <h2 id="modalFacultyName">Loading...</h2>
-        <p id="modalFacultyPosition">Loading...</p>
-        <p id="modalFacultyRequest">Loading...</p>
-
-        <div class="hr-profile-contact">
-          <span><i class='bx bx-envelope'></i> Email: <span id="modalFacultyEmail">N/A</span></span>
-          <span><i class='bx bx-phone'></i> Contact: <span id="modalFacultyPhone">N/A</span></span>
+    <!-- ── Header ─────────────────────────────────── -->
+    <div style="padding:22px 24px 0;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;">
+      <div style="display:flex;align-items:center;gap:16px;flex:1;min-width:0;">
+        <div style="position:relative;flex-shrink:0;">
+          <div id="modalAvatarInitial"
+               style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#7b1113,#9f1239);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;box-shadow:0 3px 10px rgba(123,17,19,.35);">?</div>
+          <img id="modalProfileImage" alt="Faculty"
+               style="display:none;position:absolute;inset:0;width:64px;height:64px;border-radius:50%;object-fit:cover;box-shadow:0 3px 10px rgba(0,0,0,.2);">
         </div>
+        <div style="min-width:0;">
+          <h2 id="modalFacultyName" style="margin:0;font-size:18px;font-weight:700;color:#111;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Loading...</h2>
+          <div id="modalFacultyPosition" style="font-size:12px;color:#6b7280;margin-top:2px;">Loading...</div>
+          <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span id="modalStatusPill" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;"></span>
+            <span id="modalFacultyRequest" style="font-size:11px;color:#6b7280;font-style:italic;"></span>
+          </div>
+        </div>
+      </div>
+      <button id="closeModal"
+              style="border:none;background:#f3f4f6;color:#6b7280;cursor:pointer;width:32px;height:32px;border-radius:50%;font-size:18px;line-height:1;flex-shrink:0;display:flex;align-items:center;justify-content:center;"
+              onmouseover="this.style.background='#e5e7eb'" onmouseout="this.style.background='#f3f4f6'">&times;</button>
+    </div>
 
-        <div class="hr-profile-status">
-          <strong>Submission Status:</strong> 
-          <span id="modalSubmissionStatus">Loading...</span>
+    <!-- ── Contact + Rank strip ───────────────────── -->
+    <div style="margin:14px 24px 0;padding:12px 16px;background:#f9fafb;border-radius:10px;border:1px solid #f0f0f0;display:flex;align-items:center;gap:0;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:7px;padding:4px 16px 4px 0;">
+        <i class='bx bx-transfer' style="font-size:15px;color:#7b1113;flex-shrink:0;"></i>
+        <div>
+          <div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Rank Change</div>
+          <div id="modalRankChange" style="font-size:13px;font-weight:700;color:#111;">—</div>
+        </div>
+      </div>
+      <div style="width:1px;height:34px;background:#e5e7eb;margin-right:16px;flex-shrink:0;"></div>
+      <div style="display:flex;align-items:center;gap:7px;padding:4px 16px 4px 0;">
+        <i class='bx bx-envelope' style="font-size:15px;color:#9ca3af;flex-shrink:0;"></i>
+        <div>
+          <div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Email</div>
+          <span id="modalFacultyEmail" style="font-size:12px;color:#374151;font-weight:500;">N/A</span>
+        </div>
+      </div>
+      <div style="width:1px;height:34px;background:#e5e7eb;margin-right:16px;flex-shrink:0;"></div>
+      <div style="display:flex;align-items:center;gap:7px;">
+        <i class='bx bx-phone' style="font-size:15px;color:#9ca3af;flex-shrink:0;"></i>
+        <div>
+          <div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Contact</div>
+          <span id="modalFacultyPhone" style="font-size:12px;color:#374151;font-weight:500;">N/A</span>
         </div>
       </div>
     </div>
 
-    <div class="hr-documents" style="margin-top: 20px;">
-        <h3>Review Documents</h3>
-        <div class="hr-stats" id="documentLinks" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
-            <div class="hr-stat-card" id="resumeContainer">
-                <a href="#" id="resumeLink"><i class='bx bx-file'></i> <span id="labelResume">Resume</span></a>
-            </div>
-            <div class="hr-stat-card" id="torContainer">
-                <a href="#" id="torLink"><i class='bx bxs-graduation'></i> <span id="labelTor">TOR</span></a>
-            </div>
-            <div class="hr-stat-card" id="diplomaContainer">
-                <a href="#" id="diplomaLink"><i class='bx bx-award'></i> <span id="labelDiploma">Diploma</span></a>
-            </div>
-            <div class="hr-stat-card" id="coverLetterContainer">
-                <a href="#" id="coverLetterLink"><i class='bx bx-envelope'></i> <span id="labelCoverLetter">Cover Letter</span></a>
-            </div>
+    <!-- ── Documents ──────────────────────────────── -->
+    <div style="margin:18px 24px 0;">
+      <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;display:flex;align-items:center;gap:5px;">
+        <i class='bx bx-folder-open' style="font-size:14px;color:#7b1113;"></i> Submitted Documents
+      </div>
+      <div id="documentLinks" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
+        <div id="resumeContainer" style="border-radius:10px;overflow:hidden;">
+          <a href="#" id="resumeLink" style="display:flex;align-items:center;gap:10px;padding:12px 14px;text-decoration:none;color:#374151;font-size:13px;font-weight:600;">
+            <i class='bx bx-file' style="font-size:22px;color:#7b1113;flex-shrink:0;"></i>
+            <span id="labelResume">Resume / CV</span>
+          </a>
         </div>
-
-      <div id="pdfViewer" style="margin-top:20px;display:none;">
-        <h4 id="pdfTitle">Document Preview</h4>
-        <iframe id="pdfFrame" style="width:100%;height:500px;border:1px solid #ddd;border-radius:8px;"></iframe>
+        <div id="torContainer" style="border-radius:10px;overflow:hidden;">
+          <a href="#" id="torLink" style="display:flex;align-items:center;gap:10px;padding:12px 14px;text-decoration:none;color:#374151;font-size:13px;font-weight:600;">
+            <i class='bx bxs-graduation' style="font-size:22px;color:#7b1113;flex-shrink:0;"></i>
+            <span id="labelTor">Official TOR</span>
+          </a>
+        </div>
+        <div id="diplomaContainer" style="border-radius:10px;overflow:hidden;">
+          <a href="#" id="diplomaLink" style="display:flex;align-items:center;gap:10px;padding:12px 14px;text-decoration:none;color:#374151;font-size:13px;font-weight:600;">
+            <i class='bx bx-award' style="font-size:22px;color:#7b1113;flex-shrink:0;"></i>
+            <span id="labelDiploma">Diploma / Cert</span>
+          </a>
+        </div>
+        <div id="coverLetterContainer" style="border-radius:10px;overflow:hidden;">
+          <a href="#" id="coverLetterLink" style="display:flex;align-items:center;gap:10px;padding:12px 14px;text-decoration:none;color:#374151;font-size:13px;font-weight:600;">
+            <i class='bx bx-envelope' style="font-size:22px;color:#7b1113;flex-shrink:0;"></i>
+            <span id="labelCoverLetter">Cover Letter</span>
+          </a>
+        </div>
       </div>
-
-    <div id="notesInputSection" style="margin-top:24px; display:none;"> <label for="hrNotes" style="font-size:14px;font-weight:600;margin-bottom:8px;display:block;">Add Notes or Remarks:</label>
-      <textarea id="hrNotes" placeholder="Add notes for this application (visible to other reviewers)" 
-                style="width:100%;min-height:80px;border-radius:8px;border:1px solid #ccc;padding:10px; resize:vertical;"></textarea>
     </div>
-      
-      <div id="previousNotes" style="margin-top:25px;display:none;">
-        <h3 style="color:#333;font-size:16px;font-weight:600;margin-bottom:15px;border-bottom:2px solid #f0f0f0;padding-bottom:10px;">
-          <i class='bx bx-time-five' style="vertical-align:middle;margin-right:5px;"></i>Review History
-        </h3>
-        <div id="notesContainer" class="review-timeline"></div>
+
+    <!-- ── PDF Viewer ─────────────────────────────── -->
+    <div id="pdfViewer" style="margin:16px 24px 0;display:none;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <h4 id="pdfTitle" style="margin:0;font-size:13px;font-weight:700;color:#374151;display:flex;align-items:center;gap:5px;">
+          <i class='bx bx-file-blank' style="font-size:16px;color:#7b1113;"></i> Document Preview
+        </h4>
+        <button onclick="pdfViewer.style.display='none';pdfFrame.src='';"
+                style="border:none;background:#f3f4f6;color:#6b7280;cursor:pointer;width:26px;height:26px;border-radius:50%;font-size:15px;display:flex;align-items:center;justify-content:center;">&times;</button>
       </div>
-
+      <iframe id="pdfFrame" style="width:100%;height:460px;border:1px solid #e5e7eb;border-radius:10px;"></iframe>
     </div>
 
-    <div class="hr-modal-footer">
-      <button id="rejectBtn" class="btn reject">Reject</button>
-      <button id="forwardApproveBtn" class="btn forward">Forward/Approve</button>
-      <button id="viewProfileBtn" class="btn btn-view">View Profile</button>
-      <button id="closeModal" class="btn close" style="font-size: 18px;">Close</button>
+    <!-- ── Notes Input ────────────────────────────── -->
+    <div id="notesInputSection" style="margin:18px 24px 0;display:none;">
+      <label style="display:block;font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;">
+        <i class='bx bx-edit' style="font-size:14px;vertical-align:middle;color:#7b1113;"></i> Notes / Remarks
+        <span style="font-weight:400;font-size:11px;color:#9ca3af;text-transform:none;letter-spacing:0;"> — optional, visible to other reviewers</span>
+      </label>
+      <textarea id="hrNotes" placeholder="Enter notes or remarks..."
+                style="width:100%;min-height:80px;border-radius:8px;border:1px solid #d1d5db;padding:10px 12px;font-size:13px;resize:vertical;box-sizing:border-box;font-family:inherit;color:#111;"></textarea>
     </div>
+
+    <!-- ── Review History ─────────────────────────── -->
+    <div id="previousNotes" style="margin:18px 24px 0;display:none;">
+      <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px;display:flex;align-items:center;gap:6px;">
+        <i class='bx bx-history' style="font-size:15px;color:#7b1113;"></i> Review History
+      </div>
+      <div id="notesContainer" class="review-timeline"></div>
+    </div>
+
+    <!-- ── Footer ─────────────────────────────────── -->
+    <div style="margin-top:20px;padding:16px 24px;border-top:1px solid #f3f4f6;display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+      <span id="modalSubmissionStatus" style="display:none;"></span>
+      <button id="rejectBtn"
+              style="display:none;align-items:center;gap:5px;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:#fef2f2;color:#991b1b;border:1px solid #fecaca;">
+        <i class='bx bx-x-circle' style="font-size:15px;"></i> Reject
+      </button>
+      <button id="forwardApproveBtn"
+              style="display:none;align-items:center;gap:5px;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;background:#7b1113;color:#fff;border:none;box-shadow:0 2px 6px rgba(123,17,19,.3);">
+        <i class='bx bx-send' style="font-size:15px;"></i> Forward/Approve
+      </button>
+      <button id="viewProfileBtn"
+              style="display:inline-flex;align-items:center;gap:5px;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;"
+              onmouseover="this.style.background='#e5e7eb'" onmouseout="this.style.background='#f3f4f6'">
+        <i class='bx bx-user-circle' style="font-size:15px;"></i> View Profile
+      </button>
+    </div>
+
   </div>
+</div>
 
 <div id="modal-loading" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:10000;">
   <div style="background:rgba(0,0,0,0.8); padding:40px 50px; border-radius:16px; text-align:center;">
@@ -463,31 +671,56 @@ function loadPromotionDetails(applicationId) {
       if (result.success) {
         const data = result.data;
         currentStatus = data.status;
-        
+
         document.getElementById('modalFacultyName').textContent = data.name;
         document.getElementById('modalFacultyPosition').textContent = `${data.currentrank} • ${data.department}`;
-        document.getElementById('modalFacultyRequest').textContent = `Applied for promotion to ${data.requestedrank || 'Not specified'}.`;
-        document.getElementById('modalFacultyEmail').textContent = data.email;
-        document.getElementById('modalFacultyPhone').textContent = data.phone;
+        document.getElementById('modalFacultyRequest').textContent = `Applying for promotion to ${data.requestedrank || 'Not specified'}`;
+        document.getElementById('modalFacultyEmail').textContent = data.email || 'N/A';
+        document.getElementById('modalFacultyPhone').textContent = data.phone || 'N/A';
         document.getElementById('modalSubmissionStatus').textContent = data.status;
-        
-        // Profile image loading (default first, then fetch)
+
+        // Avatar initial
+        const avatarEl = document.getElementById('modalAvatarInitial');
+        avatarEl.textContent = (data.name || '?')[0].toUpperCase();
+        avatarEl.style.visibility = 'visible';
+
+        // Rank change
+        document.getElementById('modalRankChange').textContent =
+          `${data.currentrank || '—'} → ${data.requestedrank || '—'}`;
+
+        // Status pill
+        const pill = document.getElementById('modalStatusPill');
+        const statusLower = (data.status || '').toLowerCase();
+        const pillMap = {
+          hrmd:     { bg:'#fef9c3', color:'#713f12', border:'#fde68a', icon:'bx-time-five',    label:'HR Review'        },
+          vpa:      { bg:'#eff6ff', color:'#1d4ed8', border:'#bfdbfe', icon:'bx-time-five',    label:'VPA Review'      },
+          pres:     { bg:'#f5f3ff', color:'#6d28d9', border:'#ddd6fe', icon:'bx-time-five',    label:'President Review' },
+          approved: { bg:'#f0fdf4', color:'#166534', border:'#bbf7d0', icon:'bx-check-circle', label:'Approved'         },
+          rejected: { bg:'#fef2f2', color:'#991b1b', border:'#fecaca', icon:'bx-x-circle',     label:'Rejected'         },
+        };
+        const pm = Object.entries(pillMap).find(([k]) => statusLower.includes(k));
+        if (pm) {
+          const s = pm[1];
+          pill.style.cssText = `display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:${s.bg};color:${s.color};border:1px solid ${s.border};`;
+          pill.innerHTML = `<i class='bx ${s.icon}' style="font-size:12px;"></i>${s.label}`;
+        } else {
+          pill.style.cssText = `display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;`;
+          pill.textContent = data.status;
+        }
+
+        // Profile photo
         const profileImg = document.getElementById('modalProfileImage');
-        profileImg.src = "/static/img/logo.png";
-        profileImg.style.display = 'block';
-        profileImg.style.backgroundColor = '#f0f0f0';
-        profileImg.alt = 'Faculty Profile';
-        
+        profileImg.style.display = 'none';
         fetch(`/api/profile/image-base64/${data.faculty_id}`)
           .then(resp => resp.json())
           .then(imageData => {
             if (imageData.success && imageData.image) {
               profileImg.src = imageData.image;
+              profileImg.style.display = 'block';
+              avatarEl.style.visibility = 'hidden';
             }
           })
-          .catch(() => {
-            profileImg.src = "/static/img/logo.png";
-          });
+          .catch(() => {});
         
         // Display existing notes in timeline format
         const notesContainer = document.getElementById('notesContainer');
@@ -512,7 +745,7 @@ function loadPromotionDetails(applicationId) {
             <div class="review-note-card vpa">
               <div class="review-note-header">
                 <span class="review-note-role vpa">
-                  <i class='bx bx-shield-quarter'></i>VPAA Review
+                  <i class='bx bx-shield-quarter'></i>VPA Review
                 </span>
               </div>
               <div class="review-note-content">${data.vpa_remarks}</div>
@@ -558,14 +791,14 @@ function loadPromotionDetails(applicationId) {
         const notesInputSection = document.getElementById('notesInputSection');
 
         if (data.status.toLowerCase() === 'vpa') {
-          rejectBtn.style.display = 'inline-block';
-          forwardApproveBtn.style.display = 'inline-block';
-          forwardApproveBtn.textContent = 'Forward to President';
+          rejectBtn.style.display = 'inline-flex';
+          forwardApproveBtn.style.display = 'inline-flex';
+          forwardApproveBtn.innerHTML = "<i class='bx bx-send' style='font-size:15px;'></i> Forward to President";
           notesInputSection.style.display = 'block';
         } else if (data.status.toLowerCase() === 'pres') {
-          rejectBtn.style.display = 'inline-block';
-          forwardApproveBtn.style.display = 'inline-block';
-          forwardApproveBtn.textContent = 'Approve';
+          rejectBtn.style.display = 'inline-flex';
+          forwardApproveBtn.style.display = 'inline-flex';
+          forwardApproveBtn.innerHTML = "<i class='bx bx-check-circle' style='font-size:15px;'></i> Approve";
           notesInputSection.style.display = 'block';
         } else {
           rejectBtn.style.display = 'none';
@@ -731,23 +964,27 @@ document.querySelectorAll('.review-regularization-btn').forEach(btn => {
     const facultyName = this.getAttribute('data-faculty-name');
     const status = this.getAttribute('data-status');
     const eligibleFor = this.getAttribute('data-eligible-for');
-    
+    const isVpaa = this.getAttribute('data-is-vpaa') === 'true';
+
     let actionText = '';
     let endpoint = '';
-    
-    if (status === 'vpa') {
-      actionText = `Forward regularization to ${eligibleFor} status for ${facultyName} to President for approval?`;
+
+    if (isVpaa && status === 'vpa') {
+      actionText = `Forward ${facultyName}'s regularization to President for approval?`;
       endpoint = '/api/regularization/forward-to-president';
+    } else if (!isVpaa && status === 'vpa') {
+      actionText = `Approve ${facultyName}'s regularization to ${eligibleFor} status directly?\n\nNote: This bypasses the VPAA endorsement stage.`;
+      endpoint = '/api/regularization/approve-by-president';
     } else if (status === 'pres') {
-      actionText = `Approve regularization to ${eligibleFor} status for ${facultyName}?`;
+      actionText = `Approve ${facultyName}'s regularization to ${eligibleFor} status?`;
       endpoint = '/api/regularization/approve-by-president';
     } else {
       alert('Invalid status for review');
       return;
     }
-    
+
     if (!confirm(actionText)) return;
-    
+
     fetch(endpoint, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},

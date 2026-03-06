@@ -128,12 +128,13 @@ const NotifSystem = (function () {
 
   function _store(data) {
     if (!data) return;
-    if (!data.tap_time && data.notification_type !== 'license') return;
+    if (!data.tap_time && data.notification_type !== 'license' && data.notification_type !== 'probationary') return;
 
     // Role-based filtering for promotion notifications:
-    //   HR      → only 'new_application'
-    //   VPAA    → only 'forwarded_vpaa'
+    //   HR        → only 'new_application'
+    //   VPAA      → only 'forwarded_vpaa'
     //   President → only 'forwarded_president'
+    //   Faculty   → 'approved' and 'rejected' (pushed directly to their queue)
     if (data.notification_type === 'promotion') {
       var act = data.action || '';
       if (_userType === 'hr'        && act !== 'new_application')     return;
@@ -143,6 +144,9 @@ const NotifSystem = (function () {
 
     var notifs = _load();
 
+    // Deduplicate local-only notifications (e.g. probationary near-eligibility) using local_key
+    if (data.local_key && notifs.some(function (n) { return n.local_key === data.local_key; })) return;
+
     // Use the DB-assigned notif_id when available so we can deduplicate on reload
     var itemId = data.notif_id ? 'db_' + data.notif_id
                                : (Date.now() + '_' + Math.random().toString(36).slice(2));
@@ -151,7 +155,7 @@ const NotifSystem = (function () {
     if (data.notif_id && notifs.some(function (n) { return n.id === itemId; })) return;
 
     var item = {
-      id            : Date.now() + '_' + Math.random().toString(36).slice(2),
+      id            : itemId,
       // sensor / alert type
       type          : data.notification_type || 'rfid',
       // identity
@@ -176,6 +180,8 @@ const NotifSystem = (function () {
       days_until_expiry  : data.days_until_expiry != null ? data.days_until_expiry : null,
       // timestamp
       tap_time      : data.tap_time || new Date().toLocaleString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric', hour:'numeric', minute:'2-digit', hour12:true }),
+      // dedup key for locally-generated notifications (no DB id)
+      local_key     : data.local_key || null,
       // panel state
       read          : false,
       ts            : Date.now()
@@ -350,8 +356,22 @@ const NotifSystem = (function () {
       title = 'Promotion Forwarded to You'; icon = 'bx-send';         color = '#b45309';
     } else if (n.action === 'forwarded_president') {
       title = 'Promotion Forwarded to You'; icon = 'bx-send';         color = '#1d4ed8';
+    } else if (n.action === 'approved') {
+      title = 'Promotion Approved!';        icon = 'bx-trophy';       color = '#059669';
+    } else if (n.action === 'rejected') {
+      title = 'Promotion Application Rejected'; icon = 'bx-x-circle'; color = '#dc2626';
     } else {
       title = 'Promotion Update';           icon = 'bx-award';        color = '#7b1113';
+    }
+    return { title: title, icon: icon, color: color };
+  }
+
+  function _probationaryMeta(n) {
+    var title, icon, color;
+    if (n.action === 'near_eligible') {
+      title = 'Almost Eligible for Regularization'; icon = 'bx-time-five'; color = '#d97706';
+    } else {
+      title = 'Probationary Update'; icon = 'bx-hourglass'; color = '#d97706';
     }
     return { title: title, icon: icon, color: color };
   }
@@ -397,18 +417,20 @@ const NotifSystem = (function () {
     }
 
     var html = notifs.map(function (n) {
-      var isBio       = (n.type === 'biometric');
-      var isLicense   = (n.type === 'license');
-      var isPromotion = (n.type === 'promotion');
-      var meta = isPromotion ? _promotionMeta(n)
-               : isLicense   ? _licenseMeta(n)
-               : isBio        ? _bioMeta(n)
-               :                _rfidMeta(n);
+      var isBio          = (n.type === 'biometric');
+      var isLicense      = (n.type === 'license');
+      var isPromotion    = (n.type === 'promotion');
+      var isProbationary = (n.type === 'probationary');
+      var meta = isProbationary ? _probationaryMeta(n)
+               : isPromotion    ? _promotionMeta(n)
+               : isLicense      ? _licenseMeta(n)
+               : isBio          ? _bioMeta(n)
+               :                  _rfidMeta(n);
 
       // Type tag styling
-      var tagBg    = isPromotion ? '#fce7f3' : isLicense ? '#fef3c7' : (isBio ? '#dcfce7'  : '#dbeafe');
-      var tagColor = isPromotion ? '#9d174d' : isLicense ? '#92400e' : (isBio ? '#166534'  : '#1e40af');
-      var tagLabel = isPromotion ? 'Promotion' : isLicense ? 'License' : (isBio ? 'Biometric' : 'RFID');
+      var tagBg    = isProbationary ? '#fef3c7' : isPromotion ? '#fce7f3' : isLicense ? '#fef3c7' : (isBio ? '#dcfce7'  : '#dbeafe');
+      var tagColor = isProbationary ? '#92400e' : isPromotion ? '#9d174d' : isLicense ? '#92400e' : (isBio ? '#166534'  : '#1e40af');
+      var tagLabel = isProbationary ? 'Probationary' : isPromotion ? 'Promotion' : isLicense ? 'License' : (isBio ? 'Biometric' : 'RFID');
 
       // Icon background tinted from action colour
       var iconBg = meta.color + '18'; // 9% opacity hex
@@ -492,8 +514,15 @@ const NotifSystem = (function () {
         }
       }
 
-      // Message (non-promotion — already handled above for promotion)
-      if (!isPromotion && n.message) {
+      // Probationary near-eligibility detail rows
+      if (isProbationary) {
+        if (n.message) {
+          details += '<div class="notif-item-msg" style="color:#92400e;font-weight:600">' + _esc(n.message) + '</div>';
+        }
+      }
+
+      // Message (non-promotion, non-probationary — already handled above)
+      if (!isPromotion && !isProbationary && n.message) {
         details += '<div class="notif-item-msg">' + _esc(n.message) + '</div>';
       }
 
