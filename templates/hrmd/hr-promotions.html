@@ -19,7 +19,7 @@
       <div class="icon eval"><i class='bx bx-check-circle'></i></div>
       <div>
         <div class="title">Eligible for Regularization</div>
-        <div class="value">{{ regularizations|length }}</div>
+        <div class="value">{{ regularizations|selectattr('has_application', 'equalto', false)|list|length }}</div>
       </div>
     </div>
     <div class="kpi card">
@@ -93,7 +93,7 @@
       <div class="tab" data-tab="regularizations" style="display:inline-flex; align-items:center; gap:6px;">
         Regularizations
         <span style="display:inline-flex; align-items:center; gap:3px;">
-          <span style="background:#16a34a; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:99px; line-height:1.6;">{{ regularizations|length }}</span>
+          <span style="background:#16a34a; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:99px; line-height:1.6;">{{ regularizations|selectattr('has_application', 'equalto', false)|list|length }}</span>
           <span style="background:#2563eb; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:99px; line-height:1.6;">{{ probationary_faculty|length }}</span>
           <span style="background:#6b7280; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:99px; line-height:1.6;">{{ contractual_faculty|length }}</span>
         </span>
@@ -242,7 +242,7 @@
           <div class="icon eval"><i class='bx bx-check-shield'></i></div>
           <div>
             <div class="title">Eligible</div>
-            <div class="value">{{ regularizations|length }}</div>
+            <div class="value">{{ regularizations|selectattr('has_application', 'equalto', false)|list|length }}</div>
           </div>
         </div>
         <div class="kpi card">
@@ -269,7 +269,7 @@
           <div style="font-size:11px;color:#166534;margin-top:1px;">Has aligned Master's &amp; completed ≥ 3 years of probation. Ready to initiate.</div>
         </div>
         <span style="background:#dcfce7;color:#166534;font-size:13px;font-weight:700;padding:4px 14px;border-radius:20px;flex-shrink:0;">
-          {{ regularizations|length }}
+          {{ regularizations|selectattr('has_application', 'equalto', false)|list|length }}
         </span>
       </div>
 

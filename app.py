@@ -683,7 +683,7 @@ def check_license_expiry():
             conn = None
 
             for row in rows:
-                _, personnel_id, license_type, license_number, expiration_date, firstname, lastname = row
+                tracker_id, personnel_id, license_type, license_number, expiration_date, firstname, lastname = row
                 days = (expiration_date - today).days
 
                 if days < 0:
@@ -706,6 +706,49 @@ def check_license_expiry():
                     msg = (f'{license_type or "License"} license'
                            f'{" (No. " + license_number + ")" if license_number else ""}'
                            f' expires in {days} day(s) on {expiration_date}.')
+
+                # Dedup: only send each action milestone once per tracker
+                try:
+                    conn2 = db_pool.get_connection()
+                    cur2 = conn2.cursor()
+                    cur2.execute("""
+                        SELECT 1 FROM notifications
+                        WHERE notification_type = 'license'
+                          AND action = %s
+                          AND rfid_uid = %s
+                        LIMIT 1
+                    """, (action, str(tracker_id)))
+                    already_sent = cur2.fetchone() is not None
+                    cur2.close()
+                    db_pool.return_connection(conn2)
+                except Exception:
+                    already_sent = False
+
+                if already_sent:
+                    continue
+
+                now_str = datetime.now(philippines_tz).strftime('%A, %B %d, %Y %I:%M %p')
+                notification_data = {
+                    'notification_type': 'license',
+                    'action': action,
+                    'personnel_id': personnel_id,
+                    'person_name': f"{firstname} {lastname}",
+                    'message': msg,
+                    # Store license fields in spare DB columns for history retrieval
+                    'subject_code': license_type,
+                    'subject_name': license_number,
+                    'class_section': str(expiration_date),
+                    'classroom': str(days),
+                    'rfid_uid': str(tracker_id),  # used for dedup
+                    'tap_time': now_str,
+                    # Extra fields for live SSE rendering
+                    'license_type': license_type,
+                    'license_number': license_number,
+                    'expiration_date': str(expiration_date),
+                    'days_until_expiry': days,
+                }
+                _push_to_queue(personnel_id, notification_data)
+                print(f"📋 License expiry notification sent to faculty {personnel_id}: {action} — {msg}")
 
         except Exception as e:
             print(f"Error in license expiry checker: {e}")
@@ -2433,6 +2476,13 @@ def api_notifications_history():
             n = dict(zip(columns, row))
             if n['created_at']:
                 n['created_at'] = n['created_at'].isoformat()
+            # Remap spare columns back to license-specific fields for history display
+            if n.get('notification_type') == 'license':
+                n['license_type'] = n.get('subject_code')
+                n['license_number'] = n.get('subject_name')
+                n['expiration_date'] = n.get('class_section')
+                days_str = n.get('classroom')
+                n['days_until_expiry'] = int(days_str) if days_str and days_str.lstrip('-').isdigit() else None
             notifications.append(n)
 
         return jsonify({'success': True, 'notifications': notifications})
@@ -12236,14 +12286,15 @@ def promotion_document_upload():
     if not userid:
         return "Unauthorized", 401
 
+    # DEV: submission window check disabled for testing
     # Enforce the official promotion submission window: June 1 – August 31
-    from datetime import date as _date
-    _today = _date.today()
-    if not (6 <= _today.month <= 8):
-        return (
-            "Promotion applications are only accepted between June 1 and August 31 each year. "
-            "Please resubmit during the official submission period."
-        ), 403
+    # from datetime import date as _date
+    # _today = _date.today()
+    # if not (6 <= _today.month <= 8):
+    #     return (
+    #         "Promotion applications are only accepted between June 1 and August 31 each year. "
+    #         "Please resubmit during the official submission period."
+    #     ), 403
 
     conn = db_pool.get_connection()
     cursor = conn.cursor()

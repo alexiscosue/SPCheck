@@ -389,31 +389,8 @@
           statusHTML = 'Eligible';
           statusColor = '#16a34a';
           statusIcon = 'bx-check-circle';
-        } else if (lock_reasons.length > 0) {
-          const r = lock_reasons[0];
-          if (r.includes('Attendance')) {
-            statusHTML = 'Low Attendance';
-            statusColor = '#ef4444';
-            statusIcon = 'bx-x-circle';
-          } else if (r.includes('Evaluation')) {
-            statusHTML = 'Low Eval Score';
-            statusColor = '#ef4444';
-            statusIcon = 'bx-x-circle';
-          } else if (r.includes('Degree')) {
-            statusHTML = 'Needs Degree';
-            statusColor = '#6b7280';
-            statusIcon = 'bx-book';
-          } else if (r.includes('experience') || r.includes('year')) {
-            statusHTML = 'More Yrs Needed';
-            statusColor = '#6b7280';
-            statusIcon = 'bx-time-five';
-          } else {
-            statusHTML = 'Not Eligible';
-            statusColor = '#6b7280';
-            statusIcon = 'bx-lock-alt';
-          }
         } else {
-          statusHTML = 'Not Eligible';
+          statusHTML = 'Not Yet Eligible';
           statusColor = '#6b7280';
           statusIcon = 'bx-lock-alt';
         }
@@ -804,9 +781,9 @@
             Next: <strong style="color:var(--text);">${data.next_rank}</strong>
           </div>`;
         }
-        if (!data.has_active_application && !data.can_apply && data.lock_reasons.length > 0) {
+        if (!data.has_active_application && !data.can_apply) {
           html += `<div style="font-size:11px;color:#6b7280;margin-top:5px;line-height:1.4;">
-            ${data.lock_reasons[0]}
+            Not yet eligible for promotion
           </div>`;
         }
 
