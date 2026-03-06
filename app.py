@@ -8993,6 +8993,94 @@ def api_hr_update_evaluation_score():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/hr/evaluation-trends', methods=['GET'])
+@require_auth([20003])
+def api_hr_evaluation_trends():
+    personnel_id = request.args.get('personnel_id', '').strip()
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        if personnel_id:
+            # Per-faculty mode: scores for one faculty member across all semesters
+            cur.execute("""
+                SELECT
+                    ac.acadcalendar_id,
+                    ac.semester,
+                    ac.acadyear,
+                    ac.semesterstart,
+                    MAX(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END) AS avg_student,
+                    MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END) AS avg_supervisor,
+                    MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END) AS avg_peer
+                FROM faculty_evaluations fe
+                JOIN acadcalendar ac ON fe.acadcalendar_id = ac.acadcalendar_id
+                WHERE fe.personnel_id = %s
+                GROUP BY ac.acadcalendar_id, ac.semester, ac.acadyear, ac.semesterstart
+                ORDER BY ac.semesterstart ASC
+            """, (personnel_id,))
+        else:
+            # Aggregate mode: institution-wide average per semester
+            cur.execute("""
+                SELECT
+                    ac.acadcalendar_id,
+                    ac.semester,
+                    ac.acadyear,
+                    ac.semesterstart,
+                    AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END) AS avg_student,
+                    AVG(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END) AS avg_supervisor,
+                    AVG(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END) AS avg_peer
+                FROM faculty_evaluations fe
+                JOIN acadcalendar ac ON fe.acadcalendar_id = ac.acadcalendar_id
+                JOIN personnel p ON fe.personnel_id = p.personnel_id
+                WHERE p.role_id = 20001
+                GROUP BY ac.acadcalendar_id, ac.semester, ac.acadyear, ac.semesterstart
+                ORDER BY ac.semesterstart ASC
+            """)
+
+        rows = cur.fetchall()
+        trends = []
+        for row in rows:
+            sem_label = row[1]
+            short = '1st Sem' if 'First' in sem_label else ('2nd Sem' if 'Second' in sem_label else 'Summer')
+            year = row[2].replace('AY ', '') if row[2] else ''
+            label = f"{short} AY {year}"
+
+            avg_s  = float(row[4]) if row[4] is not None else None
+            avg_sv = float(row[5]) if row[5] is not None else None
+            avg_p  = float(row[6]) if row[6] is not None else None
+
+            weights = []
+            if avg_s  is not None: weights.append((avg_s,  0.55))
+            if avg_sv is not None: weights.append((avg_sv, 0.35))
+            if avg_p  is not None: weights.append((avg_p,  0.10))
+
+            if weights:
+                total_w = sum(w for _, w in weights)
+                avg_overall = round(sum(v * w for v, w in weights) / total_w, 3)
+            else:
+                avg_overall = None
+
+            trends.append({
+                'label':      label,
+                'overall':    avg_overall,
+                'student':    round(avg_s,  3) if avg_s  is not None else None,
+                'supervisor': round(avg_sv, 3) if avg_sv is not None else None,
+                'peer':       round(avg_p,  3) if avg_p  is not None else None,
+            })
+
+        return jsonify({'success': True, 'trends': trends})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
 @app.route('/api/hr/faculty-evaluation-report/<int:personnel_id>')
 @require_auth([20003])
 def api_hr_faculty_evaluation_report(personnel_id):

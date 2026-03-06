@@ -122,56 +122,182 @@
 
       </div>
 
-      <div class="chart-large card" style="grid-column:1 / -1; padding:16px;">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <div style="font-weight:700">Evaluations</div>
-          </div>
+      <div class="chart-large card" style="grid-column:1 / -1; padding:0; overflow:hidden;">
 
-        <div class="card" style="padding:16px; margin-bottom:16px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-            <div>
-              <div style="font-weight:700;font-size:15px;" id="termDisplay">📅 Semester 1 — AY 2025–2026</div>
-              <div style="font-size:13px;color:var(--muted)">Evaluation Cycle Information</div>
-            </div>
-            <div style="display:flex;gap:20px;font-size:14px;">
-              <div><strong>⏳ Duration:</strong> <span id="durationDates">Loading...</span></div>
-              
-              <div id="cycleStatusContainer">
-                <strong>🔔 Status:</strong> 
-                <span id="cycleStatus" style="color:#f59e0b;font-weight:600;">Loading...</span>
+        <!-- Page-level Tab Bar -->
+        <div style="display:flex; border-bottom:2px solid #e5e7eb; background:#f8fafc; padding:0 16px;">
+          <button id="evalPageTab-evaluations" class="eval-page-tab active" onclick="switchEvalTab('evaluations')">
+            <i class='bx bx-list-ul'></i> Evaluations
+          </button>
+          <button id="evalPageTab-analytics" class="eval-page-tab" onclick="switchEvalTab('analytics')">
+            <i class='bx bx-bar-chart-alt-2'></i> Analytics
+          </button>
+        </div>
+
+        <!-- Tab: Evaluations -->
+        <div id="evalTabContent-evaluations" style="padding:16px;">
+
+          <div class="card" style="padding:16px; margin-bottom:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+              <div>
+                <div style="font-weight:700;font-size:15px;" id="termDisplay">📅 Semester 1 — AY 2025–2026</div>
+                <div style="font-size:13px;color:var(--muted)">Evaluation Cycle Information</div>
+              </div>
+              <div style="display:flex;gap:20px;font-size:14px;">
+                <div><strong>⏳ Duration:</strong> <span id="durationDates">Loading...</span></div>
+
+                <div id="cycleStatusContainer">
+                  <strong>🔔 Status:</strong>
+                  <span id="cycleStatus" style="color:#f59e0b;font-weight:600;">Loading...</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="table" style="margin-top:12px;">
-          <table id="evalTable" aria-label="Evaluations table">
-            <thead>
-              <tr>
-                <th>Faculty</th>
-                <th>Department</th>
-                <th>Position</th>
-                <th>Student Response Rate</th>
-                <th>Student</th>
-                <th>Supervisor</th>
-                <th>Peer</th>
-                <th>Overall Score</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="evalTableBody">
+          <div class="table" style="margin-top:12px;">
+            <table id="evalTable" aria-label="Evaluations table">
+              <thead>
+                <tr>
+                  <th>Faculty</th>
+                  <th>Department</th>
+                  <th>Position</th>
+                  <th>Student Response Rate</th>
+                  <th>Student</th>
+                  <th>Supervisor</th>
+                  <th>Peer</th>
+                  <th>Overall Score</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="evalTableBody">
               </tbody>
-          </table>
-          <div id="emptyState" class="table-empty" style="display:none;">No evaluations found — try clearing filters.</div>
+            </table>
+            <div id="emptyState" class="table-empty" style="display:none;">No evaluations found — try clearing filters.</div>
+          </div>
+
+          <div class="page-controls">
+            <div id="pagerInfo" style="font-size:13px;color:var(--muted)"></div>
+            <button class="btn ghost" id="prevPage">Prev</button>
+            <button class="btn ghost" id="nextPage">Next</button>
+          </div>
+
         </div>
 
-        <div class="page-controls">
-          <div id="pagerInfo" style="font-size:13px;color:var(--muted)"></div>
-          <button class="btn ghost" id="prevPage">Prev</button>
-          <button class="btn ghost" id="nextPage">Next</button>
+        <!-- Tab: Analytics -->
+        <div id="evalTabContent-analytics" style="display:none; padding:16px;">
+
+          <!-- Analytics KPI Cards -->
+          <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px;">
+            <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; display:flex; align-items:center; gap:12px;">
+              <div style="width:40px; height:40px; background:#fef3c7; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <i class='bx bx-star' style="font-size:20px; color:#d97706;"></i>
+              </div>
+              <div>
+                <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted);">Avg Rating</div>
+                <div style="font-size:1.5rem; font-weight:800; color:#1f2937; line-height:1.2;" id="an-avgRating">—</div>
+              </div>
+            </div>
+            <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; display:flex; align-items:center; gap:12px;">
+              <div style="width:40px; height:40px; background:#dcfce7; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <i class='bx bx-check-shield' style="font-size:20px; color:#16a34a;"></i>
+              </div>
+              <div>
+                <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted);">Rated Faculty</div>
+                <div style="font-size:1.5rem; font-weight:800; color:#1f2937; line-height:1.2;" id="an-ratedCount">—</div>
+              </div>
+            </div>
+            <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; display:flex; align-items:center; gap:12px;">
+              <div style="width:40px; height:40px; background:#dbeafe; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <i class='bx bx-trending-up' style="font-size:20px; color:#2563eb;"></i>
+              </div>
+              <div>
+                <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted);">Above Average</div>
+                <div style="font-size:1.5rem; font-weight:800; color:#1f2937; line-height:1.2;" id="an-aboveAvg">—</div>
+              </div>
+            </div>
+            <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; display:flex; align-items:center; gap:12px;">
+              <div style="width:40px; height:40px; background:#fce7f3; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <i class='bx bx-time' style="font-size:20px; color:#db2777;"></i>
+              </div>
+              <div>
+                <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted);">Not Yet Rated</div>
+                <div style="font-size:1.5rem; font-weight:800; color:#1f2937; line-height:1.2;" id="an-notRated">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Charts Row -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px;">
+            <div style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; padding:16px;">
+              <div style="font-weight:700; font-size:13px; color:#374151; margin-bottom:14px;"><i class='bx bx-bar-chart-alt-2' style="color:var(--spc-maroon); margin-right:5px;"></i>Rating Distribution</div>
+              <canvas id="evalDistChart"></canvas>
+            </div>
+            <div style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; padding:16px;">
+              <div style="font-weight:700; font-size:13px; color:#374151; margin-bottom:14px;"><i class='bx bx-buildings' style="color:#2563eb; margin-right:5px;"></i>Avg Rating by Department</div>
+              <canvas id="evalDeptChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Faculty Breakdown Table -->
+          <div style="border:1px solid #e5e7eb; border-radius:10px; overflow:hidden;">
+            <div style="background:#f8fafc; padding:12px 16px; border-bottom:1px solid #e5e7eb; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+              <span style="font-weight:700; font-size:13px; color:#374151;"><i class='bx bx-table' style="margin-right:5px; color:var(--muted);"></i>Faculty Rating Breakdown</span>
+              <input type="text" id="analyticsSearch" placeholder="Search faculty..."
+                style="padding:6px 12px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; outline:none; width:200px; transition:border-color .15s;"
+                onfocus="this.style.borderColor='var(--spc-maroon)'" onblur="this.style.borderColor='#e5e7eb'"
+                oninput="renderAnalyticsTable()">
+            </div>
+            <div style="overflow-x:auto; max-height:380px; overflow-y:auto;">
+              <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead style="position:sticky; top:0; background:#f8fafc; z-index:1;">
+                  <tr>
+                    <th onclick="sortAnalytics('name')" style="padding:10px 14px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; cursor:pointer; white-space:nowrap;">Faculty <i class='bx bx-sort' id="an-sort-name"></i></th>
+                    <th style="padding:10px 14px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; white-space:nowrap;">Department</th>
+                    <th onclick="sortAnalytics('student')" style="padding:10px 14px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; cursor:pointer; white-space:nowrap;">Student <i class='bx bx-sort' id="an-sort-student"></i></th>
+                    <th onclick="sortAnalytics('supervisor')" style="padding:10px 14px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; cursor:pointer; white-space:nowrap;">Supervisor <i class='bx bx-sort' id="an-sort-supervisor"></i></th>
+                    <th onclick="sortAnalytics('peer')" style="padding:10px 14px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; cursor:pointer; white-space:nowrap;">Peer <i class='bx bx-sort' id="an-sort-peer"></i></th>
+                    <th onclick="sortAnalytics('overall')" style="padding:10px 14px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; cursor:pointer; white-space:nowrap;">Overall <i class='bx bx-sort-down' id="an-sort-overall"></i></th>
+                    <th style="padding:10px 14px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; white-space:nowrap;">Rating</th>
+                    <th style="padding:10px 14px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; white-space:nowrap;">Trend</th>
+                  </tr>
+                </thead>
+                <tbody id="analyticsTableBody">
+                  <tr><td colspan="8" style="text-align:center; padding:24px; color:var(--muted);">Click the Analytics tab to load data.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
         </div>
       </div>
     </section>
+
+    <!-- Faculty Trend Modal -->
+    <div id="facultyTrendModal" class="hr-modal-wrapper" style="display:none;">
+        <div class="hr-modal-content" style="max-width:700px; width:95vw; padding:0; overflow:hidden;">
+            <div style="background:linear-gradient(135deg, var(--spc-maroon), #a71d2a); padding:18px 24px; display:flex; align-items:center; justify-content:space-between;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <div style="width:36px; height:36px; background:rgba(255,255,255,0.15); border-radius:9px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <i class='bx bx-line-chart' style="font-size:18px; color:#fff;"></i>
+                    </div>
+                    <div>
+                        <h2 id="facultyTrendTitle" style="color:#fff; font-size:1rem; margin:0; font-weight:700;">Performance Trend</h2>
+                        <p style="color:rgba(255,255,255,0.7); font-size:11px; margin:2px 0 0;">Scores across all evaluated semesters</p>
+                    </div>
+                </div>
+                <button onclick="closeFacultyTrendModal()" style="background:rgba(255,255,255,0.15); border:none; color:#fff; width:30px; height:30px; border-radius:7px; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center;">&times;</button>
+            </div>
+            <div style="padding:24px;">
+                <div id="facultyTrendLoader" style="text-align:center; padding:40px; color:var(--muted);">
+                    <i class='bx bx-loader-alt bx-spin' style="font-size:24px;"></i>
+                </div>
+                <canvas id="facultyTrendChart" style="display:none;"></canvas>
+                <div id="facultyTrendEmpty" style="display:none; text-align:center; padding:40px; color:var(--muted); font-size:13px;">
+                    No evaluation history found for this faculty member.
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div id="peerAssignmentModal" class="hr-modal-wrapper" style="display: none;">
         <div class="hr-modal-content" style="max-width: 1200px; width: 95vw; padding: 0; overflow: hidden;">
@@ -435,23 +561,33 @@
     </div>
     
     <div id="newCycleModal" class="hr-modal-wrapper" style="display: none;">
-        <div class="hr-modal-content" style="max-width: 520px; padding: 0; overflow: hidden;">
+        <div class="hr-modal-content" style="max-width: 1100px; width: 95vw; padding: 0; overflow: hidden;">
             <!-- Header -->
             <div style="background: linear-gradient(135deg, #1e40af, #3b82f6); padding: 20px 24px; display: flex; align-items: center; justify-content: space-between;">
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <div style="width: 40px; height: 40px; background: rgba(255,255,255,0.15); border-radius: 10px; display: flex; align-items: center; justify-content: center;">
-                        <i class='bx bx-calendar-plus' style="font-size: 20px; color: #fff;"></i>
+                        <i class='bx bx-calendar' style="font-size: 20px; color: #fff;"></i>
                     </div>
                     <div>
-                        <h2 style="color: #fff; font-size: 1.1rem; margin: 0; font-weight: 700;">New Evaluation Cycle</h2>
-                        <p style="color: rgba(255,255,255,0.7); font-size: 12px; margin: 2px 0 0;">Define the academic term for the new cycle</p>
+                        <h2 style="color: #fff; font-size: 1.1rem; margin: 0; font-weight: 700;">Evaluation Cycles</h2>
+                        <p style="color: rgba(255,255,255,0.7); font-size: 12px; margin: 2px 0 0;">Create or manage academic evaluation cycles</p>
                     </div>
                 </div>
-                <button onclick="closeNewCycleModal()" style="background: rgba(255,255,255,0.15); border: none; color: #fff; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center;">&times;</button>
+                <button onclick="closeNewCycleModal()" style="background: rgba(255,255,255,0.15); border: none; color: #fff; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; line-height: 1;">&times;</button>
             </div>
 
-            <!-- Body -->
-            <div style="padding: 24px;">
+            <!-- Tabs -->
+            <div style="display: flex; border-bottom: 1px solid #e5e7eb; background: #f8fafc;">
+                <button id="cycleTab-new" class="peer-modal-tab active" onclick="switchCycleTab('new')">
+                    <i class='bx bx-calendar-plus'></i> New Cycle
+                </button>
+                <button id="cycleTab-manage" class="peer-modal-tab" onclick="switchCycleTab('manage')">
+                    <i class='bx bx-list-ul'></i> Manage Cycles
+                </button>
+            </div>
+
+            <!-- Tab: New Cycle -->
+            <div id="cycleTabContent-new" class="peer-tab-content" style="padding: 24px;">
                 <form id="newCycleForm">
                     <!-- Semester + Year row -->
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
@@ -504,6 +640,29 @@
                         <button type="button" onclick="closeNewCycleModal()" class="btn secondary" style="padding: 8px 20px;">Cancel</button>
                     </div>
                 </form>
+            </div>
+
+            <!-- Tab: Manage Cycles -->
+            <div id="cycleTabContent-manage" class="peer-tab-content" style="display: none; padding: 24px;">
+                <div style="background: #fffbea; border: 1px solid #fde68a; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: #78350f;">
+                    <i class='bx bx-info-circle' style="font-size: 15px; margin-top: 1px; flex-shrink: 0;"></i>
+                    Only cycles with status <strong>Not Started</strong> can be edited or deleted.
+                </div>
+                <div style="overflow-x: auto; max-height: 380px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                        <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 1;">
+                            <tr>
+                                <th style="padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid #e5e7eb;">Term</th>
+                                <th style="padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid #e5e7eb;">Duration</th>
+                                <th style="padding: 10px 14px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid #e5e7eb;">Status</th>
+                                <th style="padding: 10px 14px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid #e5e7eb;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="manage-cycles-tbody">
+                            <tr><td colspan="4" style="text-align:center; padding: 24px; color: var(--muted);">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -580,6 +739,31 @@
 
 {% block extra_scripts %}
 <style>
+/* ── Page-level Eval Tabs ─────────────────────────── */
+.eval-page-tab {
+    padding: 12px 20px;
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-bottom: 3px solid transparent;
+    transition: color .15s, border-color .15s, background .15s;
+}
+.eval-page-tab:hover {
+    color: var(--spc-maroon);
+    background: rgba(123,17,19,0.03);
+}
+.eval-page-tab.active {
+    color: var(--spc-maroon);
+    border-bottom-color: var(--spc-maroon);
+    background: #fff;
+}
+
 .peer-modal-tab {
     flex: 1;
     padding: 11px 16px;
@@ -661,6 +845,7 @@
 #evalTable tbody tr:last-child td { border-bottom: none; }
 #evalTable tbody td:first-child { font-weight: 600; color: #111827; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script>
 window.CURRENT_TERM_ID = {{ acadcalendar_id }};
@@ -855,8 +1040,12 @@ function confirmDelete() {
             if (response.success) {
                 showToast(`Successfully deleted term: ${termName}. The list will now refresh.`);
                 closeDeleteModal();
-                $('#semesterFilter').val(''); 
-                fetchSemestersAndPopulate(); 
+                $('#semesterFilter').val('');
+                fetchSemestersAndPopulate();
+                if (document.getElementById('cycleTabContent-manage') &&
+                    document.getElementById('cycleTabContent-manage').style.display !== 'none') {
+                    loadManageCycles();
+                }
             } else {
                 showToast(`Deletion failed. Reason: ${response.error}`, 'error');
                 button.prop('disabled', false).html("<i class='bx bx-trash'></i>&nbsp; Delete Permanently");
@@ -971,22 +1160,10 @@ function loadEvaluations() {
                  statusColor = "#6b7280";
             }
             
-            // 3. Render Status and Delete Button into the container
-            const currentTermId = selectedOption.val();
-            const currentTermName = info.display.replace('📅 ', '').trim();
-
-            const deleteButtonHtml = canDelete ? `
-                <button class="btn secondary" 
-                        onclick="deleteAcademicTerm(${currentTermId}, '${currentTermName}')" 
-                        title="Delete Academic Term" 
-                        style="margin-left: 10px; padding: 6px 8px; font-size: 14px; background-color: #fef2f2; color: #dc2626; border: 1px solid #fecaca;">
-                    <i class='bx bx-trash'></i>
-                </button>` : '';
-
+            // 3. Render Status into the container
             $('#cycleStatusContainer').html(`
-                <strong>🔔 Status:</strong> 
+                <strong>🔔 Status:</strong>
                 <span id="cycleStatus" style="color:${statusColor};font-weight:600;">${statusText}</span>
-                ${deleteButtonHtml}
             `);
         }
         
@@ -1013,12 +1190,18 @@ function loadEvaluations() {
 
         // --- 4. STORE DATA & RENDER FIRST PAGE ---
         if(data.success && data.evaluations.length > 0) {
-            EVALUATIONS_DATA = data.evaluations; 
-            CURRENT_PAGE = 1; 
+            EVALUATIONS_DATA = data.evaluations;
+            CURRENT_PAGE = 1;
             renderTablePage(CURRENT_PAGE);
         } else {
             EVALUATIONS_DATA = [];
-            renderTablePage(1); 
+            renderTablePage(1);
+        }
+
+        // Refresh analytics if that tab is currently visible
+        const analyticsTab = document.getElementById('evalTabContent-analytics');
+        if (analyticsTab && analyticsTab.style.display !== 'none') {
+            renderAnalytics();
         }
     }).fail(function() {
         $('#evalTableBody').html('<tr><td colspan="6" class="table-empty" style="color:#991b1b;">Failed to load data from API.</td></tr>');
@@ -1283,11 +1466,157 @@ function openNewCycleModal() {
     $('#newCycleForm')[0].reset();
     $('#cycleFormMessage').hide().text('');
     $('#cyclePreviewChip').hide();
+    switchCycleTab('new');
     $('#newCycleModal').css('display', 'flex');
 }
 
 function closeNewCycleModal() {
     $('#newCycleModal').css('display', 'none');
+}
+
+function switchCycleTab(tab) {
+    ['new', 'manage'].forEach(t => {
+        document.getElementById(`cycleTabContent-${t}`).style.display = t === tab ? 'block' : 'none';
+        document.getElementById(`cycleTab-${t}`).classList.toggle('active', t === tab);
+    });
+    if (tab === 'manage') loadManageCycles();
+}
+
+async function loadManageCycles() {
+    const tbody = document.getElementById('manage-cycles-tbody');
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted);"><i class='bx bx-loader-alt bx-spin'></i> Loading...</td></tr>`;
+    try {
+        const res  = await fetch('/api/hr/acadcalendar');
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error);
+
+        const records = data.calendar_records;
+        if (records.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--muted);">No cycles found.</td></tr>`;
+            return;
+        }
+
+        const today = new Date(); today.setHours(0,0,0,0);
+        const fmt = d => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+        tbody.innerHTML = records.map(r => {
+            const start = new Date(r.start_date); start.setHours(0,0,0,0);
+            const end   = new Date(r.end_date);   end.setHours(0,0,0,0);
+
+            let statusLabel, statusStyle;
+            const canEdit = today < start;
+            if (today < start) {
+                statusLabel = 'Not Started';
+                statusStyle = 'background:#dbeafe;color:#1e40af;';
+            } else if (today <= end) {
+                statusLabel = 'In Progress';
+                statusStyle = 'background:#fef3c7;color:#92400e;';
+            } else {
+                statusLabel = 'Finished';
+                statusStyle = 'background:#dcfce7;color:#166534;';
+            }
+
+            const statusBadge = `<span style="${statusStyle}padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;">${statusLabel}</span>`;
+            const actions = canEdit ? `
+                <button onclick="startEditCycle(${r.id}, '${r.semester}', '${r.year}', '${r.start_date}', '${r.end_date}')"
+                    style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;font-weight:600;margin-right:4px;">
+                    <i class='bx bx-edit'></i> Edit
+                </button>
+                <button onclick="openDeleteModal(${r.id}, '${r.semester}, AY ${r.year}')"
+                    style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;font-weight:600;">
+                    <i class='bx bx-trash'></i> Delete
+                </button>` : `<span style="font-size:12px;color:var(--muted);">—</span>`;
+
+            return `<tr id="cycle-row-${r.id}">
+                <td style="padding:10px 14px;border-bottom:1px solid #f1f3f7;font-weight:600;">${r.semester}, AY ${r.year}</td>
+                <td style="padding:10px 14px;border-bottom:1px solid #f1f3f7;color:var(--muted);font-size:12px;">${fmt(r.start_date)} – ${fmt(r.end_date)}</td>
+                <td style="padding:10px 14px;border-bottom:1px solid #f1f3f7;text-align:center;">${statusBadge}</td>
+                <td style="padding:10px 14px;border-bottom:1px solid #f1f3f7;text-align:center;">${actions}</td>
+            </tr>`;
+        }).join('');
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:#dc2626;">Failed to load cycles.</td></tr>`;
+        console.error(err);
+    }
+}
+
+function startEditCycle(id, semester, year, startDate, endDate) {
+    const row = document.getElementById(`cycle-row-${id}`);
+    row.innerHTML = `
+        <td colspan="4" style="padding:12px 14px;border-bottom:1px solid #e5e7eb;background:#f8fbff;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px;align-items:end;">
+                <div>
+                    <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Semester</label>
+                    <select id="edit_semester_${id}" style="width:100%;padding:8px 10px;border:1.5px solid #bfdbfe;border-radius:7px;font-size:13px;outline:none;">
+                        <option value="First Semester" ${semester === 'First Semester' ? 'selected' : ''}>First Semester</option>
+                        <option value="Second Semester" ${semester === 'Second Semester' ? 'selected' : ''}>Second Semester</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Academic Year</label>
+                    <input type="text" id="edit_year_${id}" value="${year}" placeholder="e.g. 2025-2026"
+                        style="width:100%;padding:8px 10px;border:1.5px solid #bfdbfe;border-radius:7px;font-size:13px;outline:none;box-sizing:border-box;">
+                </div>
+                <div>
+                    <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Start Date</label>
+                    <input type="date" id="edit_start_${id}" value="${startDate}"
+                        style="width:100%;padding:8px 10px;border:1.5px solid #bfdbfe;border-radius:7px;font-size:13px;outline:none;box-sizing:border-box;">
+                </div>
+                <div>
+                    <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">End Date</label>
+                    <input type="date" id="edit_end_${id}" value="${endDate}"
+                        style="width:100%;padding:8px 10px;border:1.5px solid #bfdbfe;border-radius:7px;font-size:13px;outline:none;box-sizing:border-box;">
+                </div>
+                <div style="display:flex;gap:6px;">
+                    <button onclick="saveEditCycle(${id})"
+                        style="background:#1e40af;color:#fff;border:none;border-radius:7px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap;">
+                        <i class='bx bx-check'></i> Save
+                    </button>
+                    <button onclick="loadManageCycles()"
+                        style="background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:7px;padding:8px 12px;cursor:pointer;font-size:12px;font-weight:600;">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+            <div id="edit-msg-${id}" style="display:none;margin-top:8px;font-size:12px;font-weight:600;padding:6px 10px;border-radius:6px;"></div>
+        </td>`;
+}
+
+async function saveEditCycle(id) {
+    const semester  = document.getElementById(`edit_semester_${id}`).value;
+    const year      = document.getElementById(`edit_year_${id}`).value.trim();
+    const startDate = document.getElementById(`edit_start_${id}`).value;
+    const endDate   = document.getElementById(`edit_end_${id}`).value;
+    const msgEl     = document.getElementById(`edit-msg-${id}`);
+
+    if (!semester || !year || !startDate || !endDate) {
+        msgEl.style.display = 'block';
+        msgEl.style.background = '#fef3c7'; msgEl.style.color = '#92400e';
+        msgEl.textContent = 'All fields are required.';
+        return;
+    }
+
+    try {
+        const res  = await fetch(`/api/hr/acadcalendar/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ semester, acadyear: year, start_date: startDate, end_date: endDate })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('Cycle updated successfully.', 'success');
+            fetchSemestersAndPopulate();
+            loadManageCycles();
+        } else {
+            msgEl.style.display = 'block';
+            msgEl.style.background = '#fef2f2'; msgEl.style.color = '#991b1b';
+            msgEl.textContent = data.error || 'Failed to save changes.';
+        }
+    } catch (err) {
+        msgEl.style.display = 'block';
+        msgEl.style.background = '#fef2f2'; msgEl.style.color = '#991b1b';
+        msgEl.textContent = 'Server error. Please try again.';
+    }
 }
 
 function updateCyclePreview() {
@@ -1454,6 +1783,12 @@ $(document).ready(function() {
     $('#linkModal').click(function(event) {
         if (event.target === this) {
             closeLinkModal();
+        }
+    });
+
+    $('#facultyTrendModal').click(function(event) {
+        if (event.target === this) {
+            closeFacultyTrendModal();
         }
     });
     
@@ -1758,6 +2093,307 @@ async function submitManualAssignment() {
         msgBox.style.border = '1px solid #fecaca';
         msgBox.textContent = 'Server error. Please try again.';
     }
+}
+
+// ── Analytics Tab ──────────────────────────────────────────
+
+let AN_SORT_COL = 'overall';
+let AN_SORT_DIR = 'desc';
+let evalDistChartInstance = null;
+let evalDeptChartInstance = null;
+let facultyTrendChartInstance = null;
+
+function switchEvalTab(tab) {
+    ['evaluations', 'analytics'].forEach(t => {
+        document.getElementById(`evalTabContent-${t}`).style.display = t === tab ? 'block' : 'none';
+        document.getElementById(`evalPageTab-${t}`).classList.toggle('active', t === tab);
+    });
+    if (tab === 'analytics') renderAnalytics();
+}
+
+function renderAnalytics() {
+    if (!EVALUATIONS_DATA || EVALUATIONS_DATA.length === 0) {
+        document.getElementById('analyticsTableBody').innerHTML =
+            `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted);">No evaluation data for the selected term.</td></tr>`;
+        document.getElementById('an-avgRating').textContent = '—';
+        document.getElementById('an-ratedCount').textContent = '—';
+        document.getElementById('an-aboveAvg').textContent = '—';
+        document.getElementById('an-notRated').textContent = '—';
+        return;
+    }
+
+    const data = EVALUATIONS_DATA;
+    const rated = data.filter(r => parseFloat(r.avgscore) > 0);
+    const notRated = data.length - rated.length;
+    const aboveAvg = rated.filter(r => parseFloat(r.avgscore) >= 3).length;
+    const avgRating = rated.length > 0
+        ? (rated.reduce((s, r) => s + parseFloat(r.avgscore), 0) / rated.length).toFixed(2)
+        : '—';
+
+    document.getElementById('an-avgRating').textContent = avgRating;
+    document.getElementById('an-ratedCount').textContent = `${rated.length} / ${data.length}`;
+    document.getElementById('an-aboveAvg').textContent = aboveAvg;
+    document.getElementById('an-notRated').textContent = notRated;
+
+    renderDistributionChart(data);
+    renderDeptChart(data);
+    renderAnalyticsTable();
+}
+
+function renderDistributionChart(data) {
+    const buckets = ['0–1', '1–2', '2–3', '3–4', '4–5'];
+    const counts = [0, 0, 0, 0, 0];
+    data.forEach(r => {
+        const s = parseFloat(r.avgscore);
+        if (s <= 0) return;
+        if (s <= 1) counts[0]++;
+        else if (s <= 2) counts[1]++;
+        else if (s <= 3) counts[2]++;
+        else if (s <= 4) counts[3]++;
+        else counts[4]++;
+    });
+
+    if (evalDistChartInstance) evalDistChartInstance.destroy();
+    const ctx = document.getElementById('evalDistChart').getContext('2d');
+    evalDistChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: buckets,
+            datasets: [{
+                label: 'Faculty Count',
+                data: counts,
+                backgroundColor: ['#fca5a5','#fcd34d','#6ee7b7','#60a5fa','#a78bfa'],
+                borderRadius: 6,
+                borderSkipped: false,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f1f5f9' } },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+}
+
+// ── Faculty Trend Modal ────────────────────────────────────
+
+async function openFacultyTrend(personnelId, name) {
+    document.getElementById('facultyTrendTitle').textContent = name;
+    document.getElementById('facultyTrendLoader').style.display = 'block';
+    document.getElementById('facultyTrendChart').style.display = 'none';
+    document.getElementById('facultyTrendEmpty').style.display = 'none';
+    document.getElementById('facultyTrendModal').style.display = 'flex';
+
+    if (facultyTrendChartInstance) {
+        facultyTrendChartInstance.destroy();
+        facultyTrendChartInstance = null;
+    }
+
+    try {
+        const res = await fetch(`/api/hr/evaluation-trends?personnel_id=${personnelId}`);
+        const data = await res.json();
+
+        document.getElementById('facultyTrendLoader').style.display = 'none';
+
+        if (!data.success || !data.trends || data.trends.length === 0) {
+            document.getElementById('facultyTrendEmpty').style.display = 'block';
+            return;
+        }
+
+        const canvas = document.getElementById('facultyTrendChart');
+        canvas.style.display = 'block';
+        const ctx = canvas.getContext('2d');
+        const trends = data.trends;
+
+        facultyTrendChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: trends.map(t => t.label),
+                datasets: [
+                    {
+                        label: 'Overall',
+                        data: trends.map(t => t.overall),
+                        borderColor: '#7b1113',
+                        backgroundColor: 'rgba(123,17,19,0.07)',
+                        fill: true,
+                        tension: 0.3,
+                        borderWidth: 2.5,
+                        pointRadius: 5,
+                        pointBackgroundColor: '#7b1113',
+                    },
+                    {
+                        label: 'Student',
+                        data: trends.map(t => t.student),
+                        borderColor: '#d97706',
+                        borderDash: [5, 3],
+                        tension: 0.3,
+                        borderWidth: 1.5,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#d97706',
+                    },
+                    {
+                        label: 'Supervisor',
+                        data: trends.map(t => t.supervisor),
+                        borderColor: '#2563eb',
+                        borderDash: [5, 3],
+                        tension: 0.3,
+                        borderWidth: 1.5,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#2563eb',
+                    },
+                    {
+                        label: 'Peer',
+                        data: trends.map(t => t.peer),
+                        borderColor: '#16a34a',
+                        borderDash: [5, 3],
+                        tension: 0.3,
+                        borderWidth: 1.5,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#16a34a',
+                    },
+                ]
+            },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 18, padding: 12 } }
+                },
+                scales: {
+                    y: {
+                        min: 0, max: 5,
+                        grid: { color: '#f1f5f9' },
+                        title: { display: true, text: 'Score (0–5)', font: { size: 11 } },
+                        ticks: { stepSize: 1 }
+                    },
+                    x: { grid: { display: false }, ticks: { font: { size: 11 } } }
+                }
+            }
+        });
+    } catch (err) {
+        document.getElementById('facultyTrendLoader').style.display = 'none';
+        document.getElementById('facultyTrendEmpty').style.display = 'block';
+        document.getElementById('facultyTrendEmpty').textContent = 'Failed to load trend data.';
+        console.error(err);
+    }
+}
+
+function closeFacultyTrendModal() {
+    document.getElementById('facultyTrendModal').style.display = 'none';
+}
+
+function renderDeptChart(data) {
+    const deptMap = {};
+    data.forEach(r => {
+        const dept = r.department || 'Unknown';
+        const score = parseFloat(r.avgscore);
+        if (!deptMap[dept]) deptMap[dept] = { sum: 0, count: 0 };
+        if (score > 0) { deptMap[dept].sum += score; deptMap[dept].count++; }
+    });
+
+    const depts = Object.keys(deptMap).sort();
+    const avgs = depts.map(d => deptMap[d].count > 0
+        ? parseFloat((deptMap[d].sum / deptMap[d].count).toFixed(2))
+        : 0);
+
+    if (evalDeptChartInstance) evalDeptChartInstance.destroy();
+    const ctx = document.getElementById('evalDeptChart').getContext('2d');
+    evalDeptChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: depts,
+            datasets: [{
+                label: 'Avg Rating',
+                data: avgs,
+                backgroundColor: 'rgba(123,17,19,0.75)',
+                borderRadius: 6,
+                borderSkipped: false,
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { beginAtZero: true, max: 5, grid: { color: '#f1f5f9' } },
+                y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+            }
+        }
+    });
+}
+
+function sortAnalytics(col) {
+    if (AN_SORT_COL === col) {
+        AN_SORT_DIR = AN_SORT_DIR === 'asc' ? 'desc' : 'asc';
+    } else {
+        AN_SORT_COL = col;
+        AN_SORT_DIR = 'desc';
+    }
+    // Update sort icons
+    ['name','student','supervisor','peer','overall'].forEach(c => {
+        const el = document.getElementById(`an-sort-${c}`);
+        if (el) el.className = c === col ? (AN_SORT_DIR === 'asc' ? 'bx bx-sort-up' : 'bx bx-sort-down') : 'bx bx-sort';
+    });
+    renderAnalyticsTable();
+}
+
+function renderAnalyticsTable() {
+    const search = (document.getElementById('analyticsSearch').value || '').toLowerCase();
+    let rows = EVALUATIONS_DATA.filter(r =>
+        !search || r.name.toLowerCase().includes(search) || (r.department || '').toLowerCase().includes(search)
+    );
+
+    const colMap = {
+        name: r => r.name,
+        student: r => parseFloat(r.student_score) || 0,
+        supervisor: r => parseFloat(r.supervisor_score) || 0,
+        peer: r => parseFloat(r.peer_score) || 0,
+        overall: r => parseFloat(r.avgscore) || 0,
+    };
+    const getter = colMap[AN_SORT_COL] || colMap.overall;
+    rows.sort((a, b) => {
+        const va = getter(a), vb = getter(b);
+        if (typeof va === 'string') return AN_SORT_DIR === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+        return AN_SORT_DIR === 'asc' ? va - vb : vb - va;
+    });
+
+    const tbody = document.getElementById('analyticsTableBody');
+    if (rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted);">No results found.</td></tr>`;
+        return;
+    }
+
+    const fmt = v => { const n = parseFloat(v); return n > 0 ? n.toFixed(2) : '—'; };
+    tbody.innerHTML = rows.map(r => {
+        const score = parseFloat(r.avgscore);
+        let badgeStyle, badgeLabel;
+        if (score >= 3) { badgeStyle = 'background:#dcfce7;color:#166534;'; badgeLabel = 'Above Avg'; }
+        else if (score >= 2) { badgeStyle = 'background:#fef3c7;color:#92400e;'; badgeLabel = 'Average'; }
+        else if (score > 0) { badgeStyle = 'background:#fee2e2;color:#991b1b;'; badgeLabel = 'Below Avg'; }
+        else { badgeStyle = 'background:#f1f5f9;color:#6b7280;'; badgeLabel = 'Not Rated'; }
+
+        const safeName = r.name.replace(/'/g, "\\'");
+        return `<tr>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;font-weight:600;color:#111827;">${r.name}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;color:var(--muted);font-size:12px;">${r.department || '—'}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;text-align:center;">${fmt(r.student_score)}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;text-align:center;">${fmt(r.supervisor_score)}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;text-align:center;">${fmt(r.peer_score)}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;text-align:center;font-weight:700;color:var(--spc-maroon);">${fmt(r.avgscore)}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;text-align:center;">
+                <span style="${badgeStyle}padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;">${badgeLabel}</span>
+            </td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;text-align:center;">
+                <button onclick="openFacultyTrend(${r.personnelid}, '${safeName}')"
+                    style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px;">
+                    <i class='bx bx-line-chart'></i> Trend
+                </button>
+            </td>
+        </tr>`;
+    }).join('');
 }
 
 async function runAssignmentLogic() {
