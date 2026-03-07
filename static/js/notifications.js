@@ -128,7 +128,7 @@ const NotifSystem = (function () {
 
   function _store(data) {
     if (!data) return;
-    if (!data.tap_time && data.notification_type !== 'license' && data.notification_type !== 'probationary') return;
+    if (!data.tap_time && data.notification_type !== 'license' && data.notification_type !== 'probationary' && data.notification_type !== 'degree_submission') return;
 
     // Role-based filtering for promotion notifications:
     //   HR        → only 'new_application'
@@ -243,8 +243,12 @@ const NotifSystem = (function () {
             message       : n.message || '',
             subject_code  : n.subject_code  || null,
             subject_name  : n.subject_name  || null,
-            class_section : n.class_section || null,
-            classroom     : n.classroom     || null,
+            class_section      : n.class_section || null,
+            classroom          : n.classroom     || null,
+            license_type       : n.license_type       || null,
+            license_number     : n.license_number     || null,
+            expiration_date    : n.expiration_date     || null,
+            days_until_expiry  : n.days_until_expiry != null ? n.days_until_expiry : null,
             tap_time      : n.tap_time,
             read          : n.is_read,
             ts            : n.created_at ? new Date(n.created_at).getTime() : Date.now()
@@ -366,6 +370,10 @@ const NotifSystem = (function () {
     return { title: title, icon: icon, color: color };
   }
 
+  function _degreeMeta(n) {
+    return { title: 'Degree Document Submitted', icon: 'bx-graduation', color: '#7b1113' };
+  }
+
   function _probationaryMeta(n) {
     var title, icon, color;
     if (n.action === 'near_eligible') {
@@ -421,16 +429,18 @@ const NotifSystem = (function () {
       var isLicense      = (n.type === 'license');
       var isPromotion    = (n.type === 'promotion');
       var isProbationary = (n.type === 'probationary');
+      var isDegree       = (n.type === 'degree_submission');
       var meta = isProbationary ? _probationaryMeta(n)
                : isPromotion    ? _promotionMeta(n)
                : isLicense      ? _licenseMeta(n)
                : isBio          ? _bioMeta(n)
+               : isDegree       ? _degreeMeta(n)
                :                  _rfidMeta(n);
 
       // Type tag styling
-      var tagBg    = isProbationary ? '#fef3c7' : isPromotion ? '#fce7f3' : isLicense ? '#fef3c7' : (isBio ? '#dcfce7'  : '#dbeafe');
-      var tagColor = isProbationary ? '#92400e' : isPromotion ? '#9d174d' : isLicense ? '#92400e' : (isBio ? '#166534'  : '#1e40af');
-      var tagLabel = isProbationary ? 'Probationary' : isPromotion ? 'Promotion' : isLicense ? 'License' : (isBio ? 'Biometric' : 'RFID');
+      var tagBg    = isProbationary ? '#fef3c7' : isPromotion ? '#fce7f3' : isLicense ? '#fef3c7' : isDegree ? '#fce7e7' : (isBio ? '#dcfce7'  : '#dbeafe');
+      var tagColor = isProbationary ? '#92400e' : isPromotion ? '#9d174d' : isLicense ? '#92400e' : isDegree ? '#7b1113' : (isBio ? '#166534'  : '#1e40af');
+      var tagLabel = isProbationary ? 'Probationary' : isPromotion ? 'Promotion' : isLicense ? 'License' : isDegree ? 'Degree' : (isBio ? 'Biometric' : 'RFID');
 
       // Icon background tinted from action colour
       var iconBg = meta.color + '18'; // 9% opacity hex
@@ -456,7 +466,7 @@ const NotifSystem = (function () {
       }
 
       // Subject (RFID)
-      if (!isBio && n.subject_code && n.subject_name) {
+      if (!isBio && !isLicense && n.subject_code && n.subject_name) {
         details += '<div class="notif-item-detail notif-item-subject">' +
           '<i class="bx bx-book-open"></i> ' +
           '<strong>' + _esc(n.subject_code) + '</strong> — ' + _esc(n.subject_name) +
@@ -464,7 +474,7 @@ const NotifSystem = (function () {
       }
 
       // Section + Room (RFID)
-      if (!isBio && (n.class_section || n.classroom)) {
+      if (!isBio && !isLicense && (n.class_section || n.classroom)) {
         var loc = [];
         if (n.class_section) loc.push('<span><i class="bx bx-group"></i> Section: <strong>' + _esc(n.class_section) + '</strong></span>');
         if (n.classroom)     loc.push('<span><i class="bx bx-door-open"></i> Room: <strong>' + _esc(n.classroom) + '</strong></span>');
@@ -521,8 +531,13 @@ const NotifSystem = (function () {
         }
       }
 
-      // Message (non-promotion, non-probationary — already handled above)
-      if (!isPromotion && !isProbationary && n.message) {
+      // Degree submission detail rows
+      if (isDegree && n.message) {
+        details += '<div class="notif-item-msg">' + _esc(n.message) + '</div>';
+      }
+
+      // Message (non-promotion, non-probationary, non-license, non-degree — already handled above)
+      if (!isPromotion && !isProbationary && !isLicense && !isDegree && n.message) {
         details += '<div class="notif-item-msg">' + _esc(n.message) + '</div>';
       }
 

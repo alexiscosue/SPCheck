@@ -682,7 +682,7 @@ def check_license_expiry():
             conn = None
 
             for row in rows:
-                _, personnel_id, license_type, license_number, expiration_date, firstname, lastname = row
+                tracker_id, personnel_id, license_type, license_number, expiration_date, firstname, lastname = row
                 days = (expiration_date - today).days
 
                 if days < 0:
@@ -705,6 +705,49 @@ def check_license_expiry():
                     msg = (f'{license_type or "License"} license'
                            f'{" (No. " + license_number + ")" if license_number else ""}'
                            f' expires in {days} day(s) on {expiration_date}.')
+
+                # Dedup: only send each action milestone once per tracker
+                try:
+                    conn2 = db_pool.get_connection()
+                    cur2 = conn2.cursor()
+                    cur2.execute("""
+                        SELECT 1 FROM notifications
+                        WHERE notification_type = 'license'
+                          AND action = %s
+                          AND rfid_uid = %s
+                        LIMIT 1
+                    """, (action, str(tracker_id)))
+                    already_sent = cur2.fetchone() is not None
+                    cur2.close()
+                    db_pool.return_connection(conn2)
+                except Exception:
+                    already_sent = False
+
+                if already_sent:
+                    continue
+
+                now_str = datetime.now(philippines_tz).strftime('%A, %B %d, %Y %I:%M %p')
+                notification_data = {
+                    'notification_type': 'license',
+                    'action': action,
+                    'personnel_id': personnel_id,
+                    'person_name': f"{firstname} {lastname}",
+                    'message': msg,
+                    # Store license fields in spare DB columns for history retrieval
+                    'subject_code': license_type,
+                    'subject_name': license_number,
+                    'class_section': str(expiration_date),
+                    'classroom': str(days),
+                    'rfid_uid': str(tracker_id),  # used for dedup
+                    'tap_time': now_str,
+                    # Extra fields for live SSE rendering
+                    'license_type': license_type,
+                    'license_number': license_number,
+                    'expiration_date': str(expiration_date),
+                    'days_until_expiry': days,
+                }
+                _push_to_queue(personnel_id, notification_data)
+                print(f"📋 License expiry notification sent to faculty {personnel_id}: {action} — {msg}")
 
         except Exception as e:
             print(f"Error in license expiry checker: {e}")
@@ -2522,6 +2565,13 @@ def api_notifications_history():
             n = dict(zip(columns, row))
             if n['created_at']:
                 n['created_at'] = n['created_at'].isoformat()
+            # Remap spare columns back to license-specific fields for history display
+            if n.get('notification_type') == 'license':
+                n['license_type'] = n.get('subject_code')
+                n['license_number'] = n.get('subject_name')
+                n['expiration_date'] = n.get('class_section')
+                days_str = n.get('classroom')
+                n['days_until_expiry'] = int(days_str) if days_str and days_str.lstrip('-').isdigit() else None
             notifications.append(n)
 
         return jsonify({'success': True, 'notifications': notifications})
@@ -3900,14 +3950,49 @@ def api_faculty_dashboard():
         """, (user_id,))
         
         result = cursor.fetchone()
+
+        if not result or result[0] is None:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return {'success': False, 'error': 'No active academic calendar found'}
+
+        semester_info_json, schedule_json, attendance_json, teaching_load, overall_eval_score = result
+
+        # Fetch regularization data for the dashboard
+        cursor.execute("""
+            SELECT p.hiredate, pr.employmentstatus, pr.has_aligned_master,
+                   COALESCE(pr.probationary_start_date, p.hiredate) as prob_start
+            FROM personnel p
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            WHERE p.user_id = %s
+        """, (user_id,))
+        reg_row = cursor.fetchone()
+
         cursor.close()
         db_pool.return_connection(conn)
-        
-        if not result or result[0] is None:
-            return {'success': False, 'error': 'No active academic calendar found'}
-        
-        semester_info_json, schedule_json, attendance_json, teaching_load, overall_eval_score = result
-        
+
+        # Compute regularization status
+        from datetime import date as _date_cls
+        _today = _date_cls.today()
+        reg_status = 'Unknown'
+        reg_percent = 0
+        reg_message = ''
+        if reg_row:
+            _hire_date, _emp_status, _has_master, _prob_start = reg_row
+            if _emp_status in ('Regular', 'Tenured'):
+                reg_status = _emp_status
+                reg_percent = 100
+                reg_message = 'Regular status achieved.'
+            elif not _has_master:
+                reg_status = 'Contractual'
+                reg_percent = 0
+                reg_message = "Status: Contractual. An aligned Master's Degree is required to begin the 3-year probationary period."
+            else:
+                reg_status = 'Probationary'
+                _prob_days = max(0, (_today - _prob_start).days) if _prob_start else 0
+                reg_percent = min(round((_prob_days / 1095) * 100, 1), 100)
+                reg_message = f"Probationary Progress: {_prob_days} days completed out of 1,095 ({reg_percent}%)."
+
         semester_start = date.fromisoformat(semester_info_json['semesterstart'])
         semester_end = date.fromisoformat(semester_info_json['semesterend'])
         
@@ -4050,7 +4135,10 @@ def api_faculty_dashboard():
                 'name': semester_info_json['semester'],
                 'year': semester_info_json['acadyear'],
                 'display': f"{semester_info_json['semester']}, AY {semester_info_json['acadyear']}"
-            }
+            },
+            'regularization_status': reg_status,
+            'regularization_percentage': reg_percent,
+            'regularization_message': reg_message,
         }
         
     except Exception as e:
@@ -4820,6 +4908,92 @@ def api_update_documents():
         import traceback
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
+
+
+@app.route('/api/faculty/submit-degree', methods=['POST'])
+@require_auth([20001, 20002])
+def api_submit_degree():
+    """Faculty submits a degree document for HR review with metadata."""
+    try:
+        user_id = session['user_id']
+        degree_level = request.form.get('degree_level', '').strip()
+        institution = request.form.get('institution', '').strip()
+        date_obtained = request.form.get('date_obtained', '').strip() or None
+
+        if not degree_level:
+            return jsonify({'success': False, 'error': 'Degree level is required'}), 400
+        if 'degree_file' not in request.files or not request.files['degree_file'].filename:
+            return jsonify({'success': False, 'error': 'A degree document file is required'}), 400
+
+        degree_file = request.files['degree_file']
+        file_data = degree_file.read()
+        filename = degree_file.filename
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT p.personnel_id, p.firstname, p.lastname
+            FROM personnel p WHERE p.user_id = %s
+        """, (user_id,))
+        result = cursor.fetchone()
+        if not result:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify({'success': False, 'error': 'Faculty not found'}), 404
+
+        personnel_id, firstname, lastname = result
+        faculty_name = f"{lastname}, {firstname}"
+
+        # Append degree file to profile
+        cursor.execute("""
+            SELECT degrees, degreesname FROM profile WHERE personnel_id = %s
+        """, (personnel_id,))
+        profile_result = cursor.fetchone()
+        existing_docs = list(profile_result[0]) if profile_result and profile_result[0] else []
+        existing_names = list(profile_result[1]) if profile_result and profile_result[1] else []
+
+        cursor.execute("""
+            UPDATE profile SET degrees = %s, degreesname = %s WHERE personnel_id = %s
+        """, (existing_docs + [file_data], existing_names + [filename], personnel_id))
+        conn.commit()
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        # Build notification message
+        details = degree_level
+        if institution:
+            details += f" from {institution}"
+        if date_obtained:
+            details += f" (obtained {date_obtained})"
+
+        notif_data = {
+            'notification_type': 'degree_submission',
+            'person_name': faculty_name,
+            'personnel_id': personnel_id,
+            'action': 'degree_submitted',
+            'status': 'pending',
+            'message': f"{faculty_name} submitted a {details} degree document for HR review.",
+            'tap_time': datetime.now(pytz.timezone('Asia/Manila')).isoformat()
+        }
+        save_notification_to_db('hr', None, notif_data)
+        _push_to_queue('hr_all_notifications', notif_data)
+
+        log_audit_action(
+            personnel_id,
+            'Degree document submitted',
+            f"Faculty submitted {degree_level} degree document for HR review",
+            after_value=f"{filename} | institution={institution or 'N/A'} | date={date_obtained or 'N/A'}"
+        )
+
+        return jsonify({'success': True, 'message': 'Degree submitted successfully. HR has been notified.'})
+
+    except Exception as e:
+        print(f"Error submitting degree: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/faculty/profile/password', methods=['POST'])
 @require_auth([20001, 20002, 20003, 20004])
@@ -9072,10 +9246,10 @@ def faculty_promotion():
 
         rank_lock_reasons = []
 
-        # Degree check
+        # Degree check (doctorate satisfies master's requirement)
         if req_degree == "doctorate" and not has_doctorate:
             rank_lock_reasons.append(f"{target_rank} requires a Doctorate Degree.")
-        elif req_degree == "master" and not has_aligned_master:
+        elif req_degree == "master" and not (has_aligned_master or has_doctorate):
             rank_lock_reasons.append(f"{target_rank} requires an aligned Master's Degree.")
 
         # Experience check (years from hire date)
@@ -12201,14 +12375,15 @@ def promotion_document_upload():
     if not userid:
         return "Unauthorized", 401
 
+    # DEV: submission window check disabled for testing
     # Enforce the official promotion submission window: June 1 – August 31
-    from datetime import date as _date
-    _today = _date.today()
-    if not (6 <= _today.month <= 8):
-        return (
-            "Promotion applications are only accepted between June 1 and August 31 each year. "
-            "Please resubmit during the official submission period."
-        ), 403
+    # from datetime import date as _date
+    # _today = _date.today()
+    # if not (6 <= _today.month <= 8):
+    #     return (
+    #         "Promotion applications are only accepted between June 1 and August 31 each year. "
+    #         "Please resubmit during the official submission period."
+    #     ), 403
 
     conn = db_pool.get_connection()
     cursor = conn.cursor()
@@ -13412,11 +13587,13 @@ _RANK_REQUIREMENTS = {
 
 
 def _has_degree(required_degree, has_aligned_master, has_doctorate):
-    """Return True if the faculty holds at least the required degree level."""
+    """Return True if the faculty holds at least the required degree level.
+    Doctorate is treated as satisfying a Master's requirement (hierarchical).
+    """
     if required_degree == 'Bachelor':
         return True
     if required_degree == 'Master':
-        return bool(has_aligned_master)
+        return bool(has_aligned_master or has_doctorate)
     if required_degree == 'Doctorate':
         return bool(has_doctorate)
     return False
@@ -13490,27 +13667,6 @@ def get_promotion_eligibility():
     """, (faculty_id, current_term_id))
     weighted_eval_score = float(cursor.fetchone()[0] or 0)
 
-    # Check promotion cooldown
-    cursor.execute("""
-        SELECT pres_approval_date
-        FROM promotion_application
-        WHERE faculty_id = %s AND final_decision = 1
-        ORDER BY pres_approval_date DESC
-        LIMIT 1
-    """, (faculty_id,))
-
-    last_promotion = cursor.fetchone()
-    is_cooldown_ok = True
-    months_remaining = 0
-
-    if last_promotion and last_promotion[0]:
-        days_since_promotion = (today - last_promotion[0].date()).days
-        years_since_promotion = days_since_promotion / 365.25
-
-        if years_since_promotion < 1.0:
-            is_cooldown_ok = False
-            months_remaining = int((365.25 - days_since_promotion) / 30.44)
-
     # Check for active application
     cursor.execute("""
         SELECT COUNT(*)
@@ -13540,8 +13696,6 @@ def get_promotion_eligibility():
             'years_employed': years_employed,
             'attendance_rate': avg_attendance_rate,
             'eval_score': weighted_eval_score,
-            'is_cooldown_ok': is_cooldown_ok,
-            'months_remaining': months_remaining,
             'current_rank': current_rank,
             'next_rank': None,
             'required_degree': None,
@@ -13559,7 +13713,7 @@ def get_promotion_eligibility():
     is_attendance_ok = avg_attendance_rate >= 80.0
     is_eval_ok = weighted_eval_score >= 3.0
 
-    can_apply = is_degree_ok and is_years_ok and is_attendance_ok and is_eval_ok and is_cooldown_ok
+    can_apply = is_degree_ok and is_years_ok and is_attendance_ok and is_eval_ok
 
     # Determine tenure type for display
     tenure_type = employment_status
@@ -13582,8 +13736,6 @@ def get_promotion_eligibility():
         lock_reasons.append(f"Attendance: {avg_attendance_rate:.1f}% (needs 80%+)")
     if not is_eval_ok:
         lock_reasons.append(f"Evaluation: {weighted_eval_score:.2f} (needs 3.00+)")
-    if not is_cooldown_ok:
-        lock_reasons.append(f"Cooldown: {months_remaining} month(s) remaining")
 
     return jsonify({
         'success': True,
@@ -13593,8 +13745,6 @@ def get_promotion_eligibility():
         'years_employed': years_employed,
         'attendance_rate': avg_attendance_rate,
         'eval_score': weighted_eval_score,
-        'is_cooldown_ok': is_cooldown_ok,
-        'months_remaining': months_remaining,
         'current_rank': current_rank,
         'next_rank': next_rank,
         'required_degree': required_degree,
