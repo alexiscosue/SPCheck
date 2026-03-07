@@ -9085,11 +9085,10 @@ def faculty_promotion():
     available_ranks = []
 
     # Promotion window: June 1 – August 31
-    # DEV: window check disabled for testing
-    # if not (6 <= today.month <= 8):
-    #     lock_reasons.append(
-    #         f"Submission window closed. Promotion applications are only accepted June 1 – August 31 each year."
-    #     )
+    if not (6 <= today.month <= 8):
+        lock_reasons.append(
+            "Submission window closed. Promotion applications are only accepted June 1 – August 31 each year."
+        )
 
     # Active application check
     cursor.execute(
@@ -9265,14 +9264,6 @@ def faculty_promotion():
     profile_img = f"data:image/jpeg;base64,{base64.b64encode(bytes(profilepic)).decode('utf-8')}" if profilepic else ''
     
     at_highest_rank = current_rank == 'Professor'
-
-    # DEV: disable all promotion locks for testing
-    lock_reasons.clear()
-    if not available_ranks and not at_highest_rank:
-        # determine target rank so the form has something to submit
-        target_idx = RANK_ORDER.index(current_rank) + 1 if current_rank in RANK_ORDER else 0
-        if target_idx < len(RANK_ORDER):
-            available_ranks = [RANK_ORDER[target_idx]]
 
     # Stepper display vars — always sourced from latest_row so they persist after approval/rejection
     _STAGE_STATUS = {
@@ -12286,15 +12277,14 @@ def promotion_document_upload():
     if not userid:
         return "Unauthorized", 401
 
-    # DEV: submission window check disabled for testing
     # Enforce the official promotion submission window: June 1 – August 31
-    # from datetime import date as _date
-    # _today = _date.today()
-    # if not (6 <= _today.month <= 8):
-    #     return (
-    #         "Promotion applications are only accepted between June 1 and August 31 each year. "
-    #         "Please resubmit during the official submission period."
-    #     ), 403
+    from datetime import date as _date
+    _today = _date.today()
+    if not (6 <= _today.month <= 8):
+        return (
+            "Promotion applications are only accepted between June 1 and August 31 each year. "
+            "Please resubmit during the official submission period."
+        ), 403
 
     conn = db_pool.get_connection()
     cursor = conn.cursor()
@@ -12310,6 +12300,16 @@ def promotion_document_upload():
         return "Faculty record not found for the current user.", 400
 
     faculty_id = result[0]
+
+    # Prevent duplicate submissions: block if an active application already exists
+    cursor.execute(
+        "SELECT COUNT(*) FROM promotion_application WHERE faculty_id = %s AND final_decision IS NULL",
+        (faculty_id,)
+    )
+    if cursor.fetchone()[0] > 0:
+        cursor.close()
+        db_pool.return_connection(conn)
+        return "You already have an active promotion application under review. Please wait for the current application to be resolved before submitting a new one.", 400
 
     # Get requested rank from form
     requested_rank = request.form.get('requested_rank')
