@@ -5,6 +5,20 @@
 {% block page_title %}Welcome back, {{ faculty_name }}{% endblock %}
 
 {% block content %}
+{% if session.user_role == 20002 %}
+<div style="background:#f1f5f9; border-radius:14px; padding:5px; display:flex; width:100%; gap:4px; margin-bottom:1.5rem; box-sizing:border-box;">
+  <button id="btn-view-personal" onclick="switchView('personal')"
+    style="flex:1; padding:11px 0; font-size:14px; font-weight:700; cursor:pointer; border:none; border-radius:10px; background:#fff; color:var(--primary); box-shadow:0 1px 4px rgba(0,0,0,0.10); transition:all .2s; display:flex; align-items:center; justify-content:center; gap:7px;">
+    <i class='bx bx-user' style="font-size:16px;"></i> Personal
+  </button>
+  <button id="btn-view-department" onclick="switchView('department')"
+    style="flex:1; padding:11px 0; font-size:14px; font-weight:700; cursor:pointer; border:none; border-radius:10px; background:transparent; color:#9ca3af; box-shadow:none; transition:all .2s; display:flex; align-items:center; justify-content:center; gap:7px;">
+    <i class='bx bx-building' style="font-size:16px;"></i> Department
+  </button>
+</div>
+{% endif %}
+
+<div id="view-personal">
 <section class="grid">
   <div class="kpis card">
     <div class="kpi card">
@@ -132,6 +146,118 @@
     </div>
   </div>
 </section>
+</div><!-- end #view-personal -->
+
+{% if session.user_role == 20002 %}
+<div id="view-department" style="display:none;">
+  <!-- Dept KPI Cards -->
+  <div class="kpis card" style="margin-bottom:1rem;">
+    <div class="kpi card">
+      <div class="icon att"><i class='bx bx-check-shield'></i></div>
+      <div>
+        <div class="title">Dept Attendance</div>
+        <div class="value" id="dean-kpi-att">--</div>
+      </div>
+    </div>
+    <div class="kpi card">
+      <div class="icon fac"><i class='bx bx-user'></i></div>
+      <div>
+        <div class="title">Total Faculty</div>
+        <div class="value" id="dean-kpi-fac">--</div>
+      </div>
+    </div>
+    <div class="kpi card">
+      <div class="icon eval"><i class='bx bx-star'></i></div>
+      <div>
+        <div class="title">Avg Eval Score</div>
+        <div class="value" id="dean-kpi-eval">--</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Inner tabs: Attendance | Evaluation -->
+  <div class="card" style="overflow:hidden;">
+    <div style="display:flex; border-bottom:1px solid #e5e7eb; padding:0 16px;">
+      <button id="dean-tab-btn-att" onclick="switchDeptTab('att')"
+        style="padding:11px 20px; font-size:13px; font-weight:700; cursor:pointer; border:none; border-bottom:2px solid var(--primary); background:transparent; color:var(--primary); margin-bottom:-1px; transition:all .15s; display:flex; align-items:center; gap:6px;">
+        <i class='bx bx-calendar-check'></i> Attendance Logs
+      </button>
+      <button id="dean-tab-btn-eval" onclick="switchDeptTab('eval')"
+        style="padding:11px 20px; font-size:13px; font-weight:700; cursor:pointer; border:none; border-bottom:2px solid transparent; background:transparent; color:#9ca3af; margin-bottom:-1px; transition:all .15s; display:flex; align-items:center; gap:6px;">
+        <i class='bx bx-bar-chart-alt-2'></i> Evaluation Records
+      </button>
+    </div>
+
+    <!-- Attendance Tab -->
+    <div id="dean-tab-att" style="padding:16px;">
+      <div class="table">
+        <table aria-label="Department attendance logs">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Date</th>
+              <th>Subject</th>
+              <th>Room</th>
+              <th>Time In</th>
+              <th>Time Out</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="dean-attendance-logs">
+            <tr><td colspan="7" style="text-align:center;padding:2rem;color:#6b7280;">--</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Evaluation Tab -->
+    <div id="dean-tab-eval" style="display:none; padding:16px;">
+
+      <!-- Rating Distribution Cards -->
+      <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px;" id="dean-eval-dist-cards">
+        <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:14px; text-align:center;">
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#166534; margin-bottom:6px;">Above Average</div>
+          <div style="font-size:1.8rem; font-weight:800; color:#16a34a; line-height:1;" id="dean-dist-above">--</div>
+        </div>
+        <div style="background:#fefce8; border:1px solid #fef08a; border-radius:10px; padding:14px; text-align:center;">
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#854d0e; margin-bottom:6px;">Average</div>
+          <div style="font-size:1.8rem; font-weight:800; color:#ca8a04; line-height:1;" id="dean-dist-avg">--</div>
+        </div>
+        <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:10px; padding:14px; text-align:center;">
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#991b1b; margin-bottom:6px;">Below Average</div>
+          <div style="font-size:1.8rem; font-weight:800; color:#dc2626; line-height:1;" id="dean-dist-below">--</div>
+        </div>
+        <div style="background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:14px; text-align:center;">
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6b7280; margin-bottom:6px;">Not Rated</div>
+          <div style="font-size:1.8rem; font-weight:800; color:#9ca3af; line-height:1;" id="dean-dist-unrated">--</div>
+        </div>
+      </div>
+
+      <!-- Simple faculty score list -->
+      <div class="table">
+        <table id="evalTable" aria-label="Department evaluation summary">
+          <thead>
+            <tr>
+              <th>Faculty</th>
+              <th>Position</th>
+              <th style="text-align:center;">Overall Score</th>
+              <th style="text-align:center;">Rating</th>
+            </tr>
+          </thead>
+          <tbody id="evalTableBody">
+            <tr><td colspan="4" style="text-align:center;padding:2rem;color:#6b7280;">--</td></tr>
+          </tbody>
+        </table>
+        <div id="deanEmptyState" class="table-empty" style="display:none;">No evaluation data for this term.</div>
+      </div>
+
+      <div style="margin-top:10px; font-size:12px; color:var(--muted); text-align:right;">
+        For full details, go to <a href="/faculty_evaluations" style="color:var(--primary); font-weight:600; text-decoration:none;">Evaluations <i class='bx bx-chevron-right' style="font-size:12px; vertical-align:middle;"></i></a>
+      </div>
+    </div>
+  </div>
+</div><!-- end #view-department -->
+{% endif %}
 
 <!-- Promotion Modal -->
 <div id="promotionModalOverlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999; align-items: center; justify-content: center;" onclick="closePromotionModal(event)">
@@ -164,10 +290,30 @@
     </div>
   </div>
 </div>
+
 {% endblock %}
 
 {% block extra_scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% if session.user_role == 20002 %}
+<style>
+/* ── Dean Evaluation Summary Table ── */
+#evalTable { border-collapse: separate; border-spacing: 0; width: 100%; }
+#evalTable thead th {
+    background: #f8fafc; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted);
+    padding: 11px 14px; border-top: 1px solid #e5e7eb; border-bottom: 2px solid #e5e7eb;
+}
+#evalTable tbody tr { transition: background .1s; }
+#evalTable tbody tr:hover td { background: #f9fafb; }
+#evalTable tbody td {
+    padding: 11px 14px; border-bottom: 1px solid #f1f3f5;
+    font-size: 13px; vertical-align: middle; color: #1f2937;
+}
+#evalTable tbody tr:last-child td { border-bottom: none; }
+#evalTable tbody td:first-child { font-weight: 600; color: #111827; }
+</style>
+{% endif %}
 <script>
   let dashboardData = null;
   let evalChartInstance = null;
@@ -851,6 +997,173 @@
         document.getElementById('regularizationDonut').innerHTML = '';
       });
   }
+
+  {% if session.user_role == 20002 %}
+  // ── Dean: View Toggle ──────────────────────────────────
+  let deanDataLoaded = false;
+  let deanEvalLoaded = false;
+
+  const SEG_ACTIVE   = 'flex:1;padding:11px 0;font-size:14px;font-weight:700;cursor:pointer;border:none;border-radius:10px;background:#fff;color:var(--primary);box-shadow:0 1px 4px rgba(0,0,0,0.10);transition:all .2s;display:flex;align-items:center;justify-content:center;gap:7px;';
+  const SEG_INACTIVE = 'flex:1;padding:11px 0;font-size:14px;font-weight:700;cursor:pointer;border:none;border-radius:10px;background:transparent;color:#9ca3af;box-shadow:none;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:7px;';
+
+  function switchView(view) {
+    const personal   = document.getElementById('view-personal');
+    const department = document.getElementById('view-department');
+    const btnP = document.getElementById('btn-view-personal');
+    const btnD = document.getElementById('btn-view-department');
+
+    if (view === 'personal') {
+      personal.style.display   = '';
+      department.style.display = 'none';
+      btnP.style.cssText = SEG_ACTIVE;
+      btnD.style.cssText = SEG_INACTIVE;
+    } else {
+      personal.style.display   = 'none';
+      department.style.display = '';
+      btnP.style.cssText = SEG_INACTIVE;
+      btnD.style.cssText = SEG_ACTIVE;
+      if (!deanDataLoaded) {
+        loadDeanDashboard();
+        deanDataLoaded = true;
+      }
+    }
+  }
+
+  const INNER_ACTIVE   = 'padding:11px 20px;font-size:13px;font-weight:700;cursor:pointer;border:none;border-bottom:2px solid var(--primary);background:transparent;color:var(--primary);margin-bottom:-1px;transition:all .15s;display:flex;align-items:center;gap:6px;';
+  const INNER_INACTIVE = 'padding:11px 20px;font-size:13px;font-weight:700;cursor:pointer;border:none;border-bottom:2px solid transparent;background:transparent;color:#9ca3af;margin-bottom:-1px;transition:all .15s;display:flex;align-items:center;gap:6px;';
+
+  function switchDeptTab(tab) {
+    document.getElementById('dean-tab-att').style.display  = tab === 'att'  ? '' : 'none';
+    document.getElementById('dean-tab-eval').style.display = tab === 'eval' ? '' : 'none';
+    document.getElementById('dean-tab-btn-att').style.cssText  = tab === 'att'  ? INNER_ACTIVE : INNER_INACTIVE;
+    document.getElementById('dean-tab-btn-eval').style.cssText = tab === 'eval' ? INNER_ACTIVE : INNER_INACTIVE;
+    if (tab === 'eval' && !deanEvalLoaded) {
+      loadDeanEvaluations();
+      deanEvalLoaded = true;
+    }
+  }
+
+  let deanEvalData    = [];
+  let deanEvalTermId  = null;
+
+  function getStatusInfo(rating) {
+    if (rating >= 3) return { class: 'above-average', label: 'Above Average' };
+    if (rating >= 2) return { class: 'average', label: 'Average' };
+    if (rating > 0)  return { class: 'below-average', label: 'Below Average' };
+    return { class: 'pending', label: 'Not Rated' };
+  }
+
+  function setEvalTableBody(html) {
+    document.getElementById('evalTableBody').innerHTML = html;
+  }
+
+  async function loadDeanEvaluations() {
+    setEvalTableBody(`<tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--muted);"><i class='bx bx-loader-alt bx-spin'></i> Loading...</td></tr>`);
+    try {
+      const res  = await fetch('/api/dean/evaluations-data');
+      const data = await res.json();
+      if (!data.success) {
+        setEvalTableBody(`<tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--muted);">Failed to load evaluation data.</td></tr>`);
+        return;
+      }
+
+      // Populate distribution cards
+      const rb = data.rating_breakdown;
+      const notRated = (data.faculty_scores || []).filter(f => f.rating === 'Not Rated').length;
+      document.getElementById('dean-dist-above').textContent   = rb.above_average ?? '--';
+      document.getElementById('dean-dist-avg').textContent     = rb.average ?? '--';
+      document.getElementById('dean-dist-below').textContent   = rb.below_average ?? '--';
+      document.getElementById('dean-dist-unrated').textContent = notRated;
+
+      if (!data.faculty_scores || data.faculty_scores.length === 0) {
+        setEvalTableBody(`<tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--muted);">No evaluation data for this term.</td></tr>`);
+        return;
+      }
+
+      deanEvalData   = data.faculty_scores;
+      deanEvalTermId = data.current_term_id;
+      renderDeanEvalTable(deanEvalData);
+    } catch(e) {
+      console.error('Dean eval load failed:', e);
+      setEvalTableBody(`<tr><td colspan="4" style="text-align:center;padding:2rem;color:#ef4444;">Error loading data.</td></tr>`);
+    }
+  }
+
+  function renderDeanEvalTable(rows) {
+    const empty = document.getElementById('deanEmptyState');
+    const fmt = v => v > 0 ? parseFloat(v).toFixed(2) : '—';
+
+    if (!rows || rows.length === 0) {
+      setEvalTableBody('');
+      if (empty) empty.style.display = '';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+
+    setEvalTableBody(rows.map(f => {
+      const rating = parseFloat(f.overall);
+      const statusInfo = getStatusInfo(rating);
+      const overallDisplay = rating > 0
+        ? `<span class="status ${statusInfo.class}" style="padding:3px 8px;">${fmt(f.overall)}</span>`
+        : `<span style="color:var(--muted);">—</span>`;
+      const ratingDisplay = rating > 0
+        ? `<span class="status ${statusInfo.class}" style="padding:3px 8px;">${statusInfo.label}</span>`
+        : `<span style="color:var(--muted); font-size:12px;">Not Rated</span>`;
+      return `<tr>` +
+        `<td>${f.name}</td>` +
+        `<td style="font-size:12px; color:var(--muted);">${f.position || 'N/A'}</td>` +
+        `<td style="text-align:center;">${overallDisplay}</td>` +
+        `<td style="text-align:center;">${ratingDisplay}</td>` +
+      `</tr>`;
+    }).join(''));
+  }
+
+  async function loadDeanDashboard() {
+    ['dean-kpi-att','dean-kpi-fac','dean-kpi-eval'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i>`;
+    });
+    const tbody = document.getElementById('dean-attendance-logs');
+    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:2rem;color:#6b7280;"><i class='bx bx-loader-alt bx-spin'></i> Loading...</td></tr>`;
+
+    try {
+      const res  = await fetch('/api/dean/dashboard');
+      const data = await res.json();
+      if (!data.success) {
+        ['dean-kpi-att','dean-kpi-fac','dean-kpi-eval'].forEach(id => {
+          const el = document.getElementById(id); if (el) el.textContent = 'Error';
+        });
+        return;
+      }
+
+      const title = document.getElementById('dean-dept-title');
+      if (title) title.textContent = `${data.college_name} — Attendance Logs`;
+
+      document.getElementById('dean-kpi-att').textContent   = `${data.dept_attendance_rate}%`;
+      document.getElementById('dean-kpi-fac').textContent   = data.faculty_count;
+      document.getElementById('dean-kpi-eval').textContent  = data.dept_avg_eval > 0 ? `${data.dept_avg_eval} / 4` : 'N/A';
+
+      if (!data.recent_attendance_logs || data.recent_attendance_logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:#6b7280;">No recent attendance records</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.recent_attendance_logs.map(log => {
+        const statusClass = log.status.toLowerCase();
+        return `<tr>
+          <td>${log.name}</td>
+          <td>${log.date}</td>
+          <td style="font-size:12px;">${log.subject} (${log.section})</td>
+          <td>${log.room}</td>
+          <td>${log.time_in}</td>
+          <td>${log.time_out}</td>
+          <td><span class="status ${statusClass}">${log.status}</span></td>
+        </tr>`;
+      }).join('');
+    } catch(e) {
+      console.error('Dean dashboard load failed:', e);
+    }
+  }
+  {% endif %}
 
   document.addEventListener('DOMContentLoaded', function() {
     fetchDashboardData();

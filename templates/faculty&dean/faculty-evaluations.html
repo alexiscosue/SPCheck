@@ -42,6 +42,42 @@
     </div>
   </div>
 
+  {% if session.user_role == 20002 %}
+  <!-- ── Dean: Department Evaluation Summary ── -->
+  <div style="grid-column: 1 / -1;">
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <i class='bx bx-building' style="color: var(--primary);"></i>
+          <span style="font-weight: 700;" id="dean-eval-dept-title">Department Evaluation Summary</span>
+        </div>
+        <div style="display: flex; gap: 12px; font-size: 12px; color: var(--muted);">
+          <span>Dept Avg: <strong id="dean-eval-dept-avg" style="color: var(--text);">--</strong></span>
+          <span id="dean-eval-rating-summary"></span>
+        </div>
+      </div>
+      <div class="table">
+        <table aria-label="Department faculty evaluation scores">
+          <thead>
+            <tr>
+              <th>Faculty</th>
+              <th>Position</th>
+              <th style="text-align:center;">Student (55%)</th>
+              <th style="text-align:center;">Peer (10%)</th>
+              <th style="text-align:center;">Supervisor (35%)</th>
+              <th style="text-align:center;">Overall</th>
+              <th style="text-align:center;">Rating</th>
+            </tr>
+          </thead>
+          <tbody id="dean-eval-table-body">
+            <tr><td colspan="7" style="text-align:center;padding:1.5rem;color:var(--muted);"><i class='bx bx-loader-alt bx-spin'></i> Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- ── Main Column ── -->
   <div class="chart-large">
 
@@ -700,6 +736,78 @@
       }
     });
   });
+
+  // ── Dean: Department Evaluation Table ────────────────
+  {% if session.user_role == 20002 %}
+  async function loadDeanEvaluations(termId) {
+    const tbody  = document.getElementById('dean-eval-table-body');
+    const avgEl  = document.getElementById('dean-eval-dept-avg');
+    const titleEl = document.getElementById('dean-eval-dept-title');
+    const summEl = document.getElementById('dean-eval-rating-summary');
+    if (!tbody) return;
+
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:1.5rem;color:var(--muted);"><i class='bx bx-loader-alt bx-spin'></i> Loading...</td></tr>`;
+
+    try {
+      const url  = termId ? `/api/dean/evaluations-data?term_id=${termId}` : '/api/dean/evaluations-data';
+      const res  = await fetch(url);
+      const data = await res.json();
+      if (!data.success) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:1.5rem;color:var(--muted);">Failed to load department data.</td></tr>`;
+        return;
+      }
+
+      if (titleEl) titleEl.textContent = `${data.college_name} — Evaluation Summary`;
+      if (avgEl)   avgEl.textContent   = data.dept_avg > 0 ? `${data.dept_avg} / 4` : 'N/A';
+
+      const rb = data.rating_breakdown;
+      if (summEl) summEl.innerHTML =
+        `<span style="color:#16a34a;font-weight:600;">${rb.above_average} Above</span> · ` +
+        `<span style="color:#ca8a04;font-weight:600;">${rb.average} Avg</span> · ` +
+        `<span style="color:#dc2626;font-weight:600;">${rb.below_average} Below</span>`;
+
+      if (!data.faculty_scores || data.faculty_scores.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:1.5rem;color:var(--muted);">No evaluation data for this term.</td></tr>`;
+        return;
+      }
+
+      const ratingMeta = {
+        'Above Average': { bg: '#dcfce7', color: '#16a34a' },
+        'Average':       { bg: '#fef9c3', color: '#ca8a04' },
+        'Below Average': { bg: '#fee2e2', color: '#dc2626' },
+        'Not Rated':     { bg: '#f3f4f6', color: '#6b7280' }
+      };
+
+      tbody.innerHTML = data.faculty_scores.map(f => {
+        const m = ratingMeta[f.rating] || ratingMeta['Not Rated'];
+        const fmtScore = v => v > 0 ? v.toFixed(2) : '—';
+        return `<tr>
+          <td style="font-weight:600;">${f.name}</td>
+          <td style="font-size:12px;color:var(--muted);">${f.position}</td>
+          <td style="text-align:center;">${fmtScore(f.student_avg)}</td>
+          <td style="text-align:center;">${fmtScore(f.peer_avg)}</td>
+          <td style="text-align:center;">${fmtScore(f.supervisor_avg)}</td>
+          <td style="text-align:center;font-weight:700;">${fmtScore(f.overall)}</td>
+          <td style="text-align:center;">
+            <span style="padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;background:${m.bg};color:${m.color};">
+              ${f.rating}
+            </span>
+          </td>
+        </tr>`;
+      }).join('');
+    } catch(e) {
+      console.error('Dean eval load failed:', e);
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:1.5rem;color:#ef4444;">Error loading data.</td></tr>`;
+    }
+  }
+
+  // Hook into the semester filter so dean table also refreshes
+  const _origLoadEval = loadEvaluationData;
+  loadEvaluationData = async function() {
+    await _origLoadEval();
+    loadDeanEvaluations(currentTermId);
+  };
+  {% endif %}
 
   document.addEventListener('DOMContentLoaded', loadSemesters);
 </script>
