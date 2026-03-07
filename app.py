@@ -538,7 +538,6 @@ def check_and_record_absences():
                                         attendancestatus, timein, timeout
                                     )
                                     VALUES (%s, %s, %s, %s, NULL)
-                                    ON CONFLICT ON CONSTRAINT unique_attendance_per_day DO NOTHING
                                 """, (personnel_id, class_id, 'Absent', absence_timestamp))
                                 
                                 absences_recorded += 1
@@ -1871,11 +1870,13 @@ def api_sync_campus_attendance():
 def api_hr_campus_attendance_analytics():
     """Aggregate campus attendance (morning + afternoon) per faculty for a given semester."""
     try:
+        from datetime import timedelta as _td
         semester_id = request.args.get('semester_id')
         conn = db_pool.get_connection()
         cursor = conn.cursor()
 
         # Resolve semester date range
+        sem_start = sem_end = None
         date_filter = ""
         params = []
         if semester_id:
@@ -1885,9 +1886,80 @@ def api_hr_campus_attendance_analytics():
             """, (semester_id,))
             sem = cursor.fetchone()
             if sem and sem[0] and sem[1]:
+                sem_start, sem_end = sem[0], sem[1]
                 date_filter = "AND ca.attendance_date BETWEEN %s AND %s"
-                params = [sem[0], sem[1]]
+                params = [sem_start, sem_end]
 
+        # ── Overall KPIs (all faculty combined) ──────────────────────────
+        kpi_filter = "WHERE ca.attendance_date BETWEEN %s AND %s" if sem_start else ""
+        kpi_params = [sem_start, sem_end] if sem_start else []
+        cursor.execute(f"""
+            SELECT
+                COUNT(*) FILTER (WHERE ca.status = 'Present') AS present,
+                COUNT(*) FILTER (WHERE ca.status = 'Late')    AS late,
+                COUNT(*) FILTER (WHERE ca.status = 'Absent')  AS absent,
+                COUNT(*) FILTER (WHERE ca.status = 'Excused') AS excused,
+                COUNT(*) AS total
+            FROM campus_attendance ca
+            {kpi_filter}
+        """, kpi_params)
+        kpi_row = cursor.fetchone() or (0, 0, 0, 0, 0)
+        kpi_present, kpi_late, kpi_absent, kpi_excused, kpi_total = (int(x) for x in kpi_row)
+        avg_rate = round(((kpi_present + kpi_excused + kpi_late * 0.75) / kpi_total) * 100, 1) if kpi_total > 0 else 0.0
+
+        # ── Weekly trends (all faculty combined) ─────────────────────────
+        trends = []
+        if sem_start and sem_end:
+            cursor.execute("""
+                WITH weeks AS (
+                    SELECT generate_series(
+                        DATE_TRUNC('week', %s::date),
+                        DATE_TRUNC('week', %s::date),
+                        INTERVAL '1 week'
+                    )::date AS week_start
+                ),
+                agg AS (
+                    SELECT
+                        DATE_TRUNC('week', ca.attendance_date)::date AS week_start,
+                        COUNT(*) FILTER (WHERE ca.status = 'Present') AS present,
+                        COUNT(*) FILTER (WHERE ca.status = 'Late')    AS late,
+                        COUNT(*) FILTER (WHERE ca.status = 'Absent')  AS absent,
+                        COUNT(*) AS total
+                    FROM campus_attendance ca
+                    WHERE ca.attendance_date BETWEEN %s AND %s
+                    GROUP BY 1
+                )
+                SELECT w.week_start,
+                       COALESCE(a.present,0), COALESCE(a.late,0),
+                       COALESCE(a.absent,0),  COALESCE(a.total,0)
+                FROM weeks w
+                LEFT JOIN agg a ON a.week_start = w.week_start
+                ORDER BY w.week_start
+            """, (sem_start, sem_end, sem_start, sem_end))
+        else:
+            cursor.execute("""
+                SELECT
+                    DATE_TRUNC('week', ca.attendance_date)::date AS week_start,
+                    COUNT(*) FILTER (WHERE ca.status = 'Present') AS present,
+                    COUNT(*) FILTER (WHERE ca.status = 'Late')    AS late,
+                    COUNT(*) FILTER (WHERE ca.status = 'Absent')  AS absent,
+                    COUNT(*) AS total
+                FROM campus_attendance ca
+                GROUP BY week_start
+                ORDER BY week_start
+            """)
+        for r in cursor.fetchall():
+            wk_start, wp, wl, wa, wt = r
+            rate = round(((int(wp) + int(wl) * 0.75) / int(wt)) * 100, 1) if int(wt) > 0 else 0.0
+            trends.append({
+                'label':         wk_start.strftime('%b %d') if wk_start else '',
+                'avg_rate':      rate,
+                'total_present': int(wp),
+                'total_late':    int(wl),
+                'total_absent':  int(wa),
+            })
+
+        # ── Per-faculty breakdown ─────────────────────────────────────────
         cursor.execute(f"""
             SELECT
                 p.personnel_id,
@@ -1934,7 +2006,24 @@ def api_hr_campus_attendance_analytics():
                 'afternoon_absent' : int(aa),
             })
 
-        return jsonify({'success': True, 'campus_breakdown': campus_breakdown})
+        return jsonify({
+            'success': True,
+            'kpis': {
+                'avg_rate':      avg_rate,
+                'total_present': kpi_present,
+                'total_late':    kpi_late,
+                'total_absent':  kpi_absent,
+                'total_excused': kpi_excused,
+            },
+            'distribution': {
+                'present': kpi_present,
+                'late':    kpi_late,
+                'absent':  kpi_absent,
+                'excused': kpi_excused,
+            },
+            'trends':           trends,
+            'campus_breakdown': campus_breakdown,
+        })
 
     except Exception as e:
         print(f"Error fetching campus attendance analytics: {e}")
