@@ -495,6 +495,24 @@
         <input type="hidden" name="requested_rank"
           value="{{ available_ranks[0] if available_ranks and available_ranks|length > 0 else '' }}">
 
+        <!-- Degree requirement reminder -->
+        {% if degree_req_label %}
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:10px;margin-bottom:14px;
+          {% if degree_met %}background:#f0fdf4;border:1px solid #bbf7d0;{% else %}background:#fffbeb;border:1px solid #fde68a;{% endif %}">
+          <i class='bx {% if degree_met %}bx-check-circle{% else %}bx-info-circle{% endif %}'
+             style="font-size:18px;flex-shrink:0;margin-top:1px;{% if degree_met %}color:#16a34a;{% else %}color:#d97706;{% endif %}"></i>
+          <div style="font-size:13px;">
+            {% if degree_met %}
+            <span style="font-weight:600;color:#15803d;">Degree Requirement Met</span>
+            <span style="color:#166534;margin-left:4px;">— A {{ degree_req_label }} is confirmed in your record.</span>
+            {% else %}
+            <span style="font-weight:600;color:#92400e;">Degree Reminder</span>
+            <span style="color:#78350f;"> — {{ available_ranks[0] if available_ranks else 'This rank' }} requires a <strong>{{ degree_req_label }}</strong>. If yours hasn't been confirmed yet, HR will need to verify it before your application can be approved.</span>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+
         <!-- Eligibility snapshot -->
         {% if attendance_rate is not none or eval_score is not none %}
         <div

@@ -9083,6 +9083,8 @@ def faculty_promotion():
 
     lock_reasons = []
     available_ranks = []
+    degree_met = True
+    degree_req_label = ''
 
     # Promotion window: June 1 – August 31
     if not (6 <= today.month <= 8):
@@ -9156,11 +9158,16 @@ def faculty_promotion():
 
         rank_lock_reasons = []
 
-        # Degree check (doctorate satisfies master's requirement)
-        if req_degree == "doctorate" and not has_doctorate:
-            rank_lock_reasons.append(f"{target_rank} requires a Doctorate Degree.")
-        elif req_degree == "master" and not (has_aligned_master or has_doctorate):
-            rank_lock_reasons.append(f"{target_rank} requires an aligned Master's Degree.")
+        # Degree is no longer a hard lock for submission — shown as a reminder only.
+        if req_degree == "doctorate":
+            degree_met = bool(has_doctorate)
+            degree_req_label = "Doctorate Degree"
+        elif req_degree == "master":
+            degree_met = bool(has_aligned_master or has_doctorate)
+            degree_req_label = "Aligned Master's Degree"
+        else:
+            degree_met = True
+            degree_req_label = "Bachelor's Degree"
 
         # Experience check (years from hire date)
         if years_decimal < req_years:
@@ -9312,6 +9319,9 @@ def faculty_promotion():
         'days_remaining_regular': _days_remaining_regular,
         'expected_regular_date': _expected_regular_date,
         'has_aligned_master': bool(has_aligned_master),
+        'has_doctorate': bool(has_doctorate),
+        'degree_met': degree_met,
+        'degree_req_label': degree_req_label,
         'prob_start_date': _prob_start_date,
         'total_service_days': total_days,
         'current_rank': current_rank,
@@ -11346,7 +11356,7 @@ def hr_promotions():
         
         # === FETCH PROMOTIONS ===
         cursor.execute("""
-            SELECT 
+            SELECT
                 pa.application_id,
                 pa.faculty_id,
                 p.firstname,
@@ -11359,7 +11369,10 @@ def hr_promotions():
                 pa.date_submitted,
                 pa.hrmd_approval_date,
                 pa.vpa_approval_date,
-                pa.pres_approval_date
+                pa.pres_approval_date,
+                pr.highest_degree_level,
+                pr.has_aligned_master,
+                pr.has_doctorate
             FROM promotion_application pa
             JOIN personnel p ON pa.faculty_id = p.personnel_id
             LEFT JOIN college c ON p.college_id = c.college_id
@@ -11373,8 +11386,9 @@ def hr_promotions():
         promotions_list = []
         for promo in promotions:
             (application_id, faculty_id, firstname, lastname, honorifics, collegename,
-             current_rank, requested_rank, current_status, date_submitted, 
-             hrmd_approval, vpa_approval, pres_approval) = promo
+             current_rank, requested_rank, current_status, date_submitted,
+             hrmd_approval, vpa_approval, pres_approval,
+             highest_degree_level, has_aligned_master, has_doctorate) = promo
             
             if honorifics:
                 fullname = f"{lastname}, {firstname}, {honorifics}"
@@ -11391,7 +11405,10 @@ def hr_promotions():
                 'currentrank': current_rank or 'Instructor',
                 'requestedrank': requested_rank or 'Not Specified',
                 'status': status_display,
-                'submitteddate': date_submitted.strftime('%Y-%m-%d') if date_submitted else 'N/A'
+                'submitteddate': date_submitted.strftime('%Y-%m-%d') if date_submitted else 'N/A',
+                'highest_degree_level': highest_degree_level or '',
+                'has_aligned_master': bool(has_aligned_master),
+                'has_doctorate': bool(has_doctorate),
             })
         
         # === FETCH ELIGIBLE FACULTY + ACTIVE REGULARIZATIONS ===
