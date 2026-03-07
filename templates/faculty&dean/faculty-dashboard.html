@@ -135,6 +135,24 @@
         </div>
       </div>
     </div>
+
+    <!-- Attendance Status Distribution -->
+    <div class="card" style="padding:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="font-weight:700;font-size:14px;">Status Distribution</div>
+        <div style="font-size:12px;color:var(--muted);">Current Semester</div>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;">Class Attendance</div>
+        <div style="position:relative;height:120px; margin-bottom:16px;">
+          <canvas id="dashClassDistChart"></canvas>
+        </div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;">Campus Attendance</div>
+        <div style="position:relative;height:120px;">
+          <canvas id="dashCampusDistChart"></canvas>
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -177,6 +195,54 @@
   let dashboardData = null;
   let evalChartInstance = null;
   let comparisonChartInstance = null;
+  let dashClassDistChart = null;
+  let dashCampusDistChart = null;
+
+  async function fetchAttendanceDist() {
+    try {
+      const [classResp, campusResp] = await Promise.all([
+        fetch('/api/faculty/attendance-analytics'),
+        fetch('/api/faculty/campus-attendance-analytics')
+      ]);
+      const classData  = await classResp.json();
+      const campusData = await campusResp.json();
+      if (classData.success && classData.distribution)   renderDashDist('dashClassDistChart',  classData.distribution,  true);
+      if (campusData.success && campusData.distribution) renderDashDist('dashCampusDistChart', campusData.distribution, false);
+    } catch(e) { console.error('Error fetching attendance distribution:', e); }
+  }
+
+  function renderDashDist(canvasId, dist, isClass) {
+    const ctx    = document.getElementById(canvasId);
+    if (!ctx) return;
+    const colors = ['#16a34a', '#f59e0b', '#ef4444', '#8b5cf6'];
+    const labels = ['Present', 'Late', 'Absent', 'Excused'];
+    const values = [dist.present || 0, dist.late || 0, dist.absent || 0, dist.excused || 0];
+    if (isClass) {
+      if (dashClassDistChart)  { dashClassDistChart.destroy();  dashClassDistChart  = null; }
+    } else {
+      if (dashCampusDistChart) { dashCampusDistChart.destroy(); dashCampusDistChart = null; }
+    }
+    const chart = new Chart(ctx.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{ data: values, backgroundColor: colors, borderRadius: 4, borderSkipped: false }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: c => ` ${c.parsed.y} sessions` } }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { font: { size: 10 }, stepSize: 1 }, grid: { color: 'rgba(0,0,0,0.05)' } },
+          x: { grid: { display: false }, ticks: { font: { size: 10 } } }
+        }
+      }
+    });
+    if (isClass) dashClassDistChart = chart;
+    else dashCampusDistChart = chart;
+  }
 
   async function fetchDashboardData() {
     try {
@@ -860,6 +926,7 @@
 
   document.addEventListener('DOMContentLoaded', function() {
     fetchDashboardData();
+    fetchAttendanceDist();
     loadLicenseStatusCard();
     loadPromotionSummary();
     loadRegularizationSummary();

@@ -6,55 +6,93 @@
 
 {% block content %}
 <section class="grid" aria-live="polite">
+  <!-- Global Top Bar: Search + Semester -->
+  <div style="grid-column:1 / -1; margin-bottom:4px;">
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px;">
+      <div style="position:relative; flex:1; min-width:180px;">
+        <i class='bx bx-search' style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:15px; pointer-events:none;"></i>
+        <input type="text" id="globalFacultySearch" placeholder="Search faculty name..."
+          style="width:100%; box-sizing:border-box; padding:9px 12px 9px 34px; border:1.5px solid #e5e7eb; border-radius:8px; font-size:13px; color:#1f2937; outline:none; transition:border-color .15s;"
+          onfocus="this.style.borderColor='var(--spc-maroon)'" onblur="this.style.borderColor='#e5e7eb'">
+      </div>
+      <div style="position:relative; flex-shrink:0;">
+        <i class='bx bx-calendar' style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:14px; pointer-events:none;"></i>
+        <select id="globalSemesterSelect"
+          style="padding:9px 12px 9px 30px; border:1.5px solid #e5e7eb; border-radius:8px; font-size:13px; color:#1f2937; background:#fff; outline:none; min-width:210px; cursor:pointer;">
+          <option value="">Loading Semesters...</option>
+        </select>
+      </div>
+    </div>
+    <!-- Global Filter Bar -->
+    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:#f8fafc; border:1px solid #e5e7eb; border-radius:10px; padding:10px 14px;">
+      <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted); white-space:nowrap; display:flex; align-items:center; gap:4px; flex-shrink:0;">
+        <i class='bx bx-filter-alt'></i> Filters
+      </span>
+      <div style="width:1px; height:20px; background:#e5e7eb; flex-shrink:0;"></div>
+      <select id="globalCollegeFilter"
+        style="padding:7px 10px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; flex:1; min-width:130px; cursor:pointer;">
+        <option value="">All Colleges</option>
+      </select>
+      <select id="globalPositionFilter"
+        style="padding:7px 10px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; flex:1; min-width:130px; cursor:pointer;">
+        <option value="">All Positions</option>
+        <option>Instructor</option>
+        <option>Assistant Professor</option>
+        <option>Associate Professor</option>
+        <option>Professor</option>
+        <option>Dean</option>
+        <option>HR Staff</option>
+        <option>Vice President</option>
+        <option>President</option>
+      </select>
+      <select id="globalEmploymentFilter"
+        style="padding:7px 10px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; flex:1; min-width:130px; cursor:pointer;">
+        <option value="">All Employment</option>
+        <option>Full-Time</option>
+        <option>Part-Time</option>
+        <option>Regular</option>
+        <option>Probationary</option>
+      </select>
+      <select id="globalStatusFilter"
+        style="padding:7px 10px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; flex:1; min-width:110px; cursor:pointer;">
+        <option value="">All Status</option>
+        <option value="Present">Present</option>
+        <option value="Late">Late</option>
+        <option value="Absent">Absent</option>
+        <option value="Excused">Excused</option>
+      </select>
+      <select id="globalSessionFilter"
+        style="padding:7px 10px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; flex:1; min-width:110px; cursor:pointer;">
+        <option value="">All Sessions</option>
+        <option value="Morning">Morning</option>
+        <option value="Afternoon">Afternoon</option>
+      </select>
+      <button onclick="clearAttFilters()"
+        style="padding:7px 12px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:12px; font-weight:700; color:var(--muted); background:#fff; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:4px; flex-shrink:0; transition:all .15s;"
+        onmouseover="this.style.borderColor='#ef4444';this.style.color='#ef4444';"
+        onmouseout="this.style.borderColor='#e5e7eb';this.style.color='var(--muted)';">
+        <i class='bx bx-x'></i> Clear
+      </button>
+    </div>
+  </div>
+
   <!-- Main Content Area with Sidebar Layout -->
   <div class="hr-attendance-layout" style="grid-column: 1 / -1;">
     <!-- Left: Tabs + Content -->
-    <div class="hr-attendance-main card">
-      <div class="tabs_profile">
-        <div class="tab active" data-tab="logs">Class Attendance</div>
-        <div class="tab" data-tab="campusattendance">Campus Attendance</div>
-        <div class="tab" data-tab="classes">Classes</div>
-        <div class="tab" data-tab="attendancelogs">Attendance Logs</div>
-        <div class="tab" data-tab="analytics"><i class='bx bx-bar-chart-alt-2' style="vertical-align:middle;margin-right:4px"></i>Analytics</div>
+    <div class="hr-attendance-main chart-large card" style="padding:0; overflow:hidden;">
+      <!-- Eval-style Tab Bar -->
+      <div style="display:flex; border-bottom:2px solid #e5e7eb; background:#f8fafc; padding:0 16px;">
+        <button class="eval-page-tab active" data-tab="logs"><i class='bx bx-list-ul'></i> Class Attendance</button>
+        <button class="eval-page-tab" data-tab="campusattendance"><i class='bx bx-building'></i> Campus Attendance</button>
+        <button class="eval-page-tab" data-tab="classes"><i class='bx bx-book-open'></i> Classes</button>
+        <button class="eval-page-tab" data-tab="attendancelogs"><i class='bx bx-history'></i> Attendance Logs</button>
+        <button class="eval-page-tab" data-tab="analytics"><i class='bx bx-bar-chart-alt-2'></i> Analytics</button>
       </div>
 
       <!-- All Faculty Logs -->
-      <div id="logs" class="tab-content active">
-        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px">
-          <label for="logsSemesterSelect" style="font-size:13px;color:var(--muted);white-space:nowrap">Semester:</label>
-          <select id="logsSemesterSelect" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:var(--card);color:var(--text);cursor:pointer;min-width:220px">
-            <option value="">Loading...</option>
-          </select>
-        </div>
-        <div class="search-filter">
-          <input type="text" id="logSearch" placeholder="Search by name, date, class, or room...">
-          <select id="logCollegeFilter"><option value="">All Colleges</option></select>
-          <select id="logPositionFilter">
-            <option value="">All Positions</option>
-            <option>Instructor</option>
-            <option>Assistant Professor</option>
-            <option>Associate Professor</option>
-            <option>Professor</option>
-            <option>Dean</option>
-            <option>HR Staff</option>
-            <option>Vice President</option>
-            <option>President</option>
-          </select>
-          <select id="logEmploymentFilter">
-            <option value="">All Employment</option>
-            <option>Full-Time</option>
-            <option>Part-Time</option>
-            <option>Regular</option>
-            <option>Probationary</option>
-          </select>
-          <select id="logFilter" style="margin-left:auto">
-            <option value="">All Status</option>
-            <option>Present</option>
-            <option>Late</option>
-            <option>Absent</option>
-            <option>Excused</option>
-          </select>
-        </div>
+      <div id="logs" class="tab-content active" style="padding:16px;">
+        <!-- Hidden per-tab semester select (synced from global) -->
+        <select id="logsSemesterSelect" style="display:none"><option value="">Loading...</option></select>
         <div class="hr-pagination-controls">
           <button id="prevPage" class="hr-pagination-btn">‹</button>
           <span id="pageInfo">0 records</span>
@@ -89,50 +127,22 @@
             </tbody>
           </table>
         </div>
+        <!-- Reader Controls for Class Attendance -->
+        <div id="readerControlsContainer" style="border-top:1px solid #e5e7eb;margin-top:14px;padding-top:12px;display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
+          <button class="rfid-btn" id="rfidBtn"><i class='bx bx-power-off'></i><span id="rfidBtnText">Start RFID Reader</span></button>
+          <div class="rfid-status" id="rfidStatus">
+            <span class="status-indicator" id="statusIndicator"></span>
+            <span id="statusText">Reader Offline</span>
+          </div>
+          <button class="edit-time-btn" id="editTimeBtn" style="display:none;"><i class='bx bx-time'></i><span id="editTimeBtnText">Edit Time In/Out</span></button>
+          <button class="edit-time-btn" id="openExcuseModalBtn" onclick="openExcuseModal()" style="background:#6b7280"><i class='bx bx-calendar-x'></i> Excuse Absence</button>
+        </div>
       </div>
 
       <!-- Campus Attendance Tab -->
-      <div id="campusattendance" class="tab-content">
-        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px">
-          <label for="campusAttSemesterSelect" style="font-size:13px;color:var(--muted);white-space:nowrap">Semester:</label>
-          <select id="campusAttSemesterSelect" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:var(--card);color:var(--text);cursor:pointer;min-width:220px">
-            <option value="">Loading...</option>
-          </select>
-        </div>
-        <div class="search-filter">
-          <input type="text" id="campusAttSearch" placeholder="Search by name or date...">
-          <select id="campusAttCollegeFilter"><option value="">All Colleges</option></select>
-          <select id="campusAttPositionFilter">
-            <option value="">All Positions</option>
-            <option>Instructor</option>
-            <option>Assistant Professor</option>
-            <option>Associate Professor</option>
-            <option>Professor</option>
-            <option>Dean</option>
-            <option>HR Staff</option>
-            <option>Vice President</option>
-            <option>President</option>
-          </select>
-          <select id="campusAttEmploymentFilter">
-            <option value="">All Employment</option>
-            <option>Full-Time</option>
-            <option>Part-Time</option>
-            <option>Regular</option>
-            <option>Probationary</option>
-          </select>
-          <select id="campusAttSessionFilter" style="margin-left:auto">
-            <option value="">All Sessions</option>
-            <option value="Morning">Morning</option>
-            <option value="Afternoon">Afternoon</option>
-          </select>
-          <select id="campusAttStatusFilter">
-            <option value="">All Status</option>
-            <option value="Present">Present</option>
-            <option value="Late">Late</option>
-            <option value="Absent">Absent</option>
-          </select>
-          <button id="campusAttRefreshBtn" onclick="syncCampusAttendance()" style="padding:6px 14px;border:none;border-radius:6px;background:var(--spc-maroon);color:#fff;font-weight:600;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:5px;"><i class='bx bx-refresh'></i> Refresh</button>
-        </div>
+      <div id="campusattendance" class="tab-content" style="padding:16px;">
+        <!-- Hidden per-tab semester select (synced from global) -->
+        <select id="campusAttSemesterSelect" style="display:none"><option value="">Loading...</option></select>
         <div class="hr-pagination-controls">
           <button id="prevPageCampusAtt" class="hr-pagination-btn">‹</button>
           <span id="pageInfoCampusAtt">0 records</span>
@@ -165,38 +175,22 @@
             </tbody>
           </table>
         </div>
+        <!-- Biometric Controls for Campus Attendance -->
+        <div id="campusAttControlsContainer" style="border-top:1px solid #e5e7eb;margin-top:14px;padding-top:12px;display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
+          <button class="rfid-btn" id="biometricBtn"><i class='bx bx-fingerprint'></i><span id="biometricBtnText">Start Biometric Reader</span></button>
+          <div class="rfid-status" id="biometricStatus">
+            <span class="status-indicator" id="biometricStatusIndicator"></span>
+            <span id="biometricStatusText">Biometric Offline</span>
+          </div>
+          <button class="edit-time-btn" id="editCampusTimeBtn"><i class='bx bx-time'></i><span id="editCampusTimeBtnText">Edit Time In/Out</span></button>
+          <button id="campusAttRefreshBtn" onclick="syncCampusAttendance()" style="margin-left:auto;padding:7px 14px;border:none;border-radius:7px;background:var(--spc-maroon);color:#fff;font-weight:600;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:5px;"><i class='bx bx-refresh'></i> Refresh</button>
+        </div>
       </div>
 
       <!-- View Classes Tab -->
-      <div id="classes" class="tab-content">
-        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px">
-          <label for="classesSemesterSelect" style="font-size:13px;color:var(--muted);white-space:nowrap">Semester:</label>
-          <select id="classesSemesterSelect" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:var(--card);color:var(--text);cursor:pointer;min-width:220px">
-            <option value="">Loading...</option>
-          </select>
-        </div>
-        <div class="search-filter">
-          <input type="text" id="facultySearch" placeholder="Search faculty...">
-          <select id="classesCollegeFilter"><option value="">All Colleges</option></select>
-          <select id="classesPositionFilter">
-            <option value="">All Positions</option>
-            <option>Instructor</option>
-            <option>Assistant Professor</option>
-            <option>Associate Professor</option>
-            <option>Professor</option>
-            <option>Dean</option>
-            <option>HR Staff</option>
-            <option>Vice President</option>
-            <option>President</option>
-          </select>
-          <select id="classesEmploymentFilter">
-            <option value="">All Employment</option>
-            <option>Full-Time</option>
-            <option>Part-Time</option>
-            <option>Regular</option>
-            <option>Probationary</option>
-          </select>
-        </div>
+      <div id="classes" class="tab-content" style="padding:16px;">
+        <!-- Hidden per-tab semester select (synced from global) -->
+        <select id="classesSemesterSelect" style="display:none"><option value="">Loading...</option></select>
         <div class="hr-pagination-controls">
           <button id="prevPageClasses" class="hr-pagination-btn">‹</button>
           <span id="pageInfoClasses">0 records</span>
@@ -224,13 +218,9 @@
       </div>
 
       <!-- Attendance Logs Tab (RFID + Biometric) -->
-      <div id="attendancelogs" class="tab-content">
-        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px">
-          <label for="attendanceLogsSemesterSelect" style="font-size:13px;color:var(--muted);white-space:nowrap">Semester:</label>
-          <select id="attendanceLogsSemesterSelect" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:var(--card);color:var(--text);cursor:pointer;min-width:220px">
-            <option value="">Loading...</option>
-          </select>
-        </div>
+      <div id="attendancelogs" class="tab-content" style="padding:16px;">
+        <!-- Hidden per-tab semester select (synced from global) -->
+        <select id="attendanceLogsSemesterSelect" style="display:none"><option value="">Loading...</option></select>
         <!-- Sub-tabs -->
         <div class="attendance-sub-tabs">
           <div class="attendance-sub-tab active" data-subtab="sub-rfidlogs">RFID Logs</div>
@@ -239,28 +229,6 @@
 
         <!-- RFID Logs sub-content -->
         <div id="sub-rfidlogs" class="sub-tab-content active">
-          <div class="search-filter">
-            <input type="text" id="rfidLogSearch" placeholder="Search by name, remarks, or date...">
-            <select id="rfidCollegeFilter"><option value="">All Colleges</option></select>
-            <select id="rfidPositionFilter">
-              <option value="">All Positions</option>
-              <option>Instructor</option>
-              <option>Assistant Professor</option>
-              <option>Associate Professor</option>
-              <option>Professor</option>
-              <option>Dean</option>
-              <option>HR Staff</option>
-              <option>Vice President</option>
-              <option>President</option>
-            </select>
-            <select id="rfidEmploymentFilter">
-              <option value="">All Employment</option>
-              <option>Full-Time</option>
-              <option>Part-Time</option>
-              <option>Regular</option>
-              <option>Probationary</option>
-            </select>
-          </div>
           <div class="hr-pagination-controls">
             <button id="prevPageRfidLogs" class="hr-pagination-btn">‹</button>
             <span id="pageInfoRfidLogs">0 records</span>
@@ -291,28 +259,6 @@
 
         <!-- Biometric Logs sub-content -->
         <div id="sub-campusentry" class="sub-tab-content">
-          <div class="search-filter">
-            <input type="text" id="campusEntrySearch" placeholder="Search by name, remarks, or date...">
-            <select id="campusCollegeFilter"><option value="">All Colleges</option></select>
-            <select id="campusPositionFilter">
-              <option value="">All Positions</option>
-              <option>Instructor</option>
-              <option>Assistant Professor</option>
-              <option>Associate Professor</option>
-              <option>Professor</option>
-              <option>Dean</option>
-              <option>HR Staff</option>
-              <option>Vice President</option>
-              <option>President</option>
-            </select>
-            <select id="campusEmploymentFilter">
-              <option value="">All Employment</option>
-              <option>Full-Time</option>
-              <option>Part-Time</option>
-              <option>Regular</option>
-              <option>Probationary</option>
-            </select>
-          </div>
           <div class="hr-pagination-controls">
             <button id="prevPageCampusEntry" class="hr-pagination-btn">‹</button>
             <span id="pageInfoCampusEntry">0 records</span>
@@ -340,112 +286,108 @@
             </table>
           </div>
         </div>
+
+        <!-- Edit Remarks for RFID Logs -->
+        <div id="rfidEditControlsContainer" style="display: none;">
+          <div class="rfid-controls">
+            <button class="edit-remarks-btn" id="editRemarksBtn">
+              <i class='bx bx-edit-alt'></i>
+              <span id="editRemarksBtnText">Edit Remarks</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Edit Remarks for Biometric Logs -->
+        <div id="campusEntryEditControlsContainer" style="display: none;">
+          <div class="rfid-controls">
+            <button class="edit-remarks-btn" id="editBiometricRemarksBtn">
+              <i class='bx bx-edit-alt'></i>
+              <span id="editBiometricRemarksBtnText">Edit Remarks</span>
+            </button>
+          </div>
+        </div>
+
       </div>
 
       <!-- Analytics Tab -->
-      <div id="analytics" class="tab-content">
+      <div id="analytics" class="tab-content" style="padding:16px;">
 
-          <!-- Semester selector -->
-        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:18px">
-          <label for="analyticsSemesterSelect" style="font-size:13px;color:var(--muted);white-space:nowrap">Semester:</label>
-          <select id="analyticsSemesterSelect" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:var(--card);color:var(--text);cursor:pointer">
-            <option value="">Loading…</option>
-          </select>
+        <!-- Hidden per-tab semester select (synced from global) -->
+        <select id="analyticsSemesterSelect" style="display:none"><option value="">Loading…</option></select>
+
+        <!-- Top-level analytics mini-tabs -->
+        <div class="attendance-sub-tabs">
+          <div class="attendance-sub-tab active" data-subtab="sub-analytics-class">Class Attendance</div>
+          <div class="attendance-sub-tab" data-subtab="sub-analytics-campus">Campus Attendance</div>
         </div>
 
-        <!-- Analytics KPI Cards -->
-        <div class="kpis" style="margin-bottom:20px">
-          <div class="kpi card" style="gap:14px">
-            <div class="icon fac"><i class='bx bx-trending-up'></i></div>
-            <div>
-              <div class="title">Avg. Attendance Rate</div>
-              <div class="value" id="an-kpi-rate">—</div>
-            </div>
-          </div>
-          <div class="kpi card" style="gap:14px">
-            <div class="icon eval"><i class='bx bx-check-circle'></i></div>
-            <div>
-              <div class="title">Total Present</div>
-              <div class="value" id="an-kpi-present">—</div>
-            </div>
-          </div>
-          <div class="kpi card" style="gap:14px">
-            <div class="icon promo"><i class='bx bx-time'></i></div>
-            <div>
-              <div class="title">Total Late</div>
-              <div class="value" id="an-kpi-late">—</div>
-            </div>
-          </div>
-          <div class="kpi card" style="gap:14px">
-            <div class="icon att"><i class='bx bx-x-circle'></i></div>
-            <div>
-              <div class="title">Total Absent</div>
-              <div class="value" id="an-kpi-absent">—</div>
-            </div>
-          </div>
-          <div class="kpi card" style="gap:14px">
-            <div class="icon" style="background:#ede9fe"><i class='bx bx-calendar-x' style="color:#7c3aed"></i></div>
-            <div>
-              <div class="title">Total Excused</div>
-              <div class="value" id="an-kpi-excused">—</div>
-            </div>
-          </div>
-        </div>
+        <!-- ── Class Attendance sub-content ─────────────────────── -->
+        <div id="sub-analytics-class" class="sub-tab-content active">
 
-        <!-- Charts Row -->
-        <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:20px">
-
-          <!-- Trend Chart -->
-          <div class="card" style="padding:14px">
-            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Attendance Trends by Week</div>
-            <div style="position:relative;height:340px">
-              <canvas id="analyticsTrendChart"></canvas>
+          <!-- Class KPI Cards -->
+          <div class="kpis" style="margin-bottom:20px">
+            <div class="kpi card" style="gap:14px">
+              <div class="icon fac"><i class='bx bx-trending-up'></i></div>
+              <div>
+                <div class="title">Avg. Attendance Rate</div>
+                <div class="value" id="an-kpi-rate">—</div>
+              </div>
+            </div>
+            <div class="kpi card" style="gap:14px">
+              <div class="icon eval"><i class='bx bx-check-circle'></i></div>
+              <div>
+                <div class="title">Total Present</div>
+                <div class="value" id="an-kpi-present">—</div>
+              </div>
+            </div>
+            <div class="kpi card" style="gap:14px">
+              <div class="icon promo"><i class='bx bx-time'></i></div>
+              <div>
+                <div class="title">Total Late</div>
+                <div class="value" id="an-kpi-late">—</div>
+              </div>
+            </div>
+            <div class="kpi card" style="gap:14px">
+              <div class="icon att"><i class='bx bx-x-circle'></i></div>
+              <div>
+                <div class="title">Total Absent</div>
+                <div class="value" id="an-kpi-absent">—</div>
+              </div>
+            </div>
+            <div class="kpi card" style="gap:14px">
+              <div class="icon" style="background:#ede9fe"><i class='bx bx-calendar-x' style="color:#7c3aed"></i></div>
+              <div>
+                <div class="title">Total Excused</div>
+                <div class="value" id="an-kpi-excused">—</div>
+              </div>
             </div>
           </div>
 
-          <!-- Distribution Doughnut -->
-          <div class="card" style="padding:14px;display:flex;flex-direction:column;align-items:center">
-            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;align-self:flex-start">Status Distribution</div>
-            <div style="position:relative;height:280px;width:100%">
-              <canvas id="analyticsDistChart"></canvas>
+          <!-- Class Charts Row -->
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:20px">
+            <div class="card" style="padding:14px">
+              <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Attendance Trends by Week</div>
+              <div style="position:relative;height:340px">
+                <canvas id="analyticsTrendChart"></canvas>
+              </div>
             </div>
-            <div id="analyticsDistLegend" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center"></div>
+            <div class="card" style="padding:14px;display:flex;flex-direction:column;align-items:center">
+              <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;align-self:flex-start">Status Distribution</div>
+              <div style="position:relative;height:280px;width:100%">
+                <canvas id="analyticsDistChart"></canvas>
+              </div>
+              <div id="analyticsDistLegend" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center"></div>
+            </div>
           </div>
 
-        </div>
-
-        <!-- Breakdown Sub-tabs -->
-        <div>
+          <!-- Class breakdown inner sub-tabs -->
           <div class="analytics-sub-tabs">
             <div class="analytics-sub-tab active" data-analyticssubtab="sub-classbreakdown">Class Attendance</div>
             <div class="analytics-sub-tab" data-analyticssubtab="sub-facultybreakdown">Total Class Attendance</div>
-            <div class="analytics-sub-tab" data-analyticssubtab="sub-campusattanalytics">Campus Attendance</div>
           </div>
 
           <!-- Class Breakdown sub-content -->
           <div id="sub-classbreakdown" class="analytics-sub-content active">
-            <div class="search-filter">
-              <input type="text" id="breakdownSearch" placeholder="Search by name, subject, or section…">
-              <select id="bdCollegeFilter"><option value="">All Colleges</option></select>
-              <select id="bdPositionFilter">
-                <option value="">All Positions</option>
-                <option>Instructor</option>
-                <option>Assistant Professor</option>
-                <option>Associate Professor</option>
-                <option>Professor</option>
-                <option>Dean</option>
-                <option>HR Staff</option>
-                <option>Vice President</option>
-                <option>President</option>
-              </select>
-              <select id="bdEmploymentFilter">
-                <option value="">All Employment</option>
-                <option>Full Time</option>
-                <option>Part Time</option>
-                <option>Regular</option>
-                <option>Probationary</option>
-              </select>
-            </div>
             <div class="hr-pagination-controls">
               <button id="breakdownPrev" class="hr-pagination-btn">‹</button>
               <span id="breakdownPageInfo">0 records</span>
@@ -488,28 +430,6 @@
 
           <!-- Faculty Breakdown sub-content -->
           <div id="sub-facultybreakdown" class="analytics-sub-content">
-            <div class="search-filter">
-              <input type="text" id="fbSearch" placeholder="Search by faculty name…">
-              <select id="fbCollegeFilter"><option value="">All Colleges</option></select>
-              <select id="fbPositionFilter">
-                <option value="">All Positions</option>
-                <option>Instructor</option>
-                <option>Assistant Professor</option>
-                <option>Associate Professor</option>
-                <option>Professor</option>
-                <option>Dean</option>
-                <option>HR Staff</option>
-                <option>Vice President</option>
-                <option>President</option>
-              </select>
-              <select id="fbEmploymentFilter">
-                <option value="">All Employment</option>
-                <option>Full Time</option>
-                <option>Part Time</option>
-                <option>Regular</option>
-                <option>Probationary</option>
-              </select>
-            </div>
             <div class="hr-pagination-controls">
               <button id="fbPrev" class="hr-pagination-btn">‹</button>
               <span id="fbPageInfo">0 records</span>
@@ -548,144 +468,116 @@
             </div>
           </div>
 
-          <!-- Campus Attendance sub-content -->
-          <div id="sub-campusattanalytics" class="analytics-sub-content">
-            <div class="search-filter">
-              <input type="text" id="caSearch" placeholder="Search by faculty name…">
-              <select id="caCollegeFilter"><option value="">All Colleges</option></select>
-              <select id="caPositionFilter">
-                <option value="">All Positions</option>
-                <option>Instructor</option>
-                <option>Assistant Professor</option>
-                <option>Associate Professor</option>
-                <option>Professor</option>
-                <option>Dean</option>
-                <option>HR Staff</option>
-                <option>Vice President</option>
-                <option>President</option>
-              </select>
-              <select id="caEmploymentFilter">
-                <option value="">All Employment</option>
-                <option>Full-Time</option>
-                <option>Part-Time</option>
-                <option>Regular</option>
-                <option>Probationary</option>
-              </select>
+        </div><!-- /sub-analytics-class -->
+
+        <!-- ── Campus Attendance sub-content ────────────────────── -->
+        <div id="sub-analytics-campus" class="sub-tab-content">
+
+          <!-- Campus KPI Cards -->
+          <div class="kpis" style="margin-bottom:20px">
+            <div class="kpi card" style="gap:14px">
+              <div class="icon fac"><i class='bx bx-trending-up'></i></div>
+              <div>
+                <div class="title">Avg. Attendance Rate</div>
+                <div class="value" id="hr-ca-kpi-rate">—</div>
+              </div>
             </div>
-            <div class="hr-pagination-controls">
-              <button id="caPrev" class="hr-pagination-btn">‹</button>
-              <span id="caPageInfo">0 records</span>
-              <button id="caNext" class="hr-pagination-btn">›</button>
+            <div class="kpi card" style="gap:14px">
+              <div class="icon eval"><i class='bx bx-check-circle'></i></div>
+              <div>
+                <div class="title">Total Present</div>
+                <div class="value" id="hr-ca-kpi-present">—</div>
+              </div>
             </div>
-            <div class="table">
-              <table class="hr-attendance-table" id="caTable">
-                <colgroup>
-                  <col style="width:17%">
-                  <col style="width:8%">
-                  <col style="width:8%">
-                  <col style="width:8%">
-                  <col style="width:8%">
-                  <col style="width:8%">
-                  <col style="width:8%">
-                  <col style="width:8%">
-                  <col style="width:8%">
-                  <col style="width:7%">
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th rowspan="2" style="cursor:pointer;vertical-align:middle" data-sort-ca="faculty_name">Faculty <span class="ca-sort-icon">↕</span></th>
-                    <th colspan="3" style="text-align:center;border-bottom:1px solid #e5e7eb">Morning</th>
-                    <th colspan="3" style="text-align:center;border-bottom:1px solid #e5e7eb">Afternoon</th>
-                    <th colspan="2" style="text-align:center;border-bottom:1px solid #e5e7eb">Overall</th>
-                    <th rowspan="2" style="text-align:center;vertical-align:middle">Report</th>
-                  </tr>
-                  <tr>
-                    <th style="text-align:center;cursor:pointer;font-weight:500" data-sort-ca="morning_present">Present <span class="ca-sort-icon">↕</span></th>
-                    <th style="text-align:center;cursor:pointer;font-weight:500" data-sort-ca="morning_late">Late <span class="ca-sort-icon">↕</span></th>
-                    <th style="text-align:center;cursor:pointer;font-weight:500" data-sort-ca="morning_absent">Absent <span class="ca-sort-icon">↕</span></th>
-                    <th style="text-align:center;cursor:pointer;font-weight:500" data-sort-ca="afternoon_present">Present <span class="ca-sort-icon">↕</span></th>
-                    <th style="text-align:center;cursor:pointer;font-weight:500" data-sort-ca="afternoon_late">Late <span class="ca-sort-icon">↕</span></th>
-                    <th style="text-align:center;cursor:pointer;font-weight:500" data-sort-ca="afternoon_absent">Absent <span class="ca-sort-icon">↕</span></th>
-                    <th style="text-align:center;cursor:pointer;font-weight:500" data-sort-ca="total_sessions">Sessions <span class="ca-sort-icon">↕</span></th>
-                    <th style="text-align:center;cursor:pointer;font-weight:500" data-sort-ca="rate">Rate <span class="ca-sort-icon">↕</span></th>
-                  </tr>
-                </thead>
-                <tbody id="caBody">
-                  <tr><td colspan="10" style="text-align:center;padding:2rem;color:#6b7280">Select a semester to view campus attendance</td></tr>
-                </tbody>
-              </table>
+            <div class="kpi card" style="gap:14px">
+              <div class="icon promo"><i class='bx bx-time'></i></div>
+              <div>
+                <div class="title">Total Late</div>
+                <div class="value" id="hr-ca-kpi-late">—</div>
+              </div>
+            </div>
+            <div class="kpi card" style="gap:14px">
+              <div class="icon att"><i class='bx bx-x-circle'></i></div>
+              <div>
+                <div class="title">Total Absent</div>
+                <div class="value" id="hr-ca-kpi-absent">—</div>
+              </div>
+            </div>
+            <div class="kpi card" style="gap:14px">
+              <div class="icon" style="background:#ede9fe"><i class='bx bx-calendar-x' style="color:#7c3aed"></i></div>
+              <div>
+                <div class="title">Total Excused</div>
+                <div class="value" id="hr-ca-kpi-excused">—</div>
+              </div>
             </div>
           </div>
 
-        </div>
-
-      </div>
-
-      <!-- Reader Controls - Only visible on All Faculty Logs (Class Attendance) -->
-      <div id="readerControlsContainer">
-        <div class="rfid-controls">
-          <button class="rfid-btn" id="rfidBtn">
-            <i class='bx bx-power-off'></i>
-            <span id="rfidBtnText">Start RFID Reader</span>
-          </button>
-          <div class="rfid-status" id="rfidStatus">
-            <span class="status-indicator" id="statusIndicator"></span>
-            <span id="statusText">Reader Offline</span>
+          <!-- Campus Charts Row -->
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:20px">
+            <div class="card" style="padding:14px">
+              <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Campus Attendance Trends</div>
+              <div style="position:relative;height:340px">
+                <canvas id="hrCaTrendChart"></canvas>
+              </div>
+            </div>
+            <div class="card" style="padding:14px;display:flex;flex-direction:column;align-items:center">
+              <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;align-self:flex-start">Status Distribution</div>
+              <div style="position:relative;height:280px;width:100%">
+                <canvas id="hrCaDistChart"></canvas>
+              </div>
+              <div id="hrCaDistLegend" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center"></div>
+            </div>
           </div>
-        </div>
-        <div class="rfid-controls" style="margin-top: 10px;">
-          <button class="edit-time-btn" id="editTimeBtn" style="display: none;">
-            <i class='bx bx-time'></i>
-            <span id="editTimeBtnText">Edit Time In/Out</span>
-          </button>
-        </div>
-        <div class="rfid-controls" style="margin-top: 10px;">
-          <button class="edit-time-btn" id="openExcuseModalBtn" onclick="openExcuseModal()" style="background:#6b7280">
-            <i class='bx bx-calendar-x'></i>
-            Excuse Absence
-          </button>
-        </div>
-      </div>
 
-      <!-- Campus Attendance Controls - Only visible on Campus Attendance tab -->
-      <div id="campusAttControlsContainer" style="display: none;">
-        <div class="rfid-controls">
-          <button class="rfid-btn" id="biometricBtn">
-            <i class='bx bx-fingerprint'></i>
-            <span id="biometricBtnText">Start Biometric Reader</span>
-          </button>
-          <div class="rfid-status" id="biometricStatus">
-            <span class="status-indicator" id="biometricStatusIndicator"></span>
-            <span id="biometricStatusText">Biometric Offline</span>
+          <!-- Campus Faculty Breakdown -->
+          <div class="hr-pagination-controls">
+            <button id="caPrev" class="hr-pagination-btn">‹</button>
+            <span id="caPageInfo">0 records</span>
+            <button id="caNext" class="hr-pagination-btn">›</button>
           </div>
-        </div>
-        <div class="rfid-controls" style="margin-top: 10px;">
-          <button class="edit-time-btn" id="editCampusTimeBtn">
-            <i class='bx bx-time'></i>
-            <span id="editCampusTimeBtnText">Edit Time In/Out</span>
-          </button>
-        </div>
+          <div class="table">
+            <table class="hr-attendance-table" id="caTable">
+              <colgroup>
+                <col style="width:17%">
+                <col style="width:8%">
+                <col style="width:8%">
+                <col style="width:8%">
+                <col style="width:8%">
+                <col style="width:8%">
+                <col style="width:8%">
+                <col style="width:8%">
+                <col style="width:8%">
+                <col style="width:7%">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th rowspan="2" style="cursor:pointer;vertical-align:middle" data-sort-ca="faculty_name">Faculty <span class="ca-sort-icon">↕</span></th>
+                  <th colspan="3" style="text-align:center;border-bottom:1px solid #e5e7eb">Morning</th>
+                  <th colspan="3" style="text-align:center;border-bottom:1px solid #e5e7eb">Afternoon</th>
+                  <th colspan="2" style="text-align:center;border-bottom:1px solid #e5e7eb">Overall</th>
+                  <th rowspan="2" style="text-align:center;vertical-align:middle">Report</th>
+                </tr>
+                <tr>
+                  <th style="text-align:center;cursor:pointer;font-weight:500" data-sort-ca="morning_present">Present <span class="ca-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer;font-weight:500" data-sort-ca="morning_late">Late <span class="ca-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer;font-weight:500" data-sort-ca="morning_absent">Absent <span class="ca-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer;font-weight:500" data-sort-ca="afternoon_present">Present <span class="ca-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer;font-weight:500" data-sort-ca="afternoon_late">Late <span class="ca-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer;font-weight:500" data-sort-ca="afternoon_absent">Absent <span class="ca-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer;font-weight:500" data-sort-ca="total_sessions">Sessions <span class="ca-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer;font-weight:500" data-sort-ca="rate">Rate <span class="ca-sort-icon">↕</span></th>
+                </tr>
+              </thead>
+              <tbody id="caBody">
+                <tr><td colspan="10" style="text-align:center;padding:2rem;color:#6b7280">Select a semester to view campus attendance</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div><!-- /sub-analytics-campus -->
+
       </div>
 
-      <!-- Edit Remarks for RFID Logs -->
-      <div id="rfidEditControlsContainer" style="display: none;">
-        <div class="rfid-controls">
-          <button class="edit-remarks-btn" id="editRemarksBtn">
-            <i class='bx bx-edit-alt'></i>
-            <span id="editRemarksBtnText">Edit Remarks</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Edit Remarks for Campus Entry -->
-      <div id="campusEntryEditControlsContainer" style="display: none;">
-        <div class="rfid-controls">
-          <button class="edit-remarks-btn" id="editBiometricRemarksBtn">
-            <i class='bx bx-edit-alt'></i>
-            <span id="editBiometricRemarksBtnText">Edit Remarks</span>
-          </button>
-        </div>
-      </div>
     </div>
   </div>
 </section>
@@ -802,6 +694,44 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<style>
+/* ── Page-level Attendance Tabs (matches evaluations design) ── */
+.eval-page-tab {
+  padding: 12px 20px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 3px solid transparent;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.eval-page-tab:hover {
+  color: var(--spc-maroon);
+  background: rgba(123,17,19,0.03);
+}
+.eval-page-tab.active {
+  color: var(--spc-maroon);
+  border-bottom-color: var(--spc-maroon);
+  background: #fff;
+}
+/* Table header styling to match evaluations */
+.hr-attendance-main thead th {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--muted);
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  z-index: 1;
+}
+</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 <script>
   let facultyForExcuse = [];
@@ -1027,21 +957,15 @@
   let isEditingCampusTime = false;
   let campusTimeEditData = new Map();
 
-  document.querySelectorAll('.hr-attendance-main .tab').forEach(btn => {
+  document.querySelectorAll('.hr-attendance-main .eval-page-tab').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.hr-attendance-main .tab').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.hr-attendance-main .eval-page-tab').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       btn.classList.add('active');
       document.getElementById(btn.dataset.tab).classList.add('active');
 
-      const readerControlsContainer = document.getElementById('readerControlsContainer');
-      const campusAttControlsContainer = document.getElementById('campusAttControlsContainer');
-      const rfidEditControlsContainer = document.getElementById('rfidEditControlsContainer');
-      const campusEntryEditControlsContainer = document.getElementById('campusEntryEditControlsContainer');
       const editTimeBtn = document.getElementById('editTimeBtn');
       const editCampusTimeBtn = document.getElementById('editCampusTimeBtn');
-      const editRemarksBtn = document.getElementById('editRemarksBtn');
-      const editBiometricRemarksBtn = document.getElementById('editBiometricRemarksBtn');
 
       // Reset all editing states when switching tabs
       isEditingRemarks = false;
@@ -1054,9 +978,12 @@
       biometricRemarksEditData.clear();
 
       // Reset button appearances
-      editRemarksBtn.classList.remove('active');
-      document.getElementById('editRemarksBtnText').textContent = 'Edit Remarks';
-      editRemarksBtn.querySelector('i').className = 'bx bx-edit-alt';
+      const editRemarksBtn = document.getElementById('editRemarksBtn');
+      if (editRemarksBtn) {
+        editRemarksBtn.classList.remove('active');
+        document.getElementById('editRemarksBtnText').textContent = 'Edit Remarks';
+        editRemarksBtn.querySelector('i').className = 'bx bx-edit-alt';
+      }
 
       editTimeBtn.classList.remove('active');
       document.getElementById('editTimeBtnText').textContent = 'Edit Time In/Out';
@@ -1066,35 +993,23 @@
       document.getElementById('editCampusTimeBtnText').textContent = 'Edit Time In/Out';
       editCampusTimeBtn.querySelector('i').className = 'bx bx-time';
 
-      editBiometricRemarksBtn.classList.remove('active');
-      document.getElementById('editBiometricRemarksBtnText').textContent = 'Edit Remarks';
-      editBiometricRemarksBtn.querySelector('i').className = 'bx bx-edit-alt';
+      const editBiometricRemarksBtn = document.getElementById('editBiometricRemarksBtn');
+      if (editBiometricRemarksBtn) {
+        editBiometricRemarksBtn.classList.remove('active');
+        document.getElementById('editBiometricRemarksBtnText').textContent = 'Edit Remarks';
+        editBiometricRemarksBtn.querySelector('i').className = 'bx bx-edit-alt';
+      }
 
       if (btn.dataset.tab === 'logs') {
-        // All Faculty Logs - Show reader controls, Edit Time button, and Excuse Absence
-        readerControlsContainer.style.display = 'block';
-        campusAttControlsContainer.style.display = 'none';
-        rfidEditControlsContainer.style.display = 'none';
-        campusEntryEditControlsContainer.style.display = 'none';
         editTimeBtn.style.display = 'flex';
         renderLogs();
       } else if (btn.dataset.tab === 'campusattendance') {
-        // Campus Attendance - Show biometric + edit time
-        readerControlsContainer.style.display = 'none';
-        campusAttControlsContainer.style.display = 'block';
-        rfidEditControlsContainer.style.display = 'none';
-        campusEntryEditControlsContainer.style.display = 'none';
         fetchCampusAttendance(document.getElementById('campusAttSemesterSelect')?.value);
       } else if (btn.dataset.tab === 'classes') {
-        // View Classes - No buttons
-        readerControlsContainer.style.display = 'none';
-        campusAttControlsContainer.style.display = 'none';
-        rfidEditControlsContainer.style.display = 'none';
-        campusEntryEditControlsContainer.style.display = 'none';
+        renderFacultyList();
       } else if (btn.dataset.tab === 'attendancelogs') {
-        // Attendance Logs - show controls based on active sub-tab
-        readerControlsContainer.style.display = 'none';
-        campusAttControlsContainer.style.display = 'none';
+        const rfidEditControlsContainer = document.getElementById('rfidEditControlsContainer');
+        const campusEntryEditControlsContainer = document.getElementById('campusEntryEditControlsContainer');
         const activeSubTab = document.querySelector('#attendancelogs .attendance-sub-tab.active');
         if (activeSubTab && activeSubTab.dataset.subtab === 'sub-campusentry') {
           rfidEditControlsContainer.style.display = 'none';
@@ -1106,11 +1021,6 @@
           renderRFIDLogs();
         }
       } else if (btn.dataset.tab === 'analytics') {
-        // Analytics - Hide all controls
-        readerControlsContainer.style.display = 'none';
-        campusAttControlsContainer.style.display = 'none';
-        rfidEditControlsContainer.style.display = 'none';
-        campusEntryEditControlsContainer.style.display = 'none';
         if (!analyticsLoaded) {
           loadAnalyticsSemesters();
           analyticsLoaded = true;
@@ -1120,10 +1030,10 @@
   });
 
   // Sub-tab switching inside Attendance Logs
-  document.querySelectorAll('.attendance-sub-tab').forEach(subBtn => {
+  document.querySelectorAll('#attendancelogs .attendance-sub-tab').forEach(subBtn => {
     subBtn.addEventListener('click', () => {
-      document.querySelectorAll('.attendance-sub-tab').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.sub-tab-content').forEach(c => c.classList.remove('active'));
+      document.querySelectorAll('#attendancelogs .attendance-sub-tab').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('#attendancelogs .sub-tab-content').forEach(c => c.classList.remove('active'));
       subBtn.classList.add('active');
       document.getElementById(subBtn.dataset.subtab).classList.add('active');
 
@@ -1394,9 +1304,8 @@
   let filteredFaculty = [];
 
   const COLLEGE_FILTER_IDS = [
-    'logCollegeFilter', 'classesCollegeFilter',
-    'rfidCollegeFilter', 'campusCollegeFilter', 'bdCollegeFilter',
-    'campusAttCollegeFilter', 'fbCollegeFilter', 'caCollegeFilter'
+    'globalCollegeFilter',
+    'excuseCollegeFilter'
   ];
 
   async function fetchAndPopulateAllColleges() {
@@ -1534,12 +1443,12 @@
   function renderLogs() {
     const tbody = document.getElementById('logsBody');
     tbody.innerHTML = '';
-    
-    let search = document.getElementById('logSearch').value.toLowerCase();
-    let filter = document.getElementById('logFilter').value;
-    let collegeFilter = document.getElementById('logCollegeFilter').value;
-    let positionFilter = document.getElementById('logPositionFilter').value;
-    let employmentFilter = document.getElementById('logEmploymentFilter').value;
+
+    let search = (document.getElementById('globalFacultySearch')?.value || '').toLowerCase();
+    let filter = document.getElementById('globalStatusFilter')?.value || '';
+    let collegeFilter = document.getElementById('globalCollegeFilter')?.value || '';
+    let positionFilter = document.getElementById('globalPositionFilter')?.value || '';
+    let employmentFilter = document.getElementById('globalEmploymentFilter')?.value || '';
 
     filteredLogs = facultyLogs.filter(f => {
         const searchMatch = !search ||
@@ -1547,7 +1456,9 @@
             f.date.includes(search) ||
             (f.class_name && f.class_name.toLowerCase().includes(search)) ||
             (f.class_section && f.class_section.toLowerCase().includes(search)) ||
-            (f.room && f.room.toLowerCase().includes(search));
+            (f.room && f.room.toLowerCase().includes(search)) ||
+            (f.status && f.status.toLowerCase().includes(search)) ||
+            (f.college && f.college.toLowerCase().includes(search));
         const filterMatch = !filter || f.status === filter;
         const collegeMatch = !collegeFilter || f.college === collegeFilter;
         const positionMatch = !positionFilter || f.position === positionFilter;
@@ -1752,8 +1663,6 @@
                     btn.classList.remove('active');
                     btnText.textContent = 'Edit Time In/Out';
                     btnIcon.className = 'bx bx-time';
-                    document.getElementById('logFilter').value = '';
-
                     await fetchFacultyAttendance(document.getElementById('logsSemesterSelect')?.value);
 
                 } else {
@@ -1844,16 +1753,16 @@
   function renderFacultyList(){
     const tbody = document.getElementById('facultyBody');
     tbody.innerHTML='';
-    let search = document.getElementById('facultySearch').value.toLowerCase();
-    
+    let search = (document.getElementById('globalFacultySearch')?.value || '').toLowerCase();
+
     if (facultyList.length === 0) {
       tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 2rem; color: #6b7280;">Loading faculty list...</td></tr>';
       return;
     }
-    
-    let classesCollegeFilter = document.getElementById('classesCollegeFilter').value;
-    let classesPositionFilter = document.getElementById('classesPositionFilter').value;
-    let classesEmploymentFilter = document.getElementById('classesEmploymentFilter').value;
+
+    let classesCollegeFilter = document.getElementById('globalCollegeFilter')?.value || '';
+    let classesPositionFilter = document.getElementById('globalPositionFilter')?.value || '';
+    let classesEmploymentFilter = document.getElementById('globalEmploymentFilter')?.value || '';
 
     filteredFaculty = facultyList.filter(f => {
       const searchMatch = !search ||
@@ -2099,19 +2008,8 @@
   }
 
   document.getElementById('closeModal').addEventListener('click',()=>document.getElementById('classModal').classList.remove('active'));
-  document.getElementById('facultySearch').addEventListener('input', () => {
-    currentPageClasses = 1; 
-    renderFacultyList();
-  });
+  // (search/filter listeners are now global — see globalFacultySearch listener)
 
-  document.getElementById('logSearch').addEventListener('input', () => {
-    currentPage = 1; 
-    renderLogs();
-  });
-  document.getElementById('logFilter').addEventListener('change', () => {
-    currentPage = 1; 
-    renderLogs();
-  });
 
   document.getElementById('prevPage').addEventListener('click', () => {
     goToPage(currentPage - 1);
@@ -2170,7 +2068,7 @@
           onClick: (e, els) => {
             if(els.length){
               const label = breakdownChart.data.labels[els[0].index];
-              document.getElementById('logFilter').value = label;
+              document.getElementById('globalStatusFilter').value = label;
               currentPage = 1;
               renderLogs();
             }
@@ -2462,12 +2360,11 @@
   function renderRFIDLogs() {
     const tbody = document.getElementById('rfidLogsBody');
     tbody.innerHTML = '';
-    
-    let search = document.getElementById('rfidLogSearch').value.toLowerCase();
-    
-    let rfidCollegeFilter = document.getElementById('rfidCollegeFilter').value;
-    let rfidPositionFilter = document.getElementById('rfidPositionFilter').value;
-    let rfidEmploymentFilter = document.getElementById('rfidEmploymentFilter').value;
+
+    let search = (document.getElementById('globalFacultySearch')?.value || '').toLowerCase();
+    let rfidCollegeFilter = document.getElementById('globalCollegeFilter')?.value || '';
+    let rfidPositionFilter = document.getElementById('globalPositionFilter')?.value || '';
+    let rfidEmploymentFilter = document.getElementById('globalEmploymentFilter')?.value || '';
 
     filteredRfidLogs = rfidLogs.filter(log => {
         const searchMatch = !search ||
@@ -2563,10 +2460,6 @@
       }
   }
 
-  document.getElementById('rfidLogSearch').addEventListener('input', () => {
-      currentPageRfidLogs = 1;
-      renderRFIDLogs();
-  });
 
   document.getElementById('prevPageRfidLogs').addEventListener('click', () => {
       goToPageRfidLogs(currentPageRfidLogs - 1);
@@ -2608,7 +2501,7 @@
               currentPageCampusEntry = 1;
               renderCampusEntryLogs();
               // Also refresh campus attendance if that tab is active
-              const activeTab = document.querySelector('.hr-attendance-main .tab.active');
+              const activeTab = document.querySelector('.hr-attendance-main .eval-page-tab.active');
               if (activeTab && activeTab.dataset.tab === 'campusattendance') {
                 syncCampusAttendance();
               }
@@ -2626,11 +2519,10 @@
     const tbody = document.getElementById('campusEntryBody');
     tbody.innerHTML = '';
 
-    let search = document.getElementById('campusEntrySearch').value.toLowerCase();
-
-    let campusCollegeFilter = document.getElementById('campusCollegeFilter').value;
-    let campusPositionFilter = document.getElementById('campusPositionFilter').value;
-    let campusEmploymentFilter = document.getElementById('campusEmploymentFilter').value;
+    let search = (document.getElementById('globalFacultySearch')?.value || '').toLowerCase();
+    let campusCollegeFilter = document.getElementById('globalCollegeFilter')?.value || '';
+    let campusPositionFilter = document.getElementById('globalPositionFilter')?.value || '';
+    let campusEmploymentFilter = document.getElementById('globalEmploymentFilter')?.value || '';
 
     filteredBiometricLogs = biometricLogs.filter(log => {
         const searchMatch = !search ||
@@ -2726,10 +2618,6 @@
       }
   }
 
-  document.getElementById('campusEntrySearch').addEventListener('input', () => {
-      currentPageCampusEntry = 1;
-      renderCampusEntryLogs();
-  });
 
   // ==================== CAMPUS ATTENDANCE (SESSION-BASED) ====================
 
@@ -2788,17 +2676,21 @@
   }
 
   function renderCampusAttendance() {
-    const search      = document.getElementById('campusAttSearch').value.toLowerCase();
-    const collegeF    = document.getElementById('campusAttCollegeFilter').value;
-    const positionF   = document.getElementById('campusAttPositionFilter').value;
-    const employmentF = document.getElementById('campusAttEmploymentFilter').value;
-    const sessionF    = document.getElementById('campusAttSessionFilter').value;
-    const statusF     = document.getElementById('campusAttStatusFilter').value;
+    const search      = (document.getElementById('globalFacultySearch')?.value || '').toLowerCase();
+    const collegeF    = document.getElementById('globalCollegeFilter')?.value || '';
+    const positionF   = document.getElementById('globalPositionFilter')?.value || '';
+    const employmentF = document.getElementById('globalEmploymentFilter')?.value || '';
+    const sessionF    = document.getElementById('globalSessionFilter')?.value || '';
+    const statusF     = document.getElementById('globalStatusFilter')?.value || '';
 
     filteredCampusAtt = campusAttRecords.filter(r => {
       const searchMatch = !search ||
         r.name.toLowerCase().includes(search) ||
-        r.date.includes(search);
+        r.date.includes(search) ||
+        (r.session && r.session.toLowerCase().includes(search)) ||
+        (r.status && r.status.toLowerCase().includes(search)) ||
+        (r.employment_status && r.employment_status.toLowerCase().includes(search)) ||
+        (r.college && r.college.toLowerCase().includes(search));
       const collegeMatch    = !collegeF    || r.college           === collegeF;
       const positionMatch   = !positionF   || r.position          === positionF;
       const employmentMatch = !employmentF || r.employment_status === employmentF;
@@ -2883,20 +2775,7 @@
     nextBtn.disabled = currentPageCampusAtt >= totalPages || totalPages === 0;
   }
 
-  document.getElementById('campusAttSearch').addEventListener('input', () => {
-    currentPageCampusAtt = 1; renderCampusAttendance();
-  });
-  document.getElementById('campusAttSessionFilter').addEventListener('change', () => {
-    currentPageCampusAtt = 1; renderCampusAttendance();
-  });
-  document.getElementById('campusAttStatusFilter').addEventListener('change', () => {
-    currentPageCampusAtt = 1; renderCampusAttendance();
-  });
-  ['campusAttCollegeFilter','campusAttPositionFilter','campusAttEmploymentFilter'].forEach(id => {
-    document.getElementById(id)?.addEventListener('change', () => {
-      currentPageCampusAtt = 1; renderCampusAttendance();
-    });
-  });
+  // Campus Att pagination only (filters are now global)
   document.getElementById('prevPageCampusAtt').addEventListener('click', () => {
     const totalPages = Math.ceil(filteredCampusAtt.length / recordsPerPage);
     if (currentPageCampusAtt > 1) { currentPageCampusAtt--; renderCampusAttendance(); }
@@ -3032,7 +2911,7 @@
       const currentId = data.current_semester_id ? String(data.current_semester_id) : null;
       const defaultId = currentId || (semesters.length > 0 ? String(semesters[0].id) : '');
 
-      ['logsSemesterSelect','campusAttSemesterSelect','classesSemesterSelect','attendanceLogsSemesterSelect'].forEach(selId => {
+      ['globalSemesterSelect','logsSemesterSelect','campusAttSemesterSelect','classesSemesterSelect','attendanceLogsSemesterSelect','analyticsSemesterSelect'].forEach(selId => {
         const sel = document.getElementById(selId);
         if (!sel) return;
         sel.innerHTML = '';
@@ -3060,6 +2939,45 @@
     }
   }
 
+  // ==================== GLOBAL FILTER SYNC ====================
+  function syncGlobalToTabFilters() {
+    // Sync semester to all hidden per-tab semester selects
+    const gSem = document.getElementById('globalSemesterSelect')?.value || '';
+    ['logsSemesterSelect','campusAttSemesterSelect','classesSemesterSelect','attendanceLogsSemesterSelect','analyticsSemesterSelect'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el && el.value !== gSem) el.value = gSem;
+    });
+  }
+
+  function rerenderActiveTab() {
+    const activeTabEl = document.querySelector('.hr-attendance-main .eval-page-tab.active');
+    if (!activeTabEl) return;
+    const tab = activeTabEl.dataset.tab;
+    if (tab === 'logs') { currentPage = 1; renderLogs(); }
+    else if (tab === 'campusattendance') { currentPageCampusAtt = 1; renderCampusAttendance(); }
+    else if (tab === 'classes') { currentPageClasses = 1; renderFacultyList(); }
+    else if (tab === 'attendancelogs') {
+      const activeSub = document.querySelector('#attendancelogs .attendance-sub-tab.active');
+      if (activeSub?.dataset.subtab === 'sub-campusentry') { currentPageCampusEntry = 1; renderCampusEntryLogs(); }
+      else { currentPageRfidLogs = 1; renderRFIDLogs(); }
+    } else if (tab === 'analytics') {
+      const activeSub = document.querySelector('#analytics .attendance-sub-tab.active');
+      if (activeSub?.dataset.subtab === 'sub-analytics-campus') { caPage = 1; applyCaFilters(); }
+      else {
+        const activeInner = document.querySelector('#sub-analytics-class .analytics-sub-tab.active');
+        if (activeInner?.dataset.analyticssubtab === 'sub-facultybreakdown') { fbPage = 1; applyFbFilters(); }
+        else { bdPage = 1; applyBreakdownFilters(); }
+      }
+    }
+  }
+
+  function clearAttFilters() {
+    ['globalFacultySearch','globalCollegeFilter','globalPositionFilter','globalEmploymentFilter','globalStatusFilter','globalSessionFilter'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    rerenderActiveTab();
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     checkRFIDStatus();
     checkBiometricStatus();
@@ -3068,6 +2986,25 @@
     analyticsLoaded = true;
     startNotificationListener();
     fetchAndPopulateAllColleges();
+
+    // Global semester change listener
+    document.getElementById('globalSemesterSelect')?.addEventListener('change', function() {
+      syncGlobalToTabFilters(); // sync to hidden per-tab selects
+      const semVal = this.value;
+      fetchFacultyAttendance(semVal);
+      fetchFacultyList(semVal);
+      fetchRFIDLogs(semVal);
+      fetchBiometricLogs(semVal);
+      fetchCampusAttendance(semVal);
+      const anSel = document.getElementById('analyticsSemesterSelect');
+      if (anSel) { anSel.value = semVal; anSel.dispatchEvent(new Event('change')); }
+    });
+
+    // Global filter/search change listeners — all tabs re-render on any change
+    ['globalCollegeFilter','globalPositionFilter','globalEmploymentFilter','globalStatusFilter','globalSessionFilter'].forEach(id => {
+      document.getElementById(id)?.addEventListener('change', rerenderActiveTab);
+    });
+    document.getElementById('globalFacultySearch')?.addEventListener('input', rerenderActiveTab);
 
     // Semester change listeners for each tab
     document.getElementById('logsSemesterSelect')?.addEventListener('change', function() {
@@ -3084,58 +3021,14 @@
       fetchBiometricLogs(this.value);
     });
 
-    // Filter listeners — Faculty Logs tab
-    ['logCollegeFilter','logPositionFilter','logEmploymentFilter'].forEach(id => {
-      document.getElementById(id)?.addEventListener('change', () => { currentPage = 1; renderLogs(); });
-    });
+    // (per-tab filter listeners removed — all filtering is now global)
 
-    // Filter listeners — View Classes tab
-    ['classesCollegeFilter','classesPositionFilter','classesEmploymentFilter'].forEach(id => {
-      document.getElementById(id)?.addEventListener('change', () => { currentPageClasses = 1; renderFacultyList(); });
-    });
-
-    // Filter listeners — RFID Logs tab
-    ['rfidCollegeFilter','rfidPositionFilter','rfidEmploymentFilter'].forEach(id => {
-      document.getElementById(id)?.addEventListener('change', () => { currentPageRfidLogs = 1; renderRFIDLogs(); });
-    });
-
-    // Filter listeners — Campus Entry tab
-    ['campusCollegeFilter','campusPositionFilter','campusEmploymentFilter'].forEach(id => {
-      document.getElementById(id)?.addEventListener('change', () => { currentPageCampusEntry = 1; renderCampusEntryLogs(); });
-    });
-
-    // Initialize button visibility based on active tab (default is 'logs')
-    const activeTab = document.querySelector('.hr-attendance-main .tab.active');
-    if (activeTab) {
-      const readerControlsContainer = document.getElementById('readerControlsContainer');
-      const campusAttControlsContainer = document.getElementById('campusAttControlsContainer');
-      const rfidEditControlsContainer = document.getElementById('rfidEditControlsContainer');
-      const campusEntryEditControlsContainer = document.getElementById('campusEntryEditControlsContainer');
-      const editTimeBtn = document.getElementById('editTimeBtn');
-
-      if (activeTab.dataset.tab === 'logs') {
-        readerControlsContainer.style.display = 'block';
-        campusAttControlsContainer.style.display = 'none';
-        rfidEditControlsContainer.style.display = 'none';
-        campusEntryEditControlsContainer.style.display = 'none';
-        editTimeBtn.style.display = 'flex';
-      } else if (activeTab.dataset.tab === 'classes') {
-        readerControlsContainer.style.display = 'none';
-        campusAttControlsContainer.style.display = 'none';
-        rfidEditControlsContainer.style.display = 'none';
-        campusEntryEditControlsContainer.style.display = 'none';
-      } else if (activeTab.dataset.tab === 'campusattendance') {
-        readerControlsContainer.style.display = 'none';
-        campusAttControlsContainer.style.display = 'block';
-        rfidEditControlsContainer.style.display = 'none';
-        campusEntryEditControlsContainer.style.display = 'none';
-      } else if (activeTab.dataset.tab === 'attendancelogs') {
-        readerControlsContainer.style.display = 'none';
-        campusAttControlsContainer.style.display = 'none';
-        rfidEditControlsContainer.style.display = 'block';
-        campusEntryEditControlsContainer.style.display = 'none';
-      }
-    }
+    // Initialize editTimeBtn visibility (logs tab is active by default)
+    const editTimeBtn = document.getElementById('editTimeBtn');
+    if (editTimeBtn) editTimeBtn.style.display = 'flex';
+    // rfidEditControlsContainer shown for default RFID sub-tab in attendancelogs
+    const rfidEditControlsContainer = document.getElementById('rfidEditControlsContainer');
+    if (rfidEditControlsContainer) rfidEditControlsContainer.style.display = 'block';
   });
 
   let autoRefreshInterval = null;
@@ -3173,6 +3066,8 @@
 
   let analyticsTrendChart = null;
   let analyticsDistChart  = null;
+  let hrCaTrendChart      = null;
+  let hrCaDistChart       = null;
 
   async function loadAnalyticsSemesters() {
     try {
@@ -3224,11 +3119,82 @@
         renderFacultyBreakdown(data.faculty_breakdown);
       }
       if (caData.success) {
+        updateHrCaKPIs(caData.kpis || {});
+        renderHrCaTrend(caData.trends || []);
+        renderHrCaDist(caData.distribution || {});
         renderCampusAttAnalytics(caData.campus_breakdown);
       }
     } catch (e) {
       console.error('Error fetching analytics:', e);
     }
+  }
+
+  // ── HR Campus Attendance Trends ────────────────────────────────
+  function updateHrCaKPIs(kpis) {
+    document.getElementById('hr-ca-kpi-rate').textContent    = kpis.avg_rate    != null ? kpis.avg_rate.toFixed(1) + '%' : '—';
+    document.getElementById('hr-ca-kpi-present').textContent = kpis.total_present ?? '—';
+    document.getElementById('hr-ca-kpi-late').textContent    = kpis.total_late    ?? '—';
+    document.getElementById('hr-ca-kpi-absent').textContent  = kpis.total_absent  ?? '—';
+    document.getElementById('hr-ca-kpi-excused').textContent = kpis.total_excused ?? '—';
+  }
+
+  function renderHrCaTrend(trends) {
+    const ctx = document.getElementById('hrCaTrendChart').getContext('2d');
+    if (hrCaTrendChart) { hrCaTrendChart.destroy(); hrCaTrendChart = null; }
+    if (!trends || trends.length === 0) return;
+    hrCaTrendChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: trends.map(function(t) { return t.label; }),
+        datasets: [
+          { label: 'Avg. Rate (%)', data: trends.map(function(t) { return t.avg_rate; }), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', fill: true, tension: 0.4, yAxisID: 'yRate', pointRadius: 4, pointHoverRadius: 6 },
+          { label: 'Present Sessions', data: trends.map(function(t) { return t.total_present; }), borderColor: '#10b981', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5, 3] },
+          { label: 'Late Sessions', data: trends.map(function(t) { return t.total_late; }), borderColor: '#f59e0b', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5, 3] },
+          { label: 'Absent Sessions', data: trends.map(function(t) { return t.total_absent; }), borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5, 3] }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+        scales: {
+          yRate: { type: 'linear', position: 'left', min: 0, max: 100, title: { display: true, text: 'Rate (%)', font: { size: 11 } }, ticks: { font: { size: 11 }, callback: function(v) { return v + '%'; } } },
+          yCounts: { type: 'linear', position: 'right', min: 0, title: { display: true, text: 'Sessions', font: { size: 11 } }, ticks: { font: { size: 11 } }, grid: { drawOnChartArea: false } },
+          x: { ticks: { font: { size: 11 }, maxRotation: 30 } }
+        }
+      }
+    });
+  }
+
+  function renderHrCaDist(dist) {
+    const ctx = document.getElementById('hrCaDistChart').getContext('2d');
+    if (hrCaDistChart) { hrCaDistChart.destroy(); hrCaDistChart = null; }
+    const colors = ['#16a34a', '#f59e0b', '#ef4444', '#8b5cf6'];
+    const labels = ['Present', 'Late', 'Absent', 'Excused'];
+    const values = [dist.present || 0, dist.late || 0, dist.absent || 0, dist.excused || 0];
+    hrCaDistChart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: c => ` ${c.parsed.y} sessions` } }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { font: { size: 11 }, stepSize: 1 }, grid: { color: 'rgba(0,0,0,0.05)' } },
+          x: { grid: { display: false }, ticks: { font: { size: 11 } } }
+        }
+      }
+    });
+    const total = values.reduce(function(a, b) { return a + b; }, 0);
+    document.getElementById('hrCaDistLegend').innerHTML = labels.map(function(lbl, i) {
+      const pct = total > 0 ? ((values[i] / total) * 100).toFixed(1) : '0.0';
+      return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text)">' +
+        '<span style="width:10px;height:10px;border-radius:50%;background:' + colors[i] + ';flex-shrink:0"></span>' +
+        lbl + ': <strong>' + values[i] + '</strong> (' + pct + '%)' +
+      '</span>';
+    }).join('');
   }
 
   function updateAnalyticsKPIs(kpis) {
@@ -3328,33 +3294,28 @@
     const ctx = document.getElementById('analyticsDistChart').getContext('2d');
     if (analyticsDistChart) { analyticsDistChart.destroy(); analyticsDistChart = null; }
 
-    const colors = ['#16a34a', '#f59e0b', '#ef4444', '#6b7280'];
+    const colors = ['#16a34a', '#f59e0b', '#ef4444', '#8b5cf6'];
     const labels = ['Present', 'Late', 'Absent', 'Excused'];
     const values = [dist.present || 0, dist.late || 0, dist.absent || 0, dist.excused || 0];
 
     analyticsDistChart = new Chart(ctx, {
-      type: 'doughnut',
-      data: {
-        labels: labels,
-        datasets: [{
-          data: values,
-          backgroundColor: colors,
-          borderWidth: 2,
-          borderColor: '#fff'
-        }]
-      },
+      type: 'bar',
+      data: { labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        cutout: '68%'
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: c => ` ${c.parsed.y} sessions` } }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { font: { size: 11 }, stepSize: 1 }, grid: { color: 'rgba(0,0,0,0.05)' } },
+          x: { grid: { display: false }, ticks: { font: { size: 11 } } }
+        }
       }
     });
 
-    // Custom legend with counts + percentages
-    const legendEl = document.getElementById('analyticsDistLegend');
     const total = values.reduce((a, b) => a + b, 0);
-    legendEl.innerHTML = labels.map(function (lbl, i) {
+    document.getElementById('analyticsDistLegend').innerHTML = labels.map(function (lbl, i) {
       const pct = total > 0 ? ((values[i] / total) * 100).toFixed(1) : '0.0';
       return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text)">' +
         '<span style="width:10px;height:10px;border-radius:50%;background:' + colors[i] + ';flex-shrink:0"></span>' +
@@ -3374,17 +3335,16 @@
     bdAllData  = breakdown || [];
     bdPage     = 1;
     bdSort     = { column: 'rate', direction: 'asc' };
-    document.getElementById('breakdownSearch').value = '';
     applyBreakdownFilters();
     updateBdSortIcons();
     renderFacultyOverall(breakdown);
   }
 
   function applyBreakdownFilters() {
-    const q = document.getElementById('breakdownSearch').value.toLowerCase();
-    const bdCollege = document.getElementById('bdCollegeFilter').value;
-    const bdPosition = document.getElementById('bdPositionFilter').value;
-    const bdEmployment = document.getElementById('bdEmploymentFilter').value;
+    const q = (document.getElementById('globalFacultySearch')?.value || '').toLowerCase();
+    const bdCollege = document.getElementById('globalCollegeFilter')?.value || '';
+    const bdPosition = document.getElementById('globalPositionFilter')?.value || '';
+    const bdEmployment = document.getElementById('globalEmploymentFilter')?.value || '';
     bdFiltered = bdAllData.filter(function (f) {
       const searchMatch = !q ||
         f.faculty_name.toLowerCase().includes(q) ||
@@ -3533,16 +3493,15 @@
     fbAllData = buildFacultyOverallData(breakdown);
     fbPage    = 1;
     fbSort    = { column: 'faculty_name', direction: 'asc' };
-    document.getElementById('fbSearch').value = '';
     applyFbFilters();
     updateFbSortIcons();
   }
 
   function applyFbFilters() {
-    const q          = document.getElementById('fbSearch').value.toLowerCase();
-    const college    = document.getElementById('fbCollegeFilter').value;
-    const position   = document.getElementById('fbPositionFilter').value;
-    const employment = document.getElementById('fbEmploymentFilter').value;
+    const q          = (document.getElementById('globalFacultySearch')?.value || '').toLowerCase();
+    const college    = document.getElementById('globalCollegeFilter')?.value || '';
+    const position   = document.getElementById('globalPositionFilter')?.value || '';
+    const employment = document.getElementById('globalEmploymentFilter')?.value || '';
     fbFiltered = fbAllData.filter(function (f) {
       const searchMatch     = !q          || f.faculty_name.toLowerCase().includes(q);
       const collegeMatch    = !college    || f.college            === college;
@@ -3641,16 +3600,15 @@
     });
     caPage = 1;
     caSort = { column: 'faculty_name', direction: 'asc' };
-    document.getElementById('caSearch').value = '';
     applyCaFilters();
     updateCaSortIcons();
   }
 
   function applyCaFilters() {
-    const q          = document.getElementById('caSearch').value.toLowerCase();
-    const college    = document.getElementById('caCollegeFilter').value;
-    const position   = document.getElementById('caPositionFilter').value;
-    const employment = document.getElementById('caEmploymentFilter').value;
+    const q          = (document.getElementById('globalFacultySearch')?.value || '').toLowerCase();
+    const college    = document.getElementById('globalCollegeFilter')?.value || '';
+    const position   = document.getElementById('globalPositionFilter')?.value || '';
+    const employment = document.getElementById('globalEmploymentFilter')?.value || '';
     caFiltered = caAllData.filter(function (f) {
       const searchMatch     = !q          || f.faculty_name.toLowerCase().includes(q);
       const collegeMatch    = !college    || f.college            === college;
@@ -3728,11 +3686,7 @@
 
   // Wire up breakdown controls once DOM is ready
   document.addEventListener('DOMContentLoaded', function () {
-    // Class Breakdown controls
-    document.getElementById('breakdownSearch').addEventListener('input', function () {
-      bdPage = 1;
-      applyBreakdownFilters();
-    });
+    // Class Breakdown controls (search is now global)
     document.getElementById('breakdownPrev').addEventListener('click', function () {
       if (bdPage > 1) { bdPage--; renderBdPage(); }
     });
@@ -3754,18 +3708,7 @@
         updateBdSortIcons();
       });
     });
-    ['bdCollegeFilter','bdPositionFilter','bdEmploymentFilter'].forEach(function (id) {
-      document.getElementById(id)?.addEventListener('change', function () {
-        bdPage = 1;
-        applyBreakdownFilters();
-      });
-    });
-
-    // Faculty Breakdown (overall) controls
-    document.getElementById('fbSearch').addEventListener('input', function () {
-      fbPage = 1;
-      applyFbFilters();
-    });
+    // Faculty Breakdown (overall) controls (search/filters are now global)
     document.getElementById('fbPrev').addEventListener('click', function () {
       if (fbPage > 1) { fbPage--; renderFbPage(); }
     });
@@ -3787,15 +3730,7 @@
         updateFbSortIcons();
       });
     });
-    ['fbCollegeFilter','fbPositionFilter','fbEmploymentFilter'].forEach(function (id) {
-      document.getElementById(id)?.addEventListener('change', function () {
-        fbPage = 1;
-        applyFbFilters();
-      });
-    });
-
-    // Campus Attendance Analytics controls
-    document.getElementById('caSearch').addEventListener('input', function () { caPage = 1; applyCaFilters(); });
+    // Campus Attendance Analytics controls (search/filters are now global)
     document.getElementById('caPrev').addEventListener('click', function () { if (caPage > 1) { caPage--; renderCaPage(); } });
     document.getElementById('caNext').addEventListener('click', function () {
       if (caPage < Math.ceil(caFiltered.length / caPerPage)) { caPage++; renderCaPage(); }
@@ -3808,11 +3743,17 @@
         caPage = 1; applyCaFilters(); updateCaSortIcons();
       });
     });
-    ['caCollegeFilter','caPositionFilter','caEmploymentFilter'].forEach(function (id) {
-      document.getElementById(id)?.addEventListener('change', function () { caPage = 1; applyCaFilters(); });
+    // Analytics top-level mini-tabs (Class Attendance / Campus Attendance)
+    document.querySelectorAll('#analytics .attendance-sub-tab').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        document.querySelectorAll('#analytics > .attendance-sub-tabs .attendance-sub-tab').forEach(function (b) { b.classList.remove('active'); });
+        document.querySelectorAll('#analytics > .sub-tab-content').forEach(function (c) { c.classList.remove('active'); });
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.subtab).classList.add('active');
+      });
     });
 
-    // Analytics sub-tab switching
+    // Analytics class-breakdown inner sub-tabs
     document.querySelectorAll('.analytics-sub-tab').forEach(function (btn) {
       btn.addEventListener('click', function () {
         document.querySelectorAll('.analytics-sub-tab').forEach(function (b) { b.classList.remove('active'); });
