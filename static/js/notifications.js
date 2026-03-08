@@ -325,15 +325,17 @@ const NotifSystem = (function () {
     var title, icon, color;
 
     if (n.action === 'entry') {
-      title = 'Entry Recorded';      icon = 'bx-log-in-circle';  color = '#16a34a';
+      title = 'Entry Recorded';         icon = 'bx-log-in-circle';  color = '#16a34a';
     } else if (n.action === 'exit') {
-      title = 'Exit Recorded';       icon = 'bx-log-out-circle'; color = '#16a34a';
+      title = 'Exit Recorded';          icon = 'bx-log-out-circle'; color = '#16a34a';
     } else if (n.action === 'buffer_period') {
-      title = 'Already Scanned';     icon = 'bx-time';           color = '#3b82f6';
+      title = 'Already Scanned';        icon = 'bx-time';           color = '#3b82f6';
+    } else if (n.action === 'outside_buffer') {
+      title = 'Outside Session Hours';  icon = 'bx-time-five';      color = '#f59e0b';
     } else if (n.action === 'unknown_biometric') {
-      title = 'Unknown Fingerprint'; icon = 'bx-error-circle';   color = '#ef4444';
+      title = 'Unknown Fingerprint';    icon = 'bx-error-circle';   color = '#ef4444';
     } else {
-      title = 'Biometric Scanned';   icon = 'bx-fingerprint';    color = '#6b7280';
+      title = 'Biometric Scanned';      icon = 'bx-fingerprint';    color = '#6b7280';
     }
     return { title: title, icon: icon, color: color };
   }

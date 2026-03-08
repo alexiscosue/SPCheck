@@ -1250,6 +1250,10 @@
         icon = 'bx-time';
         colorClass = 'info';
         title = 'Already Scanned';
+    } else if (data.action === 'outside_buffer') {
+        icon = 'bx-time-five';
+        colorClass = 'warning';
+        title = 'Outside Session Hours';
     } else if (data.action === 'unknown_biometric') {
         icon = 'bx-error-circle';
         colorClass = 'error';

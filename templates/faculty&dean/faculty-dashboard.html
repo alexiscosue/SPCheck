@@ -233,8 +233,13 @@
 
   async function fetchAttendanceDist() {
     try {
+      // Deans have no personal class attendance — use college-wide analytics instead
+      const classUrl = IS_DEAN
+        ? '/api/dean/college-analytics'
+        : '/api/faculty/attendance-analytics';
+
       const [classResp, campusResp] = await Promise.all([
-        fetch('/api/faculty/attendance-analytics'),
+        fetch(classUrl),
         fetch('/api/faculty/campus-attendance-analytics')
       ]);
       const classData  = await classResp.json();

@@ -163,6 +163,31 @@ class BiometricReader:
             biometric_id, personnel_id, firstname, lastname = result
             person_name = f"{lastname}, {firstname}" if firstname and lastname else f"Personnel #{personnel_id}"
 
+            # ── Outside session window guard ───────────────────────────────
+            # If the tap time falls outside both the morning (07:00–12:44) and
+            # afternoon (12:45–17:45) windows, treat it like RFID's outside_buffer:
+            # log the scan but do NOT create an Entry/Exit campus attendance record.
+            if session is None:
+                remarks = f"[Outside Window] Scanned outside session hours on {day_name} at {current_time.strftime('%H:%M')}"
+                self._log_biometric_scan(cursor, biometric_id, current_time, 'outside_buffer', remarks)
+                conn.commit()
+                notification_data = {
+                    'biometric_uid': biometric_uid,
+                    'biometric_id': biometric_id,
+                    'personnel_id': personnel_id,
+                    'person_name': person_name,
+                    'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
+                    'action': 'outside_buffer',
+                    'status': 'outside_buffer',
+                    'session': None,
+                    'message': f'{person_name} - Scanned outside session hours ({current_time.strftime("%H:%M")})'
+                }
+                self._trigger_notification(notification_data)
+                self._send_to_arduino(f"OUTSIDE:{person_name}")
+                print(f"⏰ {person_name}: Tapped outside session time windows at {current_time.strftime('%H:%M')}")
+                return
+            # ──────────────────────────────────────────────────────────────
+
             status, remarks, is_buffer = self._determine_status(cursor, biometric_id, current_time, day_name)
             self._log_biometric_scan(cursor, biometric_id, current_time, status, remarks)
 

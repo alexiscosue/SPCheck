@@ -136,10 +136,6 @@
 
     <!-- Analytics Tab -->
     <div id="analytics" class="tab-content" style="padding:16px;">
-      <div id="collegeViewLabel" style="display:none; align-items:center; gap:8px; margin-bottom:12px; padding:8px 12px; background:#fdf2f2; border:1px solid #fca5a5; border-radius:8px;">
-        <i class='bx bx-buildings' style="color:var(--spc-maroon); font-size:15px;"></i>
-        <span id="collegeViewLabelText" style="font-size:13px; color:var(--spc-maroon);"></span>
-      </div>
       <div class="attendance-sub-tabs">
         <div class="attendance-sub-tab active" data-subtab="sub-analytics-class">Class Attendance</div>
         <div class="attendance-sub-tab" data-subtab="sub-analytics-campus">Campus Attendance</div>
@@ -502,6 +498,7 @@
     if (data.action === 'entry') { icon = 'bx-log-in-circle'; colorClass = 'success'; title = 'Entry Recorded'; }
     else if (data.action === 'exit') { icon = 'bx-log-out-circle'; colorClass = 'success'; title = 'Exit Recorded'; }
     else if (data.action === 'buffer_period') { icon = 'bx-time'; colorClass = 'info'; title = 'Already Scanned'; }
+    else if (data.action === 'outside_buffer') { icon = 'bx-time-five'; colorClass = 'warning'; title = 'Outside Session Hours'; }
     else if (data.action === 'unknown_biometric') { icon = 'bx-error-circle'; colorClass = 'error'; title = 'Unknown Fingerprint'; }
     notification.classList.add(colorClass);
     let content = `
@@ -513,10 +510,20 @@
       <div class="notification-body">
         <div class="notification-time">${formatTapTime(data.tap_time)}</div>`;
     if (data.person_name) content += `<div class="notification-class"><strong>${data.person_name}</strong></div>`;
+    if (data.session) {
+      const sessionIcon = data.session === 'Morning' ? 'bx-sun' : 'bx-moon';
+      content += `<div class="notification-class" style="font-size:12px;color:#6b7280"><i class='bx ${sessionIcon}' style="vertical-align:middle;margin-right:3px"></i>${data.session} Session</div>`;
+    }
     content += `<div class="notification-message">${data.message}</div></div>`;
     notification.innerHTML = content;
     container.appendChild(notification);
     setTimeout(() => notification.classList.add('show'), 10);
+    setTimeout(() => {
+      if (notification.parentElement) {
+        notification.classList.remove('show');
+        setTimeout(() => { if (notification.parentElement) notification.remove(); }, 300);
+      }
+    }, 10000);
   }
 
   // ── State ──────────────────────────────────────────────────────
@@ -1187,12 +1194,7 @@
     viewMode = mode;
     const semId = document.getElementById('globalSemesterSelect')?.value;
     const calTab = document.querySelector('[data-tab="calendar"]');
-    const label = document.getElementById('collegeViewLabel');
-    const labelText = document.getElementById('collegeViewLabelText');
     if (mode === 'college') {
-      // Show college label in analytics tab
-      if (label) { label.style.display = 'flex'; }
-      if (labelText) { labelText.textContent = 'Viewing: {{ college }} — College Attendance'; }
       // Hide Calendar tab in college mode
       if (calTab) calTab.style.display = 'none';
       // If calendar was active, switch to logs
@@ -1206,8 +1208,6 @@
       fetchCollegeLogs(semId);
       fetchCollegeCampusLogs(semId);
     } else {
-      // Hide college label
-      if (label) { label.style.display = 'none'; }
       // Show Calendar tab
       if (calTab) calTab.style.display = '';
       // Restore original headers
