@@ -991,7 +991,8 @@
         const curr = semData.semesters.find(s => s.is_current);
         termId = curr ? curr.id : (semData.semesters[0]?.id || 0);
       }
-      const res = await fetch(`/api/hr/evaluations?term=${termId}`);
+      const url = termId ? `/api/hr/evaluations?term=${termId}` : '/api/hr/evaluations';
+      const res = await fetch(url);
       const data = await res.json();
       if (data.all_dept_averages && data.all_dept_averages.length > 0) {
         renderDeanDeptChart(data.all_dept_averages);

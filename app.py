@@ -258,7 +258,12 @@ class ConnectionPool:
                 cursor.close()
                 return conn
             except:
-                conn.close()
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                with self.lock:
+                    self.current_connections -= 1
                 return self._create_connection()
         except Empty:
             with self.lock:
@@ -267,12 +272,21 @@ class ConnectionPool:
                     return self._create_connection()
 
             return self.pool.get(block=True, timeout=5)
-    
+
     def return_connection(self, conn):
+        # Use the simple query protocol for ROLLBACK so it works even when
+        # the extended query protocol state is broken. If the rollback itself
+        # fails (dead/corrupted connection), close the connection rather than
+        # returning it to the pool where it would corrupt the next request.
         try:
+            if conn._in_transaction:
+                conn.execute_simple("ROLLBACK")
             self.pool.put(conn, block=False)
-        except:
-            conn.close()
+        except Exception:
+            try:
+                conn.close()
+            except Exception:
+                pass
             with self.lock:
                 self.current_connections -= 1
 
@@ -3903,6 +3917,8 @@ def api_faculty_teaching_schedule(semester_id):
 @require_auth([20001, 20002])
 def api_faculty_dashboard():
     """OPTIMIZED: Get faculty dashboard data with single query"""
+    conn = None
+    cursor = None
     try:
         user_id = session['user_id']
         conn = db_pool.get_connection()
@@ -4169,6 +4185,11 @@ def api_faculty_dashboard():
         print(f"Error fetching dashboard data: {e}")
         import traceback
         traceback.print_exc()
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            db_pool.return_connection(conn)
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/hr/today-classes-attendance')
@@ -6358,14 +6379,16 @@ def api_faculty_evaluations_data():
     Fetches evaluation breakdown data for charts and comparison, INCLUDING qualitative feedback.
     (MODIFIED to include 'chart_data' for the dashboard bar chart.)
     """
+    conn = None
+    cursor = None
     try:
         user_id = session.get('user_id')
         personnel_info = get_personnel_info(user_id)
         personnel_id = personnel_info.get('personnel_id')
-        
+
         if not personnel_id:
             return jsonify({'success': False, 'error': 'Personnel record not found'}), 404
-        
+
         conn = db_pool.get_connection()
         cursor = conn.cursor()
         
@@ -6527,6 +6550,11 @@ def api_faculty_evaluations_data():
         print(f"Error fetching faculty evaluation data: {e}")
         import traceback
         traceback.print_exc()
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            db_pool.return_connection(conn)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/hr/employees-list')
