@@ -8422,7 +8422,7 @@ def api_hr_employee_profile_stats(personnel_id):
     return api_get_profile_stats()
 
 @app.route('/api/hr/colleges-list')
-@require_auth([20003])
+@require_auth([20002, 20003])
 def api_hr_colleges_list():
     """OPTIMIZED: Get all colleges for filter dropdown - CACHED"""
     cache_key = "colleges_list"
@@ -9661,15 +9661,20 @@ def api_hr_evaluation_dashboard_data():
 
 
 @app.route('/api/hr/evaluations', methods=['GET'])
-@require_auth([20003])
+@require_auth([20002, 20003])
 def api_hr_evaluations():
     term = request.args.get('term')
     dept = request.args.get('dept', '')
-    status = request.args.get('status', '') 
+    status = request.args.get('status', '')
     search = request.args.get('search', '')
-    position_filter = request.args.get('position', '') 
-    response_rate_filter = request.args.get('response_rate', '') 
-    
+    position_filter = request.args.get('position', '')
+    response_rate_filter = request.args.get('response_rate', '')
+
+    # For Deans, always restrict to their own college regardless of client-side filter
+    if session.get('user_role') == 20002:
+        dean_info = get_personnel_info(session['user_id'])
+        dept = dean_info.get('college', '')
+
     conn = db_pool.get_connection()
     cursor = conn.cursor()
 
@@ -9725,7 +9730,11 @@ def api_hr_evaluations():
         }
 
     # --- KPI 1, 2, 3, & 4 Calculation (Combined Query) ---
-    cursor.execute("""
+    kpi_dept_clause = "AND p.college_id = (SELECT college_id FROM college WHERE collegename = %s)" if dept else ""
+    kpi_params = [current_term_id, current_term_id]
+    if dept:
+        kpi_params.append(dept)  # appended after the two acadcalendar_id params
+    cursor.execute(f"""
         WITH faculty_data AS (
             SELECT
                 p.personnel_id,
@@ -9753,7 +9762,7 @@ def api_hr_evaluations():
                 ), 0) AS total_students
             FROM personnel p
             LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s
-            WHERE p.role_id = 20001
+            WHERE p.role_id = 20001 {kpi_dept_clause}
             GROUP BY p.personnel_id, p.college_id
         ),
         department_avg AS (
@@ -9788,8 +9797,8 @@ def api_hr_evaluations():
             c.collegename AS best_department_name
         FROM department_avg da
         JOIN college c ON da.college_id = c.college_id
-    """, (current_term_id, current_term_id))
-    
+    """, tuple(kpi_params))
+
     kpi_results = cursor.fetchone()
     
     # Map results
@@ -9923,7 +9932,34 @@ def api_hr_evaluations():
         ORDER BY pr.position
     """)
     unique_positions = [row[0] for row in cursor.fetchall() if row[0] and row[0].strip() != '']
-    
+
+    # All-college dept averages (unfiltered) for the "Avg Rating by Department" chart
+    cursor.execute("""
+        SELECT c.collegename,
+               AVG(fs.weighted_score) AS avg_score
+        FROM (
+            SELECT p.college_id,
+                   COALESCE(
+                       COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END), 0) * 0.55 +
+                       COALESCE(MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END), 0) * 0.35 +
+                       COALESCE(MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END), 0) * 0.10,
+                   0) AS weighted_score
+            FROM personnel p
+            LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s
+            WHERE p.role_id = 20001
+            GROUP BY p.personnel_id, p.college_id
+            HAVING COALESCE(
+                       COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END), 0) * 0.55 +
+                       COALESCE(MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END), 0) * 0.35 +
+                       COALESCE(MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END), 0) * 0.10,
+                   0) > 0
+        ) fs
+        JOIN college c ON c.college_id = fs.college_id
+        GROUP BY c.collegename
+        ORDER BY c.collegename
+    """, (current_term_id,))
+    all_dept_averages = [{"dept": row[0], "avg": float(row[1])} for row in cursor.fetchall()]
+
     cursor.close()
     db_pool.return_connection(conn)
 
@@ -9945,11 +9981,12 @@ def api_hr_evaluations():
 
     # Combine table data and KPIs into the final JSON response
     return jsonify(
-        success=True, 
-        evaluations=evals, 
+        success=True,
+        evaluations=evals,
         kpis=kpis,
         unique_positions=unique_positions,
-        acadcalendar_info=acadcalendar_info # Dynamic term info
+        acadcalendar_info=acadcalendar_info,
+        all_dept_averages=all_dept_averages
     )
 
 
@@ -10038,7 +10075,7 @@ def api_hr_update_evaluation_score():
 
 
 @app.route('/api/hr/evaluation-trends', methods=['GET'])
-@require_auth([20003])
+@require_auth([20002, 20003])
 def api_hr_evaluation_trends():
     personnel_id = request.args.get('personnel_id', '').strip()
     conn = None
@@ -10126,7 +10163,7 @@ def api_hr_evaluation_trends():
 
 
 @app.route('/api/hr/dept-trends', methods=['GET'])
-@require_auth([20003])
+@require_auth([20002, 20003])
 def api_hr_dept_trends():
     """Per-department weighted avg score per semester, ordered chronologically."""
     conn = None
@@ -10209,7 +10246,7 @@ def api_hr_dept_trends():
 
 
 @app.route('/api/hr/distribution-trends', methods=['GET'])
-@require_auth([20003])
+@require_auth([20002, 20003])
 def api_hr_distribution_trends():
     """Per-semester count of faculty in each rating bucket (0-1, 1-2, 2-3, 3-4)."""
     conn = None
@@ -10273,7 +10310,7 @@ def api_hr_distribution_trends():
 
 
 @app.route('/api/hr/faculty-evaluation-report/<int:personnel_id>')
-@require_auth([20003])
+@require_auth([20002, 20003])
 def api_hr_faculty_evaluation_report(personnel_id):
     """
     API endpoint to fetch a detailed faculty evaluation report for modal viewing.
@@ -10407,7 +10444,7 @@ def api_hr_faculty_evaluation_report(personnel_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/hr/faculty-evaluation-report-pdf/<int:personnel_id>')
-@require_auth([20003])
+@require_auth([20002, 20003])
 def api_hr_faculty_evaluation_report_pdf(personnel_id):
     term_id = request.args.get('term_id')
 

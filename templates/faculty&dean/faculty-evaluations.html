@@ -1,13 +1,46 @@
 {% extends "faculty&dean/faculty-base.html" %}
 
-{% block title %}My Evaluations{% endblock %}
-{% block page_title %}My Evaluations{% endblock %}
+{% block title %}Evaluations{% endblock %}
+{% block page_title %}Evaluations{% endblock %}
 
 {% block content %}
 <section class="grid">
 
+  <!-- ── Semester Filter / View Toggle ── -->
+  <div class="card" id="semester-filter-bar"
+       data-faculty-name="{{ session.get('full_name', session.get('name', '')) }}"
+       data-role="{{ session.get('user_role') }}"
+       style="grid-column: 1 / -1; display:flex; align-items:center; padding:10px 16px; flex-wrap:wrap; gap:8px;">
+    <!-- Personal-only: context label + semester select -->
+    <div id="personal-filter-inner" style="display:flex; align-items:center; justify-content:space-between; flex:1; gap:8px; flex-wrap:wrap;">
+      <div style="display:flex; align-items:center; gap:8px; font-size:13px;">
+        <i class='bx bx-calendar-check' style="color:var(--primary); font-size:16px;"></i>
+        <span id="filter-context-label" style="font-weight:600; color:#1f2937;">Loading...</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <select id="semesterFilter" style="padding:6px 12px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; cursor:pointer; min-width:220px;">
+          <option value="">Loading semesters...</option>
+        </select>
+      </div>
+    </div>
+    <!-- Department-only: label + semester select -->
+    <div id="dept-filter-inner" style="display:none; align-items:center; justify-content:space-between; flex:1; gap:8px; flex-wrap:wrap;">
+      <div style="display:flex; align-items:center; gap:8px; font-size:13px;">
+        <i class='bx bx-buildings' style="color:var(--primary); font-size:16px;"></i>
+        <span id="dept-context-label" data-college="{{ college }}" style="font-weight:600; color:#1f2937;">{{ college }}</span>
+      </div>
+      <div style="position:relative;">
+        <i class='bx bx-calendar' style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:14px; pointer-events:none;"></i>
+        <select id="dept-semesterFilter"
+          style="padding:6px 12px 6px 30px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; min-width:220px; cursor:pointer;">
+          <option value="">Loading Semesters...</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
   <!-- ── KPI Cards ── -->
-  <div class="kpis card" id="evaluation-kpis" style="flex-wrap:wrap; gap:12px;">
+  <div class="kpis card personal-view-item" id="evaluation-kpis" style="flex-wrap:wrap; gap:12px;">
     <div class="kpi card">
       <div class="icon eval"><i class='bx bx-star'></i></div>
       <div><div class="title">Overall Average</div><div class="value" id="kpi-overall">--</div></div>
@@ -27,23 +60,8 @@
 
   </div>
 
-  <!-- ── Semester Filter ── -->
-  <div class="card" id="semester-filter-bar"
-       data-faculty-name="{{ session.get('full_name', session.get('name', '')) }}"
-       style="grid-column: 1 / -1; display:flex; align-items:center; justify-content:space-between; padding:10px 16px; flex-wrap:wrap; gap:8px;">
-    <div style="display:flex; align-items:center; gap:8px; font-size:13px;">
-      <i class='bx bx-calendar-check' style="color:var(--primary); font-size:16px;"></i>
-      <span id="filter-context-label" style="font-weight:600; color:#1f2937;">Loading...</span>
-    </div>
-    <div style="display:flex; align-items:center; gap:8px;">
-      <select id="semesterFilter" style="padding:6px 12px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; cursor:pointer; min-width:220px;">
-        <option value="">Loading semesters...</option>
-      </select>
-    </div>
-  </div>
-
   <!-- ── Main Column ── -->
-  <div class="chart-large">
+  <div class="chart-large personal-view-item">
 
     <!-- Peer Evaluation Tasks (urgent — first) -->
     <div class="chart-card-f card">
@@ -119,7 +137,7 @@
   </div>
 
   <!-- ── Side Column ── -->
-  <div class="chart-side">
+  <div class="chart-side personal-view-item">
 
     <!-- Score Trend -->
     <div class="chart-card card">
@@ -159,6 +177,353 @@
 
   </div>
 
+  <!-- ── Department View ── -->
+  <div id="department-view" style="display:none; grid-column:1/-1;">
+
+    <!-- KPI Cards -->
+    <div class="kpis card" style="padding:16px">
+      <div class="kpi card" style="gap:14px">
+        <div class="icon eval"><i class='bx bx-check-shield'></i></div>
+        <div>
+          <div class="title">Avg Rating (term)</div>
+          <div class="value" id="kpiAvg">—</div>
+        </div>
+      </div>
+      <div class="kpi card" style="gap:14px">
+        <div class="icon fac"><i class='bx bx-user'></i></div>
+        <div>
+          <div class="title">Total Faculty</div>
+          <div class="value" id="kpiTotalFaculty">—</div>
+        </div>
+      </div>
+      <div class="kpi card" style="gap:14px">
+        <div class="icon promo"><i class='bx bx-user'></i></div>
+        <div>
+          <div class="title">Met Response Rate</div>
+          <div class="value" id="kpiMetRate">—</div>
+        </div>
+      </div>
+      <div class="kpi card" style="gap:14px">
+        <div class="icon att"><i class='bx bx-user'></i></div>
+        <div>
+          <div class="title">Leading Dept.</div>
+          <div class="value" id="kpiBestDept">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:8px;">
+
+      <!-- Search bar -->
+      <div style="position:relative; margin-bottom:8px;">
+        <i class='bx bx-search' style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:15px; pointer-events:none;"></i>
+        <input type="text" id="evalSearch" placeholder="Search faculty name..."
+          style="width:100%; box-sizing:border-box; padding:9px 12px 9px 34px; border:1.5px solid #e5e7eb; border-radius:8px; font-size:13px; color:#1f2937; outline:none; transition:border-color .15s;"
+          onfocus="this.style.borderColor='var(--spc-maroon)'" onblur="this.style.borderColor='#e5e7eb'">
+      </div>
+
+      <!-- Secondary filter bar -->
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:#f8fafc; border:1px solid #e5e7eb; border-radius:10px; padding:10px 14px;">
+        <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted); white-space:nowrap; display:flex; align-items:center; gap:4px; flex-shrink:0;">
+          <i class='bx bx-filter-alt'></i> Filters
+        </span>
+        {% if session.get('user_role') != 20002 %}
+        <div style="width:1px; height:20px; background:#e5e7eb; flex-shrink:0;"></div>
+        <select id="deptFilter"
+          style="padding:7px 10px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; flex:1; min-width:130px; cursor:pointer;">
+          <option value="">All Departments</option>
+        </select>
+        {% else %}
+        <select id="deptFilter" style="display:none;"><option value="">All Departments</option></select>
+        {% endif %}
+        <select id="positionFilter"
+          style="padding:7px 10px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; flex:1; min-width:120px; cursor:pointer;">
+          <option value="">All Positions</option>
+        </select>
+        <select id="statusFilter"
+          style="padding:7px 10px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; flex:1; min-width:150px; cursor:pointer;">
+          <option value="">All Ratings</option>
+          <option value="above-average">Above Average (3–4)</option>
+          <option value="average">Average (2–3)</option>
+          <option value="below-average">Below Average (&lt;2)</option>
+        </select>
+        <select id="responseRateFilter"
+          style="padding:7px 10px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; flex:1; min-width:155px; cursor:pointer;">
+          <option value="">All Response Rates</option>
+          <option value="met">Met</option>
+          <option value="not-met">Not Met</option>
+        </select>
+        <button onclick="clearEvalFilters()"
+          style="padding:7px 12px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:12px; font-weight:700; color:var(--muted); background:#fff; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:4px; flex-shrink:0; transition:all .15s;"
+          onmouseover="this.style.borderColor='#ef4444';this.style.color='#ef4444';"
+          onmouseout="this.style.borderColor='#e5e7eb';this.style.color='var(--muted)';">
+          <i class='bx bx-x'></i> Clear
+        </button>
+      </div>
+
+    </div>
+
+    <div class="chart-large card" style="grid-column:1 / -1; padding:0; overflow:hidden; margin-top:8px;">
+
+      <!-- Page-level Tab Bar -->
+      <div style="display:flex; border-bottom:2px solid #e5e7eb; background:#f8fafc; padding:0 16px;">
+        <button id="evalPageTab-evaluations" class="eval-page-tab active" onclick="switchEvalTab('evaluations')">
+          <i class='bx bx-list-ul'></i> Evaluations
+        </button>
+        <button id="evalPageTab-analytics" class="eval-page-tab" onclick="switchEvalTab('analytics')">
+          <i class='bx bx-bar-chart-alt-2'></i> Analytics
+        </button>
+      </div>
+
+      <!-- Tab: Evaluations -->
+      <div id="evalTabContent-evaluations" style="padding:16px;">
+        <div class="card" style="padding:16px; margin-bottom:16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div>
+              <div style="font-weight:700;font-size:15px;" id="termDisplay">📅 Semester 1 — AY 2025–2026</div>
+              <div style="font-size:13px;color:var(--muted)">Evaluation Cycle Information</div>
+            </div>
+            <div style="display:flex;gap:20px;font-size:14px;">
+              <div><strong>⏳ Duration:</strong> <span id="durationDates">Loading...</span></div>
+              <div id="cycleStatusContainer">
+                <strong>🔔 Status:</strong>
+                <span id="cycleStatus" style="color:#f59e0b;font-weight:600;">Loading...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="table" style="margin-top:12px;">
+          <table id="evalTable" aria-label="Evaluations table">
+            <thead>
+              <tr>
+                <th>Faculty</th>
+                <th>Department</th>
+                <th>Position</th>
+                <th>Student Response Rate</th>
+                <th>Student</th>
+                <th>Supervisor</th>
+                <th>Peer</th>
+                <th>Overall Score</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="evalTableBody"></tbody>
+          </table>
+          <div id="emptyState" class="table-empty" style="display:none;">No evaluations found — try clearing filters.</div>
+        </div>
+        <div class="page-controls">
+          <div id="pagerInfo" style="font-size:13px;color:var(--muted)"></div>
+          <button class="btn ghost" id="prevPage">Prev</button>
+          <button class="btn ghost" id="nextPage">Next</button>
+        </div>
+      </div>
+
+      <!-- Tab: Analytics -->
+      <div id="evalTabContent-analytics" style="display:none; padding:16px;">
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px;">
+          <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; display:flex; align-items:center; gap:12px;">
+            <div style="width:40px; height:40px; background:#fef3c7; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              <i class='bx bx-star' style="font-size:20px; color:#d97706;"></i>
+            </div>
+            <div>
+              <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted);">Avg Rating</div>
+              <div style="font-size:1.5rem; font-weight:800; color:#1f2937; line-height:1.2;" id="an-avgRating">—</div>
+            </div>
+          </div>
+          <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; display:flex; align-items:center; gap:12px;">
+            <div style="width:40px; height:40px; background:#dcfce7; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              <i class='bx bx-check-shield' style="font-size:20px; color:#16a34a;"></i>
+            </div>
+            <div>
+              <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted);">Eval. Coverage</div>
+              <div style="font-size:1.5rem; font-weight:800; color:#1f2937; line-height:1.2;" id="an-coverage">—</div>
+              <div style="font-size:11px; color:var(--muted); margin-top:1px;" id="an-coverageDetail"></div>
+            </div>
+          </div>
+          <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; display:flex; align-items:center; gap:12px;">
+            <div style="width:40px; height:40px; background:#dbeafe; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              <i class='bx bx-trending-up' style="font-size:20px; color:#2563eb;"></i>
+            </div>
+            <div>
+              <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted);">Above Average</div>
+              <div style="font-size:1.5rem; font-weight:800; color:#1f2937; line-height:1.2;" id="an-aboveAvg">—</div>
+            </div>
+          </div>
+          <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; display:flex; align-items:center; gap:12px;">
+            <div style="width:40px; height:40px; background:#fee2e2; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              <i class='bx bx-trending-down' style="font-size:20px; color:#dc2626;"></i>
+            </div>
+            <div>
+              <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted);">Below Average</div>
+              <div style="font-size:1.5rem; font-weight:800; color:#1f2937; line-height:1.2;" id="an-belowAvg">—</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px;">
+          <div style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; padding:16px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+              <div style="font-weight:700; font-size:13px; color:#374151;"><i class='bx bx-bar-chart-alt-2' style="color:var(--spc-maroon); margin-right:5px;"></i>Rating Distribution</div>
+              <div style="display:flex; gap:4px;">
+                <button id="distChartToggle-bar" onclick="switchDistChartView('bar')"
+                  style="padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid var(--spc-maroon); background:var(--spc-maroon); color:#fff; transition:all .15s;">
+                  <i class='bx bx-bar-chart-alt-2'></i> Bar
+                </button>
+                <button id="distChartToggle-line" onclick="switchDistChartView('line')"
+                  style="padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid #e5e7eb; background:#fff; color:var(--muted); transition:all .15s;">
+                  <i class='bx bx-line-chart'></i> Trend
+                </button>
+              </div>
+            </div>
+            <canvas id="evalDistChart"></canvas>
+            <canvas id="evalDistTrendChart" style="display:none;"></canvas>
+          </div>
+          <div style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; padding:16px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+              <div style="font-weight:700; font-size:13px; color:#374151;"><i class='bx bx-buildings' style="color:var(--spc-maroon); margin-right:5px;"></i>Avg Rating by Department</div>
+              <div style="display:flex; gap:4px;">
+                <button id="deptChartToggle-bar" onclick="switchDeptChartView('bar')"
+                  style="padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid var(--spc-maroon); background:var(--spc-maroon); color:#fff; transition:all .15s;">
+                  <i class='bx bx-bar-chart-alt-2'></i> Bar
+                </button>
+                <button id="deptChartToggle-line" onclick="switchDeptChartView('line')"
+                  style="padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid #e5e7eb; background:#fff; color:var(--muted); transition:all .15s;">
+                  <i class='bx bx-line-chart'></i> Trend
+                </button>
+              </div>
+            </div>
+            <canvas id="evalDeptChart"></canvas>
+            <canvas id="evalDeptTrendChart" style="display:none;"></canvas>
+          </div>
+        </div>
+
+        <!-- Faculty Breakdown Table -->
+        <div style="border:1px solid #e5e7eb; border-radius:10px; overflow:hidden;">
+          <div style="background:#f8fafc; padding:12px 16px; border-bottom:1px solid #e5e7eb; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+            <span style="font-weight:700; font-size:13px; color:#374151;"><i class='bx bx-table' style="margin-right:5px; color:var(--muted);"></i>Faculty Rating Breakdown</span>
+            <input type="text" id="analyticsSearch" placeholder="Search faculty..."
+              style="padding:6px 12px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; outline:none; width:200px; transition:border-color .15s;"
+              onfocus="this.style.borderColor='var(--spc-maroon)'" onblur="this.style.borderColor='#e5e7eb'"
+              oninput="renderAnalyticsTable()">
+          </div>
+          <div style="overflow-x:auto; max-height:380px; overflow-y:auto;">
+            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+              <thead style="position:sticky; top:0; background:#f8fafc; z-index:1;">
+                <tr>
+                  <th onclick="sortAnalytics('name')" style="padding:10px 14px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; cursor:pointer; white-space:nowrap;">Faculty <i class='bx bx-sort' id="an-sort-name"></i></th>
+                  <th style="padding:10px 14px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; white-space:nowrap;">Department</th>
+                  <th onclick="sortAnalytics('student')" style="padding:10px 14px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; cursor:pointer; white-space:nowrap;">Student <i class='bx bx-sort' id="an-sort-student"></i></th>
+                  <th onclick="sortAnalytics('supervisor')" style="padding:10px 14px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; cursor:pointer; white-space:nowrap;">Supervisor <i class='bx bx-sort' id="an-sort-supervisor"></i></th>
+                  <th onclick="sortAnalytics('peer')" style="padding:10px 14px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; cursor:pointer; white-space:nowrap;">Peer <i class='bx bx-sort' id="an-sort-peer"></i></th>
+                  <th onclick="sortAnalytics('overall')" style="padding:10px 14px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; cursor:pointer; white-space:nowrap;">Overall <i class='bx bx-sort-down' id="an-sort-overall"></i></th>
+                  <th style="padding:10px 14px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; white-space:nowrap;">Rating</th>
+                  <th style="padding:10px 14px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:var(--muted); border-bottom:1px solid #e5e7eb; white-space:nowrap;">Trend</th>
+                </tr>
+              </thead>
+              <tbody id="analyticsTableBody">
+                <tr><td colspan="8" style="text-align:center; padding:24px; color:var(--muted);">Click the Analytics tab to load data.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Faculty Trend Modal -->
+    <div id="facultyTrendModal" class="hr-modal-wrapper" style="display:none;">
+      <div class="hr-modal-content" style="max-width:700px; width:95vw; padding:0; overflow:hidden;">
+        <div style="background:linear-gradient(135deg, var(--spc-maroon), #a71d2a); padding:18px 24px; display:flex; align-items:center; justify-content:space-between;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:36px; height:36px; background:rgba(255,255,255,0.15); border-radius:9px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              <i class='bx bx-line-chart' style="font-size:18px; color:#fff;"></i>
+            </div>
+            <div>
+              <h2 id="facultyTrendTitle" style="color:#fff; font-size:1rem; margin:0; font-weight:700;">Performance Trend</h2>
+              <p style="color:rgba(255,255,255,0.7); font-size:11px; margin:2px 0 0;">Scores across all evaluated semesters</p>
+            </div>
+          </div>
+          <button onclick="closeFacultyTrendModal()" style="background:rgba(255,255,255,0.15); border:none; color:#fff; width:30px; height:30px; border-radius:7px; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center;">&times;</button>
+        </div>
+        <div style="padding:24px;">
+          <div id="facultyTrendLoader" style="text-align:center; padding:40px; color:var(--muted);">
+            <i class='bx bx-loader-alt bx-spin' style="font-size:24px;"></i>
+          </div>
+          <canvas id="facultyTrendChart" style="display:none;"></canvas>
+          <div id="facultyTrendEmpty" style="display:none; text-align:center; padding:40px; color:var(--muted); font-size:13px;">
+            No evaluation history found for this faculty member.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Evaluation Modal -->
+    <div id="evaluationModal" class="hr-modal-wrapper" style="display:none;">
+      <div class="hr-modal-content" style="max-width:860px; width:95vw; padding:0; overflow:hidden; display:flex; flex-direction:column; max-height:90vh;">
+        <div style="background:linear-gradient(135deg, var(--spc-maroon), #a71d2a); padding:20px 24px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0;">
+          <div style="display:flex; align-items:center; gap:12px; min-width:0;">
+            <div style="width:44px; height:44px; background:rgba(255,255,255,0.15); border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              <i class='bx bx-check-shield' style="font-size:22px; color:#fff;"></i>
+            </div>
+            <div style="min-width:0;">
+              <h2 id="modalTitle" style="color:#fff; font-size:1.05rem; margin:0; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Evaluation Report</h2>
+              <p id="reportSemester" style="color:rgba(255,255,255,0.75); font-size:12px; margin:3px 0 0;">Loading...</p>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; flex-shrink:0; margin-left:16px;">
+            <button id="modalDownloadBtn" data-personnel-id="0"
+              style="background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.35); color:#fff; border-radius:8px; padding:7px 14px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;"
+              onmouseover="this.style.background='rgba(255,255,255,0.25)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
+              <i class='bx bx-download'></i> Download PDF
+            </button>
+            <button onclick="closeModal()"
+              style="background:rgba(255,255,255,0.15); border:none; color:#fff; width:32px; height:32px; border-radius:8px; cursor:pointer; font-size:20px; display:flex; align-items:center; justify-content:center; line-height:1;"
+              onmouseover="this.style.background='rgba(255,255,255,0.25)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">&times;</button>
+          </div>
+        </div>
+        <div id="reportContent" style="overflow-y:auto; padding:24px; flex:1;">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px;">
+            <div style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; padding:20px; display:flex; flex-direction:column; align-items:center; gap:12px;">
+              <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted);">Overall Rating</div>
+              <div class="progress-circle" id="overallRatingCircle" style="--percentage:0;"><span id="overallRatingValue">0.00</span></div>
+              <span class="status above-average" id="finalStatusBadge">N/A</span>
+            </div>
+            <div style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; padding:20px;">
+              <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted); margin-bottom:14px;">Score Breakdown</div>
+              <table style="width:100%; border-collapse:separate; border-spacing:0 6px;">
+                <tbody id="ratingBreakdownBody"><tr><td colspan="2" style="text-align:center; color:var(--muted); font-size:13px;">Loading...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+          <div style="border:1px solid #fde68a; border-radius:12px; overflow:hidden; margin-bottom:16px;">
+            <div style="background:#fffbea; border-bottom:1px solid #fde68a; padding:11px 16px; display:flex; align-items:center; gap:8px;">
+              <i class='bx bxs-graduation' style="color:#92400e; font-size:15px;"></i>
+              <span style="font-weight:700; font-size:13px; color:#78350f;">Student Feedback</span>
+              <span style="margin-left:auto; background:#fef3c7; color:#92400e; border-radius:999px; padding:2px 10px; font-size:11px; font-weight:700; border:1px solid #fde68a;"><span id="studentResponsesCount">0</span> responses</span>
+            </div>
+            <div style="padding:14px 16px; background:#fff;">
+              <ul id="feedbackList" style="list-style:none; padding:0; margin:0;"></ul>
+              <div id="noFeedback" style="text-align:center; color:var(--muted); padding:16px; font-size:13px;">No qualitative feedback available.</div>
+            </div>
+          </div>
+          <div id="peerFeedbackCard" style="border:1px solid #bfdbfe; border-radius:12px; overflow:hidden; margin-bottom:8px;">
+            <div style="background:#eff6ff; border-bottom:1px solid #bfdbfe; padding:11px 16px; display:flex; align-items:center; gap:8px;">
+              <i class='bx bx-group' style="color:#1d4ed8; font-size:15px;"></i>
+              <span style="font-weight:700; font-size:13px; color:#1e3a8a;">Peer Feedback</span>
+              <span style="margin-left:auto; background:#dbeafe; color:#1e40af; border-radius:999px; padding:2px 10px; font-size:11px; font-weight:700; border:1px solid #bfdbfe;"><span id="peerSubmissionsCount">0</span> submission(s)</span>
+            </div>
+            <div style="padding:14px 16px; background:#fff;">
+              <div id="peerFeedbackList"></div>
+              <div id="noPeerFeedback" style="text-align:center; color:var(--muted); padding:16px; font-size:13px;">No peer evaluation feedback available.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+  </div><!-- end #department-view -->
+
 </section>
 {% endblock %}
 
@@ -190,6 +555,7 @@
   Chart.register(overallPromoPlugin);
 
   const FACULTY_NAME = document.getElementById('semester-filter-bar')?.dataset.facultyName || '';
+  const DEAN_COLLEGE = document.getElementById('dept-context-label')?.dataset.college || '';
   let currentDeptName = '';
 
   let scoresChartInstance     = null;
@@ -197,6 +563,14 @@
   let trendChartInstance      = null;
   let currentTermId           = null;
 
+
+  // ── Dept Context Label ────────────────────────────────────
+  function updateDeptContextLabel() {
+    const sel = document.getElementById('dept-semesterFilter');
+    const semText = (sel?.options[sel.selectedIndex]?.text || '').replace(' (Current)', '');
+    const label = document.getElementById('dept-context-label');
+    if (label) label.textContent = DEAN_COLLEGE && semText ? `${DEAN_COLLEGE} · ${semText}` : (DEAN_COLLEGE || semText || 'Department Overview');
+  }
 
   // ── Filter Label ─────────────────────────────────────────
   function updateFilterLabel() {
@@ -701,6 +1075,592 @@
     });
   });
 
-  document.addEventListener('DOMContentLoaded', loadSemesters);
+  const IS_DEAN = document.getElementById('semester-filter-bar')?.dataset.role === '20002';
+
+  document.addEventListener('DOMContentLoaded', function() {
+    if (IS_DEAN) {
+      // Deans go straight to department view — skip personal data loading
+      document.querySelectorAll('.personal-view-item').forEach(el => el.style.display = 'none');
+      document.getElementById('personal-filter-inner').style.display = 'none';
+      document.getElementById('dept-filter-inner').style.display = 'flex';
+      document.getElementById('department-view').style.display = 'block';
+      if (typeof $ !== 'undefined') fetchSemestersAndPopulate();
+      else setTimeout(fetchSemestersAndPopulate, 300);
+    } else {
+      loadSemesters();
+    }
+  });
 </script>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script>
+// ── Department View JS (copied from HR Evaluations) ──────
+
+window.CURRENT_TERM_ID = 0;
+const MODAL = document.getElementById('evaluationModal');
+let ALL_COLLEGES = [];
+let ALL_DEPT_AVERAGES = [];
+
+let EVALUATIONS_DATA = [];
+const PAGE_SIZE = 10;
+let CURRENT_PAGE = 1;
+
+function showToast(message, type = 'success', duration = 3000) {
+    const toast = $('<div>').addClass('toast show').text(message);
+    if (type === 'error') {
+        toast.css({ 'background': '#dc2626', 'color': 'white' });
+        toast.prepend("<i class='bx bx-x-circle'></i>&nbsp;");
+    } else if (type === 'warning') {
+        toast.css({ 'background': '#f59e0b', 'color': '#111' });
+        toast.prepend("<i class='bx bx-error-alt'></i>&nbsp;");
+    } else {
+        toast.css({ 'background': '#10b981', 'color': 'white' });
+        toast.prepend("<i class='bx bx-check'></i>&nbsp;");
+    }
+    $('body').append(toast);
+    setTimeout(() => { toast.removeClass('show').addClass('hide'); toast.remove(); }, duration);
+}
+
+function reRenderCurrentPage() {
+    renderTablePage(CURRENT_PAGE);
+    $('#update-eval-btn').prop('disabled', false);
+    $('#newCycleBtn').prop('disabled', false);
+}
+
+function renderTablePage(pageNumber) {
+    const tbody = $('#evalTableBody');
+    tbody.empty();
+    const startIndex = (pageNumber - 1) * PAGE_SIZE;
+    const endIndex = startIndex + PAGE_SIZE;
+    const totalRecords = EVALUATIONS_DATA.length;
+    const totalPages = Math.ceil(totalRecords / PAGE_SIZE);
+    const paginatedData = EVALUATIONS_DATA.slice(startIndex, endIndex);
+
+    if (paginatedData.length === 0) {
+        $('#evalTable').hide();
+        $('#emptyState').show().text('No evaluations found matching filters.');
+        $('#pagerInfo').text('');
+        $('#prevPage').prop('disabled', true);
+        $('#nextPage').prop('disabled', true);
+        return;
+    }
+
+    const formatScore = (score) => { const num = parseFloat(score); return (num > 0) ? num.toFixed(2) : '—'; };
+
+    paginatedData.forEach(function(row) {
+        var rating = parseFloat(row.avgscore);
+        var statusClass = '', statusLabel = 'N/A';
+        if (rating >= 3) { statusClass = 'above-average'; statusLabel = 'Above Average'; }
+        else if (rating >= 2) { statusClass = 'average'; statusLabel = 'Average'; }
+        else if (rating > 0) { statusClass = 'below-average'; statusLabel = 'Below Average'; }
+        else { statusClass = 'pending'; statusLabel = 'Not Rated'; }
+
+        var studentResponses = row.studentresponses;
+        var totalStudents = row.total_students || 0;
+        var metThreshold = totalStudents > 0 ? getResponseThreshold(totalStudents) : null;
+        var metRateNum = totalStudents > 0 ? Math.ceil(totalStudents * metThreshold) : null;
+        var responseMet = metThreshold !== null && studentResponses >= totalStudents * metThreshold;
+        var responseStatusLabel = metThreshold === null
+            ? '<span style="color:#6b7280;font-weight:600">No Data</span>'
+            : responseMet ? '<span style="color:#166534;font-weight:600">Met</span>' : '<span style="color:#991b1b;font-weight:600">Not Met</span>';
+        var responseDisplay = totalStudents > 0 ? `${studentResponses} / ${totalStudents} (need ${metRateNum})` : `${studentResponses}`;
+
+        const disableDownload = (rating <= 0 || isNaN(rating)) ? 'disabled' : '';
+        const studentScore = formatScore(row.student_score);
+        const supervisorScore = formatScore(row.supervisor_score);
+        const peerScoreDisplay = parseFloat(row.peer_score) > 0 ? formatScore(row.peer_score) : '—';
+
+        const isComplete = row.score_complete === true;
+        const incompleteIcon = !isComplete && rating > 0 ? ` <i class='bx bx-error-circle' title='Incomplete Score' style='color:#f59e0b;font-size:13px;vertical-align:middle;cursor:help;'></i>` : '';
+        const overallDisplay = (rating > 0)
+            ? `<span class="status ${statusClass}" style="padding:4px 8px;">${rating.toFixed(2)} - ${statusLabel}</span>${incompleteIcon}`
+            : `<span class="status pending">${statusLabel}</span>`;
+
+        const actionButtons = `
+            <button class="btn action" onclick="openModal(${row.personnelid}, '${row.name}', ${rating.toFixed(2)}, ${studentResponses})">
+                <i class='bx bx-show-alt'></i>&nbsp;View
+            </button>
+            <button class="btn secondary" onclick="downloadReport(${row.personnelid})" ${disableDownload}>
+                <i class='bx bx-download'></i>
+            </button>`;
+
+        tbody.append(
+          `<tr data-personnel-id="${row.personnelid}">` +
+            `<td>${row.name}</td>` +
+            `<td>${row.department}</td>` +
+            `<td>${row.position || 'N/A'}</td>` +
+            `<td>${responseDisplay} — ${responseStatusLabel}</td>` +
+            `<td style="text-align:center;">${studentScore}</td>` +
+            `<td style="text-align:center;">${supervisorScore}</td>` +
+            `<td style="text-align:center;">${peerScoreDisplay}</td>` +
+            `<td style="text-align:left;">${overallDisplay}</td>` +
+            `<td class="action-buttons">${actionButtons}</td>` +
+          '</tr>'
+        );
+    });
+
+    $('#evalTable').show();
+    $('#emptyState').hide();
+    $('#pagerInfo').text(`Showing ${startIndex + 1} to ${Math.min(endIndex, totalRecords)} of ${totalRecords} records (Page ${pageNumber} of ${totalPages})`);
+    $('#prevPage').prop('disabled', pageNumber === 1);
+    $('#nextPage').prop('disabled', pageNumber === totalPages);
+    CURRENT_PAGE = pageNumber;
+}
+
+
+function loadEvaluations() {
+    const selectedTerm = $('#dept-semesterFilter').val();
+    const termIdToUse = selectedTerm || window.CURRENT_TERM_ID;
+    var dept = $('#deptFilter').val() || '';
+    var status = $('#statusFilter').val() || '';
+    var search = $('#evalSearch').val() || '';
+    var position = $('#positionFilter').val() || '';
+    var responseRate = $('#responseRateFilter').val() || '';
+
+    $('#evalTableBody').html('<tr><td colspan="6" class="table-empty">Loading evaluations...</td></tr>');
+    $('#emptyState').hide();
+    $('#termDisplay').html('📅 Loading...');
+    $('#durationDates').text('Loading...');
+    $('#cycleStatusContainer').html('<strong>🔔 Status:</strong> <span id="cycleStatus">Loading...</span>');
+
+    $.get('/api/hr/evaluations', { term: termIdToUse, dept, status, search, position, response_rate: responseRate }, function(data) {
+        if (data.kpis) {
+            const kpis = data.kpis;
+            $('#kpiAvg').text(parseFloat(kpis.avg_rating).toFixed(2));
+            $('#kpiTotalFaculty').text(kpis.total_faculty);
+            $('#kpiMetRate').text(`${kpis.met_response_rate_count}/${kpis.total_faculty}`);
+            $('#kpiBestDept').text(kpis.best_department_name);
+        }
+        if (data.acadcalendar_info) {
+            const info = data.acadcalendar_info;
+            let cleanedDisplay = info.display.replace('AY AY', 'AY').replace('  ', ' ').trim();
+            $('#termDisplay').html(cleanedDisplay);
+            const selectedOption = $('#dept-semesterFilter option:selected');
+            const startDateString = selectedOption.data('start');
+            const endDateString = selectedOption.data('end');
+            let durationText = info.deadline;
+            if (startDateString && endDateString) {
+                const fmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                durationText = `${fmt.format(new Date(startDateString))} – ${fmt.format(new Date(endDateString))}`;
+            }
+            $('#durationDates').text(durationText);
+
+            let statusText = "N/A", statusColor = "#6b7280";
+            if (startDateString && endDateString) {
+                const start = new Date(startDateString); start.setHours(0,0,0,0);
+                const end   = new Date(endDateString);   end.setHours(0,0,0,0);
+                const today = new Date();                today.setHours(0,0,0,0);
+                if (today < start)       { statusText = "Not Started"; statusColor = "#3b82f6"; }
+                else if (today <= end)   { statusText = "In Progress"; statusColor = "#f59e0b"; }
+                else                     { statusText = "Finished";    statusColor = "#166534"; }
+            }
+            $('#cycleStatusContainer').html(`<strong>🔔 Status:</strong> <span id="cycleStatus" style="color:${statusColor};font-weight:600;">${statusText}</span>`);
+        }
+        var deptFilter = $('#deptFilter');
+        var currentDeptVal = deptFilter.val();
+        if (ALL_COLLEGES.length > 0) {
+            deptFilter.empty().append('<option value="">All Departments</option>');
+            ALL_COLLEGES.forEach(function(d) { deptFilter.append(`<option value="${d}">${d}</option>`); });
+        }
+        deptFilter.val(currentDeptVal);
+        var positionFilter = $('#positionFilter');
+        var currentPositionVal = positionFilter.val();
+        positionFilter.empty().append('<option value="">All Positions</option>');
+        if (data.unique_positions) {
+            data.unique_positions.forEach(function(p) { positionFilter.append(`<option value="${p}">${p}</option>`); });
+        }
+        positionFilter.val(currentPositionVal);
+
+        if (data.all_dept_averages) ALL_DEPT_AVERAGES = data.all_dept_averages;
+        if (data.success && data.evaluations.length > 0) {
+            EVALUATIONS_DATA = data.evaluations; CURRENT_PAGE = 1; renderTablePage(CURRENT_PAGE);
+        } else {
+            EVALUATIONS_DATA = []; renderTablePage(1);
+        }
+        const analyticsTab = document.getElementById('evalTabContent-analytics');
+        if (analyticsTab && analyticsTab.style.display !== 'none') renderAnalytics();
+    }).fail(function() {
+        $('#evalTableBody').html('<tr><td colspan="6" class="table-empty" style="color:#991b1b;">Failed to load data from API.</td></tr>');
+    });
+}
+
+function fetchSemestersAndPopulate() {
+    const semesterFilter = $('#dept-semesterFilter');
+    semesterFilter.empty().append('<option value="">Loading Semesters...</option>');
+    $.get('/api/faculty/semesters', function(data) {
+        if (data.success && data.semesters) {
+            semesterFilter.empty();
+            let currentTermSet = false;
+            data.semesters.forEach(function(sem) {
+                const isCurrent = sem.is_current;
+                const selectedAttr = (isCurrent && !currentTermSet) ? 'selected' : '';
+                const display = isCurrent ? `${sem.text} (Current)` : sem.text;
+                semesterFilter.append(`<option value="${sem.id}" ${selectedAttr} data-start="${sem.start_date}" data-end="${sem.end_date}">${display}</option>`);
+                if (isCurrent && !currentTermSet) { window.CURRENT_TERM_ID = sem.id; currentTermSet = true; }
+            });
+            updateDeptContextLabel();
+            $.get('/api/hr/colleges-list', function(collegeData) {
+                if (collegeData.success && collegeData.colleges) {
+                    ALL_COLLEGES = collegeData.colleges.map(c => c.collegename).sort();
+                    const df = $('#deptFilter');
+                    df.empty().append('<option value="">All Departments</option>');
+                    ALL_COLLEGES.forEach(function(d) { df.append(`<option value="${d}">${d}</option>`); });
+                }
+                loadEvaluations();
+            }).fail(function() { loadEvaluations(); });
+        } else {
+            semesterFilter.empty().append('<option value="">Error Loading Terms</option>');
+            loadEvaluations();
+        }
+    }).fail(function() {
+        semesterFilter.empty().append('<option value="">API Error</option>');
+        loadEvaluations();
+    });
+}
+
+function getResponseThreshold(totalStudents) {
+    if (totalStudents <= 25)  return 0.80;
+    if (totalStudents <= 50)  return 0.66;
+    if (totalStudents <= 100) return 0.50;
+    if (totalStudents <= 200) return 0.33;
+    return 0.25;
+}
+
+function getStatusInfo(rating) {
+    if (rating >= 3)  return { class: 'above-average completed', label: 'Above Average' };
+    if (rating >= 2)  return { class: 'average pending',         label: 'Average' };
+    if (rating > 0)   return { class: 'below-average rejected',  label: 'Below Average' };
+    return { class: 'pending', label: 'Not Rated' };
+}
+
+function openModal(personnelId, facultyName, overallRating, studentResponses) {
+    $('#modalTitle').text(`Evaluation Report: ${facultyName}`);
+    const circlePercentage = Math.min((overallRating / 4) * 100, 100);
+    $('#overallRatingCircle').css('--percentage', `${circlePercentage}`);
+    $('#overallRatingValue').text(overallRating.toFixed(2));
+    $('#modalDownloadBtn').data('personnel-id', personnelId);
+    $('#studentResponsesCount').text(studentResponses);
+    const statusInfo = getStatusInfo(overallRating);
+    $('#finalStatusBadge').text(statusInfo.label).removeClass().addClass(`status ${statusInfo.class}`);
+    $('#reportSemester').text('Loading...');
+    $('#ratingBreakdownBody').html('<tr><td colspan="2" style="text-align:center;color:var(--muted);font-size:13px;">Loading...</td></tr>');
+    $('#feedbackList').empty();
+    $('#noFeedback').show();
+    $('#peerFeedbackList').empty();
+    $('#noPeerFeedback').show();
+    $('#peerSubmissionsCount').text(0);
+    MODAL.style.display = 'flex';
+
+    const selectedTermId = $('#dept-semesterFilter').val() || window.CURRENT_TERM_ID;
+    $.get(`/api/hr/faculty-evaluation-report/${personnelId}?term_id=${selectedTermId}`, function(data) {
+        $('#ratingBreakdownBody').empty(); $('#feedbackList').empty(); $('#peerFeedbackList').empty();
+        if (data.success && data.report) {
+            const report = data.report;
+            const apiOverall = parseFloat(report.overall_rating) || 0;
+            $('#overallRatingCircle').css('--percentage', `${Math.min((apiOverall / 4) * 100, 100)}`);
+            $('#overallRatingValue').text(apiOverall.toFixed(2));
+            const apiStatus = getStatusInfo(apiOverall);
+            $('#finalStatusBadge').text(apiStatus.label).removeClass().addClass(`status ${apiStatus.class}`);
+            $('#modalIncompleteWarning').remove();
+            if (!report.score_complete && apiOverall > 0) {
+                $('#finalStatusBadge').after(`<span id='modalIncompleteWarning' style='margin-left:8px;color:#f59e0b;font-size:12px;font-weight:600;'><i class='bx bx-error-circle'></i> Incomplete Score</span>`);
+            }
+            const expectedTypes = {
+                'Student':    { weight: 0.55, score: 0, responses: 0, disclaimer: "No student responses recorded." },
+                'Supervisor': { weight: 0.35, score: 0, responses: 0, disclaimer: "No supervisor evaluation recorded." },
+                'Peer':       { weight: 0.10, score: 0, responses: 0, disclaimer: "No peer evaluation recorded." }
+            };
+            report.rating_breakdown.forEach(item => {
+                if (expectedTypes[item.type]) {
+                    expectedTypes[item.type].score = item.score;
+                    expectedTypes[item.type].responses = item.total_responses;
+                    if (item.score > 0) expectedTypes[item.type].disclaimer = null;
+                }
+            });
+            Object.keys(expectedTypes).forEach(type => {
+                const item = expectedTypes[type];
+                const weight = item.weight * 100;
+                const scoreDisplay = (item.score > 0) ? item.score.toFixed(2) : '—';
+                let rowClass = (item.score > 0) ? '' : 'style="background-color:#fcfcfc;"';
+                let scoreCellContent = item.score > 0
+                    ? `<td style="text-align:right; font-weight:700; color:var(--spc-maroon); padding:5px 0;">${scoreDisplay}</td>`
+                    : `<td style="text-align:right; font-weight:700; color:var(--muted); padding:5px 0;">${scoreDisplay} <i class='bx bx-info-circle' title="${item.disclaimer || ''}"></i></td>`;
+                $('#ratingBreakdownBody').append(`<tr ${rowClass}><td style="font-weight:500; padding:5px 0;">${type} (${weight.toFixed(0)}%)</td>${scoreCellContent}</tr>`);
+            });
+            if (report.qualitative_feedback && report.qualitative_feedback.length > 0) {
+                const cleanFeedback = report.qualitative_feedback.filter(c => c.trim() !== '' && c.trim() !== '---');
+                if (cleanFeedback.length > 0) {
+                    cleanFeedback.forEach(function(comment) {
+                        $('#feedbackList').append(`<li style="margin-bottom:12px; padding:10px; border-left:3px solid var(--spc-gold); background:#fcfcfd; border-radius:4px;"><i class='bx bxs-quote-alt-left' style="font-size:1.1rem; color:var(--spc-gold); margin-right:5px;"></i><span style="font-style:italic; color:#333;">${comment}</span></li>`);
+                    });
+                    $('#noFeedback').hide();
+                } else { $('#noFeedback').show().text('No qualitative feedback available.'); }
+            } else { $('#noFeedback').show().text('No qualitative feedback available.'); }
+            const peerSubs = report.peer_submissions || [];
+            $('#peerSubmissionsCount').text(peerSubs.length);
+            if (peerSubs.length > 0) {
+                $('#noPeerFeedback').hide();
+                peerSubs.forEach(function(sub) {
+                    let html = `<div style="margin-bottom:14px; padding:12px 14px; border:1px solid #dbeafe; border-left:3px solid #3b82f6; border-radius:6px; background:#f8fbff;">`;
+                    html += `<div style="font-weight:700; font-size:13px; color:#1e40af; margin-bottom:8px;"><i class='bx bx-user' style="margin-right:5px;"></i>${sub.evaluator_name} <span style="font-weight:400; color:var(--muted); font-size:12px;">— Score: ${sub.final_score.toFixed(2)}</span></div>`;
+                    if (sub.strengths) html += `<div style="margin-bottom:6px;"><span style="font-weight:600; font-size:12px; color:#166534;">Strengths:</span> <span style="font-size:13px; color:#374151;">${sub.strengths}</span></div>`;
+                    if (sub.growth)    html += `<div style="margin-bottom:6px;"><span style="font-weight:600; font-size:12px; color:#92400e;">Areas for Growth:</span> <span style="font-size:13px; color:#374151;">${sub.growth}</span></div>`;
+                    if (sub.comments)  html += `<div><span style="font-weight:600; font-size:12px; color:#374151;">Comments:</span> <span style="font-size:13px; font-style:italic; color:#374151;">${sub.comments}</span></div>`;
+                    if (!sub.strengths && !sub.growth && !sub.comments) html += `<span style="font-size:12px; color:var(--muted);">No written feedback provided.</span>`;
+                    html += `</div>`;
+                    $('#peerFeedbackList').append(html);
+                });
+            } else { $('#noPeerFeedback').show(); }
+            let cleanedReportSemester = report.semester_display.replace('AY AY', 'AY').replace('  ', ' ').trim();
+            $('#reportSemester').text(cleanedReportSemester);
+        } else {
+            $('#ratingBreakdownBody').html('<tr><td colspan="2" style="text-align:center; color:#ef4444;">Failed to load report details.</td></tr>');
+            $('#noFeedback').show().text('Error loading qualitative feedback.');
+        }
+    }).fail(function() {
+        $('#ratingBreakdownBody').html('<tr><td colspan="2" style="text-align:center; color:#ef4444;">API Error.</td></tr>');
+    });
+}
+
+function closeModal() { MODAL.style.display = 'none'; }
+
+function downloadReport(personnelId) {
+    const termId = $('#dept-semesterFilter').val() || window.CURRENT_TERM_ID;
+    window.open(`/api/hr/faculty-evaluation-report-pdf/${personnelId}?term_id=${termId}`, '_blank');
+}
+
+function clearEvalFilters() {
+    $('#deptFilter').val(''); $('#positionFilter').val(''); $('#statusFilter').val(''); $('#responseRateFilter').val('');
+    loadEvaluations();
+}
+
+
+// ── Analytics ────────────────────────────────────────────
+let AN_SORT_COL='overall', AN_SORT_DIR='desc';
+let evalDistChartInstance=null, evalDeptChartInstance=null, facultyTrendChartInstance=null;
+
+function switchEvalTab(tab) {
+    ['evaluations','analytics'].forEach(t => {
+        document.getElementById(`evalTabContent-${t}`).style.display = t===tab ? 'block' : 'none';
+        document.getElementById(`evalPageTab-${t}`).classList.toggle('active', t===tab);
+    });
+    if (tab==='analytics') {
+        deptChartView='bar'; distChartView='bar';
+        document.getElementById('evalDeptChart').style.display='block'; document.getElementById('evalDeptTrendChart').style.display='none';
+        document.getElementById('deptChartToggle-bar').style.cssText='padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--spc-maroon);background:var(--spc-maroon);color:#fff;transition:all .15s;';
+        document.getElementById('deptChartToggle-line').style.cssText='padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #e5e7eb;background:#fff;color:var(--muted);transition:all .15s;';
+        document.getElementById('evalDistChart').style.display='block'; document.getElementById('evalDistTrendChart').style.display='none';
+        document.getElementById('distChartToggle-bar').style.cssText='padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--spc-maroon);background:var(--spc-maroon);color:#fff;transition:all .15s;';
+        document.getElementById('distChartToggle-line').style.cssText='padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #e5e7eb;background:#fff;color:var(--muted);transition:all .15s;';
+        renderAnalytics();
+    }
+}
+
+function renderAnalytics() {
+    if (!EVALUATIONS_DATA||EVALUATIONS_DATA.length===0) {
+        document.getElementById('analyticsTableBody').innerHTML=`<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted);">No evaluation data for the selected term.</td></tr>`;
+        ['an-avgRating','an-coverage','an-aboveAvg','an-belowAvg'].forEach(id=>document.getElementById(id).textContent='—');
+        document.getElementById('an-coverageDetail').textContent=''; return;
+    }
+    const data=EVALUATIONS_DATA;
+    const rated=data.filter(r=>parseFloat(r.avgscore)>0);
+    const aboveAvg=rated.filter(r=>parseFloat(r.avgscore)>=3).length;
+    const belowAvg=rated.filter(r=>parseFloat(r.avgscore)<3).length;
+    const coverage=data.length>0?Math.round(rated.length/data.length*100)+'%':'0%';
+    const avgRating=rated.length>0?(rated.reduce((s,r)=>s+parseFloat(r.avgscore),0)/rated.length).toFixed(2):'—';
+    document.getElementById('an-avgRating').textContent=avgRating;
+    document.getElementById('an-coverage').textContent=coverage;
+    document.getElementById('an-coverageDetail').textContent=`${rated.length} of ${data.length} faculty`;
+    document.getElementById('an-aboveAvg').textContent=aboveAvg;
+    document.getElementById('an-belowAvg').textContent=belowAvg;
+    renderDistributionChart(data); renderDeptChart(data); renderAnalyticsTable();
+}
+
+function renderDistributionChart(data) {
+    const buckets=['0–1','1–2','2–3','3–4'], counts=[0,0,0,0];
+    data.forEach(r=>{const s=parseFloat(r.avgscore);if(s<=0)return;if(s<=1)counts[0]++;else if(s<=2)counts[1]++;else if(s<=3)counts[2]++;else counts[3]++;});
+    if (evalDistChartInstance) evalDistChartInstance.destroy();
+    const ctx=document.getElementById('evalDistChart').getContext('2d');
+    evalDistChartInstance=new Chart(ctx,{type:'bar',data:{labels:buckets,datasets:[{label:'Faculty Count',data:counts,backgroundColor:['rgba(123,17,19,0.30)','rgba(123,17,19,0.50)','rgba(123,17,19,0.75)','rgba(123,17,19,1)'],borderRadius:6,borderSkipped:false}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1},grid:{color:'#f1f5f9'}},x:{grid:{display:false}}}}});
+}
+
+let evalDistTrendChartInstance=null, distChartView='bar';
+function switchDistChartView(view) {
+    distChartView=view;
+    const barBtn=document.getElementById('distChartToggle-bar'), lineBtn=document.getElementById('distChartToggle-line'), maroon='var(--spc-maroon)';
+    if (view==='bar') {
+        barBtn.style.cssText=`padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${maroon};background:${maroon};color:#fff;transition:all .15s;`;
+        lineBtn.style.cssText='padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #e5e7eb;background:#fff;color:var(--muted);transition:all .15s;';
+        document.getElementById('evalDistChart').style.display='block'; document.getElementById('evalDistTrendChart').style.display='none';
+        if (EVALUATIONS_DATA.length>0) renderDistributionChart(EVALUATIONS_DATA);
+    } else {
+        lineBtn.style.cssText=`padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${maroon};background:${maroon};color:#fff;transition:all .15s;`;
+        barBtn.style.cssText='padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #e5e7eb;background:#fff;color:var(--muted);transition:all .15s;';
+        document.getElementById('evalDistChart').style.display='none'; document.getElementById('evalDistTrendChart').style.display='block';
+        loadDistTrendChart();
+    }
+}
+async function loadDistTrendChart() {
+    try { const res=await fetch('/api/hr/distribution-trends'),data=await res.json(); if(data.success) renderDistTrendChart(data.semesters,data.buckets); } catch(err){}
+}
+function renderDistTrendChart(semesters,buckets) {
+    if (evalDistTrendChartInstance) evalDistTrendChartInstance.destroy();
+    const bucketNames=['0–1','1–2','2–3','3–4'],bucketColors=['rgba(123,17,19,0.30)','rgba(123,17,19,0.50)','rgba(123,17,19,0.75)','rgba(123,17,19,1)'];
+    const datasets=bucketNames.map((name,i)=>({label:name,data:buckets[name]||[],borderColor:bucketColors[i],backgroundColor:bucketColors[i],tension:0.3,borderWidth:2,pointRadius:4,pointBackgroundColor:bucketColors[i],spanGaps:true}));
+    const ctx=document.getElementById('evalDistTrendChart').getContext('2d');
+    evalDistTrendChartInstance=new Chart(ctx,{type:'line',data:{labels:semesters,datasets},options:{responsive:true,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:14,padding:10}}},scales:{y:{beginAtZero:true,ticks:{stepSize:1},grid:{color:'#f1f5f9'},title:{display:true,text:'Faculty Count',font:{size:11}}},x:{grid:{display:false},ticks:{font:{size:10}}}}}});
+}
+
+async function openFacultyTrend(personnelId,name) {
+    document.getElementById('facultyTrendTitle').textContent=name;
+    document.getElementById('facultyTrendLoader').style.display='block';
+    document.getElementById('facultyTrendChart').style.display='none';
+    document.getElementById('facultyTrendEmpty').style.display='none';
+    document.getElementById('facultyTrendModal').style.display='flex';
+    if (facultyTrendChartInstance) { facultyTrendChartInstance.destroy(); facultyTrendChartInstance=null; }
+    try {
+        const res=await fetch(`/api/hr/evaluation-trends?personnel_id=${personnelId}`),data=await res.json();
+        document.getElementById('facultyTrendLoader').style.display='none';
+        if (!data.success||!data.trends||data.trends.length===0) { document.getElementById('facultyTrendEmpty').style.display='block'; return; }
+        const canvas=document.getElementById('facultyTrendChart'); canvas.style.display='block';
+        const trends=data.trends;
+        facultyTrendChartInstance=new Chart(canvas.getContext('2d'),{type:'line',data:{labels:trends.map(t=>t.label),datasets:[
+            {label:'Overall',data:trends.map(t=>t.overall),borderColor:'#7b1113',backgroundColor:'#7b1113',tension:0.3,borderWidth:2.5,pointRadius:5,pointBackgroundColor:'#7b1113'},
+            {label:'Student',data:trends.map(t=>t.student),borderColor:'#d97706',backgroundColor:'#d97706',borderDash:[5,3],tension:0.3,borderWidth:1.5,pointRadius:3,pointBackgroundColor:'#d97706'},
+            {label:'Supervisor',data:trends.map(t=>t.supervisor),borderColor:'#2563eb',backgroundColor:'#2563eb',borderDash:[5,3],tension:0.3,borderWidth:1.5,pointRadius:3,pointBackgroundColor:'#2563eb'},
+            {label:'Peer',data:trends.map(t=>t.peer),borderColor:'#16a34a',backgroundColor:'#16a34a',borderDash:[5,3],tension:0.3,borderWidth:1.5,pointRadius:3,pointBackgroundColor:'#16a34a'}
+        ]},options:{responsive:true,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:18,padding:12}}},scales:{y:{min:0,max:4,grid:{color:'#f1f5f9'},title:{display:true,text:'Score (0–4)',font:{size:11}},ticks:{stepSize:1}},x:{grid:{display:false},ticks:{font:{size:11}}}}}});
+    } catch(err) { document.getElementById('facultyTrendLoader').style.display='none'; document.getElementById('facultyTrendEmpty').style.display='block'; }
+}
+function closeFacultyTrendModal() { document.getElementById('facultyTrendModal').style.display='none'; }
+
+function renderDeptChart(data) {
+    let depts, avgs;
+    if (ALL_DEPT_AVERAGES && ALL_DEPT_AVERAGES.length > 0) {
+        // Use unfiltered all-college averages from API (so Deans see all depts for context)
+        depts = ALL_DEPT_AVERAGES.map(d => d.dept);
+        avgs  = ALL_DEPT_AVERAGES.map(d => parseFloat(d.avg.toFixed(2)));
+    } else {
+        const deptMap={};
+        data.forEach(r=>{const dept=r.department||'Unknown',score=parseFloat(r.avgscore);if(!deptMap[dept])deptMap[dept]={sum:0,count:0};if(score>0){deptMap[dept].sum+=score;deptMap[dept].count++;}});
+        depts=Object.keys(deptMap).sort();
+        avgs=depts.map(d=>deptMap[d].count>0?parseFloat((deptMap[d].sum/deptMap[d].count).toFixed(2)):0);
+    }
+    // Highlight the dean's own college bar
+    const colors = depts.map(d => d === DEAN_COLLEGE ? 'rgba(123,17,19,1)' : 'rgba(123,17,19,0.4)');
+    if (evalDeptChartInstance) evalDeptChartInstance.destroy();
+    const ctx=document.getElementById('evalDeptChart').getContext('2d');
+    evalDeptChartInstance=new Chart(ctx,{type:'bar',data:{labels:depts,datasets:[{label:'Avg Rating',data:avgs,backgroundColor:colors,borderRadius:6,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,max:4,grid:{color:'#f1f5f9'}},y:{grid:{display:false},ticks:{font:{size:11}}}}}});
+}
+
+let evalDeptTrendChartInstance=null, deptChartView='bar';
+function switchDeptChartView(view) {
+    deptChartView=view;
+    const barBtn=document.getElementById('deptChartToggle-bar'),lineBtn=document.getElementById('deptChartToggle-line');
+    if (view==='bar') {
+        barBtn.style.cssText='padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--spc-maroon);background:var(--spc-maroon);color:#fff;transition:all .15s;';
+        lineBtn.style.cssText='padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #e5e7eb;background:#fff;color:var(--muted);transition:all .15s;';
+        document.getElementById('evalDeptChart').style.display='block'; document.getElementById('evalDeptTrendChart').style.display='none';
+        if (EVALUATIONS_DATA.length>0) renderDeptChart(EVALUATIONS_DATA);
+    } else {
+        lineBtn.style.cssText='padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--spc-maroon);background:var(--spc-maroon);color:#fff;transition:all .15s;';
+        barBtn.style.cssText='padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #e5e7eb;background:#fff;color:var(--muted);transition:all .15s;';
+        document.getElementById('evalDeptChart').style.display='none'; document.getElementById('evalDeptTrendChart').style.display='block';
+        loadDeptTrendChart();
+    }
+}
+async function loadDeptTrendChart() {
+    try { const res=await fetch('/api/hr/dept-trends'),data=await res.json(); if(data.success) renderDeptTrendChart(data.semesters,data.depts); } catch(err){}
+}
+function renderDeptTrendChart(semesters,depts) {
+    if (evalDeptTrendChartInstance) evalDeptTrendChartInstance.destroy();
+    const palette=['#7b1113','#2563eb','#d97706','#16a34a','#7c3aed','#db2777','#0891b2','#65a30d','#ea580c','#6b7280'];
+    const deptNames=Object.keys(depts);
+    const datasets=deptNames.map((name,i)=>({label:name,data:depts[name],borderColor:palette[i%palette.length],backgroundColor:palette[i%palette.length],tension:0.3,borderWidth:2,pointRadius:4,pointBackgroundColor:palette[i%palette.length],spanGaps:true}));
+    const ctx=document.getElementById('evalDeptTrendChart').getContext('2d');
+    evalDeptTrendChartInstance=new Chart(ctx,{type:'line',data:{labels:semesters,datasets},options:{responsive:true,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:14,padding:10}}},scales:{y:{min:0,max:4,grid:{color:'#f1f5f9'},title:{display:true,text:'Score (0–4)',font:{size:11}},ticks:{stepSize:1}},x:{grid:{display:false},ticks:{font:{size:10}}}}}});
+}
+
+function sortAnalytics(col) {
+    if (AN_SORT_COL===col) AN_SORT_DIR=AN_SORT_DIR==='asc'?'desc':'asc'; else { AN_SORT_COL=col; AN_SORT_DIR='desc'; }
+    ['name','student','supervisor','peer','overall'].forEach(c=>{const el=document.getElementById(`an-sort-${c}`);if(el)el.className=c===col?(AN_SORT_DIR==='asc'?'bx bx-sort-up':'bx bx-sort-down'):'bx bx-sort';});
+    renderAnalyticsTable();
+}
+
+function renderAnalyticsTable() {
+    const search=(document.getElementById('analyticsSearch').value||'').toLowerCase();
+    let rows=EVALUATIONS_DATA.filter(r=>!search||r.name.toLowerCase().includes(search)||(r.department||'').toLowerCase().includes(search));
+    const colMap={name:r=>r.name,student:r=>parseFloat(r.student_score)||0,supervisor:r=>parseFloat(r.supervisor_score)||0,peer:r=>parseFloat(r.peer_score)||0,overall:r=>parseFloat(r.avgscore)||0};
+    const getter=colMap[AN_SORT_COL]||colMap.overall;
+    rows.sort((a,b)=>{const va=getter(a),vb=getter(b);if(typeof va==='string')return AN_SORT_DIR==='asc'?va.localeCompare(vb):vb.localeCompare(va);return AN_SORT_DIR==='asc'?va-vb:vb-va;});
+    const tbody=document.getElementById('analyticsTableBody');
+    if (rows.length===0) { tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted);">No results found.</td></tr>`; return; }
+    const fmt=v=>{const n=parseFloat(v);return n>0?n.toFixed(2):'—';};
+    tbody.innerHTML=rows.map(r=>{
+        const score=parseFloat(r.avgscore);
+        let badgeStyle,badgeLabel;
+        if (score>=3){badgeStyle='background:#dcfce7;color:#166534;';badgeLabel='Above Avg';}
+        else if(score>=2){badgeStyle='background:#fef3c7;color:#92400e;';badgeLabel='Average';}
+        else if(score>0){badgeStyle='background:#fee2e2;color:#991b1b;';badgeLabel='Below Avg';}
+        else{badgeStyle='background:#f1f5f9;color:#6b7280;';badgeLabel='Not Rated';}
+        const safeName=r.name.replace(/'/g,"\\'");
+        return `<tr>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;font-weight:600;color:#111827;">${r.name}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;color:var(--muted);font-size:12px;">${r.department||'—'}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;text-align:center;">${fmt(r.student_score)}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;text-align:center;">${fmt(r.supervisor_score)}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;text-align:center;">${fmt(r.peer_score)}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;text-align:center;font-weight:700;color:var(--spc-maroon);">${fmt(r.avgscore)}</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;text-align:center;"><span style="${badgeStyle}padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;">${badgeLabel}</span></td>
+            <td style="padding:10px 14px;border-bottom:1px solid #f1f3f5;text-align:center;">
+                <button onclick="openFacultyTrend(${r.personnelid},'${safeName}')" style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px;"><i class='bx bx-line-chart'></i> Trend</button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+// ── Dept view jQuery init ────────────────────────────────
+$(document).ready(function() {
+    $('#dept-semesterFilter, #deptFilter, #statusFilter, #positionFilter, #responseRateFilter').change(loadEvaluations);
+    $('#dept-semesterFilter').on('change', updateDeptContextLabel);
+    $('#evalSearch').on('input', loadEvaluations);
+
+    $('#modalDownloadBtn').click(function(){
+        const personnelId=$(this).data('personnel-id');
+        if(personnelId>0) downloadReport(personnelId);
+        else showToast('Error: Personnel ID not set.','error');
+    });
+
+    $('#prevPage').click(()=>{ if(CURRENT_PAGE>1) renderTablePage(CURRENT_PAGE-1); });
+    $('#nextPage').click(()=>{ const tp=Math.ceil(EVALUATIONS_DATA.length/PAGE_SIZE); if(CURRENT_PAGE<tp) renderTablePage(CURRENT_PAGE+1); });
+
+    MODAL.addEventListener('click',function(event){ if(event.target===MODAL) closeModal(); });
+    $('#facultyTrendModal').click(function(event){ if(event.target===this) closeFacultyTrendModal(); });
+});
+</script>
+
+<style>
+.eval-page-tab {
+    padding:12px 20px; border:none; background:transparent; font-size:13px; font-weight:600;
+    color:var(--muted); cursor:pointer; display:flex; align-items:center; gap:6px;
+    border-bottom:3px solid transparent; transition:color .15s, border-color .15s, background .15s;
+}
+.eval-page-tab:hover { color:var(--spc-maroon); background:rgba(123,17,19,0.03); }
+.eval-page-tab.active { color:var(--spc-maroon); border-bottom-color:var(--spc-maroon); background:#fff; }
+.peer-modal-tab {
+    flex:1; padding:11px 16px; border:none; background:transparent; font-size:13px; font-weight:600;
+    color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;
+    border-bottom:3px solid transparent; transition:color .15s, border-color .15s, background .15s;
+}
+.peer-modal-tab:hover { color:var(--spc-maroon); background:rgba(123,17,19,0.04); }
+.peer-modal-tab.active { color:var(--spc-maroon); border-bottom-color:var(--spc-maroon); background:#fff; }
+.peer-tab-content { animation:fadeIn .2s ease; }
+#evalTable { border-collapse:separate; border-spacing:0; width:100%; }
+#evalTable thead th { background:#f8fafc; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted); padding:11px 14px; border-top:1px solid #e5e7eb; border-bottom:2px solid #e5e7eb; white-space:nowrap; }
+#evalTable tbody tr { transition:background .1s; }
+#evalTable tbody tr:hover td { background:#f9fafb; }
+#evalTable tbody td { padding:11px 14px; border-bottom:1px solid #f1f3f5; font-size:13px; vertical-align:middle; color:#1f2937; }
+#evalTable tbody tr:last-child td { border-bottom:none; }
+#evalTable tbody td:first-child { font-weight:600; color:#111827; }
+</style>
 {% endblock %}
