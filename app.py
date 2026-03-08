@@ -276,7 +276,7 @@ class ConnectionPool:
             with self.lock:
                 self.current_connections -= 1
 
-db_pool = ConnectionPool(min_connections=3, max_connections=15)
+db_pool = ConnectionPool(min_connections=1, max_connections=15)
 
 
 def ensure_notifications_table():
@@ -356,6 +356,16 @@ def migrate_campus_attendance_status_constraint():
     try:
         conn = db_pool.get_connection()
         cursor = conn.cursor()
+        # Check if constraint already includes 'Excused' — skip if already migrated
+        cursor.execute("""
+            SELECT pg_get_constraintdef(oid) FROM pg_constraint
+            WHERE conname = 'campus_attendance_status_check'
+        """)
+        row = cursor.fetchone()
+        if row and 'Excused' in row[0]:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return
         cursor.execute("""
             ALTER TABLE campus_attendance
                 DROP CONSTRAINT IF EXISTS campus_attendance_status_check
@@ -373,7 +383,7 @@ def migrate_campus_attendance_status_constraint():
         print(f"Error migrating campus_attendance constraint: {e}")
 
 
-migrate_campus_attendance_status_constraint()
+threading.Thread(target=migrate_campus_attendance_status_constraint, daemon=True).start()
 shared_serial = SharedSerialPort()
 rfid_reader = RFIDReader(db_pool, shared_serial)
 biometric_reader = BiometricReader(db_pool, shared_serial)
@@ -3044,42 +3054,44 @@ def api_faculty_attendance_analytics():
         class_breakdown = []
 
         if semester_id:
-            # KPIs + distribution
+            # KPIs + distribution — query live attendance table (same source as trends)
             cursor.execute("""
                 SELECT
-                    COALESCE(SUM(ar.presentcount), 0),
-                    COALESCE(SUM(ar.latecount), 0),
-                    COALESCE(SUM(ar.absentcount), 0),
-                    COALESCE(SUM(ar.excusedcount), 0),
-                    CASE
-                        WHEN COUNT(ar.attendancereport_id) > 0
-                        THEN ROUND(AVG(ar.attendancerate)::numeric, 2)
-                        ELSE 0
-                    END
-                FROM attendancereport ar
-                WHERE ar.acadcalendar_id = %s
-                  AND ar.personnel_id = %s
-            """, (semester_id, personnel_id))
+                    COUNT(*) FILTER (WHERE a.attendancestatus = 'Present'),
+                    COUNT(*) FILTER (WHERE a.attendancestatus = 'Late'),
+                    COUNT(*) FILTER (WHERE a.attendancestatus = 'Absent'),
+                    COUNT(*) FILTER (WHERE a.attendancestatus = 'Excused')
+                FROM attendance a
+                JOIN schedule sch ON a.class_id = sch.class_id
+                WHERE a.personnel_id = %s
+                  AND sch.acadcalendar_id = %s
+                  AND a.timein IS NOT NULL
+            """, (personnel_id, semester_id))
             dist_row = cursor.fetchone()
             if dist_row:
-                (tot_p, tot_l, tot_a, tot_e, avg_r) = dist_row
+                (tot_p, tot_l, tot_a, tot_e) = dist_row
+                tot_p = int(tot_p); tot_l = int(tot_l)
+                tot_a = int(tot_a); tot_e = int(tot_e)
+                total_att = tot_p + tot_l + tot_a + tot_e
+                avg_r = round(((tot_p + tot_e + tot_l * 0.75) / total_att) * 100, 2) if total_att > 0 else 0.0
                 distribution = {
-                    'present': int(tot_p), 'late': int(tot_l),
-                    'absent': int(tot_a), 'excused': int(tot_e)
+                    'present': tot_p, 'late': tot_l,
+                    'absent': tot_a, 'excused': tot_e
                 }
                 analytics_kpis = {
-                    'avg_rate': float(avg_r),
-                    'total_present': int(tot_p), 'total_late': int(tot_l),
-                    'total_absent': int(tot_a), 'total_excused': int(tot_e)
+                    'avg_rate': avg_r,
+                    'total_present': tot_p, 'total_late': tot_l,
+                    'total_absent': tot_a, 'total_excused': tot_e
                 }
 
-            # Per-class breakdown for this faculty
+            # Per-class breakdown
             cursor.execute("""
                 SELECT
                     sub.subjectcode, sub.subjectname,
                     sch.classsection,
                     ar.presentcount, ar.latecount, ar.absentcount,
-                    ar.excusedcount, ar.totalclasses, ar.attendancerate
+                    ar.excusedcount, ar.totalclasses, ar.attendancerate,
+                    ar.class_id
                 FROM attendancereport ar
                 JOIN schedule sch ON ar.class_id = sch.class_id
                 JOIN subjects sub ON sch.subject_id = sub.subject_id
@@ -3088,7 +3100,7 @@ def api_faculty_attendance_analytics():
                 ORDER BY ar.attendancerate ASC, sub.subjectcode
             """, (semester_id, personnel_id))
             for row in cursor.fetchall():
-                (scode, sname, section, pres, late, absent, excused, total, rate) = row
+                (scode, sname, section, pres, late, absent, excused, total, rate, cid) = row
                 class_breakdown.append({
                     'subject_code': scode,
                     'subject_name': sname,
@@ -3098,7 +3110,8 @@ def api_faculty_attendance_analytics():
                     'absent': int(absent),
                     'excused': int(excused),
                     'total': int(total),
-                    'rate': round(float(rate), 2)
+                    'rate': round(float(rate), 2),
+                    'class_id': cid
                 })
 
         cursor.close()
@@ -3618,13 +3631,12 @@ def api_faculty_campus_attendance_analytics():
             if sem:
                 sem_start, sem_end = sem[0], sem[1]
 
+        # KPIs
         date_filter = ""
         params_base = [personnel_id]
         if sem_start and sem_end:
             date_filter = "AND ca.attendance_date BETWEEN %s AND %s"
             params_base += [sem_start, sem_end]
-
-        # KPIs
         cursor.execute(f"""
             SELECT
                 COUNT(*) FILTER (WHERE ca.status = 'Present')  AS present,
@@ -8751,7 +8763,10 @@ def api_dean_college_analytics():
         semester_id = request.args.get('semester_id')
         sem_start = sem_end = None
         if semester_id:
-            cursor.execute("SELECT semesterstart, semesterend FROM acadcalendar WHERE acadcalendar_id = %s", (int(semester_id),))
+            cursor.execute(
+                "SELECT semesterstart, semesterend FROM acadcalendar WHERE acadcalendar_id::text = %s",
+                (str(semester_id),)
+            )
             sem = cursor.fetchone()
             if sem:
                 sem_start, sem_end = sem[0], sem[1]
@@ -8808,6 +8823,42 @@ def api_dean_college_analytics():
                 trends.append({'label': ws.strftime('%b %d') if ws else '', 'avg_rate': rate,
                                 'total_present': int(wp), 'total_late': int(wl), 'total_absent': int(wa)})
 
+        # Faculty breakdown (per class per faculty in the college)
+        faculty_breakdown = []
+        if semester_id:
+            cursor.execute("""
+                SELECT
+                    p.firstname, p.lastname, p.honorifics,
+                    sub.subjectcode, sub.subjectname,
+                    sch.classsection,
+                    ar.presentcount, ar.latecount, ar.absentcount,
+                    ar.excusedcount, ar.totalclasses, ar.attendancerate,
+                    ar.personnel_id, ar.class_id
+                FROM attendancereport ar
+                JOIN personnel p  ON ar.personnel_id = p.personnel_id
+                JOIN schedule sch ON ar.class_id     = sch.class_id
+                JOIN subjects sub ON sch.subject_id  = sub.subject_id
+                WHERE ar.acadcalendar_id::text = %s
+                  AND p.college_id = %s
+                  AND p.role_id IN (20001, 20002)
+                ORDER BY ar.attendancerate ASC, p.lastname, p.firstname
+            """, (str(semester_id), college_id))
+            for row in cursor.fetchall():
+                (fn, ln, hon, scode, sname, section, pres, late, absent,
+                 excused, total, rate, pid, cid) = row
+                name = f"{ln}, {fn}, {hon}" if hon else f"{ln}, {fn}"
+                faculty_breakdown.append({
+                    'faculty_name': name,
+                    'subject_code': scode or '',
+                    'subject_name': sname or '',
+                    'section': section or '—',
+                    'present': int(pres), 'late': int(late),
+                    'absent': int(absent), 'excused': int(excused),
+                    'total': int(total),
+                    'rate': round(float(rate), 2),
+                    'personnel_id': pid, 'class_id': cid,
+                })
+
         cursor.close()
         db_pool.return_connection(conn)
         return jsonify({
@@ -8816,6 +8867,7 @@ def api_dean_college_analytics():
                      'total_absent': ka, 'total_excused': ke},
             'distribution': {'present': kp, 'late': kl, 'absent': ka, 'excused': ke},
             'trends': trends,
+            'faculty_breakdown': faculty_breakdown,
         })
     except Exception as e:
         print(f"Error in dean college analytics: {e}")
@@ -8848,7 +8900,10 @@ def api_dean_college_campus_analytics():
         semester_id = request.args.get('semester_id')
         sem_start = sem_end = None
         if semester_id:
-            cursor.execute("SELECT semesterstart, semesterend FROM acadcalendar WHERE acadcalendar_id = %s", (int(semester_id),))
+            cursor.execute(
+                "SELECT semesterstart, semesterend FROM acadcalendar WHERE acadcalendar_id::text = %s",
+                (str(semester_id),)
+            )
             sem = cursor.fetchone()
             if sem:
                 sem_start, sem_end = sem[0], sem[1]
@@ -8904,6 +8959,35 @@ def api_dean_college_campus_analytics():
                 trends.append({'label': ws.strftime('%b %d') if ws else '', 'avg_rate': rate,
                                 'total_present': int(wp), 'total_late': int(wl), 'total_absent': int(wa)})
 
+        # Per-faculty campus breakdown (morning/afternoon) for this college
+        campus_breakdown = []
+        cursor.execute(f"""
+            SELECT
+                p.personnel_id,
+                CONCAT(p.lastname, ', ', p.firstname,
+                       CASE WHEN p.honorifics IS NOT NULL AND p.honorifics <> ''
+                            THEN CONCAT(', ', p.honorifics) ELSE '' END) AS faculty_name,
+                COALESCE(SUM(CASE WHEN ca.session = 'Morning'   AND ca.status = 'Present' THEN 1 ELSE 0 END), 0) AS morning_present,
+                COALESCE(SUM(CASE WHEN ca.session = 'Morning'   AND ca.status = 'Late'    THEN 1 ELSE 0 END), 0) AS morning_late,
+                COALESCE(SUM(CASE WHEN ca.session = 'Morning'   AND ca.status = 'Absent'  THEN 1 ELSE 0 END), 0) AS morning_absent,
+                COALESCE(SUM(CASE WHEN ca.session = 'Afternoon' AND ca.status = 'Present' THEN 1 ELSE 0 END), 0) AS afternoon_present,
+                COALESCE(SUM(CASE WHEN ca.session = 'Afternoon' AND ca.status = 'Late'    THEN 1 ELSE 0 END), 0) AS afternoon_late,
+                COALESCE(SUM(CASE WHEN ca.session = 'Afternoon' AND ca.status = 'Absent'  THEN 1 ELSE 0 END), 0) AS afternoon_absent
+            FROM personnel p
+            LEFT JOIN campus_attendance ca
+                ON ca.personnel_id = p.personnel_id {date_filter}
+            WHERE p.college_id = %s AND p.role_id IN (20001, 20002)
+            GROUP BY p.personnel_id, faculty_name
+            ORDER BY p.lastname, p.firstname
+        """, params_date + [college_id])
+        for row in cursor.fetchall():
+            pid, fname, mp, ml, ma, ap, al, aa = row
+            campus_breakdown.append({
+                'personnel_id': pid, 'faculty_name': fname,
+                'morning_present': int(mp), 'morning_late': int(ml), 'morning_absent': int(ma),
+                'afternoon_present': int(ap), 'afternoon_late': int(al), 'afternoon_absent': int(aa),
+            })
+
         cursor.close()
         db_pool.return_connection(conn)
         return jsonify({
@@ -8912,6 +8996,7 @@ def api_dean_college_campus_analytics():
                      'total_absent': ka, 'total_excused': ke},
             'distribution': {'present': kp, 'late': kl, 'absent': ka, 'excused': ke},
             'trends': trends,
+            'campus_breakdown': campus_breakdown,
         })
     except Exception as e:
         print(f"Error in dean college campus analytics: {e}")
@@ -11026,7 +11111,7 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
     return response
 
 @app.route('/api/hr/faculty-class-attendance-pdf/<int:personnel_id>/<int:class_id>')
-@require_auth([20003])
+@require_auth([20001, 20002, 20003])
 def api_hr_faculty_class_attendance_pdf(personnel_id, class_id):
     """Generate a per-class attendance PDF for a specific faculty and class."""
     try:
@@ -11034,6 +11119,15 @@ def api_hr_faculty_class_attendance_pdf(personnel_id, class_id):
 
         conn = db_pool.get_connection()
         cursor = conn.cursor()
+
+        # Faculty/dean can only download their own (or their college's) reports
+        user_role = session.get('user_role')
+        if user_role == 20001:
+            cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (session['user_id'],))
+            p_row = cursor.fetchone()
+            if not p_row or p_row[0] != personnel_id:
+                cursor.close(); db_pool.return_connection(conn)
+                return jsonify({'success': False, 'error': 'Access denied'}), 403
 
         # 1. Faculty details
         cursor.execute("""
@@ -11231,7 +11325,7 @@ def api_hr_faculty_class_attendance_pdf(personnel_id, class_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/hr/faculty-attendance-report-pdf/<int:personnel_id>')
-@require_auth([20003])
+@require_auth([20001, 20002, 20003])
 def api_hr_faculty_attendance_report_pdf(personnel_id):
     """Generate a full-semester attendance report PDF for a faculty, listing all their classes."""
     try:
@@ -11239,6 +11333,15 @@ def api_hr_faculty_attendance_report_pdf(personnel_id):
 
         conn = db_pool.get_connection()
         cursor = conn.cursor()
+
+        # Faculty can only download their own report
+        user_role = session.get('user_role')
+        if user_role == 20001:
+            cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (session['user_id'],))
+            p_row = cursor.fetchone()
+            if not p_row or p_row[0] != personnel_id:
+                cursor.close(); db_pool.return_connection(conn)
+                return jsonify({'success': False, 'error': 'Access denied'}), 403
 
         # 1. Faculty details
         cursor.execute("""
@@ -11452,7 +11555,7 @@ def api_hr_faculty_attendance_report_pdf(personnel_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/hr/campus-attendance-report-pdf/<int:personnel_id>')
-@require_auth([20003])
+@require_auth([20001, 20002, 20003])
 def api_hr_campus_attendance_report_pdf(personnel_id):
     """Generate a campus attendance report PDF for a faculty member."""
     try:
@@ -11460,6 +11563,15 @@ def api_hr_campus_attendance_report_pdf(personnel_id):
 
         conn = db_pool.get_connection()
         cursor = conn.cursor()
+
+        # Faculty can only download their own report
+        user_role = session.get('user_role')
+        if user_role == 20001:
+            cursor.execute("SELECT personnel_id FROM personnel WHERE user_id = %s", (session['user_id'],))
+            p_row = cursor.fetchone()
+            if not p_row or p_row[0] != personnel_id:
+                cursor.close(); db_pool.return_connection(conn)
+                return jsonify({'success': False, 'error': 'Access denied'}), 403
 
         # 1. Faculty details
         cursor.execute("""

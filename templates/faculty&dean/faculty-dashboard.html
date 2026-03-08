@@ -217,6 +217,20 @@
   let dashClassDistChart = null;
   let dashCampusDistChart = null;
 
+  function showDistNoData(canvasId) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    canvas.style.display = 'none';
+    const existing = canvas.parentNode.querySelector('.dist-no-data');
+    if (!existing) {
+      const msg = document.createElement('div');
+      msg.className = 'dist-no-data';
+      msg.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;font-size:12px;color:var(--muted);';
+      msg.textContent = 'No attendance data for this semester.';
+      canvas.parentNode.appendChild(msg);
+    }
+  }
+
   async function fetchAttendanceDist() {
     try {
       const [classResp, campusResp] = await Promise.all([
@@ -225,14 +239,39 @@
       ]);
       const classData  = await classResp.json();
       const campusData = await campusResp.json();
-      if (classData.success && classData.distribution)   renderDashDist('dashClassDistChart',  classData.distribution,  true);
-      if (campusData.success && campusData.distribution) renderDashDist('dashCampusDistChart', campusData.distribution, false);
-    } catch(e) { console.error('Error fetching attendance distribution:', e); }
+      if (classData.success && classData.distribution) {
+        const d = classData.distribution;
+        if ((d.present || 0) + (d.late || 0) + (d.absent || 0) + (d.excused || 0) > 0) {
+          renderDashDist('dashClassDistChart', d, true);
+        } else {
+          showDistNoData('dashClassDistChart');
+        }
+      } else {
+        showDistNoData('dashClassDistChart');
+      }
+      if (campusData.success && campusData.distribution) {
+        const d = campusData.distribution;
+        if ((d.present || 0) + (d.late || 0) + (d.absent || 0) + (d.excused || 0) > 0) {
+          renderDashDist('dashCampusDistChart', d, false);
+        } else {
+          showDistNoData('dashCampusDistChart');
+        }
+      } else {
+        showDistNoData('dashCampusDistChart');
+      }
+    } catch(e) {
+      console.error('Error fetching attendance distribution:', e);
+      showDistNoData('dashClassDistChart');
+      showDistNoData('dashCampusDistChart');
+    }
   }
 
   function renderDashDist(canvasId, dist, isClass) {
-    const ctx    = document.getElementById(canvasId);
+    const ctx = document.getElementById(canvasId);
     if (!ctx) return;
+    ctx.style.display = '';
+    const existing = ctx.parentNode.querySelector('.dist-no-data');
+    if (existing) existing.remove();
     const colors = ['#16a34a', '#f59e0b', '#ef4444', '#8b5cf6'];
     const labels = ['Present', 'Late', 'Absent', 'Excused'];
     const values = [dist.present || 0, dist.late || 0, dist.absent || 0, dist.excused || 0];
