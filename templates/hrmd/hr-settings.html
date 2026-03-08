@@ -36,110 +36,89 @@
 
   <!-- Documents Tab -->
   <div class="tab-content" id="documents">
-    <form id="documentsForm" class="grid" enctype="multipart/form-data">
-      
+    <form id="documentsForm" class="sdocs-grid" enctype="multipart/form-data">
+
       <!-- Profile Picture -->
-      <div style="grid-column: span 2;">
-        <label><i class="fas fa-user-circle"></i> Profile Picture</label>
-        <div class="upload-field">
-          <label for="profilepic" style="cursor: pointer;">
-            <i class="fas fa-camera"></i>
-            <span id="profilepic-label">Choose profile picture...</span>
-          </label>
-          <input type="file" id="profilepic" name="profilepic" accept="image/*" onchange="handleProfilePictureChange(this)">
+      <div class="sdoc-full">
+        <div class="sdoc-title"><i class="fas fa-user-circle"></i> Profile Picture</div>
+        <div class="profilepic-row">
+          <img id="profilepic-preview" class="profilepic-avatar" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 56 56'%3E%3Ccircle cx='28' cy='28' r='28' fill='%23f0f0f0'/%3E%3Ccircle cx='28' cy='22' r='10' fill='%23ccc'/%3E%3Cellipse cx='28' cy='48' rx='16' ry='12' fill='%23ccc'/%3E%3C/svg%3E"
+               onclick="viewProfilePicture()" title="Click to view">
+          <div class="profilepic-zone-wrap">
+            <label for="profilepic" class="doc-upload-zone doc-upload-row" id="profilepic-zone">
+              <i class="fas fa-camera"></i>
+              <div>
+                <span class="doc-zone-title" id="profilepic-label">Click to choose a profile picture</span>
+                <span class="doc-zone-hint">JPG, PNG, GIF</span>
+              </div>
+            </label>
+          </div>
         </div>
-        <div id="current-profilepic" style="margin-top: 10px; display: none;">
-          <img id="profilepic-preview" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 2px solid #ddd; cursor: pointer;" onclick="viewProfilePicture()">
-          <p style="margin: 5px 0; font-size: 12px; color: #666;">Current profile picture</p>
-        </div>
+        <input type="file" id="profilepic" name="profilepic" accept="image/*" onchange="handleProfilePictureChange(this)" style="display:none;">
+        <div id="current-profilepic" style="display:none;"></div>
       </div>
 
       <!-- Licenses -->
-      <div style="grid-column: span 2;">
-        <div class="document-section">
-          <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-certificate"></i> Licenses</h4>
-          <div class="upload-field">
-            <label for="licenses" style="cursor: pointer;">
-              <i class="fas fa-file-upload"></i>
-              <span>Upload licenses (PDF, images)...</span>
-            </label>
-            <input type="file" id="licenses" name="licenses" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'licenses-list', 'licenses')">
-          </div>
-          <div id="licenses-display" class="documents-grid">
-            <p style="color:var(--muted);">No licenses uploaded yet.</p>
-          </div>
+      <div class="sdoc-half">
+        <div class="sdoc-title"><i class="fas fa-certificate"></i> Licenses</div>
+        <div id="license-entries-container" style="display:flex;flex-direction:column;gap:8px;"></div>
+        <button type="button" class="add-entry-zone" onclick="addLicenseEntry()">
+          <i class="fas fa-plus"></i> Add a license
+        </button>
+        <div id="licenses-display" class="documents-grid">
+          <p class="sdoc-empty">No licenses uploaded yet.</p>
         </div>
       </div>
 
       <!-- Degrees -->
-      <div style="grid-column: span 2;">
-        <div class="document-section" style="margin-top:30px;">
-          <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-graduation-cap"></i> Degrees</h4>
-          <div class="upload-field">
-            <label for="degrees" style="cursor: pointer;">
-              <i class="fas fa-file-upload"></i>
-              <span>Upload degrees (PDF, images)...</span>
-            </label>
-            <input type="file" id="degrees" name="degrees" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'degrees-list', 'degrees')">
-          </div>
-          <div id="degrees-display" class="documents-grid">
-            <p style="color:var(--muted);">No degrees uploaded yet.</p>
-          </div>
+      <div class="sdoc-half">
+        <div class="sdoc-title"><i class="fas fa-graduation-cap"></i> Degrees</div>
+        <div id="degree-entries-container" style="display:flex;flex-direction:column;gap:8px;"></div>
+        <button type="button" class="add-entry-zone" onclick="addDegreeEntry()">
+          <i class="fas fa-plus"></i> Submit a degree
+        </button>
+        <div id="degrees-display" class="documents-grid">
+          <p class="sdoc-empty">No degrees on file yet.</p>
         </div>
       </div>
 
       <!-- Certificates -->
-      <div style="grid-column: span 2;">
-        <div class="document-section" style="margin-top:30px;">
-          <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-award"></i> Certificates</h4>
-          <div class="upload-field">
-            <label for="certificates" style="cursor: pointer;">
-              <i class="fas fa-file-upload"></i>
-              <span>Upload certificates (PDF, images)...</span>
-            </label>
-            <input type="file" id="certificates" name="certificates" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'certificates-list', 'certificates')">
-          </div>
-          <div id="certificates-display" class="documents-grid">
-            <p style="color:var(--muted);">No certificates uploaded yet.</p>
-          </div>
+      <div class="sdoc-half">
+        <div class="sdoc-title"><i class="fas fa-award"></i> Certificates</div>
+        <div id="certificates-entries-container" style="display:flex;flex-direction:column;gap:8px;"></div>
+        <button type="button" class="add-entry-zone" onclick="addDocEntry('certificates')">
+          <i class="fas fa-plus"></i> Add a certificate
+        </button>
+        <div id="certificates-display" class="documents-grid">
+          <p class="sdoc-empty">No certificates uploaded yet.</p>
         </div>
       </div>
 
       <!-- Publications -->
-      <div style="grid-column: span 2;">
-        <div class="document-section" style="margin-top:30px;">
-          <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-book"></i> Publications</h4>
-          <div class="upload-field">
-            <label for="publications" style="cursor: pointer;">
-              <i class="fas fa-file-upload"></i>
-              <span>Upload publications (PDF, documents)...</span>
-            </label>
-            <input type="file" id="publications" name="publications" multiple accept=".pdf,.doc,.docx" onchange="updateMultiFileNames(this, 'publications-list', 'publications')">
-          </div>
-          <div id="publications-display" class="documents-grid">
-            <p style="color:var(--muted);">No publications uploaded yet.</p>
-          </div>
+      <div class="sdoc-half">
+        <div class="sdoc-title"><i class="fas fa-book"></i> Publications</div>
+        <div id="publications-entries-container" style="display:flex;flex-direction:column;gap:8px;"></div>
+        <button type="button" class="add-entry-zone" onclick="addDocEntry('publications')">
+          <i class="fas fa-plus"></i> Add a publication
+        </button>
+        <div id="publications-display" class="documents-grid">
+          <p class="sdoc-empty">No publications uploaded yet.</p>
         </div>
       </div>
 
       <!-- Awards -->
-      <div style="grid-column: span 2;">
-        <div class="document-section" style="margin-top:30px;">
-          <h4 style="margin-bottom:15px;color:var(--primary);"><i class="fas fa-trophy"></i> Awards</h4>
-          <div class="upload-field">
-            <label for="awards" style="cursor: pointer;">
-              <i class="fas fa-file-upload"></i>
-              <span>Upload awards (PDF, images)...</span>
-            </label>
-            <input type="file" id="awards" name="awards" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="updateMultiFileNames(this, 'awards-list', 'awards')">
-          </div>
-          <div id="awards-display" class="documents-grid">
-            <p style="color:var(--muted);">No awards uploaded yet.</p>
-          </div>
+      <div class="sdoc-half">
+        <div class="sdoc-title"><i class="fas fa-trophy"></i> Awards</div>
+        <div id="awards-entries-container" style="display:flex;flex-direction:column;gap:8px;"></div>
+        <button type="button" class="add-entry-zone" onclick="addDocEntry('awards')">
+          <i class="fas fa-plus"></i> Add an award
+        </button>
+        <div id="awards-display" class="documents-grid">
+          <p class="sdoc-empty">No awards uploaded yet.</p>
         </div>
       </div>
 
-      <div style="grid-column:span 2; text-align:right;">
+      <div class="sdoc-full" style="text-align:right;">
         <button type="submit" class="btn-primary">
           <i class="fas fa-upload"></i> Update Documents
         </button>
@@ -244,8 +223,16 @@
       <h3 id="modal-title">Document Viewer</h3>
       <span class="close" onclick="closeDocumentModal()">&times;</span>
     </div>
+    <div id="license-details-panel" style="display:none;background:#f0f4ff;padding:12px 18px;border-bottom:1px solid #d0d8ef;">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;font-size:13px;">
+        <div><span style="color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:2px;">Type</span><strong id="modal-license-type">—</strong></div>
+        <div><span style="color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:2px;">License No.</span><strong id="modal-license-number">—</strong></div>
+        <div><span style="color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:2px;">Expiration</span><strong id="modal-expiration-date">—</strong></div>
+        <div><span style="color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:2px;">Uploaded</span><strong id="modal-date-uploaded">—</strong></div>
+      </div>
+    </div>
     <div class="modal-body">
-      <div id="document-container" style="width:100%;height:75vh;overflow:auto;background:#f5f5f5;border-radius:8px;">
+      <div id="document-container" style="width:100%;height:70vh;overflow:auto;background:#f5f5f5;border-radius:8px;">
         <iframe id="document-viewer" style="width:100%;height:100%;border:none;display:none;"></iframe>
         <img id="image-viewer" style="max-width:100%;height:auto;display:none;margin:0 auto;">
       </div>
@@ -274,6 +261,127 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<style>
+.faculty-settings form.sdocs-grid {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+  flex-direction: unset;
+}
+.sdoc-full { grid-column: span 2; }
+.sdoc-half { grid-column: span 1; min-width: 0; }
+@media (max-width: 680px) { .sdoc-half { grid-column: span 2; } }
+.sdoc-half, .sdoc-full {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.sdoc-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+.sdoc-title i { color: var(--spc-maroon); font-size: 13px; }
+.sdoc-hint { font-size: 12px; color: #888; margin: -6px 0 10px; line-height: 1.4; }
+.sdoc-empty { font-size: 12px; color: #aaa; margin: 6px 0 0; white-space: nowrap; }
+.sdocs-grid .doc-upload-zone { padding: 14px 12px; gap: 4px; }
+.sdocs-grid .doc-upload-zone i { font-size: 20px; }
+.sdocs-grid .doc-zone-title { font-size: 12px; }
+.sdocs-grid .doc-zone-hint { font-size: 11px; }
+.profilepic-row { display: flex; align-items: center; gap: 14px; }
+.profilepic-avatar {
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #e5e7eb;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.profilepic-avatar.has-pic { border-color: var(--spc-maroon); }
+.profilepic-zone-wrap { flex: 1; min-width: 0; }
+.sdocs-grid .doc-upload-row {
+  flex-direction: row !important;
+  justify-content: flex-start !important;
+  gap: 10px !important;
+  padding: 10px 14px !important;
+  text-align: left !important;
+  margin: 0 !important;
+}
+.sdocs-grid .doc-upload-row i { font-size: 18px !important; flex-shrink: 0; }
+.sdocs-grid .doc-upload-row .doc-zone-title { font-size: 12px; }
+.sdocs-grid .doc-upload-row .doc-zone-hint { font-size: 11px; margin-top: 1px; display: block; }
+.sdocs-grid .add-entry-zone { padding: 8px; font-size: 12px; margin-top: 6px; margin-bottom: 6px; }
+.sdocs-grid .documents-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; margin-top: 6px; }
+.sdocs-grid .document-card { padding: 10px 8px; }
+.sdocs-grid .document-icon { font-size: 26px; margin-bottom: 4px; color: #7b1113; }
+.sdocs-grid .document-name { font-size: 10px; }
+.sdocs-grid .document-card:hover { border-color: #7b1113; background: #fff5f5; transform: none; box-shadow: 0 2px 4px rgba(0,0,0,.06); }
+.sdocs-grid .license-entry { grid-template-columns: 80px 1fr auto; gap: 10px; padding: 10px; }
+.sdocs-grid .license-drop-zone { width: 80px; height: 80px; }
+.doc-entry {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: #fafafa; border: 1.5px dashed #d1d5db;
+  border-radius: 8px; padding: 10px;
+  transition: border-color .2s, background .2s;
+}
+.doc-entry.has-file { border-style: solid; border-color: var(--spc-maroon); background: #fff; }
+.doc-upload-zone {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; padding: 24px 16px; border: 2px dashed #d1d5db; border-radius: 10px;
+  background: #fafafa; cursor: pointer; text-align: center; color: #9ca3af;
+  margin-bottom: 12px; transition: border-color .2s, background .2s, color .2s;
+}
+.doc-upload-zone:hover { border-color: var(--spc-maroon); background: #fff5f5; color: var(--spc-maroon); }
+.doc-upload-zone.has-files { border-style: solid; border-color: var(--spc-maroon); background: #fff5f5; color: var(--spc-maroon); }
+.doc-upload-zone i { font-size: 26px; }
+.doc-zone-title { font-size: 13px; font-weight: 600; color: inherit; }
+.doc-zone-hint { font-size: 11px; color: #b0b7c3; }
+.doc-upload-zone.has-files .doc-zone-hint { color: #9b7b7b; }
+.doc-upload-zone + input[type=file] { display: none; }
+.add-entry-zone {
+  width: 100%; display: flex; align-items: center; justify-content: center;
+  gap: 8px; padding: 11px; border: 2px dashed #d1d5db; border-radius: 8px;
+  background: none; color: #9ca3af; font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: border-color .2s, background .2s, color .2s;
+  margin-top: 10px; margin-bottom: 12px; box-sizing: border-box;
+}
+.add-entry-zone:hover { border-color: var(--spc-maroon); color: var(--spc-maroon); background: #fff5f5; }
+.license-entry {
+  display: grid; grid-template-columns: 104px 1fr auto; gap: 14px;
+  align-items: start; background: #fafafa; border: 1.5px dashed #d1d5db;
+  border-radius: 10px; padding: 14px; transition: border-color .2s, background .2s;
+}
+.license-entry.has-file { border-style: solid; border-color: var(--spc-maroon); background: #fff; }
+.license-drop-zone {
+  width: 104px; height: 104px; border: 1.5px dashed #d1d5db; border-radius: 8px;
+  background: #f9fafb; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 5px; cursor: pointer; font-size: 11px;
+  color: #9ca3af; text-align: center; position: relative; overflow: hidden;
+  transition: border-color .2s, background .2s, color .2s;
+}
+.license-drop-zone:hover, .license-drop-zone.drag-over { border-color: var(--spc-maroon); background: #fff5f5; color: var(--spc-maroon); }
+.license-drop-zone .drop-icon { font-size: 22px; }
+.license-drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.license-drop-zone .file-preview-inner {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; background: #fff; gap: 4px; padding: 6px; pointer-events: none;
+}
+.license-drop-zone .file-preview-inner img { max-width: 66px; max-height: 66px; object-fit: contain; border-radius: 4px; }
+.license-drop-zone .file-preview-inner span { font-size: 10px; color: #374151; word-break: break-all; text-align: center; max-width: 90px; line-height: 1.3; }
+.license-meta-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.license-meta-fields label { font-size: 11px; color: #6b7280; display: block; margin-bottom: 3px; font-weight: 500; letter-spacing: .3px; }
+.license-meta-fields input { width: 100%; padding: 7px 9px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 13px; transition: border-color .15s; box-sizing: border-box; }
+.license-meta-fields input:focus { outline: none; border-color: var(--spc-maroon); }
+.license-meta-full { grid-column: span 2; }
+.license-remove-btn { background: none; border: none; color: #9ca3af; font-size: 20px; cursor: pointer; padding: 0 4px; line-height: 1; transition: color .15s; align-self: start; }
+.license-remove-btn:hover { color: #ef4444; }
+</style>
 <script>
 let currentProfile = {};
 let documentFileNames = {
@@ -377,28 +485,25 @@ document.getElementById('current_password').addEventListener('input', function()
 });
 
 function handleProfilePictureChange(input) {
-  updateFileName(input, 'profilepic-label');
-  
+  const zone    = document.getElementById('profilepic-zone');
+  const preview = document.getElementById('profilepic-preview');
   if (input.files && input.files[0]) {
+    zone.classList.add('has-files');
+    zone.querySelector('.doc-zone-title').textContent = input.files[0].name;
+    zone.querySelector('.doc-zone-hint').textContent  = `${(input.files[0].size / 1024).toFixed(1)} KB`;
     const reader = new FileReader();
-    reader.onload = function(e) {
-      const preview = document.getElementById('profilepic-preview');
+    reader.onload = e => {
       preview.src = e.target.result;
-      preview.style.borderColor = '#059669'; 
-      document.getElementById('current-profilepic').style.display = 'block';
-      document.querySelector('#current-profilepic p').textContent = 'New profile picture (preview)';
-      document.querySelector('#current-profilepic p').style.color = '#059669';
-    }
+      preview.classList.add('has-pic');
+    };
     reader.readAsDataURL(input.files[0]);
   } else {
+    zone.classList.remove('has-files');
+    zone.querySelector('.doc-zone-title').textContent = 'Click to choose a profile picture';
+    zone.querySelector('.doc-zone-hint').textContent  = 'JPG, PNG, GIF';
     if (currentProfile.profilepic) {
-      const preview = document.getElementById('profilepic-preview');
       preview.src = 'data:image/jpeg;base64,' + currentProfile.profilepic;
-      preview.style.borderColor = '#ddd'; 
-      document.querySelector('#current-profilepic p').textContent = 'Current profile picture';
-      document.querySelector('#current-profilepic p').style.color = '#666';
-    } else {
-      document.getElementById('current-profilepic').style.display = 'none';
+      preview.classList.add('has-pic');
     }
   }
 }
@@ -488,53 +593,54 @@ function populateForm() {
   let phone = currentProfile.phone || '+63 ';
   document.getElementById('phone').value = phone;
   document.getElementById('bio').value = currentProfile.bio || '';
-  
+
   if (currentProfile.profilepic) {
     const preview = document.getElementById('profilepic-preview');
     preview.src = 'data:image/jpeg;base64,' + currentProfile.profilepic;
-    preview.style.borderColor = '#ddd';
-    document.getElementById('current-profilepic').style.display = 'block';
-    document.querySelector('#current-profilepic p').textContent = 'Current profile picture';
-    document.querySelector('#current-profilepic p').style.color = '#666';
+    preview.classList.add('has-pic');
   }
-  
-  displayDocuments('licenses', currentProfile.licenses || [], currentProfile.licenses_filename || []);
+
+  displayDocuments('licenses', currentProfile.licenses || [], currentProfile.licenses_filename || [], currentProfile.licenses_tracker || []);
   displayDocuments('degrees', currentProfile.degrees || [], currentProfile.degrees_filename || []);
   displayDocuments('certificates', currentProfile.certificates || [], currentProfile.certificates_filename || []);
   displayDocuments('publications', currentProfile.publications || [], currentProfile.publications_filename || []);
   displayDocuments('awards', currentProfile.awards || [], currentProfile.awards_filename || []);
-  
-  documentFileNames = {
-    licenses: currentProfile.licenses_filename || [],
-    degrees: currentProfile.degrees_filename || [],
-    certificates: currentProfile.certificates_filename || [],
-    publications: currentProfile.publications_filename || [],
-    awards: currentProfile.awards_filename || []
-  };
-  
+
   showLoading(false);
 }
 
-function displayDocuments(docType, documents, filenames) {
+function getExpiryBadge(expirationDate) {
+  if (!expirationDate) return '';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const exp = new Date(expirationDate);
+  const days = Math.ceil((exp - today) / 86400000);
+  if (days < 0)    return `<span style="display:inline-block;margin-top:5px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;background:#fee2e2;color:#dc2626;"><i class="fas fa-times-circle" style="margin-right:3px;"></i>Expired</span>`;
+  if (days <= 30)  return `<span style="display:inline-block;margin-top:5px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;background:#ffedd5;color:#ea580c;"><i class="fas fa-exclamation-circle" style="margin-right:3px;"></i>Exp. in ${days}d</span>`;
+  if (days <= 90)  return `<span style="display:inline-block;margin-top:5px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;background:#fef9c3;color:#ca8a04;"><i class="fas fa-clock" style="margin-right:3px;"></i>Exp. in ${days}d</span>`;
+  return `<span style="display:inline-block;margin-top:5px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;background:#dcfce7;color:#16a34a;"><i class="fas fa-check-circle" style="margin-right:3px;"></i>Valid</span>`;
+}
+
+function displayDocuments(docType, documents, filenames, trackerData) {
   const displayElement = document.getElementById(docType + '-display');
   if (!displayElement) return;
-  
+
   const existingDocuments = documents.filter((doc, index) => !documentsToDelete[docType].includes(index));
   const newUploadCards = displayElement.querySelectorAll('.document-card[style*="e8f5e8"]');
-  
+
   if ((!existingDocuments || existingDocuments.length === 0) && newUploadCards.length === 0) {
-    displayElement.innerHTML = `<p style="color:var(--muted);">No ${docType} uploaded yet.</p>`;
+    displayElement.innerHTML = `<p class="sdoc-empty">No ${docType} uploaded yet.</p>`;
     return;
   }
-  
+
   displayElement.innerHTML = '';
-  
+
   documents.forEach((doc, index) => {
     if (documentsToDelete[docType].includes(index)) return;
-    
+
     const filename = filenames[index] || `${docType}_${index + 1}`;
     const ext = filename.split('.').pop().toLowerCase();
-    
+    const tracker = (docType === 'licenses' && trackerData && trackerData[index]) ? trackerData[index] : null;
+
     let icon = 'fa-file';
     if (['pdf'].includes(ext)) {
       icon = 'fa-file-pdf';
@@ -543,25 +649,32 @@ function displayDocuments(docType, documents, filenames) {
     } else if (['doc', 'docx'].includes(ext)) {
       icon = 'fa-file-word';
     }
-    
+
     const card = document.createElement('div');
     card.className = 'document-card';
-    card.style.position = 'relative'; 
-    card.onclick = () => viewDocument(doc, filename, ext);
-    
+    card.style.position = 'relative';
+    card.onclick = () => viewDocument(doc, filename, ext, tracker);
+
+    const metaHtml = tracker ? `
+      ${tracker.license_number ? `<div style="font-size:11px;color:#555;margin-top:4px;"><i class="fas fa-id-badge" style="margin-right:3px;"></i>No. ${tracker.license_number}</div>` : ''}
+      ${tracker.expiration_date ? `<div style="font-size:11px;color:#888;margin-top:2px;"><i class="fas fa-calendar-alt" style="margin-right:3px;"></i>Exp: ${tracker.expiration_date}</div>` : ''}
+      ${tracker.expiration_date ? getExpiryBadge(tracker.expiration_date) : ''}
+    ` : '';
+
     card.innerHTML = `
       <i class="fas ${icon} document-icon"></i>
       <div class="document-name">${filename}</div>
-      <button type="button" 
+      ${metaHtml}
+      <button type="button"
               style="position: absolute; top: 8px; right: 8px; background: none; border: none; color: #666; font-size: 16px; cursor: pointer; padding: 0; width: auto; height: auto;"
               onclick="markDocumentForDeletion('${docType}', ${index}, event)">
         ×
       </button>
     `;
-    
+
     displayElement.appendChild(card);
   });
-  
+
   newUploadCards.forEach(card => {
     displayElement.appendChild(card);
   });
@@ -569,120 +682,40 @@ function displayDocuments(docType, documents, filenames) {
 
 function markDocumentForDeletion(docType, index, event) {
   event.stopPropagation();
-  
+
   if (!documentsToDelete[docType].includes(index)) {
     documentsToDelete[docType].push(index);
   }
-  
+
   const filenames = currentProfile[docType + '_filename'] || [];
-  displayDocuments(docType, currentProfile[docType] || [], filenames);
+  const tracker = docType === 'licenses' ? (currentProfile.licenses_tracker || []) : undefined;
+  displayDocuments(docType, currentProfile[docType] || [], filenames, tracker);
 }
 
-function updateFileName(input, labelId) {
-  const label = document.getElementById(labelId);
-  if (input.files.length > 0) {
-    label.textContent = input.files[0].name;
-  } else {
-    label.textContent = 'Choose profile picture...';
-  }
-}
-
-function updateMultiFileNames(input, listId, docType) {
-  const displayElement = document.getElementById(docType + '-display');
-  
-  if (input.files.length > 0) {
-    const noDocumentsMsg = displayElement.querySelector('p[style*="color:var(--muted)"]');
-    if (noDocumentsMsg) {
-      noDocumentsMsg.remove();
-    }
-  }
-  
-  const existingNewUploads = displayElement.querySelectorAll('.document-card[style*="e8f5e8"]');
-  existingNewUploads.forEach(card => card.remove());
-  
-  if (input.files.length > 0) {
-    Array.from(input.files).forEach((file, index) => {
-      const ext = file.name.split('.').pop().toLowerCase();
-      
-      let icon = 'fa-file';
-      if (['pdf'].includes(ext)) {
-        icon = 'fa-file-pdf';
-      } else if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
-        icon = 'fa-file-image';
-      } else if (['doc', 'docx'].includes(ext)) {
-        icon = 'fa-file-word';
-      }
-      
-      const card = document.createElement('div');
-      card.className = 'document-card';
-      card.style.background = '#e8f5e8';
-      card.style.borderColor = '#059669';
-      card.style.position = 'relative';
-      card.dataset.fileIndex = index;
-      card.dataset.fileName = file.name;
-      
-      card.innerHTML = `
-        <i class="fas ${icon} document-icon"></i>
-        <div class="document-name">${file.name}</div>
-        <div style="font-size: 11px; color: #666; margin-top: 5px;">${(file.size / 1024).toFixed(1)} KB</div>
-        <button type="button" 
-                style="position: absolute; top: 8px; right: 8px; background: none; border: none; color: #666; font-size: 16px; cursor: pointer; padding: 0; width: auto; height: auto;"
-                onclick="removeNewUpload('${docType}', ${index}, this)">
-          ×
-        </button>
-      `;
-      
-      displayElement.appendChild(card);
-    });
-  } else {
-    const existingDocuments = currentProfile[docType] || [];
-    const existingDocumentsNotDeleted = existingDocuments.filter((doc, index) => !documentsToDelete[docType].includes(index));
-    
-    if (existingDocumentsNotDeleted.length === 0) {
-      displayElement.innerHTML = `<p style="color:var(--muted);">No ${docType} uploaded yet.</p>`;
-    } else {
-      const filenames = currentProfile[docType + '_filename'] || [];
-      displayDocuments(docType, existingDocuments, filenames);
-    }
-  }
-}
-
-function removeNewUpload(docType, fileIndex, buttonElement) {
-  const input = document.getElementById(docType);
-  const displayElement = document.getElementById(docType + '-display');
-  
-  if (!input.files || input.files.length === 0) return;
-  const filesArray = Array.from(input.files);
-  filesArray.splice(fileIndex, 1);
-  
-  const dt = new DataTransfer();
-  filesArray.forEach(file => dt.items.add(file));
-  input.files = dt.files;
-  
-  const card = buttonElement.closest('.document-card');
-  card.remove();
-  
-  const existingDocuments = currentProfile[docType] || [];
-  const existingDocumentsNotDeleted = existingDocuments.filter((doc, index) => !documentsToDelete[docType].includes(index));
-  const remainingNewUploads = displayElement.querySelectorAll('.document-card[style*="e8f5e8"]');
-  
-  if (existingDocumentsNotDeleted.length === 0 && remainingNewUploads.length === 0) {
-    displayElement.innerHTML = `<p style="color:var(--muted);">No ${docType} uploaded yet.</p>`;
-  }
-}
-
-function viewDocument(docBase64, filename, ext) {
+function viewDocument(docBase64, filename, ext, trackerInfo) {
   const modal = document.getElementById('document-modal');
   const title = document.getElementById('modal-title');
   const iframe = document.getElementById('document-viewer');
   const img = document.getElementById('image-viewer');
   const container = document.getElementById('document-container');
-  
-  title.textContent= filename;
+  const detailsPanel = document.getElementById('license-details-panel');
+
+  title.textContent = filename;
   iframe.style.display = 'none';
   img.style.display = 'none';
   iframe.src = '';
   img.src = '';
+
+  if (trackerInfo) {
+    detailsPanel.style.display = 'block';
+    document.getElementById('modal-license-type').textContent = trackerInfo.license_type || '—';
+    document.getElementById('modal-license-number').textContent = trackerInfo.license_number || '—';
+    document.getElementById('modal-expiration-date').textContent = trackerInfo.expiration_date || '—';
+    const uploaded = trackerInfo.date_uploaded ? trackerInfo.date_uploaded.split(' ')[0] : '—';
+    document.getElementById('modal-date-uploaded').textContent = uploaded;
+  } else {
+    detailsPanel.style.display = 'none';
+  }
   
   if (['jpg', 'jpeg', 'png', 'gif'].includes(ext.toLowerCase())) {
     img.style.display = 'block';
@@ -759,7 +792,7 @@ function closeDocumentModal() {
   const iframe = document.getElementById('document-viewer');
   const img = document.getElementById('image-viewer');
   const container = document.getElementById('document-container');
-  
+
   modal.style.display = 'none';
   iframe.src = '';
   img.src = '';
@@ -767,6 +800,7 @@ function closeDocumentModal() {
   img.style.display = 'none';
   container.style.overflow = 'auto';
   container.style.padding = '0';
+  document.getElementById('license-details-panel').style.display = 'none';
 }
 
 function base64ToBlob(base64, mimeType) {
@@ -837,18 +871,22 @@ document.getElementById('personalForm').addEventListener('submit', async (e) => 
 
 document.getElementById('documentsForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  
+
   try {
     showLoading(true, 'Processing documents...');
     showToast('Processing documents...', 'info');
 
-    const hasNewUploads = ['profilepic', 'licenses', 'degrees', 'certificates', 'publications', 'awards'].some(docType => {
-      const input = document.getElementById(docType);
-      return input.files && input.files.length > 0;
-    });
-    
+    const hasLicenseEntries = Object.values(licenseEntries).some(e => e.file);
+    const hasDegreeEntries  = Object.values(degreeEntries).some(e => e.file);
+    const hasDocEntries     = Object.values(docEntries).some(typeObj => Object.values(typeObj).some(e => e.file));
+    const hasNewUploads = (() => {
+      const ppInput = document.getElementById('profilepic');
+      return (ppInput && ppInput.files && ppInput.files.length > 0)
+          || hasLicenseEntries || hasDegreeEntries || hasDocEntries;
+    })();
+
     const hasDeletions = Object.values(documentsToDelete).some(arr => arr.length > 0);
-    
+
     if (!hasNewUploads && !hasDeletions) {
       showToast('No changes to update', 'info');
       showLoading(false);
@@ -858,67 +896,88 @@ document.getElementById('documentsForm').addEventListener('submit', async (e) =>
     for (const docType of ['licenses', 'degrees', 'certificates', 'publications', 'awards']) {
       if (documentsToDelete[docType].length > 0) {
         const sortedIndices = documentsToDelete[docType].sort((a, b) => b - a);
-        
         for (const index of sortedIndices) {
-          const response = await fetch(`/api/faculty/profile/document/${docType}/${index}`, {
-            method: 'DELETE'
-          });
+          const response = await fetch(`/api/faculty/profile/document/${docType}/${index}`, { method: 'DELETE' });
           const data = await response.json();
-          
-          if (!data.success) {
-            throw new Error(`Failed to delete ${docType} document: ${data.error}`);
-          }
+          if (!data.success) throw new Error(`Failed to delete ${docType} document: ${data.error}`);
         }
       }
     }
-    
 
     const formData = new FormData();
     const profilepicInput = document.getElementById('profilepic');
     if (profilepicInput.files.length > 0) {
       formData.append('profilepic', profilepicInput.files[0]);
     }
-    
-    ['licenses', 'degrees', 'certificates', 'publications', 'awards'].forEach(docType => {
-      const files = document.getElementById(docType).files;
-      for (let file of files) {
-        formData.append(docType, file);
+
+    for (const [id, entry] of Object.entries(licenseEntries)) {
+      if (!entry.file) continue;
+      const licFormData = new FormData();
+      licFormData.append('licenses', entry.file);
+      licFormData.append('license_type', document.getElementById(`lt-type-${id}`).value.trim());
+      licFormData.append('license_number', document.getElementById(`lt-num-${id}`).value.trim());
+      licFormData.append('license_expiration_date', document.getElementById(`lt-exp-${id}`).value);
+      const licRes = await fetch('/api/faculty/profile/documents', { method: 'POST', body: licFormData });
+      const licData = await licRes.json();
+      if (!licData.success) throw new Error(`Failed to upload license: ${licData.error}`);
+    }
+
+    for (const [id, entry] of Object.entries(degreeEntries)) {
+      if (!entry.file) continue;
+      const degLevel = document.getElementById(`deg-level-${id}`).value.trim();
+      if (!degLevel) { showToast('Please select a degree level for each degree entry.', 'error'); showLoading(false); return; }
+      const degFormData = new FormData();
+      degFormData.append('degree_file', entry.file);
+      degFormData.append('degree_level', degLevel);
+      degFormData.append('institution', document.getElementById(`deg-inst-${id}`).value.trim());
+      degFormData.append('date_obtained', document.getElementById(`deg-date-${id}`).value);
+      const degRes = await fetch('/api/faculty/submit-degree', { method: 'POST', body: degFormData });
+      const degData = await degRes.json();
+      if (!degData.success) throw new Error(`Failed to submit degree: ${degData.error}`);
+    }
+
+    for (const docType of ['certificates', 'publications', 'awards']) {
+      for (const [id, entry] of Object.entries(docEntries[docType] || {})) {
+        if (!entry.file) continue;
+        const df = new FormData();
+        df.append(docType, entry.file);
+        const res = await fetch('/api/faculty/profile/documents', { method: 'POST', body: df });
+        const rd  = await res.json();
+        if (!rd.success) throw new Error(`Failed to upload ${docType}: ${rd.error}`);
       }
-    });
-    
-    const response = await fetch('/api/faculty/profile/documents', {
-      method: 'POST',
-      body: formData
-    });
-    
+    }
+
+    const response = await fetch('/api/faculty/profile/documents', { method: 'POST', body: formData });
     const data = await response.json();
-    
+
     if (data.success) {
       showToast('Documents updated successfully', 'success');
-      
-      documentsToDelete = {
-        licenses: [],
-        degrees: [],
-        certificates: [],
-        publications: [],
-        awards: []
-      };
-      
+
+      documentsToDelete = { licenses: [], degrees: [], certificates: [], publications: [], awards: [] };
+
+      document.getElementById('license-entries-container').innerHTML = '';
+      Object.keys(licenseEntries).forEach(k => delete licenseEntries[k]);
+      licenseEntryCount = 0;
+
+      document.getElementById('degree-entries-container').innerHTML = '';
+      Object.keys(degreeEntries).forEach(k => delete degreeEntries[k]);
+      degreeEntryCount = 0;
+
+      for (const t of ['certificates', 'publications', 'awards']) {
+        document.getElementById(t + '-entries-container').innerHTML = '';
+        docEntries[t] = {};
+        docEntryCounts[t] = 0;
+      }
+
       await loadProfileData();
-      
-      ['profilepic', 'licenses', 'degrees', 'certificates', 'publications', 'awards'].forEach(id => {
-        const input = document.getElementById(id);
-        if (input) {
-          input.value = '';
-          const displayElement = document.getElementById(id + '-display');
-          if (displayElement) {
-            const newUploads = displayElement.querySelectorAll('.document-card[style*="e8f5e8"]');
-            newUploads.forEach(item => item.remove());
-          }
-        }
-      });
-      
-      document.getElementById('profilepic-label').textContent = 'Choose profile picture...';
+
+      const ppZone = document.getElementById('profilepic-zone');
+      if (ppZone) {
+        ppZone.classList.remove('has-files');
+        ppZone.querySelector('.doc-zone-title').textContent = 'Click to choose a profile picture';
+        ppZone.querySelector('.doc-zone-hint').textContent  = 'JPG, PNG, GIF';
+      }
+      document.getElementById('profilepic').value = '';
     } else {
       showToast('Error: ' + data.error, 'error');
     }
@@ -1017,14 +1076,225 @@ function showLoading(show, text = 'Loading...') {
   }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-  const allDeleteButtons = document.querySelectorAll('button[onclick*="markDocumentForDeletion"], button[onclick*="removeNewUpload"]');
-  allDeleteButtons.forEach(btn => {
-    if (!btn.closest('.document-card')) {
-      btn.remove();
-    }
-  });
-});
+// ── Degree entry card system ───────────────────────────────────────────────
+let degreeEntryCount = 0;
+const degreeEntries = {};
+
+function addDegreeEntry() {
+  const id = ++degreeEntryCount;
+  degreeEntries[id] = { file: null };
+  const container = document.getElementById('degree-entries-container');
+  const div = document.createElement('div');
+  div.className = 'license-entry';
+  div.id = `degree-entry-${id}`;
+  div.innerHTML = `
+    <div class="license-drop-zone" id="deg-drop-${id}"
+         ondragover="event.preventDefault();this.classList.add('drag-over')"
+         ondragleave="this.classList.remove('drag-over')"
+         ondrop="handleDegreeDrop(event,${id})">
+      <i class="fas fa-graduation-cap drop-icon"></i>
+      <span>Drop file<br>or click</span>
+      <input type="file" accept=".pdf,.jpg,.jpeg,.png" onchange="handleDegreeFileSelect(this,${id})">
+    </div>
+    <div class="license-meta-fields">
+      <div class="license-meta-full">
+        <label>Degree Level <span style="color:#ef4444">*</span></label>
+        <select id="deg-level-${id}" style="width:100%;padding:7px 9px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;background:#fff;">
+          <option value="">— Select degree —</option>
+          <option value="Bachelor's">Bachelor's Degree</option>
+          <option value="Master's (Aligned)">Master's Degree (Aligned)</option>
+          <option value="Doctorate">Doctorate Degree</option>
+        </select>
+      </div>
+      <div class="license-meta-full">
+        <label>Institution / School</label>
+        <input type="text" id="deg-inst-${id}" placeholder="e.g. University of the Philippines">
+      </div>
+      <div class="license-meta-full">
+        <label>Date Obtained</label>
+        <input type="date" id="deg-date-${id}">
+      </div>
+    </div>
+    <button type="button" class="license-remove-btn" onclick="removeDegreeEntry(${id})" title="Remove">×</button>
+  `;
+  container.appendChild(div);
+  setTimeout(() => div.querySelector('select').focus(), 50);
+}
+
+function removeDegreeEntry(id) {
+  const el = document.getElementById(`degree-entry-${id}`);
+  if (el) el.remove();
+  delete degreeEntries[id];
+}
+
+function handleDegreeDrop(event, id) {
+  event.preventDefault();
+  document.getElementById(`deg-drop-${id}`).classList.remove('drag-over');
+  const file = event.dataTransfer.files[0];
+  if (file) setDegreeFile(id, file);
+}
+
+function handleDegreeFileSelect(input, id) {
+  if (input.files[0]) setDegreeFile(id, input.files[0]);
+}
+
+function setDegreeFile(id, file) {
+  degreeEntries[id].file = file;
+  const drop = document.getElementById(`deg-drop-${id}`);
+  document.getElementById(`degree-entry-${id}`).classList.add('has-file');
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (['jpg', 'jpeg', 'png'].includes(ext)) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      drop.innerHTML = `<div class="file-preview-inner"><img src="${e.target.result}" alt="preview"><span>${file.name}</span></div><input type="file" accept=".pdf,.jpg,.jpeg,.png" onchange="handleDegreeFileSelect(this,${id})">`;
+    };
+    reader.readAsDataURL(file);
+  } else {
+    const color = ext === 'pdf' ? '#dc2626' : '#6b7280';
+    const icon  = ext === 'pdf' ? 'fa-file-pdf' : 'fa-file';
+    drop.innerHTML = `<div class="file-preview-inner"><i class="fas ${icon}" style="font-size:32px;color:${color};"></i><span>${file.name}</span></div><input type="file" accept=".pdf,.jpg,.jpeg,.png" onchange="handleDegreeFileSelect(this,${id})">`;
+  }
+}
+
+// ── Generic doc entry system (certificates / publications / awards) ─────────
+const docEntries    = { certificates: {}, publications: {}, awards: {} };
+const docEntryCounts = { certificates: 0, publications: 0, awards: 0 };
+const docAccept = {
+  certificates: '.pdf,.jpg,.jpeg,.png,.doc,.docx',
+  publications:  '.pdf,.doc,.docx',
+  awards:        '.pdf,.jpg,.jpeg,.png,.doc,.docx'
+};
+
+function addDocEntry(docType) {
+  const id = ++docEntryCounts[docType];
+  docEntries[docType][id] = { file: null };
+  const container = document.getElementById(docType + '-entries-container');
+  const div = document.createElement('div');
+  div.className = 'doc-entry';
+  div.id = `doc-entry-${docType}-${id}`;
+  div.innerHTML = `
+    <div class="license-drop-zone" id="doc-drop-${docType}-${id}"
+         ondragover="event.preventDefault();this.classList.add('drag-over')"
+         ondragleave="this.classList.remove('drag-over')"
+         ondrop="handleDocDrop(event,'${docType}',${id})">
+      <i class="fas fa-cloud-upload-alt drop-icon"></i>
+      <span>Drop file<br>or click</span>
+      <input type="file" accept="${docAccept[docType]}" onchange="handleDocFileSelect(this,'${docType}',${id})">
+    </div>
+    <button type="button" class="license-remove-btn" onclick="removeDocEntry('${docType}',${id})" title="Remove">×</button>
+  `;
+  container.appendChild(div);
+}
+
+function removeDocEntry(docType, id) {
+  const el = document.getElementById(`doc-entry-${docType}-${id}`);
+  if (el) el.remove();
+  delete docEntries[docType][id];
+}
+
+function handleDocDrop(event, docType, id) {
+  event.preventDefault();
+  document.getElementById(`doc-drop-${docType}-${id}`).classList.remove('drag-over');
+  const file = event.dataTransfer.files[0];
+  if (file) setDocEntryFile(docType, id, file);
+}
+
+function handleDocFileSelect(input, docType, id) {
+  if (input.files[0]) setDocEntryFile(docType, id, input.files[0]);
+}
+
+function setDocEntryFile(docType, id, file) {
+  docEntries[docType][id].file = file;
+  const drop = document.getElementById(`doc-drop-${docType}-${id}`);
+  document.getElementById(`doc-entry-${docType}-${id}`).classList.add('has-file');
+  const ext   = file.name.split('.').pop().toLowerCase();
+  const color = ext === 'pdf' ? '#dc2626' : ['jpg','jpeg','png'].includes(ext) ? '#0ea5e9' : '#6b7280';
+  const icon  = ext === 'pdf' ? 'fa-file-pdf' : ['jpg','jpeg','png'].includes(ext) ? 'fa-file-image' : 'fa-file-word';
+  if (['jpg','jpeg','png'].includes(ext)) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      drop.innerHTML = `<div class="file-preview-inner"><img src="${e.target.result}" alt="preview"><span>${file.name}</span></div><input type="file" accept="${docAccept[docType]}" onchange="handleDocFileSelect(this,'${docType}',${id})">`;
+    };
+    reader.readAsDataURL(file);
+  } else {
+    drop.innerHTML = `<div class="file-preview-inner"><i class="fas ${icon}" style="font-size:28px;color:${color};"></i><span>${file.name}</span></div><input type="file" accept="${docAccept[docType]}" onchange="handleDocFileSelect(this,'${docType}',${id})">`;
+  }
+}
+
+// ── License entry card system ──────────────────────────────────────────────
+let licenseEntryCount = 0;
+const licenseEntries = {};
+
+function addLicenseEntry() {
+  const id = ++licenseEntryCount;
+  licenseEntries[id] = { file: null };
+  const container = document.getElementById('license-entries-container');
+  const div = document.createElement('div');
+  div.className = 'license-entry';
+  div.id = `license-entry-${id}`;
+  div.innerHTML = `
+    <div class="license-drop-zone" id="drop-${id}"
+         ondragover="event.preventDefault();this.classList.add('drag-over')"
+         ondragleave="this.classList.remove('drag-over')"
+         ondrop="handleLicenseDrop(event,${id})">
+      <i class="fas fa-cloud-upload-alt drop-icon"></i>
+      <span>Drop file<br>or click</span>
+      <input type="file" accept=".pdf,.jpg,.jpeg,.png" onchange="handleLicenseFileSelect(this,${id})">
+    </div>
+    <div class="license-meta-fields">
+      <div>
+        <label>License Type</label>
+        <input type="text" id="lt-type-${id}" placeholder="e.g. PRC, Bar, CPA">
+      </div>
+      <div>
+        <label>License Number</label>
+        <input type="text" id="lt-num-${id}" placeholder="License number">
+      </div>
+      <div class="license-meta-full">
+        <label>Expiration Date</label>
+        <input type="date" id="lt-exp-${id}">
+      </div>
+    </div>
+    <button type="button" class="license-remove-btn" onclick="removeLicenseEntry(${id})" title="Remove">×</button>
+  `;
+  container.appendChild(div);
+  setTimeout(() => div.querySelector('input[type=text]').focus(), 50);
+}
+
+function removeLicenseEntry(id) {
+  const el = document.getElementById(`license-entry-${id}`);
+  if (el) el.remove();
+  delete licenseEntries[id];
+}
+
+function handleLicenseDrop(event, id) {
+  event.preventDefault();
+  document.getElementById(`drop-${id}`).classList.remove('drag-over');
+  const file = event.dataTransfer.files[0];
+  if (file) setLicenseFile(id, file);
+}
+
+function handleLicenseFileSelect(input, id) {
+  if (input.files[0]) setLicenseFile(id, input.files[0]);
+}
+
+function setLicenseFile(id, file) {
+  licenseEntries[id].file = file;
+  const drop = document.getElementById(`drop-${id}`);
+  document.getElementById(`license-entry-${id}`).classList.add('has-file');
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (['jpg', 'jpeg', 'png'].includes(ext)) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      drop.innerHTML = `<div class="file-preview-inner"><img src="${e.target.result}" alt="preview"><span>${file.name}</span></div><input type="file" accept=".pdf,.jpg,.jpeg,.png" onchange="handleLicenseFileSelect(this,${id})">`;
+    };
+    reader.readAsDataURL(file);
+  } else {
+    const color = ext === 'pdf' ? '#dc2626' : '#6b7280';
+    const icon  = ext === 'pdf' ? 'fa-file-pdf' : 'fa-file';
+    drop.innerHTML = `<div class="file-preview-inner"><i class="fas ${icon}" style="font-size:32px;color:${color};"></i><span>${file.name}</span></div><input type="file" accept=".pdf,.jpg,.jpeg,.png" onchange="handleLicenseFileSelect(this,${id})">`;
+  }
+}
 
 let auditLogs = [];
 let currentPageAuditLogs = 1;

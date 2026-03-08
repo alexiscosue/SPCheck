@@ -16,6 +16,15 @@
           style="width:100%; box-sizing:border-box; padding:9px 12px 9px 34px; border:1.5px solid #e5e7eb; border-radius:8px; font-size:13px; color:#1f2937; outline:none; transition:border-color .15s;"
           onfocus="this.style.borderColor='var(--spc-maroon)'" onblur="this.style.borderColor='#e5e7eb'">
       </div>
+      {% if is_dean %}
+      <div style="position:relative; flex-shrink:0;">
+        <i class='bx bx-layer' style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:14px; pointer-events:none;"></i>
+        <select id="viewModeSelect" style="padding:9px 12px 9px 30px; border:1.5px solid #e5e7eb; border-radius:8px; font-size:13px; color:#1f2937; background:#fff; outline:none; min-width:200px; cursor:pointer;">
+          <option value="self">My Attendance</option>
+          <option value="college">{{ college }} Attendance</option>
+        </select>
+      </div>
+      {% endif %}
       <div style="position:relative; flex-shrink:0;">
         <i class='bx bx-calendar' style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:14px; pointer-events:none;"></i>
         <select id="globalSemesterSelect" style="padding:9px 12px 9px 30px; border:1.5px solid #e5e7eb; border-radius:8px; font-size:13px; color:#1f2937; background:#fff; outline:none; min-width:210px; cursor:pointer;">
@@ -64,8 +73,8 @@
         <button id="nextPage" class="pagination-btn">›</button>
       </div>
       <div class="table">
-        <table class="attendance-table">
-          <thead>
+        <table class="attendance-table" id="logsTable">
+          <thead id="logsHead">
             <tr>
               <th>Date</th>
               <th>Class</th>
@@ -89,15 +98,8 @@
         <button id="campusNextPage" class="hr-pagination-btn">›</button>
       </div>
       <div class="table">
-        <table class="hr-attendance-table">
-          <colgroup>
-            <col style="width:20%">
-            <col style="width:20%">
-            <col style="width:20%">
-            <col style="width:20%">
-            <col style="width:20%">
-          </colgroup>
-          <thead>
+        <table class="hr-attendance-table" id="campusTable">
+          <thead id="campusHead">
             <tr>
               <th>Date</th>
               <th>Time In</th>
@@ -132,6 +134,10 @@
 
     <!-- Analytics Tab -->
     <div id="analytics" class="tab-content" style="padding:16px;">
+      <div id="collegeViewLabel" style="display:none; align-items:center; gap:8px; margin-bottom:12px; padding:8px 12px; background:#fdf2f2; border:1px solid #fca5a5; border-radius:8px;">
+        <i class='bx bx-buildings' style="color:var(--spc-maroon); font-size:15px;"></i>
+        <span id="collegeViewLabelText" style="font-size:13px; color:var(--spc-maroon);"></span>
+      </div>
       <div class="attendance-sub-tabs">
         <div class="attendance-sub-tab active" data-subtab="sub-analytics-class">Class Attendance</div>
         <div class="attendance-sub-tab" data-subtab="sub-analytics-campus">Campus Attendance</div>
@@ -283,13 +289,17 @@
       document.getElementById(btn.dataset.tab).classList.add('active');
       if (btn.dataset.tab === 'analytics') {
         if (!analyticsLoaded) {
-          fetchAnalytics(document.getElementById('globalSemesterSelect')?.value);
+          const semId = document.getElementById('globalSemesterSelect')?.value;
+          if (viewMode === 'college') fetchCollegeAnalytics(semId);
+          else fetchAnalytics(semId);
           analyticsLoaded = true;
         }
       }
       if (btn.dataset.tab === 'campus-attendance') {
         if (!campusSemesterLoaded) {
-          fetchCampusAttendance(document.getElementById('globalSemesterSelect')?.value);
+          const semId = document.getElementById('globalSemesterSelect')?.value;
+          if (viewMode === 'college') fetchCollegeCampusLogs(semId);
+          else fetchCampusAttendance(semId);
           campusSemesterLoaded = true;
         }
       }
@@ -317,6 +327,11 @@
     const period = hours >= 12 ? 'PM' : 'AM';
     hours = hours % 12 || 12;
     return `${hours}:${minutes} ${period}`;
+  }
+
+  function classTime(time, status) {
+    if (status === 'Absent') return '—';
+    return convertTo12Hour(time);
   }
 
   function formatTapTime(tapTime) {
@@ -426,6 +441,15 @@
   let campusPage = 1;
   const campusPerPage = 10;
   let campusSemesterLoaded = false;
+
+  // ── Dean college-mode state ────────────────────────────────────
+  const IS_DEAN = {{ 'true' if is_dean else 'false' }};
+  let viewMode = 'self'; // 'self' | 'college'
+  let collegeLogs = [], collegeLogsFiltered = [], collegeLogsPage = 1;
+  let collegeCampusLogs = [], collegeCampusFiltered = [], collegeCampusPage = 1;
+  let collegeAnalyticsTrendChart = null, collegeAnalyticsDistChart = null;
+  let collegeCaTrendChart = null, collegeCaDistChart = null;
+  const colPerPage = 10;
 
   // ── Semesters & logs data fetch ────────────────────────────────
   async function fetchSemesters() {
@@ -546,7 +570,7 @@
     } else {
       slice.forEach(l => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${l.date}</td><td>${l.class_name || 'N/A'}</td><td>${l.classroom || 'N/A'}</td><td>${l.class_section || 'N/A'}</td><td>${convertTo12Hour(l.time_in)}</td><td>${convertTo12Hour(l.time_out)}</td><td><span class="status ${l.status.toLowerCase()}">${l.status}</span></td>`;
+        tr.innerHTML = `<td>${l.date}</td><td>${l.class_name || 'N/A'}</td><td>${l.classroom || 'N/A'}</td><td>${l.class_section || 'N/A'}</td><td>${classTime(l.time_in, l.status)}</td><td>${classTime(l.time_out, l.status)}</td><td><span class="status ${l.status.toLowerCase()}">${l.status}</span></td>`;
         tbody.appendChild(tr);
       });
     }
@@ -612,7 +636,7 @@
         dot.className = `status-dot ${record.status.toLowerCase()}`;
         const tooltip = document.createElement('div');
         tooltip.className = 'dot-tooltip';
-        tooltip.innerHTML = `<strong>${record.status}</strong><br>${record.class_name || 'N/A'}<br>${record.classroom || 'N/A'}<br>${record.class_section || 'N/A'}<br>In: ${convertTo12Hour(record.time_in)}<br>Out: ${convertTo12Hour(record.time_out)}`;
+        tooltip.innerHTML = `<strong>${record.status}</strong><br>${record.class_name || 'N/A'}<br>${record.classroom || 'N/A'}<br>${record.class_section || 'N/A'}<br>In: ${classTime(record.time_in, record.status)}<br>Out: ${classTime(record.time_out, record.status)}`;
         dot.addEventListener('mouseenter', () => tooltip.classList.add('show'));
         dot.addEventListener('mouseleave', () => tooltip.classList.remove('show'));
         dot.appendChild(tooltip);
@@ -866,33 +890,28 @@
     const ctx = document.getElementById('analyticsDistChart').getContext('2d');
     if (analyticsDistChart) { analyticsDistChart.destroy(); analyticsDistChart = null; }
 
-    const colors = ['#16a34a', '#f59e0b', '#ef4444', '#6b7280'];
+    const colors = ['#16a34a', '#f59e0b', '#ef4444', '#8b5cf6'];
     const labels = ['Present', 'Late', 'Absent', 'Excused'];
     const values = [dist.present || 0, dist.late || 0, dist.absent || 0, dist.excused || 0];
 
     analyticsDistChart = new Chart(ctx, {
-      type: 'doughnut',
-      data: {
-        labels: labels,
-        datasets: [{
-          data: values,
-          backgroundColor: colors,
-          borderWidth: 2,
-          borderColor: '#fff'
-        }]
-      },
+      type: 'bar',
+      data: { labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        cutout: '68%'
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: c => ` ${c.parsed.y} sessions` } }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { font: { size: 11 }, stepSize: 1 }, grid: { color: 'rgba(0,0,0,0.05)' } },
+          x: { grid: { display: false }, ticks: { font: { size: 11 } } }
+        }
       }
     });
 
-    // Custom legend with counts + percentages
-    const legendEl = document.getElementById('analyticsDistLegend');
     const total = values.reduce((a, b) => a + b, 0);
-    legendEl.innerHTML = labels.map(function(lbl, i) {
+    document.getElementById('analyticsDistLegend').innerHTML = labels.map(function(lbl, i) {
       const pct = total > 0 ? ((values[i] / total) * 100).toFixed(1) : '0.0';
       return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text)">' +
         '<span style="width:10px;height:10px;border-radius:50%;background:' + colors[i] + ';flex-shrink:0"></span>' +
@@ -941,17 +960,26 @@
   function renderCaDist(dist) {
     const ctx = document.getElementById('caDistChart').getContext('2d');
     if (caDistChart) { caDistChart.destroy(); caDistChart = null; }
-    const colors = ['#16a34a', '#f59e0b', '#ef4444', '#6b7280'];
+    const colors = ['#16a34a', '#f59e0b', '#ef4444', '#8b5cf6'];
     const labels = ['Present', 'Late', 'Absent', 'Excused'];
     const values = [dist.present || 0, dist.late || 0, dist.absent || 0, dist.excused || 0];
     caDistChart = new Chart(ctx, {
-      type: 'doughnut',
-      data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '68%' }
+      type: 'bar',
+      data: { labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: c => ` ${c.parsed.y} sessions` } }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { font: { size: 11 }, stepSize: 1 }, grid: { color: 'rgba(0,0,0,0.05)' } },
+          x: { grid: { display: false }, ticks: { font: { size: 11 } } }
+        }
+      }
     });
-    const legendEl = document.getElementById('caDistLegend');
     const total = values.reduce((a, b) => a + b, 0);
-    legendEl.innerHTML = labels.map(function(lbl, i) {
+    document.getElementById('caDistLegend').innerHTML = labels.map(function(lbl, i) {
       const pct = total > 0 ? ((values[i] / total) * 100).toFixed(1) : '0.0';
       return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text)">' +
         '<span style="width:10px;height:10px;border-radius:50%;background:' + colors[i] + ';flex-shrink:0"></span>' +
@@ -1035,15 +1063,271 @@
     document.getElementById('campusNextPage').disabled = campusPage >= totalPages || totalPages === 0;
   }
 
+  // ── Dean college-mode functions ────────────────────────────────
+  function switchViewMode(mode) {
+    viewMode = mode;
+    const semId = document.getElementById('globalSemesterSelect')?.value;
+    const calTab = document.querySelector('[data-tab="calendar"]');
+    const label = document.getElementById('collegeViewLabel');
+    const labelText = document.getElementById('collegeViewLabelText');
+    if (mode === 'college') {
+      // Show college label in analytics tab
+      if (label) { label.style.display = 'flex'; }
+      if (labelText) { labelText.textContent = 'Viewing: {{ college }} — College Attendance'; }
+      // Hide Calendar tab in college mode
+      if (calTab) calTab.style.display = 'none';
+      // If calendar was active, switch to logs
+      if (document.querySelector('[data-tab="calendar"].active')) {
+        document.querySelector('[data-tab="logs"]').click();
+      }
+      // Update log table header
+      document.getElementById('logsHead').innerHTML = '<tr><th>Name</th><th>Date</th><th>Class</th><th>Room</th><th>Section</th><th>Time In</th><th>Time Out</th><th>Status</th></tr>';
+      document.getElementById('campusHead').innerHTML = '<tr><th>Name</th><th>Date</th><th>Time In</th><th>Time Out</th><th>Session</th><th>Status</th></tr>';
+      // Load college data
+      fetchCollegeLogs(semId);
+      fetchCollegeCampusLogs(semId);
+    } else {
+      // Hide college label
+      if (label) { label.style.display = 'none'; }
+      // Show Calendar tab
+      if (calTab) calTab.style.display = '';
+      // Restore original headers
+      document.getElementById('logsHead').innerHTML = '<tr><th>Date</th><th>Class</th><th>Room</th><th>Section</th><th>Time In</th><th>Time Out</th><th>Status</th></tr>';
+      document.getElementById('campusHead').innerHTML = '<tr><th>Date</th><th>Time In</th><th>Time Out</th><th>Session</th><th>Status</th></tr>';
+      // Restore self data
+      if (currentSemesterId) fetchAttendanceData(currentSemesterId);
+      if (campusSemesterLoaded) fetchCampusAttendance(semId);
+    }
+    // Reset analytics loaded flag so it reloads for the new mode
+    analyticsLoaded = false;
+    campusSemesterLoaded = false;
+  }
+
+  async function fetchCollegeLogs(semId) {
+    const tbody = document.getElementById('logsBody');
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:#6b7280">Loading...</td></tr>';
+    try {
+      const url = semId ? `/api/dean/college-attendance?semester_id=${semId}` : '/api/dean/college-attendance';
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (data.success) {
+        collegeLogs = data.logs || [];
+        collegeLogsPage = 1;
+        renderCollegeLogs();
+      } else {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:#6b7280">No records found</td></tr>';
+      }
+    } catch(e) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:#ef4444">Error loading records</td></tr>';
+    }
+  }
+
+  function renderCollegeLogs() {
+    const tbody = document.getElementById('logsBody');
+    const search = (document.getElementById('globalSearch')?.value || '').toLowerCase();
+    const statusF = document.getElementById('globalStatusFilter')?.value || '';
+    collegeLogsFiltered = collegeLogs.filter(r => {
+      const sm = !search || r.name.toLowerCase().includes(search) || r.date.includes(search) ||
+        r.class_name.toLowerCase().includes(search) || r.class_section.toLowerCase().includes(search) ||
+        r.room.toLowerCase().includes(search) || r.status.toLowerCase().includes(search);
+      return sm && (!statusF || r.status === statusF);
+    });
+    const total = collegeLogsFiltered.length;
+    const totalPages = Math.ceil(total / colPerPage);
+    const slice = collegeLogsFiltered.slice((collegeLogsPage - 1) * colPerPage, collegeLogsPage * colPerPage);
+    tbody.innerHTML = '';
+    if (!slice.length) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:#6b7280">${total === 0 && (search || statusF) ? 'No records match your search' : 'No attendance records'}</td></tr>`;
+    } else {
+      slice.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${r.name}</td><td>${r.date}</td><td>${r.class_name}</td><td>${r.room}</td><td>${r.class_section}</td><td>${classTime(r.time_in, r.status)}</td><td>${classTime(r.time_out, r.status)}</td><td><span class="status ${r.status.toLowerCase()}">${r.status}</span></td>`;
+        tbody.appendChild(tr);
+      });
+    }
+    const pageInfo = document.getElementById('pageInfo');
+    if (total === 0) { pageInfo.textContent = '0 records'; }
+    else { pageInfo.textContent = `${(collegeLogsPage-1)*colPerPage+1} - ${Math.min(collegeLogsPage*colPerPage,total)} of ${total} records`; }
+    document.getElementById('prevPage').disabled = collegeLogsPage <= 1;
+    document.getElementById('nextPage').disabled = collegeLogsPage >= totalPages || totalPages === 0;
+  }
+
+  async function fetchCollegeCampusLogs(semId) {
+    const tbody = document.getElementById('campusLogsBody');
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#6b7280">Loading...</td></tr>';
+    try {
+      const url = semId ? `/api/dean/college-campus-attendance?semester_id=${semId}` : '/api/dean/college-campus-attendance';
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (data.success) {
+        collegeCampusLogs = data.records || [];
+        collegeCampusPage = 1;
+        renderCollegeCampusLogs();
+      } else {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#6b7280">No records found</td></tr>';
+      }
+    } catch(e) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#ef4444">Error loading records</td></tr>';
+    }
+  }
+
+  function renderCollegeCampusLogs() {
+    const tbody = document.getElementById('campusLogsBody');
+    const search = (document.getElementById('globalSearch')?.value || '').toLowerCase();
+    const statusF = document.getElementById('globalStatusFilter')?.value || '';
+    const sessionF = document.getElementById('globalSessionFilter')?.value || '';
+    collegeCampusFiltered = collegeCampusLogs.filter(r => {
+      const sm = !search || r.name.toLowerCase().includes(search) || (r.date && r.date.includes(search)) ||
+        (r.session && r.session.toLowerCase().includes(search)) || (r.status && r.status.toLowerCase().includes(search));
+      return sm && (!statusF || r.status === statusF) && (!sessionF || r.session === sessionF);
+    });
+    const total = collegeCampusFiltered.length;
+    const totalPages = Math.ceil(total / colPerPage);
+    const slice = collegeCampusFiltered.slice((collegeCampusPage - 1) * colPerPage, collegeCampusPage * colPerPage);
+    tbody.innerHTML = '';
+    if (!slice.length) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:2rem;color:#6b7280">${total === 0 && (search || statusF || sessionF) ? 'No records match your search' : 'No campus attendance data'}</td></tr>`;
+    } else {
+      slice.forEach(r => {
+        const sessionClass = r.session === 'Morning' ? 'campus-session-morning' : 'campus-session-afternoon';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${r.name}</td><td>${r.date || '---'}</td><td>${fmtHHMM(r.time_in)}</td><td>${fmtHHMM(r.time_out)}</td><td><span class="campus-session-badge ${sessionClass}">${r.session}</span></td><td><span class="status ${(r.status||'').toLowerCase()}">${r.status||'---'}</span></td>`;
+        tbody.appendChild(tr);
+      });
+    }
+    const pageInfo = document.getElementById('campusPageInfo');
+    if (total === 0) { pageInfo.textContent = '0 records'; }
+    else { pageInfo.textContent = `${(collegeCampusPage-1)*colPerPage+1} - ${Math.min(collegeCampusPage*colPerPage,total)} of ${total} records`; }
+    document.getElementById('campusPrevPage').disabled = collegeCampusPage <= 1;
+    document.getElementById('campusNextPage').disabled = collegeCampusPage >= totalPages || totalPages === 0;
+  }
+
+  async function fetchCollegeAnalytics(semId) {
+    try {
+      const qs = semId ? `?semester_id=${semId}` : '';
+      const [classResp, campusResp] = await Promise.all([
+        fetch(`/api/dean/college-analytics${qs}`),
+        fetch(`/api/dean/college-campus-analytics${qs}`)
+      ]);
+      const classData = await classResp.json();
+      const campusData = await campusResp.json();
+      if (classData.success) {
+        updateAnalyticsKPIs(classData.kpis);
+        renderCollegeAnalyticsTrend(classData.trends);
+        renderCollegeAnalyticsDist(classData.distribution);
+      }
+      if (campusData.success) {
+        updateCaKPIs(campusData.kpis);
+        renderCollegeCaTrend(campusData.trends);
+        renderCollegeCaDist(campusData.distribution);
+      }
+    } catch(e) { console.error('Error fetching college analytics:', e); }
+  }
+
+  function renderCollegeAnalyticsTrend(trends) {
+    const ctx = document.getElementById('analyticsTrendChart').getContext('2d');
+    if (analyticsTrendChart) { analyticsTrendChart.destroy(); analyticsTrendChart = null; }
+    if (!trends || !trends.length) return;
+    analyticsTrendChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: trends.map(t => t.label),
+        datasets: [
+          { label: 'Avg. Rate (%)', data: trends.map(t => t.avg_rate), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', fill: true, tension: 0.4, yAxisID: 'yRate', pointRadius: 4, pointHoverRadius: 6 },
+          { label: 'Present', data: trends.map(t => t.total_present), borderColor: '#10b981', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
+          { label: 'Late', data: trends.map(t => t.total_late), borderColor: '#f59e0b', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
+          { label: 'Absent', data: trends.map(t => t.total_absent), borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+        scales: {
+          yRate: { type: 'linear', position: 'left', min: 0, max: 100, title: { display: true, text: 'Rate (%)', font: { size: 11 } }, ticks: { font: { size: 11 }, callback: v => v + '%' } },
+          yCounts: { type: 'linear', position: 'right', min: 0, title: { display: true, text: 'Sessions', font: { size: 11 } }, ticks: { font: { size: 11 } }, grid: { drawOnChartArea: false } },
+          x: { ticks: { font: { size: 11 }, maxRotation: 30 } }
+        }
+      }
+    });
+  }
+
+  function renderCollegeAnalyticsDist(dist) {
+    const ctx = document.getElementById('analyticsDistChart').getContext('2d');
+    if (analyticsDistChart) { analyticsDistChart.destroy(); analyticsDistChart = null; }
+    const colors = ['#16a34a', '#f59e0b', '#ef4444', '#8b5cf6'];
+    const labels = ['Present', 'Late', 'Absent', 'Excused'];
+    const values = [dist.present||0, dist.late||0, dist.absent||0, dist.excused||0];
+    analyticsDistChart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.parsed.y} sessions` } } },
+        scales: { y: { beginAtZero: true, ticks: { font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.05)' } }, x: { grid: { display: false }, ticks: { font: { size: 11 } } } }
+      }
+    });
+    const total = values.reduce((a,b) => a+b, 0);
+    document.getElementById('analyticsDistLegend').innerHTML = labels.map((lbl,i) => {
+      const pct = total > 0 ? ((values[i]/total)*100).toFixed(1) : '0.0';
+      return `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text)"><span style="width:10px;height:10px;border-radius:50%;background:${colors[i]};flex-shrink:0"></span>${lbl}: <strong>${values[i]}</strong> (${pct}%)</span>`;
+    }).join('');
+  }
+
+  function renderCollegeCaTrend(trends) {
+    const ctx = document.getElementById('caTrendChart').getContext('2d');
+    if (caTrendChart) { caTrendChart.destroy(); caTrendChart = null; }
+    if (!trends || !trends.length) return;
+    caTrendChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: trends.map(t => t.label),
+        datasets: [
+          { label: 'Avg. Rate (%)', data: trends.map(t => t.avg_rate), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', fill: true, tension: 0.4, yAxisID: 'yRate', pointRadius: 4, pointHoverRadius: 6 },
+          { label: 'Present', data: trends.map(t => t.total_present), borderColor: '#10b981', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
+          { label: 'Late', data: trends.map(t => t.total_late), borderColor: '#f59e0b', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
+          { label: 'Absent', data: trends.map(t => t.total_absent), borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+        scales: {
+          yRate: { type: 'linear', position: 'left', min: 0, max: 100, title: { display: true, text: 'Rate (%)', font: { size: 11 } }, ticks: { font: { size: 11 }, callback: v => v + '%' } },
+          yCounts: { type: 'linear', position: 'right', min: 0, title: { display: true, text: 'Sessions', font: { size: 11 } }, ticks: { font: { size: 11 } }, grid: { drawOnChartArea: false } },
+          x: { ticks: { font: { size: 11 }, maxRotation: 30 } }
+        }
+      }
+    });
+  }
+
+  function renderCollegeCaDist(dist) {
+    const ctx = document.getElementById('caDistChart').getContext('2d');
+    if (caDistChart) { caDistChart.destroy(); caDistChart = null; }
+    const colors = ['#16a34a', '#f59e0b', '#ef4444', '#8b5cf6'];
+    const labels = ['Present', 'Late', 'Absent', 'Excused'];
+    const values = [dist.present||0, dist.late||0, dist.absent||0, dist.excused||0];
+    caDistChart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.parsed.y} sessions` } } },
+        scales: { y: { beginAtZero: true, ticks: { font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.05)' } }, x: { grid: { display: false }, ticks: { font: { size: 11 } } } }
+      }
+    });
+    const total = values.reduce((a,b) => a+b, 0);
+    document.getElementById('caDistLegend').innerHTML = labels.map((lbl,i) => {
+      const pct = total > 0 ? ((values[i]/total)*100).toFixed(1) : '0.0';
+      return `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text)"><span style="width:10px;height:10px;border-radius:50%;background:${colors[i]};flex-shrink:0"></span>${lbl}: <strong>${values[i]}</strong> (${pct}%)</span>`;
+    }).join('');
+  }
+
   // ── Helpers ────────────────────────────────────────────────────
   function rerenderActiveTab() {
     const activeTabEl = document.querySelector('.chart-large .eval-page-tab.active');
     if (!activeTabEl) return;
     const tab = activeTabEl.dataset.tab;
-    if (tab === 'logs') { currentPage = 1; renderLogs(); }
-    else if (tab === 'campus-attendance') { campusPage = 1; renderCampusLogs(); }
-    else if (tab === 'analytics') {
-      cbPage = 1; applyCbFilters();
+    if (viewMode === 'college') {
+      if (tab === 'logs') { collegeLogsPage = 1; renderCollegeLogs(); }
+      else if (tab === 'campus-attendance') { collegeCampusPage = 1; renderCollegeCampusLogs(); }
+    } else {
+      if (tab === 'logs') { currentPage = 1; renderLogs(); }
+      else if (tab === 'campus-attendance') { campusPage = 1; renderCampusLogs(); }
+      else if (tab === 'analytics') { cbPage = 1; applyCbFilters(); }
     }
   }
 
@@ -1055,23 +1339,41 @@
   }
 
   // ── Event listeners ────────────────────────────────────────────
+  if (IS_DEAN) {
+    document.getElementById('viewModeSelect')?.addEventListener('change', e => {
+      switchViewMode(e.target.value);
+    });
+  }
+
   document.getElementById('prevMonth').addEventListener('click', () => {
     currentDate.setMonth(currentDate.getMonth() - 1); renderCalendar();
   });
   document.getElementById('nextMonth').addEventListener('click', () => {
     currentDate.setMonth(currentDate.getMonth() + 1); renderCalendar();
   });
-  document.getElementById('prevPage').addEventListener('click', () => goToPage(currentPage - 1));
-  document.getElementById('nextPage').addEventListener('click', () => goToPage(currentPage + 1));
+  document.getElementById('prevPage').addEventListener('click', () => {
+    if (viewMode === 'college') { if (collegeLogsPage > 1) { collegeLogsPage--; renderCollegeLogs(); } }
+    else goToPage(currentPage - 1);
+  });
+  document.getElementById('nextPage').addEventListener('click', () => {
+    if (viewMode === 'college') {
+      const tp = Math.ceil(collegeLogsFiltered.length / colPerPage);
+      if (collegeLogsPage < tp) { collegeLogsPage++; renderCollegeLogs(); }
+    } else goToPage(currentPage + 1);
+  });
   document.getElementById('globalSemesterSelect').addEventListener('change', e => {
     const id = e.target.value;
-    if (id && id !== currentSemesterId) {
-      currentSemesterId = id;
-      fetchAttendanceData(id);
-      // Refresh campus if already loaded
-      if (campusSemesterLoaded) fetchCampusAttendance(id);
-      // Refresh analytics if already loaded
-      if (analyticsLoaded) fetchAnalytics(id);
+    if (viewMode === 'college') {
+      fetchCollegeLogs(id);
+      fetchCollegeCampusLogs(id);
+      if (analyticsLoaded) { analyticsLoaded = false; fetchCollegeAnalytics(id); analyticsLoaded = true; }
+    } else {
+      if (id && id !== currentSemesterId) {
+        currentSemesterId = id;
+        fetchAttendanceData(id);
+        if (campusSemesterLoaded) fetchCampusAttendance(id);
+        if (analyticsLoaded) fetchAnalytics(id);
+      }
     }
   });
   document.getElementById('globalSearch').addEventListener('input', rerenderActiveTab);
@@ -1097,11 +1399,17 @@
   });
 
   document.getElementById('campusPrevPage').addEventListener('click', () => {
-    if (campusPage > 1) { campusPage--; renderCampusLogs(); }
+    if (viewMode === 'college') { if (collegeCampusPage > 1) { collegeCampusPage--; renderCollegeCampusLogs(); } }
+    else if (campusPage > 1) { campusPage--; renderCampusLogs(); }
   });
   document.getElementById('campusNextPage').addEventListener('click', () => {
-    const totalPages = Math.ceil(campusFiltered.length / campusPerPage);
-    if (campusPage < totalPages) { campusPage++; renderCampusLogs(); }
+    if (viewMode === 'college') {
+      const tp = Math.ceil(collegeCampusFiltered.length / colPerPage);
+      if (collegeCampusPage < tp) { collegeCampusPage++; renderCollegeCampusLogs(); }
+    } else {
+      const totalPages = Math.ceil(campusFiltered.length / campusPerPage);
+      if (campusPage < totalPages) { campusPage++; renderCampusLogs(); }
+    }
   });
 
   // ── Init ───────────────────────────────────────────────────────

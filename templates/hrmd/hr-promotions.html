@@ -47,11 +47,14 @@
   <select id="filterPromotionStatus">
     <option value="">All Status</option>
     <option value="Hrmd">For HRMD Checking</option>
-    <option value="Vpa">For VPA Checking</option>
+    <option value="Vpa">For VPAA Checking</option>
     <option value="Pres">For President Checking</option>
     <option value="approved">Approved</option>
     <option value="rejected">Rejected</option>
   </select>
+  <button class="btn-action" style="background:#7b1113;color:#fff;white-space:nowrap;" onclick="openDegreeModal()">
+    <i class='bx bx-book-alt'></i> Set Degree Info
+  </button>
 </div>
 
 <!-- REGULARIZATION FILTERS (only visible when Regularizations tab active) -->
@@ -75,7 +78,7 @@
   <select id="filterRegularizationStatus">
     <option value="">All Status</option>
     <option value="eligible">Eligible (Not Yet Initiated)</option>
-    <option value="vpa">For VPA Review</option>
+    <option value="vpa">For VPAA Review</option>
     <option value="pres">For President Review</option>
     <option value="approved">Approved</option>
     <option value="rejected">Rejected</option>
@@ -122,6 +125,7 @@
             <tr>
               <th>Faculty</th>
               <th>Rank Change</th>
+              <th>Degree</th>
               <th>Status</th>
               <th>Submitted</th>
               <th>Action</th>
@@ -170,13 +174,55 @@
                 </div>
               </td>
               <td style="padding:14px 12px;">
+                <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-start;">
+                  {# Determine degree requirement for the requested rank #}
+                  {% if promo.requestedrank in ['Associate Professor', 'Professor'] %}
+                    {% set needed_label = 'Doctorate' %}
+                    {% set req_met = promo.has_doctorate %}
+                  {% elif promo.requestedrank in ['Instructor', 'Assistant Professor'] %}
+                    {% set needed_label = "Aligned Master's" %}
+                    {% set req_met = promo.has_aligned_master or promo.has_doctorate %}
+                  {% else %}
+                    {% set needed_label = "Bachelor's" %}
+                    {% set req_met = true %}
+                  {% endif %}
+
+                  {# Required degree label #}
+                  <div style="display:flex;align-items:center;gap:4px;">
+                    <span style="font-size:10px;color:#9ca3af;font-weight:500;text-transform:uppercase;letter-spacing:.4px;">Required</span>
+                    <span style="font-size:11px;font-weight:700;color:#374151;">{{ needed_label }}</span>
+                  </div>
+
+                  {# Status capsule — red if not met, green if met #}
+                  {% if req_met %}
+                  <span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;background:#dcfce7;color:#166534;padding:2px 8px;border-radius:999px;border:1px solid #bbf7d0;">
+                    <i class='bx bx-check-circle' style="font-size:11px;"></i> Confirmed
+                  </span>
+                  {% else %}
+                  <span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:999px;border:1px solid #fecaca;">
+                    <i class='bx bx-error-circle' style="font-size:11px;"></i> Not confirmed
+                  </span>
+                  {% endif %}
+
+                  {# Current degree on file #}
+                  <span style="font-size:11px;color:#9ca3af;">
+                    On file:
+                    {% if promo.highest_degree_level %}
+                    <strong style="color:#6b7280;">{{ promo.highest_degree_level }}</strong>
+                    {% else %}
+                    <em>None</em>
+                    {% endif %}
+                  </span>
+                </div>
+              </td>
+              <td style="padding:14px 12px;">
                 {% if 'hrmd' in promo.status|lower %}
                 <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#fef9c3;color:#713f12;padding:4px 10px;border-radius:10px;border:1px solid #fde68a;">
                   <i class='bx bx-time-five' style="font-size:12px;"></i> HR Review
                 </span>
                 {% elif 'vpa' in promo.status|lower %}
                 <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#eff6ff;color:#1d4ed8;padding:4px 10px;border-radius:10px;border:1px solid #bfdbfe;">
-                  <i class='bx bx-time-five' style="font-size:12px;"></i> VPA Review
+                  <i class='bx bx-time-five' style="font-size:12px;"></i> VPAA Review
                 </span>
                 {% elif 'pres' in promo.status|lower %}
                 <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#f5f3ff;color:#6d28d9;padding:4px 10px;border-radius:10px;border:1px solid #ddd6fe;">
@@ -203,25 +249,33 @@
                 </div>
               </td>
               <td style="padding:14px 12px;">
-                {% if is_action %}
-                <button class="review-promotion-btn"
-                        style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:#7b1113;color:#fff;border-radius:7px;font-size:12px;font-weight:700;border:none;cursor:pointer;box-shadow:0 1px 4px rgba(123,17,19,.3);"
-                        data-application-id="{{ promo.application_id }}">
-                  <i class='bx bx-check-circle' style="font-size:14px;"></i> Review Now
-                </button>
-                {% else %}
-                <button class="review-promotion-btn"
-                        style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:#f3f4f6;color:#374151;border-radius:7px;font-size:12px;font-weight:600;border:1px solid #e5e7eb;cursor:pointer;"
-                        data-application-id="{{ promo.application_id }}"
-                        onmouseover="this.style.background='#e5e7eb'" onmouseout="this.style.background='#f3f4f6'">
-                  <i class='bx bx-show' style="font-size:14px;"></i> View
-                </button>
-                {% endif %}
+                <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch;min-width:110px;">
+                  {% if is_action %}
+                  <button class="review-promotion-btn"
+                          style="display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:7px 12px;background:#7b1113;color:#fff;border-radius:7px;font-size:12px;font-weight:700;border:1px solid #7b1113;cursor:pointer;box-shadow:0 1px 4px rgba(123,17,19,.25);width:100%;"
+                          data-application-id="{{ promo.application_id }}">
+                    <i class='bx bx-check-circle' style="font-size:14px;"></i> Review Now
+                  </button>
+                  {% else %}
+                  <button class="review-promotion-btn"
+                          style="display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:7px 12px;background:#fff;color:#374151;border-radius:7px;font-size:12px;font-weight:600;border:1px solid #d1d5db;cursor:pointer;width:100%;"
+                          data-application-id="{{ promo.application_id }}"
+                          onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='#fff'">
+                    <i class='bx bx-show' style="font-size:14px;"></i> View
+                  </button>
+                  {% endif %}
+                  <button onclick="openDegreeForFaculty({{ promo.faculty_id }}, '{{ promo.name|replace("'", "\\'") }}')"
+                          title="Set Degree Info"
+                          style="display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:7px 12px;background:#fff;color:#2563eb;border-radius:7px;font-size:12px;font-weight:600;border:1px solid #bfdbfe;cursor:pointer;width:100%;"
+                          onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='#fff'">
+                    <i class='bx bx-book-add' style="font-size:14px;"></i> Set Degree
+                  </button>
+                </div>
               </td>
             </tr>
             {% else %}
             <tr>
-              <td colspan="5" style="text-align:center;padding:3rem;color:#9ca3af;">
+              <td colspan="6" style="text-align:center;padding:3rem;color:#9ca3af;">
                 <i class='bx bx-inbox' style="font-size:40px;display:block;margin-bottom:10px;color:#fecaca;"></i>
                 <div style="font-weight:600;color:#6b7280;">No promotion requests found</div>
                 <div style="font-size:12px;margin-top:4px;">Faculty promotion applications will appear here once submitted.</div>
@@ -664,7 +718,7 @@
     <div id="hrNotesSection" style="margin:18px 24px 0;display:none;">
       <label style="display:block;font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;">
         <i class='bx bx-edit' style="font-size:14px;vertical-align:middle;color:#7b1113;"></i> HRMD Notes
-        <span style="font-weight:400;font-size:11px;color:#9ca3af;text-transform:none;letter-spacing:0;"> — optional, visible to VPA &amp; President</span>
+        <span style="font-weight:400;font-size:11px;color:#9ca3af;text-transform:none;letter-spacing:0;"> — optional, visible to VPAA &amp; President</span>
       </label>
       <textarea id="hrNotes" placeholder="Enter review notes..."
                 style="width:100%;min-height:80px;border-radius:8px;border:1px solid #d1d5db;padding:10px 12px;font-size:13px;resize:vertical;box-sizing:border-box;font-family:inherit;color:#111;"></textarea>
@@ -688,7 +742,7 @@
       </button>
       <button id="forwardBtn"
               style="display:none;align-items:center;gap:5px;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;background:#7b1113;color:#fff;border:none;box-shadow:0 2px 6px rgba(123,17,19,.3);">
-        <i class='bx bx-send' style="font-size:15px;"></i> Forward to VPA
+        <i class='bx bx-send' style="font-size:15px;"></i> Forward to VPAA
       </button>
       <button id="viewProfileBtn"
               style="display:inline-flex;align-items:center;gap:5px;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;"
@@ -997,7 +1051,7 @@ function loadPromotionDetails(applicationId) {
         const statusLower = (data.status || '').toLowerCase();
         const pillMap = {
           hrmd:     { bg:'#fef9c3', color:'#713f12', border:'#fde68a', icon:'bx-time-five',   label:'HR Review'        },
-          vpa:      { bg:'#eff6ff', color:'#1d4ed8', border:'#bfdbfe', icon:'bx-time-five',   label:'VPA Review'      },
+          vpa:      { bg:'#eff6ff', color:'#1d4ed8', border:'#bfdbfe', icon:'bx-time-five',   label:'VPAA Review'      },
           pres:     { bg:'#f5f3ff', color:'#6d28d9', border:'#ddd6fe', icon:'bx-time-five',   label:'President Review' },
           approved: { bg:'#f0fdf4', color:'#166534', border:'#bbf7d0', icon:'bx-check-circle',label:'Approved'         },
           rejected: { bg:'#fef2f2', color:'#991b1b', border:'#fecaca', icon:'bx-x-circle',    label:'Rejected'         },
@@ -1049,7 +1103,7 @@ function loadPromotionDetails(applicationId) {
             <div class="review-note-card vpa">
               <div class="review-note-header">
                 <span class="review-note-role vpa">
-                  <i class='bx bx-shield-quarter'></i>VPA Review
+                  <i class='bx bx-shield-quarter'></i>VPAA Review
                 </span>
               </div>
               <div class="review-note-content">${data.vpa_remarks}</div>
@@ -1179,13 +1233,13 @@ document.getElementById('viewProfileBtn').addEventListener('click', () => {
   window.location.href = `/hr_employee_profile/${currentFacultyId}`;
 });
 
-// FORWARD TO VPA (MODIFIED)
+// FORWARD TO VPAA (MODIFIED)
 document.getElementById('forwardBtn').addEventListener('click', () => {
   if (!currentApplicationId) return alert('No application selected');
   
   const hrNotes = document.getElementById('hrNotes').value.trim();
   
-  if (!confirm('Forward this application to VPA for review?')) return;
+  if (!confirm('Forward this application to VPAA for review?')) return;
   
   fetch('/api/promotion/forward-to-vpaa', {
     method: 'POST',
@@ -1198,7 +1252,7 @@ document.getElementById('forwardBtn').addEventListener('click', () => {
   .then(response => response.json())
   .then(result => {
     if (result.success) {
-      alert('Application forwarded to VPA successfully');
+      alert('Application forwarded to VPAA successfully');
       location.reload();
     } else {
       alert('Error: ' + result.error);

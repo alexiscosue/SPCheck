@@ -9,18 +9,22 @@
 
   <!-- Stepper -->
   <div class="card" style="grid-column:1 / -1; padding:20px">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid #e5e7eb;">
+    <div
+      style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid #e5e7eb;">
       <div style="display:flex; align-items:center; gap:12px;">
-        <div style="width:38px; height:38px; background:#fef2f2; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+        <div
+          style="width:38px; height:38px; background:#fef2f2; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
           <i class='bx bx-git-merge' style="font-size:22px; color:#7b1113;"></i>
         </div>
         <div>
           <h3 style="margin:0; font-size:16px; font-weight:700; color:#111827;">Promotion Application Progress</h3>
-          <p style="margin:2px 0 0 0; font-size:12px; color:#6b7280;">Track your application through each review stage</p>
+          <p style="margin:2px 0 0 0; font-size:12px; color:#6b7280;">Track your application through each review stage
+          </p>
         </div>
       </div>
       {% if display_requested_rank %}
-        <span style="font-size:13px;color:#64748b;background:#f1f5f9;padding:5px 12px;border-radius:20px;">Applying for: <strong style="color:#7b1113;">{{ display_requested_rank }}</strong></span>
+      <span style="font-size:13px;color:#64748b;background:#f1f5f9;padding:5px 12px;border-radius:20px;">Applying for:
+        <strong style="color:#7b1113;">{{ display_requested_rank }}</strong></span>
       {% endif %}
     </div>
     {% if display_date_submitted %}
@@ -33,7 +37,8 @@
       </div>
 
       <!-- Step 2: HRMD Review -->
-      {% set hrmd_done = display_hrmd_date or display_current_status in ['Under VPA Review', 'Awaiting Presidential Approval', 'Approved', 'Rejected'] %}
+      {% set hrmd_done = display_hrmd_date or display_current_status in ['Under VPA Review', 'Awaiting Presidential
+      Approval', 'Approved', 'Rejected'] %}
       <div class="step {% if display_current_status == 'Under HR Review' %}active{% elif hrmd_done %}done{% endif %}">
         <div class="circle">{% if hrmd_done %}<i class='bx bx-check'></i>{% else %}2{% endif %}</div>
         HRMD Review
@@ -45,11 +50,12 @@
         </small>
       </div>
 
-      <!-- Step 3: VPA Review -->
-      {% set vpa_done = display_vpa_date or display_current_status in ['Awaiting Presidential Approval', 'Approved', 'Rejected'] %}
+      <!-- Step 3: VPAA Review -->
+      {% set vpa_done = display_vpa_date or display_current_status in ['Awaiting Presidential Approval', 'Approved',
+      'Rejected'] %}
       <div class="step {% if display_current_status == 'Under VPA Review' %}active{% elif vpa_done %}done{% endif %}">
         <div class="circle">{% if vpa_done %}<i class='bx bx-check'></i>{% else %}3{% endif %}</div>
-        VPA Review
+        VPAA Review
         <small>
           {% if display_current_status == 'Under VPA Review' %}In Progress
           {% elif display_vpa_date %}{{ display_vpa_date.strftime("%b %d, %Y") }}
@@ -60,7 +66,8 @@
 
       <!-- Step 4: President -->
       {% set pres_done = display_pres_date or display_final_decision in ['approved', 'rejected'] %}
-      <div class="step {% if display_current_status == 'Awaiting Presidential Approval' %}active{% elif pres_done %}done{% endif %}">
+      <div
+        class="step {% if display_current_status == 'Awaiting Presidential Approval' %}active{% elif pres_done %}done{% endif %}">
         <div class="circle">{% if pres_done %}<i class='bx bx-check'></i>{% else %}4{% endif %}</div>
         President
         <small>
@@ -71,7 +78,8 @@
       </div>
 
       <!-- Step 5: Decision -->
-      <div class="step {% if display_final_decision == 'approved' %}done step-approved{% elif display_final_decision == 'rejected' %}step-rejected{% endif %}">
+      <div
+        class="step {% if display_final_decision == 'approved' %}done step-approved{% elif display_final_decision == 'rejected' %}step-rejected{% endif %}">
         <div class="circle">
           {% if display_final_decision == 'approved' %}<i class='bx bx-trophy'></i>
           {% elif display_final_decision == 'rejected' %}<i class='bx bx-x'></i>
@@ -88,13 +96,16 @@
 
     <!-- Promotion letter banner (show when approved and unacknowledged) -->
     {% if has_unacknowledged_letter and letter_app_id %}
-    <div id="letterBanner" style="margin-top:18px;padding:14px 18px;background:#d1fae5;border:1px solid #6ee7b7;border-radius:10px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <div id="letterBanner"
+      style="margin-top:18px;padding:14px 18px;background:#d1fae5;border:1px solid #6ee7b7;border-radius:10px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
       <i class='bx bx-envelope-open' style="font-size:28px;color:#065f46"></i>
       <div style="flex:1;min-width:200px">
         <div style="font-weight:700;color:#065f46;font-size:15px">Your promotion letter is ready!</div>
-        <div style="font-size:13px;color:#047857;margin-top:3px">Please review and acknowledge your official promotion letter.</div>
+        <div style="font-size:13px;color:#047857;margin-top:3px">Please review and acknowledge your official promotion
+          letter.</div>
       </div>
-      <button onclick="openLetterModal()" style="background:#059669;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:600;cursor:pointer;font-size:14px">
+      <button onclick="openLetterModal()"
+        style="background:#059669;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:600;cursor:pointer;font-size:14px">
         <i class='bx bx-file-find'></i> View Letter
       </button>
     </div>
@@ -110,255 +121,298 @@
 
   <!-- Promotion Letter Modal -->
   {% if letter_app_id %}
-  <div id="letterModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:2000;align-items:center;justify-content:center">
-    <div style="background:#fff;border-radius:14px;width:min(720px,96vw);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
-      <div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between">
-        <div style="font-weight:700;font-size:16px;color:#111827"><i class='bx bx-trophy' style="color:#059669;margin-right:8px"></i>Promotion Letter</div>
-        <button onclick="closeLetterModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#6b7280;line-height:1">&times;</button>
+  <div id="letterModal"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:2000;align-items:center;justify-content:center">
+    <div
+      style="background:#fff;border-radius:14px;width:min(720px,96vw);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+      <div
+        style="padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-weight:700;font-size:16px;color:#111827"><i class='bx bx-trophy'
+            style="color:#059669;margin-right:8px"></i>Promotion Letter</div>
+        <button onclick="closeLetterModal()"
+          style="background:none;border:none;font-size:22px;cursor:pointer;color:#6b7280;line-height:1">&times;</button>
       </div>
       <div style="flex:1;overflow:auto;padding:0">
-        <iframe id="letterFrame" src="/api/promotion/letter/{{ letter_app_id }}" style="width:100%;height:520px;border:none"></iframe>
+        <iframe id="letterFrame" src="/api/promotion/letter/{{ letter_app_id }}"
+          style="width:100%;height:520px;border:none"></iframe>
       </div>
       <div style="padding:14px 20px;border-top:1px solid #e5e7eb;display:flex;justify-content:flex-end;gap:12px">
         <a href="/api/promotion/letter/{{ letter_app_id }}" download="promotion_letter.pdf"
-           style="background:#f3f4f6;color:#374151;border:none;padding:10px 20px;border-radius:8px;font-weight:600;cursor:pointer;font-size:14px;text-decoration:none">
+          style="background:#f3f4f6;color:#374151;border:none;padding:10px 20px;border-radius:8px;font-weight:600;cursor:pointer;font-size:14px;text-decoration:none">
           <i class='bx bx-download'></i> Download
         </a>
         <button id="acknowledgeBtn" onclick="acknowledgeLetterFn({{ letter_app_id }})"
-                style="background:#059669;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-weight:600;cursor:pointer;font-size:14px">
+          style="background:#059669;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-weight:600;cursor:pointer;font-size:14px">
           <i class='bx bx-check-circle'></i> Acknowledge
         </button>
       </div>
     </div>
   </div>
   <script>
-  function openLetterModal() {
-    document.getElementById('letterModal').style.display = 'flex';
-  }
-  function closeLetterModal() {
-    document.getElementById('letterModal').style.display = 'none';
-  }
-  async function acknowledgeLetterFn(appId) {
-    const btn = document.getElementById('acknowledgeBtn');
-    btn.disabled = true;
-    btn.textContent = 'Saving…';
-    try {
-      const res = await fetch('/api/promotion/acknowledge/' + appId, { method: 'POST' });
-      const data = await res.json();
-      if (data.success) {
-        const banner = document.getElementById('letterBanner');
-        if (banner) banner.remove();
-        closeLetterModal();
-        btn.textContent = 'Acknowledged';
-        btn.style.background = '#d1fae5';
-        btn.style.color = '#065f46';
-      } else {
-        alert('Error: ' + (data.error || 'Could not acknowledge.'));
+    function openLetterModal() {
+      document.getElementById('letterModal').style.display = 'flex';
+    }
+    function closeLetterModal() {
+      document.getElementById('letterModal').style.display = 'none';
+    }
+    async function acknowledgeLetterFn(appId) {
+      const btn = document.getElementById('acknowledgeBtn');
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      try {
+        const res = await fetch('/api/promotion/acknowledge/' + appId, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          const banner = document.getElementById('letterBanner');
+          if (banner) banner.remove();
+          closeLetterModal();
+          btn.textContent = 'Acknowledged';
+          btn.style.background = '#d1fae5';
+          btn.style.color = '#065f46';
+        } else {
+          alert('Error: ' + (data.error || 'Could not acknowledge.'));
+          btn.disabled = false;
+          btn.innerHTML = '<i class="bx bx-check-circle"></i> Acknowledge';
+        }
+      } catch (e) {
+        alert('Network error. Please try again.');
         btn.disabled = false;
         btn.innerHTML = '<i class="bx bx-check-circle"></i> Acknowledge';
       }
-    } catch(e) {
-      alert('Network error. Please try again.');
-      btn.disabled = false;
-      btn.innerHTML = '<i class="bx bx-check-circle"></i> Acknowledge';
     }
-  }
-  {% if has_unacknowledged_letter %}
-  // Auto-open on page load if there's an unacknowledged letter
-  window.addEventListener('DOMContentLoaded', () => {
-    setTimeout(openLetterModal, 600);
-  });
-  {% endif %}
+    {% if has_unacknowledged_letter %}
+    // Auto-open on page load if there's an unacknowledged letter
+    window.addEventListener('DOMContentLoaded', () => {
+      setTimeout(openLetterModal, 600);
+    });
+    {% endif %}
   </script>
   {% endif %}
 
   <!-- Two-column layout -->
   <div class="grid-2" style="grid-column:1 / -1">
-<!-- Regularization Status (View Only - HR Initiated) -->
-<div class="card-promotion">
-  <div class="card-header">
-    <i class='bx bx-award' style="color:#7b1113;"></i>
-    <span>Tenure Regularization Status</span>
-  </div>
-
-  <div style="padding:20px; display:flex; flex-direction:column; gap:16px;">
-
-    <!-- Top Row: circle + status (centered) -->
-    <div style="display:flex; flex-direction:column; align-items:center; text-align:center; gap:14px; padding:8px 0 4px;">
-      <div class="progress-circle" data-percentage="{{ regularization_percentage }}" style="width:160px; height:160px; flex-shrink:0; --percentage:{{ regularization_percentage }};">
-        <span style="font-size:28px; font-weight:800; color:#7b1113;">{{ regularization_percentage }}%</span>
+    <!-- Regularization Status (View Only - HR Initiated) -->
+    <div class="card-promotion">
+      <div class="card-header">
+        <i class='bx bx-award' style="color:#7b1113;"></i>
+        <span>Tenure Regularization Status</span>
       </div>
-      <div>
-        <div style="font-size:20px; font-weight:700; color:#111827; margin-bottom:8px;">{{ regularization_status }}</div>
+
+      <div style="padding:20px; display:flex; flex-direction:column; gap:16px;">
+
+        <!-- Top Row: circle + status (centered) -->
+        <div
+          style="display:flex; flex-direction:column; align-items:center; text-align:center; gap:14px; padding:8px 0 4px;">
+          <div class="progress-circle" data-percentage="{{ regularization_percentage }}"
+            style="width:160px; height:160px; flex-shrink:0; --percentage:{{ regularization_percentage }};">
+            <span style="font-size:28px; font-weight:800; color:#7b1113;">{{ regularization_percentage }}%</span>
+          </div>
+          <div>
+            <div style="font-size:20px; font-weight:700; color:#111827; margin-bottom:8px;">{{ regularization_status }}
+            </div>
+            {% if tenure_type == 'Probationary' %}
+            <span class="status pending" style="font-size:13px; padding:5px 14px;">Probationary</span>
+            {% elif tenure_type == 'Regular' %}
+            <span class="status ok" style="font-size:13px; padding:5px 14px;">Regular</span>
+            {% elif tenure_type == 'Tenured' %}
+            <span class="status completed" style="font-size:13px; padding:5px 14px;">Tenured</span>
+            {% else %}
+            <span class="status nu" style="font-size:13px; padding:5px 14px;">{{ tenure_type or 'Contractual' }}</span>
+            {% endif %}
+            <div style="margin-top:12px; font-size:13px; color:#6b7280; line-height:1.6;">
+              {% if tenure_type in ['Regular', 'Tenured'] %}
+              <i class='bx bx-check-circle' style="color:#059669; vertical-align:middle;"></i> Regularization achieved.
+              {% elif not has_aligned_master %}
+              <i class='bx bx-x-circle' style="color:#dc2626; vertical-align:middle;"></i> Aligned Master's degree
+              required to begin probation.
+              {% else %}
+              <i class='bx bx-time-five' style="color:#d97706; vertical-align:middle;"></i>
+              <strong style="color:#374151;">{{ days_remaining_regular }}</strong> day{{ 's' if days_remaining_regular
+              != 1 else '' }} remaining to Regular status.
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Progress bar (only for probationary) -->
         {% if tenure_type == 'Probationary' %}
-          <span class="status pending" style="font-size:13px; padding:5px 14px;">Probationary</span>
-        {% elif tenure_type == 'Regular' %}
-          <span class="status ok" style="font-size:13px; padding:5px 14px;">Regular</span>
-        {% elif tenure_type == 'Tenured' %}
-          <span class="status completed" style="font-size:13px; padding:5px 14px;">Tenured</span>
-        {% else %}
-          <span class="status nu" style="font-size:13px; padding:5px 14px;">{{ tenure_type or 'Contractual' }}</span>
+        <div>
+          <div
+            style="display:flex; justify-content:space-between; font-size:11px; color:#6b7280; margin-bottom:5px; font-weight:600; text-transform:uppercase; letter-spacing:0.4px;">
+            <span>Probationary Progress</span>
+            <span>{{ prob_days }} / {{ prob_days_required }} days</span>
+          </div>
+          <div style="background:#f1f5f9; border-radius:99px; height:10px; overflow:hidden;">
+            <div
+              style="background:linear-gradient(90deg,#7b1113,#b91c1c); height:100%; border-radius:99px; width:{{ regularization_percentage }}%; transition:width 0.6s ease;">
+            </div>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:10px; color:#94a3b8; margin-top:4px;">
+            <span>Start</span>
+            <span>Regular (3 yrs)</span>
+          </div>
+        </div>
         {% endif %}
-        <div style="margin-top:12px; font-size:13px; color:#6b7280; line-height:1.6;">
-          {% if tenure_type in ['Regular', 'Tenured'] %}
-            <i class='bx bx-check-circle' style="color:#059669; vertical-align:middle;"></i> Regularization achieved.
-          {% elif not has_aligned_master %}
-            <i class='bx bx-x-circle' style="color:#dc2626; vertical-align:middle;"></i> Aligned Master's degree required to begin probation.
+
+        <!-- Detail stat row -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+
+          <div style="padding:12px 14px; background:#fef2f2; border-left:3px solid #7b1113; border-radius:8px;">
+            <div
+              style="font-size:10px; color:#7b1113; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">
+              Probation Start</div>
+            <div style="font-size:13px; font-weight:600; color:#1e293b;">
+              {% if prob_start_date %}{{ prob_start_date.strftime('%b %d, %Y') }}
+              {% elif hire_date %}{{ hire_date.strftime('%b %d, %Y') }}
+              {% else %}Not set{% endif %}
+            </div>
+          </div>
+
+          <div style="padding:12px 14px; background:#fef2f2; border-left:3px solid #7b1113; border-radius:8px;">
+            <div
+              style="font-size:10px; color:#7b1113; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">
+              Probationary Service</div>
+            <div style="font-size:13px; font-weight:600; color:#1e293b;">
+              {% if prob_days > 0 %}{{ (prob_days / 365.25) | round(1) }} yr{{ 's' if (prob_days / 365.25) | round(1) !=
+              1 else '' }} ({{ prob_days }} days)
+              {% else %}Not started{% endif %}
+            </div>
+          </div>
+
+          <div
+            style="padding:12px 14px; background:{% if has_aligned_master %}#f0fdf4{% else %}#fef2f2{% endif %}; border-left:3px solid {% if has_aligned_master %}#059669{% else %}#dc2626{% endif %}; border-radius:8px;">
+            <div
+              style="font-size:10px; color:{% if has_aligned_master %}#059669{% else %}#dc2626{% endif %}; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">
+              Aligned Master's</div>
+            <div style="font-size:13px; font-weight:600; color:#1e293b;">
+              {% if has_aligned_master %}<i class='bx bx-check-circle' style="color:#059669"></i> Completed
+              {% else %}<i class='bx bx-x-circle' style="color:#dc2626"></i> Not yet
+              {% endif %}
+            </div>
+          </div>
+
+          {% if tenure_type == 'Probationary' and prob_days > 0 %}
+          <div style="padding:12px 14px; background:#fffbeb; border-left:3px solid #d97706; border-radius:8px;">
+            <div
+              style="font-size:10px; color:#92400e; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">
+              {% if days_remaining_regular > 0 %}Est. Regular Date{% else %}Regular Eligible{% endif %}
+            </div>
+            <div style="font-size:13px; font-weight:600; color:#1e293b;">
+              {% if expected_regular_date %}{{ expected_regular_date.strftime('%b %d, %Y') }}
+              {% elif days_remaining_regular == 0 %}Eligible now
+              {% else %}—{% endif %}
+            </div>
+          </div>
+          {% elif tenure_type in ['Regular', 'Tenured'] %}
+          <div style="padding:12px 14px; background:#f0fdf4; border-left:3px solid #059669; border-radius:8px;">
+            <div
+              style="font-size:10px; color:#059669; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">
+              Probation Days</div>
+            <div style="font-size:13px; font-weight:600; color:#1e293b;">1,095 / 1,095 <i class='bx bx-check-circle'
+                style="color:#059669; font-size:14px"></i></div>
+          </div>
           {% else %}
-            <i class='bx bx-time-five' style="color:#d97706; vertical-align:middle;"></i>
-            <strong style="color:#374151;">{{ days_remaining_regular }}</strong> day{{ 's' if days_remaining_regular != 1 else '' }} remaining to Regular status.
+          <div style="padding:12px 14px; background:#fef2f2; border-left:3px solid #94a3b8; border-radius:8px;">
+            <div
+              style="font-size:10px; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">
+              Probation Days</div>
+            <div style="font-size:13px; font-weight:600; color:#94a3b8;">Not started</div>
+          </div>
           {% endif %}
+
         </div>
+
+        <!-- Requirement checklist -->
+        <div style="background:#f8fafc; border-radius:10px; padding:14px 16px; border:1px solid #e5e7eb;">
+          <div
+            style="font-size:11px; color:#374151; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px;">
+            Regularization Requirements</div>
+          <div style="display:grid; gap:7px;">
+            <div style="display:flex; align-items:center; gap:8px; font-size:13px;">
+              {% if has_aligned_master %}
+              <i class='bx bx-check-circle' style="color:#059669; font-size:17px; flex-shrink:0;"></i>
+              <span style="color:#374151;">Aligned Master's Degree</span>
+              {% else %}
+              <i class='bx bx-circle' style="color:#cbd5e1; font-size:17px; flex-shrink:0;"></i>
+              <span style="color:#94a3b8;">Aligned Master's Degree <em style="font-size:11px;">(required)</em></span>
+              {% endif %}
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; font-size:13px;">
+              {% if prob_days >= 1095 %}
+              <i class='bx bx-check-circle' style="color:#059669; font-size:17px; flex-shrink:0;"></i>
+              <span style="color:#374151;">3 Years Probationary Service (1,095 days)</span>
+              {% elif prob_days > 0 %}
+              <i class='bx bx-time-five' style="color:#d97706; font-size:17px; flex-shrink:0;"></i>
+              <span style="color:#374151;">3 Years Probationary Service — <strong>{{ prob_days }}/1,095
+                  days</strong></span>
+              {% else %}
+              <i class='bx bx-circle' style="color:#cbd5e1; font-size:17px; flex-shrink:0;"></i>
+              <span style="color:#94a3b8;">3 Years Probationary Service (1,095 days)</span>
+              {% endif %}
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; font-size:13px;">
+              <i class='bx bx-info-circle' style="color:#6b7280; font-size:17px; flex-shrink:0;"></i>
+              <span style="color:#6b7280; font-size:12px;">Regularization is HR-initiated — no application needed from
+                you.</span>
+            </div>
+          </div>
+        </div>
+
+        {% if regularization_status_data %}
+        <!-- Active HR-initiated regularization process -->
+        <div style="background:#fef2f2; border:1px solid #fca5a5; border-radius:10px; padding:14px 16px;">
+          <div
+            style="font-size:12px; color:#7b1113; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+            <i class='bx bx-loader-alt' style="font-size:16px;"></i> Regularization In Progress
+          </div>
+          <div style="font-size:13px; color:#7f1d1d; margin-bottom:12px;">
+            HR has initiated your regularization to <strong>{{ regularization_status_data.requested_tenure }}</strong>
+            status.
+          </div>
+          <div class="stepper" style="margin:0;">
+            <div class="step {% if regularization_status_data.hrmd_date %}done{% else %}active{% endif %}">
+              <div class="circle">{% if regularization_status_data.hrmd_date %}<i class='bx bx-check'></i>{% else %}1{%
+                endif %}</div>
+              HR Endorsement
+              <small>{{ regularization_status_data.hrmd_date.strftime("%b %d, %Y") if
+                regularization_status_data.hrmd_date else 'Pending' }}</small>
+            </div>
+            <div
+              class="step {% if regularization_status_data.vpa_date %}done{% elif regularization_status_data.current_status == 'vpa' %}active{% endif %}">
+              <div class="circle">{% if regularization_status_data.vpa_date %}<i class='bx bx-check'></i>{% else %}2{%
+                endif %}</div>
+              VPAA Review
+              <small>{{ regularization_status_data.vpa_date.strftime("%b %d, %Y") if regularization_status_data.vpa_date
+                else 'Not yet' }}</small>
+            </div>
+            <div
+              class="step {% if regularization_status_data.pres_date %}done{% elif regularization_status_data.current_status == 'pres' %}active{% endif %}">
+              <div class="circle">{% if regularization_status_data.pres_date %}<i class='bx bx-check'></i>{% else %}3{%
+                endif %}</div>
+              President
+              <small>{{ regularization_status_data.pres_date.strftime("%b %d, %Y") if
+                regularization_status_data.pres_date else 'Not yet' }}</small>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
       </div>
     </div>
-
-    <!-- Progress bar (only for probationary) -->
-    {% if tenure_type == 'Probationary' %}
-    <div>
-      <div style="display:flex; justify-content:space-between; font-size:11px; color:#6b7280; margin-bottom:5px; font-weight:600; text-transform:uppercase; letter-spacing:0.4px;">
-        <span>Probationary Progress</span>
-        <span>{{ prob_days }} / {{ prob_days_required }} days</span>
-      </div>
-      <div style="background:#f1f5f9; border-radius:99px; height:10px; overflow:hidden;">
-        <div style="background:linear-gradient(90deg,#7b1113,#b91c1c); height:100%; border-radius:99px; width:{{ regularization_percentage }}%; transition:width 0.6s ease;"></div>
-      </div>
-      <div style="display:flex; justify-content:space-between; font-size:10px; color:#94a3b8; margin-top:4px;">
-        <span>Start</span>
-        <span>Regular (3 yrs)</span>
-      </div>
-    </div>
-    {% endif %}
-
-    <!-- Detail stat row -->
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-
-      <div style="padding:12px 14px; background:#fef2f2; border-left:3px solid #7b1113; border-radius:8px;">
-        <div style="font-size:10px; color:#7b1113; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">Probation Start</div>
-        <div style="font-size:13px; font-weight:600; color:#1e293b;">
-          {% if prob_start_date %}{{ prob_start_date.strftime('%b %d, %Y') }}
-          {% elif hire_date %}{{ hire_date.strftime('%b %d, %Y') }}
-          {% else %}Not set{% endif %}
-        </div>
-      </div>
-
-      <div style="padding:12px 14px; background:#fef2f2; border-left:3px solid #7b1113; border-radius:8px;">
-        <div style="font-size:10px; color:#7b1113; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">Probationary Service</div>
-        <div style="font-size:13px; font-weight:600; color:#1e293b;">
-          {% if prob_days > 0 %}{{ (prob_days / 365.25) | round(1) }} yr{{ 's' if (prob_days / 365.25) | round(1) != 1 else '' }} ({{ prob_days }} days)
-          {% else %}Not started{% endif %}
-        </div>
-      </div>
-
-      <div style="padding:12px 14px; background:{% if has_aligned_master %}#f0fdf4{% else %}#fef2f2{% endif %}; border-left:3px solid {% if has_aligned_master %}#059669{% else %}#dc2626{% endif %}; border-radius:8px;">
-        <div style="font-size:10px; color:{% if has_aligned_master %}#059669{% else %}#dc2626{% endif %}; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">Aligned Master's</div>
-        <div style="font-size:13px; font-weight:600; color:#1e293b;">
-          {% if has_aligned_master %}<i class='bx bx-check-circle' style="color:#059669"></i> Completed
-          {% else %}<i class='bx bx-x-circle' style="color:#dc2626"></i> Not yet
-          {% endif %}
-        </div>
-      </div>
-
-      {% if tenure_type == 'Probationary' and prob_days > 0 %}
-      <div style="padding:12px 14px; background:#fffbeb; border-left:3px solid #d97706; border-radius:8px;">
-        <div style="font-size:10px; color:#92400e; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">
-          {% if days_remaining_regular > 0 %}Est. Regular Date{% else %}Regular Eligible{% endif %}
-        </div>
-        <div style="font-size:13px; font-weight:600; color:#1e293b;">
-          {% if expected_regular_date %}{{ expected_regular_date.strftime('%b %d, %Y') }}
-          {% elif days_remaining_regular == 0 %}Eligible now
-          {% else %}—{% endif %}
-        </div>
-      </div>
-      {% elif tenure_type in ['Regular', 'Tenured'] %}
-      <div style="padding:12px 14px; background:#f0fdf4; border-left:3px solid #059669; border-radius:8px;">
-        <div style="font-size:10px; color:#059669; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">Probation Days</div>
-        <div style="font-size:13px; font-weight:600; color:#1e293b;">1,095 / 1,095 <i class='bx bx-check-circle' style="color:#059669; font-size:14px"></i></div>
-      </div>
-      {% else %}
-      <div style="padding:12px 14px; background:#fef2f2; border-left:3px solid #94a3b8; border-radius:8px;">
-        <div style="font-size:10px; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">Probation Days</div>
-        <div style="font-size:13px; font-weight:600; color:#94a3b8;">Not started</div>
-      </div>
-      {% endif %}
-
-    </div>
-
-    <!-- Requirement checklist -->
-    <div style="background:#f8fafc; border-radius:10px; padding:14px 16px; border:1px solid #e5e7eb;">
-      <div style="font-size:11px; color:#374151; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px;">Regularization Requirements</div>
-      <div style="display:grid; gap:7px;">
-        <div style="display:flex; align-items:center; gap:8px; font-size:13px;">
-          {% if has_aligned_master %}
-            <i class='bx bx-check-circle' style="color:#059669; font-size:17px; flex-shrink:0;"></i>
-            <span style="color:#374151;">Aligned Master's Degree</span>
-          {% else %}
-            <i class='bx bx-circle' style="color:#cbd5e1; font-size:17px; flex-shrink:0;"></i>
-            <span style="color:#94a3b8;">Aligned Master's Degree <em style="font-size:11px;">(required)</em></span>
-          {% endif %}
-        </div>
-        <div style="display:flex; align-items:center; gap:8px; font-size:13px;">
-          {% if prob_days >= 1095 %}
-            <i class='bx bx-check-circle' style="color:#059669; font-size:17px; flex-shrink:0;"></i>
-            <span style="color:#374151;">3 Years Probationary Service (1,095 days)</span>
-          {% elif prob_days > 0 %}
-            <i class='bx bx-time-five' style="color:#d97706; font-size:17px; flex-shrink:0;"></i>
-            <span style="color:#374151;">3 Years Probationary Service — <strong>{{ prob_days }}/1,095 days</strong></span>
-          {% else %}
-            <i class='bx bx-circle' style="color:#cbd5e1; font-size:17px; flex-shrink:0;"></i>
-            <span style="color:#94a3b8;">3 Years Probationary Service (1,095 days)</span>
-          {% endif %}
-        </div>
-        <div style="display:flex; align-items:center; gap:8px; font-size:13px;">
-          <i class='bx bx-info-circle' style="color:#6b7280; font-size:17px; flex-shrink:0;"></i>
-          <span style="color:#6b7280; font-size:12px;">Regularization is HR-initiated — no application needed from you.</span>
-        </div>
-      </div>
-    </div>
-
-    {% if regularization_status_data %}
-    <!-- Active HR-initiated regularization process -->
-    <div style="background:#fef2f2; border:1px solid #fca5a5; border-radius:10px; padding:14px 16px;">
-      <div style="font-size:12px; color:#7b1113; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
-        <i class='bx bx-loader-alt' style="font-size:16px;"></i> Regularization In Progress
-      </div>
-      <div style="font-size:13px; color:#7f1d1d; margin-bottom:12px;">
-        HR has initiated your regularization to <strong>{{ regularization_status_data.requested_tenure }}</strong> status.
-      </div>
-      <div class="stepper" style="margin:0;">
-        <div class="step {% if regularization_status_data.hrmd_date %}done{% else %}active{% endif %}">
-          <div class="circle">{% if regularization_status_data.hrmd_date %}<i class='bx bx-check'></i>{% else %}1{% endif %}</div>
-          HR Endorsement
-          <small>{{ regularization_status_data.hrmd_date.strftime("%b %d, %Y") if regularization_status_data.hrmd_date else 'Pending' }}</small>
-        </div>
-        <div class="step {% if regularization_status_data.vpa_date %}done{% elif regularization_status_data.current_status == 'vpa' %}active{% endif %}">
-          <div class="circle">{% if regularization_status_data.vpa_date %}<i class='bx bx-check'></i>{% else %}2{% endif %}</div>
-          VPA Review
-          <small>{{ regularization_status_data.vpa_date.strftime("%b %d, %Y") if regularization_status_data.vpa_date else 'Not yet' }}</small>
-        </div>
-        <div class="step {% if regularization_status_data.pres_date %}done{% elif regularization_status_data.current_status == 'pres' %}active{% endif %}">
-          <div class="circle">{% if regularization_status_data.pres_date %}<i class='bx bx-check'></i>{% else %}3{% endif %}</div>
-          President
-          <small>{{ regularization_status_data.pres_date.strftime("%b %d, %Y") if regularization_status_data.pres_date else 'Not yet' }}</small>
-        </div>
-      </div>
-    </div>
-    {% endif %}
-
-  </div>
-</div>
 
 
     <!-- Promotion Application -->
     <div class="card-promotion" style="padding:20px;">
-    <div class="card-header">
-    <i class='bx bx-trending-up' style="color:#7b1113;"></i>
-    <span>Promotion Application</span>
-  </div>
-      
+      <div class="card-header">
+        <i class='bx bx-trending-up' style="color:#7b1113;"></i>
+        <span>Promotion Application</span>
+      </div>
+
       {% if at_highest_rank %}
       <!-- USER HAS REACHED HIGHEST RANK -->
       <div style="text-align:center; padding:40px 20px;">
-        <div style="background:#f0fdf4; border:2px solid #86efac; border-radius:12px; padding:30px; margin-bottom:20px;">
+        <div
+          style="background:#f0fdf4; border:2px solid #86efac; border-radius:12px; padding:30px; margin-bottom:20px;">
           <i class='bx bx-trophy' style="font-size:64px; color:#22c55e; display:block; margin-bottom:15px;"></i>
           <h3 style="margin:0 0 10px 0; color:#166534; font-size:20px;">Congratulations!</h3>
           <p style="margin:0; color:#15803d; font-size:15px; line-height:1.6;">
@@ -371,30 +425,35 @@
       {% elif not can_apply_for_promotion %}
       <!-- USER CANNOT APPLY - MODERN MAROON THEME -->
       <div style="padding:30px 20px;">
-        
+
         <!-- Lock Header with Maroon Gradient -->
-        <div style="text-align:center; padding:40px 30px; background:linear-gradient(135deg, #7b1113 0%, #991b1b 100%); border-radius:16px; margin-bottom:24px;">
-          <div style="width:80px; height:80px; background:rgba(255,255,255,0.2); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 20px;">
+        <div
+          style="text-align:center; padding:40px 30px; background:linear-gradient(135deg, #7b1113 0%, #991b1b 100%); border-radius:16px; margin-bottom:24px;">
+          <div
+            style="width:80px; height:80px; background:rgba(255,255,255,0.2); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 20px;">
             <i class='bx bx-lock-alt' style="font-size:48px; color:#fff;"></i>
           </div>
           <h3 style="margin:0 0 12px 0; color:#fff; font-size:24px; font-weight:700;">Promotion Application Locked</h3>
-          <p style="margin:0; color:rgba(255,255,255,0.9); font-size:15px; line-height:1.6; max-width:500px; margin:0 auto;">
+          <p
+            style="margin:0; color:rgba(255,255,255,0.9); font-size:15px; line-height:1.6; max-width:500px; margin:0 auto;">
             You do not currently meet the requirements to apply for promotion.
           </p>
         </div>
-        
+
         <!-- Requirements Not Met Section -->
         <div style="background:#fff; border:1px solid #fca5a5; border-radius:12px; padding:24px; margin-bottom:20px;">
           <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
-            <div style="width:36px; height:36px; background:#fef2f2; border-radius:8px; display:flex; align-items:center; justify-content:center;">
+            <div
+              style="width:36px; height:36px; background:#fef2f2; border-radius:8px; display:flex; align-items:center; justify-content:center;">
               <i class='bx bx-info-circle' style="color:#7b1113; font-size:20px;"></i>
             </div>
             <h4 style="margin:0; font-size:16px; color:#7b1113; font-weight:600;">Requirements Not Met</h4>
           </div>
-          
+
           <div style="display:grid; gap:10px;">
             {% for reason in lock_reasons %}
-            <div style="padding:14px; background:#fef2f2; border-radius:8px; display:flex; align-items:start; gap:10px;">
+            <div
+              style="padding:14px; background:#fef2f2; border-radius:8px; display:flex; align-items:start; gap:10px;">
               <i class='bx bx-x' style="color:#7b1113; font-size:18px; flex-shrink:0; margin-top:2px;"></i>
               <p style="margin:0; font-size:13px; color:#7f1d1d; line-height:1.6;">{{ reason }}</p>
             </div>
@@ -406,212 +465,287 @@
 
       {% elif available_ranks and available_ranks|length > 0 %}
 
- <!-- USER CAN APPLY FOR PROMOTION -->
-<form id="promotion-doc-upload-form" enctype="multipart/form-data" method="POST" action="/faculty/promotion/upload">
+      <!-- USER CAN APPLY FOR PROMOTION -->
+      <form id="promotion-doc-upload-form" enctype="multipart/form-data" method="POST"
+        action="/faculty/promotion/upload">
 
-  <!-- Rank Information Cards -->
-  <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:20px;">
-    <!-- Current Rank Card -->
-    <div style="padding:16px; background:linear-gradient(135deg, #7b1113 0%, #991b1b 100%); border-radius:12px; box-shadow:0 4px 12px rgba(123, 17, 19, 0.3);">
-      <p style="margin:0 0 6px 0; font-size:11px; color:rgba(255,255,255,0.8); text-transform:uppercase; letter-spacing:0.5px; font-weight:500;">Current Rank</p>
-      <p style="margin:0; font-size:18px; color:#fff; font-weight:700;">{{ current_rank or 'Not set' }}</p>
-    </div>
-    
-    <!-- Target Rank Card -->
-    <div style="padding:16px; background:linear-gradient(135deg, #991b1b 0%, #b91c1c 100%); border-radius:12px; box-shadow:0 4px 12px rgba(153, 27, 27, 0.3);">
-      <p style="margin:0 0 6px 0; font-size:11px; color:rgba(255,255,255,0.8); text-transform:uppercase; letter-spacing:0.5px; font-weight:500;">Applying For</p>
-      <p style="margin:0; font-size:18px; color:#fff; font-weight:700;">{{ available_ranks[0] if available_ranks and available_ranks|length > 0 else requested_rank or 'N/A' }}</p>
-    </div>
-  </div>
-
-  <!-- Hidden input to submit the rank automatically -->
-  <input type="hidden" name="requested_rank" value="{{ available_ranks[0] if available_ranks and available_ranks|length > 0 else '' }}">
-
-  <!-- Eligibility snapshot -->
-  {% if attendance_rate is not none or eval_score is not none %}
-  <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:10px;">
-    {% if attendance_rate is not none %}
-    <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 11px;border-radius:20px;{% if attendance_rate >= 80 %}background:#d1fae5;color:#065f46;{% else %}background:#fef2f2;color:#7b1113;{% endif %}">
-      <i class='bx {% if attendance_rate >= 80 %}bx-check-circle{% else %}bx-x-circle{% endif %}'></i>
-      Attendance {{ "%.1f"|format(attendance_rate) }}% / 80% min
-    </div>
-    {% endif %}
-    {% if eval_score is not none %}
-    <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 11px;border-radius:20px;{% if eval_score >= 3 %}background:#d1fae5;color:#065f46;{% else %}background:#fef2f2;color:#7b1113;{% endif %}">
-      <i class='bx {% if eval_score >= 3 %}bx-check-circle{% else %}bx-x-circle{% endif %}'></i>
-      Eval Score {{ "%.2f"|format(eval_score) }} / 3.0 min
-    </div>
-    {% endif %}
-  </div>
-  {% endif %}
-
-  {% if not upload_locked %}
-  
-  <!-- Document Upload Cards -->
-<div style="margin-bottom:20px;">
-  <h4 style="margin:0 0 12px 0; font-size:14px; color:#374151; font-weight:600;">Required Documents</h4>
-  
-  <div style="border:2px dashed #d1d5db; border-radius:12px; padding:20px; margin-bottom:12px; background:#fafafa; transition:all 0.3s;" onmouseover="this.style.borderColor='#7b1113'; this.style.background='#fef2f2';" onmouseout="this.style.borderColor='#d1d5db'; this.style.background='#fafafa';">
-    <input id="resume_cv" type="file" name="resume_cv" style="display:none;" required accept=".pdf,.doc,.docx" />
-    <label for="resume_cv" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-      <div style="display:flex; align-items:center; gap:12px;">
-        <div style="width:48px; height:48px; background:#7b1113; border-radius:12px; display:flex; align-items:center; justify-content:center;">
-          <i class='bx bx-file' style="font-size:24px; color:#fff;"></i>
-        </div>
-        <div>
-          <p style="margin:0; font-size:14px; font-weight:600; color:#111827;">Updated Curriculum Vitae (CV)</p>
-          <p style="margin:2px 0 0 0; font-size:12px; color:#6b7280;">PDF, DOC, or DOCX format</p>
-        </div>
-      </div>
-      <span class="status nu" id="resume_cv_status" style="font-size:12px;">Not Uploaded</span>
-    </label>
-  </div>
-
-  <div style="border:2px dashed #d1d5db; border-radius:12px; padding:20px; margin-bottom:12px; background:#fafafa; transition:all 0.3s;" onmouseover="this.style.borderColor='#7b1113'; this.style.background='#fef2f2';" onmouseout="this.style.borderColor='#d1d5db'; this.style.background='#fafafa';">
-    <input id="tor" type="file" name="tor" style="display:none;" required accept=".pdf" />
-    <label for="tor" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-      <div style="display:flex; align-items:center; gap:12px;">
-        <div style="width:48px; height:48px; background:#0ea5e9; border-radius:12px; display:flex; align-items:center; justify-content:center;">
-          <i class='bx bxs-graduation' style="font-size:24px; color:#fff;"></i>
-        </div>
-        <div>
-          <p style="margin:0; font-size:14px; font-weight:600; color:#111827;">Official Transcript of Records (TOR)</p>
-          <p style="margin:2px 0 0 0; font-size:12px; color:#6b7280;">PDF format only</p>
-        </div>
-      </div>
-      <span class="status nu" id="tor_status" style="font-size:12px;">Not Uploaded</span>
-    </label>
-  </div>
-
-  <div style="border:2px dashed #d1d5db; border-radius:12px; padding:20px; margin-bottom:12px; background:#fafafa; transition:all 0.3s;" onmouseover="this.style.borderColor='#7b1113'; this.style.background='#fef2f2';" onmouseout="this.style.borderColor='#d1d5db'; this.style.background='#fafafa';">
-    <input id="diploma" type="file" name="diploma" style="display:none;" required accept=".pdf" />
-    <label for="diploma" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-      <div style="display:flex; align-items:center; gap:12px;">
-        <div style="width:48px; height:48px; background:#8b5cf6; border-radius:12px; display:flex; align-items:center; justify-content:center;">
-          <i class='bx bx-award' style="font-size:24px; color:#fff;"></i>
-        </div>
-        <div>
-          <p style="margin:0; font-size:14px; font-weight:600; color:#111827;">Diploma / Certificate of Graduation</p>
-          <p style="margin:2px 0 0 0; font-size:12px; color:#6b7280;">PDF format only</p>
-        </div>
-      </div>
-      <span class="status nu" id="diploma_status" style="font-size:12px;">Not Uploaded</span>
-    </label>
-  </div>
-
-  <div style="border:2px dashed #d1d5db; border-radius:12px; padding:20px; background:#fafafa; transition:all 0.3s;" onmouseover="this.style.borderColor='#7b1113'; this.style.background='#fef2f2';" onmouseout="this.style.borderColor='#d1d5db'; this.style.background='#fafafa';">
-    <input id="cover_letter" type="file" name="cover_letter" style="display:none;" required accept=".pdf,.doc,.docx" />
-    <label for="cover_letter" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-      <div style="display:flex; align-items:center; gap:12px;">
-        <div style="width:48px; height:48px; background:#991b1b; border-radius:12px; display:flex; align-items:center; justify-content:center;">
-          <i class='bx bx-envelope' style="font-size:24px; color:#fff;"></i>
-        </div>
-        <div>
-          <p style="margin:0; font-size:14px; font-weight:600; color:#111827;">Cover Letter</p>
-          <p style="margin:2px 0 0 0; font-size:12px; color:#6b7280;">PDF, DOC, or DOCX format</p>
-        </div>
-      </div>
-      <span class="status nu" id="cover_letter_status" style="font-size:12px;">Not Uploaded</span>
-    </label>
-  </div>
-</div>
-
-  <!-- Submit Button -->
-  <button class="btn-primary" style="width:100%; padding:14px; font-size:16px; font-weight:600; border-radius:10px; background:linear-gradient(135deg, #7b1113 0%, #991b1b 100%); border:none; box-shadow:0 4px 12px rgba(123, 17, 19, 0.4); transition:all 0.3s;" type="submit" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(123, 17, 19, 0.5)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(123, 17, 19, 0.4)';">
-    <i class='bx bx-upload' style="font-size:18px; vertical-align:middle;"></i> Submit Application
-  </button>
-
-  {% else %}
-  
-  <!-- Locked State - Documents Already Submitted -->
-  <div style="margin-bottom:20px;">
-    <h4 style="margin:0 0 12px 0; font-size:14px; color:#374151; font-weight:600;">Submitted Documents</h4>
-    
-    <!-- Resume/CV Submitted Card -->
-    <div style="border:1px solid #fca5a5; border-radius:12px; padding:16px; margin-bottom:12px; background:#fef2f2;">
-      <div style="display:flex; align-items:center; justify-content:space-between;">
-        <div style="display:flex; align-items:center; gap:12px;">
-          <div style="width:40px; height:40px; background:#7b1113; border-radius:10px; display:flex; align-items:center; justify-content:center;">
-            <i class='bx bx-check' style="font-size:20px; color:#fff;"></i>
+        <!-- Rank Information Cards -->
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:20px;">
+          <!-- Current Rank Card -->
+          <div
+            style="padding:16px; background:linear-gradient(135deg, #7b1113 0%, #991b1b 100%); border-radius:12px; box-shadow:0 4px 12px rgba(123, 17, 19, 0.3);">
+            <p
+              style="margin:0 0 6px 0; font-size:11px; color:rgba(255,255,255,0.8); text-transform:uppercase; letter-spacing:0.5px; font-weight:500;">
+              Current Rank</p>
+            <p style="margin:0; font-size:18px; color:#fff; font-weight:700;">{{ current_rank or 'Not set' }}</p>
           </div>
-          <div>
-            <p style="margin:0; font-size:13px; font-weight:600; color:#7f1d1d;">Resume / CV</p>
-            <p style="margin:2px 0 0 0; font-size:11px; color:#991b1b;">{{ resume_filename }}</p>
+
+          <!-- Target Rank Card -->
+          <div
+            style="padding:16px; background:linear-gradient(135deg, #991b1b 0%, #b91c1c 100%); border-radius:12px; box-shadow:0 4px 12px rgba(153, 27, 27, 0.3);">
+            <p
+              style="margin:0 0 6px 0; font-size:11px; color:rgba(255,255,255,0.8); text-transform:uppercase; letter-spacing:0.5px; font-weight:500;">
+              Applying For</p>
+            <p style="margin:0; font-size:18px; color:#fff; font-weight:700;">{{ available_ranks[0] if available_ranks
+              and available_ranks|length > 0 else requested_rank or 'N/A' }}</p>
           </div>
         </div>
-        <button id="showResumeBtn" type="button" style="padding:8px 16px; background:#fff; color:#7b1113; border:1px solid #7b1113; border-radius:8px; cursor:pointer; font-size:12px; font-weight:500; transition:all 0.2s;" onmouseover="this.style.background='#fef2f2';" onmouseout="this.style.background='#fff';">
-          <i class='bx bx-show'></i> View
+
+        <!-- Hidden input to submit the rank automatically -->
+        <input type="hidden" name="requested_rank"
+          value="{{ available_ranks[0] if available_ranks and available_ranks|length > 0 else '' }}">
+
+        <!-- Degree requirement reminder -->
+        {% if degree_req_label %}
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:10px;margin-bottom:14px;
+          {% if degree_met %}background:#f0fdf4;border:1px solid #bbf7d0;{% else %}background:#fffbeb;border:1px solid #fde68a;{% endif %}">
+          <i class='bx {% if degree_met %}bx-check-circle{% else %}bx-info-circle{% endif %}'
+             style="font-size:18px;flex-shrink:0;margin-top:1px;{% if degree_met %}color:#16a34a;{% else %}color:#d97706;{% endif %}"></i>
+          <div style="font-size:13px;">
+            {% if degree_met %}
+            <span style="font-weight:600;color:#15803d;">Degree Requirement Met</span>
+            <span style="color:#166534;margin-left:4px;">— A {{ degree_req_label }} is confirmed in your record.</span>
+            {% else %}
+            <span style="font-weight:600;color:#92400e;">Degree Reminder</span>
+            <span style="color:#78350f;"> — {{ available_ranks[0] if available_ranks else 'This rank' }} requires a <strong>{{ degree_req_label }}</strong>. If yours hasn't been confirmed yet, HR will need to verify it before your application can be approved.</span>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Eligibility snapshot -->
+        {% if attendance_rate is not none or eval_score is not none %}
+        <div
+          style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:10px;">
+          {% if attendance_rate is not none %}
+          <div
+            style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 11px;border-radius:20px;{% if attendance_rate >= 80 %}background:#d1fae5;color:#065f46;{% else %}background:#fef2f2;color:#7b1113;{% endif %}">
+            <i class='bx {% if attendance_rate >= 80 %}bx-check-circle{% else %}bx-x-circle{% endif %}'></i>
+            Attendance {{ "%.1f"|format(attendance_rate) }}% / 80% min
+          </div>
+          {% endif %}
+          {% if eval_score is not none %}
+          <div
+            style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 11px;border-radius:20px;{% if eval_score >= 3 %}background:#d1fae5;color:#065f46;{% else %}background:#fef2f2;color:#7b1113;{% endif %}">
+            <i class='bx {% if eval_score >= 3 %}bx-check-circle{% else %}bx-x-circle{% endif %}'></i>
+            Eval Score {{ "%.2f"|format(eval_score) }} / 3.0 min
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {% if not upload_locked %}
+
+        <!-- Document Upload Cards -->
+        <div style="margin-bottom:20px;">
+          <h4 style="margin:0 0 12px 0; font-size:14px; color:#374151; font-weight:600;">Required Documents</h4>
+
+          <div
+            style="border:2px dashed #d1d5db; border-radius:12px; padding:20px; margin-bottom:12px; background:#fafafa; transition:all 0.3s;"
+            onmouseover="this.style.borderColor='#7b1113'; this.style.background='#fef2f2';"
+            onmouseout="this.style.borderColor='#d1d5db'; this.style.background='#fafafa';">
+            <input id="resume_cv" type="file" name="resume_cv" style="display:none;" required
+              accept=".pdf,.doc,.docx" />
+            <label for="resume_cv"
+              style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div
+                  style="width:48px; height:48px; background:#7b1113; border-radius:12px; display:flex; align-items:center; justify-content:center;">
+                  <i class='bx bx-file' style="font-size:24px; color:#fff;"></i>
+                </div>
+                <div>
+                  <p style="margin:0; font-size:14px; font-weight:600; color:#111827;">Updated Curriculum Vitae (CV)</p>
+                  <p style="margin:2px 0 0 0; font-size:12px; color:#6b7280;">PDF, DOC, or DOCX format</p>
+                </div>
+              </div>
+              <span class="status nu" id="resume_cv_status" style="font-size:12px;">Not Uploaded</span>
+            </label>
+          </div>
+
+          <div
+            style="border:2px dashed #d1d5db; border-radius:12px; padding:20px; margin-bottom:12px; background:#fafafa; transition:all 0.3s;"
+            onmouseover="this.style.borderColor='#7b1113'; this.style.background='#fef2f2';"
+            onmouseout="this.style.borderColor='#d1d5db'; this.style.background='#fafafa';">
+            <input id="tor" type="file" name="tor" style="display:none;" required accept=".pdf" />
+            <label for="tor" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div
+                  style="width:48px; height:48px; background:#0ea5e9; border-radius:12px; display:flex; align-items:center; justify-content:center;">
+                  <i class='bx bxs-graduation' style="font-size:24px; color:#fff;"></i>
+                </div>
+                <div>
+                  <p style="margin:0; font-size:14px; font-weight:600; color:#111827;">Official Transcript of Records
+                    (TOR)</p>
+                  <p style="margin:2px 0 0 0; font-size:12px; color:#6b7280;">PDF format only</p>
+                </div>
+              </div>
+              <span class="status nu" id="tor_status" style="font-size:12px;">Not Uploaded</span>
+            </label>
+          </div>
+
+          <div
+            style="border:2px dashed #d1d5db; border-radius:12px; padding:20px; margin-bottom:12px; background:#fafafa; transition:all 0.3s;"
+            onmouseover="this.style.borderColor='#7b1113'; this.style.background='#fef2f2';"
+            onmouseout="this.style.borderColor='#d1d5db'; this.style.background='#fafafa';">
+            <input id="diploma" type="file" name="diploma" style="display:none;" required accept=".pdf" />
+            <label for="diploma"
+              style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div
+                  style="width:48px; height:48px; background:#8b5cf6; border-radius:12px; display:flex; align-items:center; justify-content:center;">
+                  <i class='bx bx-award' style="font-size:24px; color:#fff;"></i>
+                </div>
+                <div>
+                  <p style="margin:0; font-size:14px; font-weight:600; color:#111827;">Diploma / Certificate of
+                    Graduation</p>
+                  <p style="margin:2px 0 0 0; font-size:12px; color:#6b7280;">PDF format only</p>
+                </div>
+              </div>
+              <span class="status nu" id="diploma_status" style="font-size:12px;">Not Uploaded</span>
+            </label>
+          </div>
+
+          <div
+            style="border:2px dashed #d1d5db; border-radius:12px; padding:20px; background:#fafafa; transition:all 0.3s;"
+            onmouseover="this.style.borderColor='#7b1113'; this.style.background='#fef2f2';"
+            onmouseout="this.style.borderColor='#d1d5db'; this.style.background='#fafafa';">
+            <input id="cover_letter" type="file" name="cover_letter" style="display:none;" required
+              accept=".pdf,.doc,.docx" />
+            <label for="cover_letter"
+              style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div
+                  style="width:48px; height:48px; background:#991b1b; border-radius:12px; display:flex; align-items:center; justify-content:center;">
+                  <i class='bx bx-envelope' style="font-size:24px; color:#fff;"></i>
+                </div>
+                <div>
+                  <p style="margin:0; font-size:14px; font-weight:600; color:#111827;">Cover Letter</p>
+                  <p style="margin:2px 0 0 0; font-size:12px; color:#6b7280;">PDF, DOC, or DOCX format</p>
+                </div>
+              </div>
+              <span class="status nu" id="cover_letter_status" style="font-size:12px;">Not Uploaded</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Submit Button -->
+        <button class="btn-primary"
+          style="width:100%; padding:14px; font-size:16px; font-weight:600; border-radius:10px; background:linear-gradient(135deg, #7b1113 0%, #991b1b 100%); border:none; box-shadow:0 4px 12px rgba(123, 17, 19, 0.4); transition:all 0.3s;"
+          type="submit"
+          onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(123, 17, 19, 0.5)';"
+          onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(123, 17, 19, 0.4)';">
+          <i class='bx bx-upload' style="font-size:18px; vertical-align:middle;"></i> Submit Application
         </button>
-      </div>
-    </div>
 
-    <!-- Cover Letter Submitted Card -->
-    <div style="border:1px solid #fca5a5; border-radius:12px; padding:16px; background:#fef2f2; margin-bottom:12px;">
-      <div style="display:flex; align-items:center; justify-content:space-between;">
-        <div style="display:flex; align-items:center; gap:12px;">
-          <div style="width:40px; height:40px; background:#7b1113; border-radius:10px; display:flex; align-items:center; justify-content:center;">
-            <i class='bx bx-check' style="font-size:20px; color:#fff;"></i>
+        {% else %}
+
+        <!-- Locked State - Documents Already Submitted -->
+        <div style="margin-bottom:20px;">
+          <h4 style="margin:0 0 12px 0; font-size:14px; color:#374151; font-weight:600;">Submitted Documents</h4>
+
+          <!-- Resume/CV Submitted Card -->
+          <div
+            style="border:1px solid #fca5a5; border-radius:12px; padding:16px; margin-bottom:12px; background:#fef2f2;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div
+                  style="width:40px; height:40px; background:#7b1113; border-radius:10px; display:flex; align-items:center; justify-content:center;">
+                  <i class='bx bx-check' style="font-size:20px; color:#fff;"></i>
+                </div>
+                <div>
+                  <p style="margin:0; font-size:13px; font-weight:600; color:#7f1d1d;">Resume / CV</p>
+                  <p style="margin:2px 0 0 0; font-size:11px; color:#991b1b;">{{ resume_filename }}</p>
+                </div>
+              </div>
+              <button id="showResumeBtn" type="button"
+                style="padding:8px 16px; background:#fff; color:#7b1113; border:1px solid #7b1113; border-radius:8px; cursor:pointer; font-size:12px; font-weight:500; transition:all 0.2s;"
+                onmouseover="this.style.background='#fef2f2';" onmouseout="this.style.background='#fff';">
+                <i class='bx bx-show'></i> View
+              </button>
+            </div>
           </div>
-          <div>
-            <p style="margin:0; font-size:13px; font-weight:600; color:#7f1d1d;">Cover Letter</p>
-            <p style="margin:2px 0 0 0; font-size:11px; color:#991b1b;">{{ cover_letter_filename }}</p>
+
+          <!-- Cover Letter Submitted Card -->
+          <div
+            style="border:1px solid #fca5a5; border-radius:12px; padding:16px; background:#fef2f2; margin-bottom:12px;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div
+                  style="width:40px; height:40px; background:#7b1113; border-radius:10px; display:flex; align-items:center; justify-content:center;">
+                  <i class='bx bx-check' style="font-size:20px; color:#fff;"></i>
+                </div>
+                <div>
+                  <p style="margin:0; font-size:13px; font-weight:600; color:#7f1d1d;">Cover Letter</p>
+                  <p style="margin:2px 0 0 0; font-size:11px; color:#991b1b;">{{ cover_letter_filename }}</p>
+                </div>
+              </div>
+              <button id="showCoverLetterBtn" type="button"
+                style="padding:8px 16px; background:#fff; color:#7b1113; border:1px solid #7b1113; border-radius:8px; cursor:pointer; font-size:12px; font-weight:500; transition:all 0.2s;"
+                onmouseover="this.style.background='#fef2f2';" onmouseout="this.style.background='#fff';">
+                <i class='bx bx-show'></i> View
+              </button>
+            </div>
+          </div>
+
+          <div
+            style="border:1px solid #fca5a5; border-radius:12px; padding:16px; margin-bottom:12px; background:#fef2f2;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div
+                  style="width:40px; height:40px; background:#7b1113; border-radius:10px; display:flex; align-items:center; justify-content:center;">
+                  <i class='bx bx-check' style="font-size:20px; color:#fff;"></i>
+                </div>
+                <div>
+                  <p style="margin:0; font-size:13px; font-weight:600; color:#7f1d1d;">Transcript of Records</p>
+                  <p style="margin:2px 0 0 0; font-size:11px; color:#991b1b;">{{ tor_filename }}</p>
+                </div>
+              </div>
+              <button id="showTorBtn" type="button" class="btn-view-small"
+                style="padding:8px 16px; background:#fff; color:#7b1113; border:1px solid #7b1113; border-radius:8px; cursor:pointer; font-size:12px; font-weight:500;">
+                <i class='bx bx-show'></i> View
+              </button>
+            </div>
+          </div>
+
+          <div
+            style="border:1px solid #fca5a5; border-radius:12px; padding:16px; margin-bottom:12px; background:#fef2f2; margin-bottom:16px;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div
+                  style="width:40px; height:40px; background:#7b1113; border-radius:10px; display:flex; align-items:center; justify-content:center;">
+                  <i class='bx bx-check' style="font-size:20px; color:#fff;"></i>
+                </div>
+                <div>
+                  <p style="margin:0; font-size:13px; font-weight:600; color:#7f1d1d;">Diploma / Certificate</p>
+                  <p style="margin:2px 0 0 0; font-size:11px; color:#991b1b;">{{ diploma_filename }}</p>
+                </div>
+              </div>
+              <button id="showDiplomaBtn" type="button" class="btn-view-small"
+                style="padding:8px 16px; background:#fff; color:#7b1113; border:1px solid #7b1113; border-radius:8px; cursor:pointer; font-size:12px; font-weight:500;">
+                <i class='bx bx-show'></i> View
+              </button>
+            </div>
           </div>
         </div>
-        <button id="showCoverLetterBtn" type="button" style="padding:8px 16px; background:#fff; color:#7b1113; border:1px solid #7b1113; border-radius:8px; cursor:pointer; font-size:12px; font-weight:500; transition:all 0.2s;" onmouseover="this.style.background='#fef2f2';" onmouseout="this.style.background='#fff';">
-          <i class='bx bx-show'></i> View
+
+        <!-- Warning + Delete Button -->
+        <div
+          style="padding:12px; background:#fef3c7; border-left:4px solid #f59e0b; border-radius:8px; margin-bottom:12px;">
+          <p style="margin:0; font-size:12px; color:#92400e;">
+            <i class='bx bx-lock-alt'></i> <strong>Application Locked:</strong> Documents are locked while under review.
+            You can delete and resubmit if needed.
+          </p>
+        </div>
+
+        <button id="deleteSubmission" type="button"
+          style="width:100%; padding:12px; background:#fff; color:#7b1113; border:1px solid #7b1113; border-radius:8px; cursor:pointer; font-size:14px; font-weight:500; transition:all 0.2s;"
+          onmouseover="this.style.background='#fef2f2';" onmouseout="this.style.background='#fff';">
+          <i class='bx bx-trash'></i> Delete and Resubmit
         </button>
-      </div>
-    </div>
 
-    <div style="border:1px solid #fca5a5; border-radius:12px; padding:16px; margin-bottom:12px; background:#fef2f2;">
-    <div style="display:flex; align-items:center; justify-content:space-between;">
-      <div style="display:flex; align-items:center; gap:12px;">
-        <div style="width:40px; height:40px; background:#7b1113; border-radius:10px; display:flex; align-items:center; justify-content:center;">
-          <i class='bx bx-check' style="font-size:20px; color:#fff;"></i>
-        </div>
-        <div>
-          <p style="margin:0; font-size:13px; font-weight:600; color:#7f1d1d;">Transcript of Records</p>
-          <p style="margin:2px 0 0 0; font-size:11px; color:#991b1b;">{{ tor_filename }}</p>
-        </div>
-      </div>
-      <button id="showTorBtn" type="button" class="btn-view-small" style="padding:8px 16px; background:#fff; color:#7b1113; border:1px solid #7b1113; border-radius:8px; cursor:pointer; font-size:12px; font-weight:500;">
-        <i class='bx bx-show'></i> View
-      </button>
-    </div>
-  </div>
+        {% endif %}
 
-  <div style="border:1px solid #fca5a5; border-radius:12px; padding:16px; margin-bottom:12px; background:#fef2f2; margin-bottom:16px;">
-    <div style="display:flex; align-items:center; justify-content:space-between;">
-      <div style="display:flex; align-items:center; gap:12px;">
-        <div style="width:40px; height:40px; background:#7b1113; border-radius:10px; display:flex; align-items:center; justify-content:center;">
-          <i class='bx bx-check' style="font-size:20px; color:#fff;"></i>
-        </div>
-        <div>
-          <p style="margin:0; font-size:13px; font-weight:600; color:#7f1d1d;">Diploma / Certificate</p>
-          <p style="margin:2px 0 0 0; font-size:11px; color:#991b1b;">{{ diploma_filename }}</p>
-        </div>
-      </div>
-      <button id="showDiplomaBtn" type="button" class="btn-view-small" style="padding:8px 16px; background:#fff; color:#7b1113; border:1px solid #7b1113; border-radius:8px; cursor:pointer; font-size:12px; font-weight:500;">
-        <i class='bx bx-show'></i> View
-      </button>
-    </div>
-  </div>
-  </div>
-
-  <!-- Warning + Delete Button -->
-  <div style="padding:12px; background:#fef3c7; border-left:4px solid #f59e0b; border-radius:8px; margin-bottom:12px;">
-    <p style="margin:0; font-size:12px; color:#92400e;">
-      <i class='bx bx-lock-alt'></i> <strong>Application Locked:</strong> Documents are locked while under review. You can delete and resubmit if needed.
-    </p>
-  </div>
-
-  <button id="deleteSubmission" type="button" style="width:100%; padding:12px; background:#fff; color:#7b1113; border:1px solid #7b1113; border-radius:8px; cursor:pointer; font-size:14px; font-weight:500; transition:all 0.2s;" onmouseover="this.style.background='#fef2f2';" onmouseout="this.style.background='#fff';">
-    <i class='bx bx-trash'></i> Delete and Resubmit
-  </button>
-  
-  {% endif %}
-
-</form>
+      </form>
 
 
       {% endif %}
@@ -622,14 +756,20 @@
   </div>
 
   {% if application_id %}
-  <div id="document-modal" class="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:9999; justify-content:center; align-items:center;">
-    <div style="position:relative; width:min(860px,95vw); height:88vh; background:#fff; border-radius:16px; box-shadow:0 24px 64px rgba(0,0,0,0.3); overflow:hidden; display:flex; flex-direction:column; animation:slideIn 0.25s ease;">
-      <div style="padding:14px 20px; background:linear-gradient(135deg,#7b1113 0%,#991b1b 100%); display:flex; align-items:center; justify-content:space-between; flex-shrink:0;">
+  <div id="document-modal" class="modal"
+    style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:9999; justify-content:center; align-items:center;">
+    <div
+      style="position:relative; width:min(860px,95vw); height:88vh; background:#fff; border-radius:16px; box-shadow:0 24px 64px rgba(0,0,0,0.3); overflow:hidden; display:flex; flex-direction:column; animation:slideIn 0.25s ease;">
+      <div
+        style="padding:14px 20px; background:linear-gradient(135deg,#7b1113 0%,#991b1b 100%); display:flex; align-items:center; justify-content:space-between; flex-shrink:0;">
         <div style="display:flex; align-items:center; gap:10px; color:#fff;">
           <i class='bx bx-file-find' style="font-size:22px"></i>
           <h3 id="modal-title" style="margin:0; font-size:16px; font-weight:700;">Document Viewer</h3>
         </div>
-        <button id="modal-close" style="background:rgba(255,255,255,0.18); border:none; color:#fff; width:32px; height:32px; border-radius:50%; font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.32)'" onmouseout="this.style.background='rgba(255,255,255,0.18)'">&times;</button>
+        <button id="modal-close"
+          style="background:rgba(255,255,255,0.18); border:none; color:#fff; width:32px; height:32px; border-radius:50%; font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s;"
+          onmouseover="this.style.background='rgba(255,255,255,0.32)'"
+          onmouseout="this.style.background='rgba(255,255,255,0.18)'">&times;</button>
       </div>
       <div style="flex:1; overflow:hidden;">
         <embed id="modal-embed" type="application/pdf" style="width:100%; height:100%; border:none;"></embed>
@@ -651,15 +791,18 @@
         <div style="padding:16px 20px; display:grid; gap:12px;">
           <div style="display:flex; gap:10px; align-items:flex-start;">
             <i class='bx bx-badge-check' style="color:#059669; font-size:18px; flex-shrink:0; margin-top:2px;"></i>
-            <p style="margin:0; font-size:13px; color:#374151; line-height:1.6;"><strong>Regularization:</strong> HR-initiated once eligible (3+ years with aligned Master's degree).</p>
+            <p style="margin:0; font-size:13px; color:#374151; line-height:1.6;"><strong>Regularization:</strong>
+              HR-initiated once eligible (3+ years with aligned Master's degree).</p>
           </div>
           <div style="display:flex; gap:10px; align-items:flex-start;">
             <i class='bx bx-trending-up' style="color:#7b1113; font-size:18px; flex-shrink:0; margin-top:2px;"></i>
-            <p style="margin:0; font-size:13px; color:#374151; line-height:1.6;"><strong>Promotion:</strong> Faculty-initiated, degree-based. Requires submitting official documents.</p>
+            <p style="margin:0; font-size:13px; color:#374151; line-height:1.6;"><strong>Promotion:</strong>
+              Faculty-initiated, degree-based. Requires submitting official documents.</p>
           </div>
           <div style="display:flex; gap:10px; align-items:flex-start;">
             <i class='bx bx-info-circle' style="color:#6b7280; font-size:18px; flex-shrink:0; margin-top:2px;"></i>
-            <p style="margin:0; font-size:13px; color:#6b7280; line-height:1.6;">Research involvement is recognized separately and does not count toward rank promotion.</p>
+            <p style="margin:0; font-size:13px; color:#6b7280; line-height:1.6;">Research involvement is recognized
+              separately and does not count toward rank promotion.</p>
           </div>
         </div>
       </div>
@@ -671,57 +814,54 @@
           <span>Application History</span>
         </div>
         <div style="padding:16px 20px;">
-        {% if application_history and application_history|length > 0 %}
-        <div class="history-table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>Date Submitted</th>
-                <th>Requested Position</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for app in application_history %}
-              <tr>
-                <td>{{ app.date_submitted.strftime('%b %d, %Y') if app.date_submitted else 'N/A' }}</td>
-                <td><strong>{{ app.requested_position or 'Not specified' }}</strong></td>
-                <td>
-                  {% if app.final_decision == 'Approved' %}
+          {% if application_history and application_history|length > 0 %}
+          <div class="history-table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date Submitted</th>
+                  <th>Requested Position</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for app in application_history %}
+                <tr>
+                  <td>{{ app.date_submitted.strftime('%b %d, %Y') if app.date_submitted else 'N/A' }}</td>
+                  <td><strong>{{ app.requested_position or 'Not specified' }}</strong></td>
+                  <td>
+                    {% if app.final_decision == 'Approved' %}
                     <span class="status ok">✓ Approved</span>
-                  {% elif app.final_decision == 'Rejected' %}
+                    {% elif app.final_decision == 'Rejected' %}
                     <span class="status rejected">✗ Rejected</span>
-                  {% else %}
+                    {% else %}
                     <span class="status pending">⏳ {{ app.stage_label }}</span>
-                  {% endif %}
-                </td>
-                <td>
-                  <button class="btn-view-history"
+                    {% endif %}
+                  </td>
+                  <td>
+                    <button class="btn-view-history"
                       data-date="{{ app.date_submitted.strftime('%B %d, %Y') if app.date_submitted else 'N/A' }}"
-                      data-status="{{ app.current_status|lower }}"
-                      data-decision="{{ app.final_decision|lower }}"
-                      data-rejected-stage="{{ app.rejected_at_stage }}"
-                      data-remarks="{{ app.remarks or 'No remarks' }}"
+                      data-status="{{ app.current_status|lower }}" data-decision="{{ app.final_decision|lower }}"
+                      data-rejected-stage="{{ app.rejected_at_stage }}" data-remarks="{{ app.remarks or 'No remarks' }}"
                       data-requested-pos="{{ app.requested_position or 'Not specified' }}"
-                      data-hrmd-date="{{ app.hrmd_date or '' }}"
-                      data-vpa-date="{{ app.vpa_date or '' }}"
+                      data-hrmd-date="{{ app.hrmd_date or '' }}" data-vpa-date="{{ app.vpa_date or '' }}"
                       data-pres-date="{{ app.pres_date or '' }}"
                       style="padding:6px 14px; background:#7b1113; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:12px; font-weight:600; display:inline-flex; align-items:center; gap:5px;">
                       <i class='bx bx-show'></i> View
-                  </button>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% else %}
-        <div class="table-empty-state">
-          <i class='bx bx-history'></i>
-          <p>No previous applications found.</p>
-        </div>
-        {% endif %}
+                    </button>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="table-empty-state">
+            <i class='bx bx-history'></i>
+            <p>No previous applications found.</p>
+          </div>
+          {% endif %}
         </div>
       </div>
 
@@ -733,30 +873,36 @@
         </div>
         <div style="padding:16px 20px; display:grid; gap:12px;">
           <div style="display:flex; gap:12px; align-items:flex-start;">
-            <div style="width:34px; height:34px; background:#fef2f2; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <div
+              style="width:34px; height:34px; background:#fef2f2; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
               <i class='bx bx-file' style="font-size:16px; color:#7b1113;"></i>
             </div>
             <div>
               <p style="margin:0; font-size:13px; font-weight:600; color:#374151;">Document Requirements</p>
-              <p style="margin:3px 0 0 0; font-size:12px; color:#6b7280; line-height:1.5;">Check the HRMD portal or ask your department secretary.</p>
+              <p style="margin:3px 0 0 0; font-size:12px; color:#6b7280; line-height:1.5;">Check the HRMD portal or ask
+                your department secretary.</p>
             </div>
           </div>
           <div style="display:flex; gap:12px; align-items:flex-start;">
-            <div style="width:34px; height:34px; background:#fef2f2; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <div
+              style="width:34px; height:34px; background:#fef2f2; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
               <i class='bx bx-envelope' style="font-size:16px; color:#7b1113;"></i>
             </div>
             <div>
               <p style="margin:0; font-size:13px; font-weight:600; color:#374151;">Email HRMD</p>
-              <p style="margin:3px 0 0 0; font-size:12px; color:#6b7280; line-height:1.5;">For regularization questions: <a href="mailto:hrmd@spc.edu.ph" style="color:#7b1113; font-weight:600;">hrmd@spc.edu.ph</a></p>
+              <p style="margin:3px 0 0 0; font-size:12px; color:#6b7280; line-height:1.5;">For regularization questions:
+                <a href="mailto:hrmd@spc.edu.ph" style="color:#7b1113; font-weight:600;">hrmd@spc.edu.ph</a></p>
             </div>
           </div>
           <div style="display:flex; gap:12px; align-items:flex-start;">
-            <div style="width:34px; height:34px; background:#fef2f2; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <div
+              style="width:34px; height:34px; background:#fef2f2; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
               <i class='bx bx-phone' style="font-size:16px; color:#7b1113;"></i>
             </div>
             <div>
               <p style="margin:0; font-size:13px; font-weight:600; color:#374151;">HRMD Office</p>
-              <p style="margin:3px 0 0 0; font-size:12px; color:#6b7280; line-height:1.5;">For urgent concerns: <strong style="color:#374151;">(032) 123-4567</strong></p>
+              <p style="margin:3px 0 0 0; font-size:12px; color:#6b7280; line-height:1.5;">For urgent concerns: <strong
+                  style="color:#374151;">(032) 123-4567</strong></p>
             </div>
           </div>
         </div>
@@ -766,13 +912,17 @@
   </div>
 
   <!-- Application History Details Modal -->
-  <div id="historyModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9999; justify-content:center; align-items:center;">
-    <div style="position:relative; width:min(640px,95vw); background:#fff; border-radius:16px; box-shadow:0 24px 64px rgba(0,0,0,0.28); overflow:hidden; animation:slideIn 0.28s ease;">
+  <div id="historyModal"
+    style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9999; justify-content:center; align-items:center;">
+    <div
+      style="position:relative; width:min(640px,95vw); background:#fff; border-radius:16px; box-shadow:0 24px 64px rgba(0,0,0,0.28); overflow:hidden; animation:slideIn 0.28s ease;">
 
       <!-- Header -->
-      <div style="background:linear-gradient(135deg,#7b1113 0%,#991b1b 100%); padding:22px 24px; color:#fff; display:flex; align-items:center; justify-content:space-between;">
+      <div
+        style="background:linear-gradient(135deg,#7b1113 0%,#991b1b 100%); padding:22px 24px; color:#fff; display:flex; align-items:center; justify-content:space-between;">
         <div style="display:flex; align-items:center; gap:12px;">
-          <div style="width:38px; height:38px; background:rgba(255,255,255,0.18); border-radius:10px; display:flex; align-items:center; justify-content:center;">
+          <div
+            style="width:38px; height:38px; background:rgba(255,255,255,0.18); border-radius:10px; display:flex; align-items:center; justify-content:center;">
             <i class='bx bx-file-blank' style="font-size:20px"></i>
           </div>
           <div>
@@ -780,36 +930,48 @@
             <div style="font-size:12px; opacity:0.8; margin-top:2px">Promotion History Record</div>
           </div>
         </div>
-        <button id="closeHistoryModal" style="background:rgba(255,255,255,0.18); border:none; color:#fff; width:34px; height:34px; border-radius:50%; cursor:pointer; font-size:20px; display:flex; align-items:center; justify-content:center; transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)';this.style.transform='rotate(90deg)'" onmouseout="this.style.background='rgba(255,255,255,0.18)';this.style.transform='rotate(0deg)'">&times;</button>
+        <button id="closeHistoryModal"
+          style="background:rgba(255,255,255,0.18); border:none; color:#fff; width:34px; height:34px; border-radius:50%; cursor:pointer; font-size:20px; display:flex; align-items:center; justify-content:center; transition:all 0.2s;"
+          onmouseover="this.style.background='rgba(255,255,255,0.3)';this.style.transform='rotate(90deg)'"
+          onmouseout="this.style.background='rgba(255,255,255,0.18)';this.style.transform='rotate(0deg)'">&times;</button>
       </div>
 
       <!-- Decision Banner (dynamic) -->
-      <div id="modalDecisionBanner" style="padding:12px 24px; font-size:14px; font-weight:600; display:flex; align-items:center; gap:8px;"></div>
+      <div id="modalDecisionBanner"
+        style="padding:12px 24px; font-size:14px; font-weight:600; display:flex; align-items:center; gap:8px;"></div>
 
       <!-- Body -->
       <div style="padding:4px 24px 24px; max-height:480px; overflow-y:auto; display:grid; gap:14px;">
 
         <!-- Requested Position -->
         <div style="padding:14px 16px; background:#fef2f2; border-radius:10px; border-left:4px solid #7b1113;">
-          <div style="font-size:11px; color:#7b1113; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:4px">Requested Position</div>
+          <div
+            style="font-size:11px; color:#7b1113; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:4px">
+            Requested Position</div>
           <div id="modalRequestedPos" style="font-size:16px; font-weight:700; color:#1e293b;"></div>
         </div>
 
         <!-- Date Submitted -->
-        <div style="padding:14px 16px; background:#f8fafc; border-radius:10px; display:flex; align-items:center; gap:10px;">
+        <div
+          style="padding:14px 16px; background:#f8fafc; border-radius:10px; display:flex; align-items:center; gap:10px;">
           <i class='bx bx-calendar' style="font-size:20px; color:#7b1113;"></i>
           <div>
-            <div style="font-size:11px; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Date Submitted</div>
+            <div
+              style="font-size:11px; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">
+              Date Submitted</div>
             <div id="modalDate" style="font-size:14px; font-weight:600; color:#1e293b; margin-top:2px;"></div>
           </div>
         </div>
 
         <!-- Approval Timeline -->
         <div style="padding:16px; background:#f8fafc; border-radius:10px; border:1px solid #e5e7eb;">
-          <div style="font-size:11px; color:#374151; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:14px;">Approval Timeline</div>
+          <div
+            style="font-size:11px; color:#374151; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:14px;">
+            Approval Timeline</div>
           <div style="display:grid; gap:0;">
 
-            <div class="hist-timeline-row" id="rowHrmd" style="display:flex; align-items:flex-start; gap:12px; padding-bottom:14px; position:relative;">
+            <div class="hist-timeline-row" id="rowHrmd"
+              style="display:flex; align-items:flex-start; gap:12px; padding-bottom:14px; position:relative;">
               <div style="display:flex; flex-direction:column; align-items:center; min-width:24px;">
                 <i id="iconHrmd" class='bx bx-circle' style="font-size:20px; color:#94a3b8;"></i>
                 <div style="width:2px; flex:1; background:#e5e7eb; margin-top:4px; min-height:20px;"></div>
@@ -820,13 +982,14 @@
               </div>
             </div>
 
-            <div class="hist-timeline-row" id="rowVpa" style="display:flex; align-items:flex-start; gap:12px; padding-bottom:14px; position:relative;">
+            <div class="hist-timeline-row" id="rowVpa"
+              style="display:flex; align-items:flex-start; gap:12px; padding-bottom:14px; position:relative;">
               <div style="display:flex; flex-direction:column; align-items:center; min-width:24px;">
                 <i id="iconVpa" class='bx bx-circle' style="font-size:20px; color:#94a3b8;"></i>
                 <div style="width:2px; flex:1; background:#e5e7eb; margin-top:4px; min-height:20px;"></div>
               </div>
               <div style="flex:1; padding-top:1px">
-                <div style="font-size:13px; font-weight:600; color:#374151;">VPA Review</div>
+                <div style="font-size:13px; font-weight:600; color:#374151;">VPAA Review</div>
                 <div id="modalVpaDate" style="font-size:12px; color:#64748b; margin-top:2px;"></div>
               </div>
             </div>
@@ -845,16 +1008,22 @@
         </div>
 
         <!-- Remarks -->
-        <div id="modalRemarksBox" style="padding:14px 16px; border-radius:10px; border-left:4px solid #f59e0b; background:#fffbeb;">
-          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:6px; color:#92400e;">Remarks</div>
+        <div id="modalRemarksBox"
+          style="padding:14px 16px; border-radius:10px; border-left:4px solid #f59e0b; background:#fffbeb;">
+          <div
+            style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:6px; color:#92400e;">
+            Remarks</div>
           <div id="modalRemarks" style="font-size:13px; line-height:1.65; color:#451a03;"></div>
         </div>
 
       </div>
 
       <!-- Footer -->
-      <div style="padding:14px 24px; background:#f8fafc; border-top:1px solid #e5e7eb; display:flex; justify-content:flex-end;">
-        <button onclick="document.getElementById('historyModal').style.display='none'" style="padding:9px 22px; background:#7b1113; color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:600; font-size:13px; transition:background 0.2s;" onmouseover="this.style.background='#991b1b'" onmouseout="this.style.background='#7b1113'">
+      <div
+        style="padding:14px 24px; background:#f8fafc; border-top:1px solid #e5e7eb; display:flex; justify-content:flex-end;">
+        <button onclick="document.getElementById('historyModal').style.display='none'"
+          style="padding:9px 22px; background:#7b1113; color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:600; font-size:13px; transition:background 0.2s;"
+          onmouseover="this.style.background='#991b1b'" onmouseout="this.style.background='#7b1113'">
           Close
         </button>
       </div>
@@ -862,12 +1031,26 @@
   </div>
 
   <style>
-  @keyframes slideIn {
-    from { opacity:0; transform:translateY(-16px); }
-    to   { opacity:1; transform:translateY(0); }
-  }
-  .btn-view-history { transition: all 0.2s; }
-  .btn-view-history:hover { opacity:0.85; transform:translateY(-1px); }
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-16px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .btn-view-history {
+      transition: all 0.2s;
+    }
+
+    .btn-view-history:hover {
+      opacity: 0.85;
+      transform: translateY(-1px);
+    }
   </style>
 
 </section>
@@ -882,15 +1065,18 @@
     border-color: #059669 !important;
     color: #fff !important;
   }
+
   .step.step-approved {
     color: #065f46;
     font-weight: 600;
   }
+
   .step.step-rejected .circle {
     background: #dc2626 !important;
     border-color: #dc2626 !important;
     color: #fff !important;
   }
+
   .step.step-rejected {
     color: #991b1b;
     font-weight: 600;
@@ -900,226 +1086,226 @@
 
 {% block extra_scripts %}
 <script>
-// FILE UPLOADING - with null checks
-// Function to handle status updates for all inputs
-function setupFileInput(inputId, statusId) {
+  // FILE UPLOADING - with null checks
+  // Function to handle status updates for all inputs
+  function setupFileInput(inputId, statusId) {
     const input = document.getElementById(inputId);
     if (input) {
-        input.addEventListener('change', function(event) {
-            const statusSpan = document.getElementById(statusId);
-            // Ensure we are getting the [0].name and NOT the file content
-            if (event.target.files && event.target.files.length > 0) {
-                const fileName = event.target.files[0].name; 
-                statusSpan.textContent = fileName; // This displays "document.pdf"
-                statusSpan.classList.add('ok');
-                statusSpan.classList.remove('nu');
-            } else {
-                statusSpan.textContent = 'Not Uploaded';
-                statusSpan.classList.remove('ok');
-                statusSpan.classList.add('nu');
-            }
-        });
-    }
-}
-// Setup the 4 inputs
-setupFileInput('resume_cv', 'resume_cv_status');
-setupFileInput('tor', 'tor_status');
-setupFileInput('diploma', 'diploma_status');
-setupFileInput('cover_letter', 'cover_letter_status');
-
-const promotionForm = document.getElementById('promotion-doc-upload-form');
-if (promotionForm) {
-  promotionForm.addEventListener('submit', function(event) {
-    const step1 = document.querySelector('.stepper .step:nth-child(1)');
-    if (step1) {
-      step1.classList.remove('active');
-      step1.classList.add('done');
-      const today = new Date().toISOString().slice(0, 10);
-      step1.querySelector('small').textContent = 'Submitted ' + today;
-    }
-  });
-}
-
-// DOCUMENT MODAL
-document.addEventListener('DOMContentLoaded', function () {
-  const modal = document.getElementById('document-modal');
-  
-  if (modal) {
-    const modalClose = document.getElementById('modal-close');
-    const modalEmbed = document.getElementById('modal-embed');
-    const modalTitle = document.getElementById('modal-title');
-    const btnResume = document.getElementById('showResumeBtn');
-    const btnCoverLetter = document.getElementById('showCoverLetterBtn');
-    const btnTor = document.getElementById('showTorBtn');
-    const btnDiploma = document.getElementById('showDiplomaBtn');
-
-    function openModal(src, title) {
-      modalEmbed.src = src;
-      modalTitle.textContent = title;
-      modal.style.display = 'flex';
-    }
-
-    if ("{{ application_id }}" != "None" && btnResume) {
-      btnResume.addEventListener('click', function() {
-        openModal("{{ url_for('view_resume') }}", "Resume / CV");
+      input.addEventListener('change', function (event) {
+        const statusSpan = document.getElementById(statusId);
+        // Ensure we are getting the [0].name and NOT the file content
+        if (event.target.files && event.target.files.length > 0) {
+          const fileName = event.target.files[0].name;
+          statusSpan.textContent = fileName; // This displays "document.pdf"
+          statusSpan.classList.add('ok');
+          statusSpan.classList.remove('nu');
+        } else {
+          statusSpan.textContent = 'Not Uploaded';
+          statusSpan.classList.remove('ok');
+          statusSpan.classList.add('nu');
+        }
       });
     }
+  }
+  // Setup the 4 inputs
+  setupFileInput('resume_cv', 'resume_cv_status');
+  setupFileInput('tor', 'tor_status');
+  setupFileInput('diploma', 'diploma_status');
+  setupFileInput('cover_letter', 'cover_letter_status');
 
-    if ("{{ application_id }}" != "None" && btnCoverLetter) {
-      btnCoverLetter.addEventListener('click', () => {
-        openModal("{{ url_for('view_cover_letter') }}", "Cover Letter");
-      });
-    }
-
-    if ("{{ application_id }}" != "None" && btnTor) {
-      btnTor.addEventListener('click', () => {
-        openModal("{{ url_for('view_tor') }}", "Transcript of Records");
-      });
-    }
-    
-    if ("{{ application_id }}" != "None" && btnDiploma) {
-      btnDiploma.addEventListener('click', () => {
-        openModal("{{ url_for('view_diploma') }}", "Diploma / Certificate");
-      });
-    }
-    modalClose.addEventListener('click', () => {
-      modal.style.display = 'none';
-      modalEmbed.src = '';
-    });
-
-    window.addEventListener('click', (event) => {
-      if (event.target === modal) {
-        modal.style.display = 'none';
-        modalEmbed.src = '';
+  const promotionForm = document.getElementById('promotion-doc-upload-form');
+  if (promotionForm) {
+    promotionForm.addEventListener('submit', function (event) {
+      const step1 = document.querySelector('.stepper .step:nth-child(1)');
+      if (step1) {
+        step1.classList.remove('active');
+        step1.classList.add('done');
+        const today = new Date().toISOString().slice(0, 10);
+        step1.querySelector('small').textContent = 'Submitted ' + today;
       }
     });
   }
-});
 
-// PROGRESS CIRCLE - CRITICAL FIX
-document.addEventListener('DOMContentLoaded', function() {
-  const progressCircle = document.querySelector('.progress-circle');
-  
-  if (progressCircle) {
-    const percentage = progressCircle.getAttribute('data-percentage');
-    
-    if (percentage !== null && percentage !== undefined) {
-      progressCircle.style.setProperty('--percentage', percentage);
-    }
-  }
-});
+  // DOCUMENT MODAL
+  document.addEventListener('DOMContentLoaded', function () {
+    const modal = document.getElementById('document-modal');
 
-// DELETE SUBMISSION
-const deleteBtn = document.getElementById('deleteSubmission');
-if (deleteBtn) {
-  deleteBtn.addEventListener('click', function() {
-    if (confirm('Are you sure you want to delete this submission?')) {
-      fetch("{{ url_for('delete_submission') }}", {
-        method: 'POST'
-      })
-      .then(response => response.json())
-      .then(result => {
-        if (result.success) {
-          alert('Submission deleted successfully');
-          location.reload();
-        } else {
-          alert('Error: ' + result.error);
+    if (modal) {
+      const modalClose = document.getElementById('modal-close');
+      const modalEmbed = document.getElementById('modal-embed');
+      const modalTitle = document.getElementById('modal-title');
+      const btnResume = document.getElementById('showResumeBtn');
+      const btnCoverLetter = document.getElementById('showCoverLetterBtn');
+      const btnTor = document.getElementById('showTorBtn');
+      const btnDiploma = document.getElementById('showDiplomaBtn');
+
+      function openModal(src, title) {
+        modalEmbed.src = src;
+        modalTitle.textContent = title;
+        modal.style.display = 'flex';
+      }
+
+      if ("{{ application_id }}" != "None" && btnResume) {
+        btnResume.addEventListener('click', function () {
+          openModal("{{ url_for('view_resume') }}", "Resume / CV");
+        });
+      }
+
+      if ("{{ application_id }}" != "None" && btnCoverLetter) {
+        btnCoverLetter.addEventListener('click', () => {
+          openModal("{{ url_for('view_cover_letter') }}", "Cover Letter");
+        });
+      }
+
+      if ("{{ application_id }}" != "None" && btnTor) {
+        btnTor.addEventListener('click', () => {
+          openModal("{{ url_for('view_tor') }}", "Transcript of Records");
+        });
+      }
+
+      if ("{{ application_id }}" != "None" && btnDiploma) {
+        btnDiploma.addEventListener('click', () => {
+          openModal("{{ url_for('view_diploma') }}", "Diploma / Certificate");
+        });
+      }
+      modalClose.addEventListener('click', () => {
+        modal.style.display = 'none';
+        modalEmbed.src = '';
+      });
+
+      window.addEventListener('click', (event) => {
+        if (event.target === modal) {
+          modal.style.display = 'none';
+          modalEmbed.src = '';
         }
-      })
-      .catch(error => {
-        console.error('Error:', error);
-        alert('Failed to delete submission');
       });
     }
   });
-}
 
-// APPLICATION HISTORY MODAL
-document.addEventListener('DOMContentLoaded', function() {
+  // PROGRESS CIRCLE - CRITICAL FIX
+  document.addEventListener('DOMContentLoaded', function () {
+    const progressCircle = document.querySelector('.progress-circle');
+
+    if (progressCircle) {
+      const percentage = progressCircle.getAttribute('data-percentage');
+
+      if (percentage !== null && percentage !== undefined) {
+        progressCircle.style.setProperty('--percentage', percentage);
+      }
+    }
+  });
+
+  // DELETE SUBMISSION
+  const deleteBtn = document.getElementById('deleteSubmission');
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', function () {
+      if (confirm('Are you sure you want to delete this submission?')) {
+        fetch("{{ url_for('delete_submission') }}", {
+          method: 'POST'
+        })
+          .then(response => response.json())
+          .then(result => {
+            if (result.success) {
+              alert('Submission deleted successfully');
+              location.reload();
+            } else {
+              alert('Error: ' + result.error);
+            }
+          })
+          .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to delete submission');
+          });
+      }
+    });
+  }
+
+  // APPLICATION HISTORY MODAL
+  document.addEventListener('DOMContentLoaded', function () {
     const historyModal = document.getElementById('historyModal');
     const closeBtn = document.getElementById('closeHistoryModal');
 
     const timelineConfig = [
-        { dateId: 'modalHrmdDate', iconId: 'iconHrmd', key: 'hrmd', attr: 'data-hrmd-date', label: 'Forwarded' },
-        { dateId: 'modalVpaDate',  iconId: 'iconVpa',  key: 'vpa',  attr: 'data-vpa-date',  label: 'Forwarded' },
-        { dateId: 'modalPresDate', iconId: 'iconPres', key: 'pres', attr: 'data-pres-date',  label: 'Approved'  },
+      { dateId: 'modalHrmdDate', iconId: 'iconHrmd', key: 'hrmd', attr: 'data-hrmd-date', label: 'Forwarded' },
+      { dateId: 'modalVpaDate', iconId: 'iconVpa', key: 'vpa', attr: 'data-vpa-date', label: 'Forwarded' },
+      { dateId: 'modalPresDate', iconId: 'iconPres', key: 'pres', attr: 'data-pres-date', label: 'Approved' },
     ];
 
     document.querySelectorAll('.btn-view-history').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const decision      = (this.getAttribute('data-decision') || '').toLowerCase();
-            const rejectedStage = (this.getAttribute('data-rejected-stage') || '').toLowerCase();
+      btn.addEventListener('click', function () {
+        const decision = (this.getAttribute('data-decision') || '').toLowerCase();
+        const rejectedStage = (this.getAttribute('data-rejected-stage') || '').toLowerCase();
 
-            // Timeline rows
-            timelineConfig.forEach(step => {
-                const dateEl = document.getElementById(step.dateId);
-                const iconEl = document.getElementById(step.iconId);
-                const date   = this.getAttribute(step.attr) || '';
-                const row    = document.getElementById('row' + step.key.charAt(0).toUpperCase() + step.key.slice(1));
+        // Timeline rows
+        timelineConfig.forEach(step => {
+          const dateEl = document.getElementById(step.dateId);
+          const iconEl = document.getElementById(step.iconId);
+          const date = this.getAttribute(step.attr) || '';
+          const row = document.getElementById('row' + step.key.charAt(0).toUpperCase() + step.key.slice(1));
 
-                if (date) {
-                    iconEl.className = 'bx bx-check-circle';
-                    iconEl.style.color = '#059669';
-                    dateEl.textContent = step.label + ' ' + date;
-                    dateEl.style.color = '#065f46';
-                    if (row) row.style.opacity = '1';
-                } else if (decision === 'rejected' && step.key === rejectedStage) {
-                    iconEl.className = 'bx bx-x-circle';
-                    iconEl.style.color = '#dc2626';
-                    dateEl.textContent = 'Rejected at this stage';
-                    dateEl.style.color = '#991b1b';
-                    if (row) row.style.opacity = '1';
-                } else {
-                    iconEl.className = 'bx bx-circle';
-                    iconEl.style.color = '#cbd5e1';
-                    dateEl.textContent = 'Not yet reached';
-                    dateEl.style.color = '#94a3b8';
-                    if (row) row.style.opacity = '0.5';
-                }
-            });
-
-            // Basic info
-            document.getElementById('modalDate').textContent         = this.getAttribute('data-date') || '—';
-            document.getElementById('modalRequestedPos').textContent = this.getAttribute('data-requested-pos') || '—';
-            document.getElementById('modalRemarks').textContent      = this.getAttribute('data-remarks') || '—';
-
-            // Decision banner
-            const banner = document.getElementById('modalDecisionBanner');
-            const remarksBox = document.getElementById('modalRemarksBox');
-            if (decision === 'approved') {
-                banner.style.cssText = 'padding:12px 24px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;background:#d1fae5;color:#065f46;border-bottom:1px solid #a7f3d0;';
-                banner.innerHTML = "<i class='bx bx-trophy' style='font-size:18px'></i> This application was Approved";
-                remarksBox.style.borderLeftColor = '#059669';
-                remarksBox.style.background = '#f0fdf4';
-                document.querySelector('#modalRemarksBox div:first-child').style.color = '#166534';
-                document.getElementById('modalRemarks').style.color = '#14532d';
-            } else if (decision === 'rejected') {
-                banner.style.cssText = 'padding:12px 24px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;background:#fee2e2;color:#991b1b;border-bottom:1px solid #fca5a5;';
-                banner.innerHTML = "<i class='bx bx-x-circle' style='font-size:18px'></i> This application was Rejected";
-                remarksBox.style.borderLeftColor = '#dc2626';
-                remarksBox.style.background = '#fef2f2';
-                document.querySelector('#modalRemarksBox div:first-child').style.color = '#991b1b';
-                document.getElementById('modalRemarks').style.color = '#7f1d1d';
-            } else {
-                banner.style.cssText = 'padding:12px 24px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;background:#fef3c7;color:#92400e;border-bottom:1px solid #fde68a;';
-                banner.innerHTML = "<i class='bx bx-time-five' style='font-size:18px'></i> Application Under Review";
-                remarksBox.style.borderLeftColor = '#f59e0b';
-                remarksBox.style.background = '#fffbeb';
-                document.querySelector('#modalRemarksBox div:first-child').style.color = '#92400e';
-                document.getElementById('modalRemarks').style.color = '#451a03';
-            }
-
-            historyModal.style.display = 'flex';
+          if (date) {
+            iconEl.className = 'bx bx-check-circle';
+            iconEl.style.color = '#059669';
+            dateEl.textContent = step.label + ' ' + date;
+            dateEl.style.color = '#065f46';
+            if (row) row.style.opacity = '1';
+          } else if (decision === 'rejected' && step.key === rejectedStage) {
+            iconEl.className = 'bx bx-x-circle';
+            iconEl.style.color = '#dc2626';
+            dateEl.textContent = 'Rejected at this stage';
+            dateEl.style.color = '#991b1b';
+            if (row) row.style.opacity = '1';
+          } else {
+            iconEl.className = 'bx bx-circle';
+            iconEl.style.color = '#cbd5e1';
+            dateEl.textContent = 'Not yet reached';
+            dateEl.style.color = '#94a3b8';
+            if (row) row.style.opacity = '0.5';
+          }
         });
+
+        // Basic info
+        document.getElementById('modalDate').textContent = this.getAttribute('data-date') || '—';
+        document.getElementById('modalRequestedPos').textContent = this.getAttribute('data-requested-pos') || '—';
+        document.getElementById('modalRemarks').textContent = this.getAttribute('data-remarks') || '—';
+
+        // Decision banner
+        const banner = document.getElementById('modalDecisionBanner');
+        const remarksBox = document.getElementById('modalRemarksBox');
+        if (decision === 'approved') {
+          banner.style.cssText = 'padding:12px 24px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;background:#d1fae5;color:#065f46;border-bottom:1px solid #a7f3d0;';
+          banner.innerHTML = "<i class='bx bx-trophy' style='font-size:18px'></i> This application was Approved";
+          remarksBox.style.borderLeftColor = '#059669';
+          remarksBox.style.background = '#f0fdf4';
+          document.querySelector('#modalRemarksBox div:first-child').style.color = '#166534';
+          document.getElementById('modalRemarks').style.color = '#14532d';
+        } else if (decision === 'rejected') {
+          banner.style.cssText = 'padding:12px 24px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;background:#fee2e2;color:#991b1b;border-bottom:1px solid #fca5a5;';
+          banner.innerHTML = "<i class='bx bx-x-circle' style='font-size:18px'></i> This application was Rejected";
+          remarksBox.style.borderLeftColor = '#dc2626';
+          remarksBox.style.background = '#fef2f2';
+          document.querySelector('#modalRemarksBox div:first-child').style.color = '#991b1b';
+          document.getElementById('modalRemarks').style.color = '#7f1d1d';
+        } else {
+          banner.style.cssText = 'padding:12px 24px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;background:#fef3c7;color:#92400e;border-bottom:1px solid #fde68a;';
+          banner.innerHTML = "<i class='bx bx-time-five' style='font-size:18px'></i> Application Under Review";
+          remarksBox.style.borderLeftColor = '#f59e0b';
+          remarksBox.style.background = '#fffbeb';
+          document.querySelector('#modalRemarksBox div:first-child').style.color = '#92400e';
+          document.getElementById('modalRemarks').style.color = '#451a03';
+        }
+
+        historyModal.style.display = 'flex';
+      });
     });
 
     if (closeBtn) {
-        closeBtn.addEventListener('click', () => { historyModal.style.display = 'none'; });
+      closeBtn.addEventListener('click', () => { historyModal.style.display = 'none'; });
     }
     window.addEventListener('click', (e) => {
-        if (e.target === historyModal) historyModal.style.display = 'none';
+      if (e.target === historyModal) historyModal.style.display = 'none';
     });
-});
+  });
 
 </script>
 {% endblock %}

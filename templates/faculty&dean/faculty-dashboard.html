@@ -83,8 +83,11 @@
     </div>
     {% endif %}
 
-    <div id="license-status-card" style="display:none;">
-      <div class="card" style="padding:16px;">
+    <!-- License + Promotion + Regularization row (2:1:1 when license is visible) -->
+    <div id="cards-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+
+      <!-- License Status Card (hidden until data loads, then becomes 2fr) -->
+      <div id="license-status-card" class="card" style="display: none; padding: 16px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
           <div style="display:flex;align-items:center;gap:8px;">
             <i class='bx bx-id-card' style="font-size:18px;color:var(--primary);"></i>
@@ -96,40 +99,42 @@
         </div>
         <div id="license-status-list"></div>
       </div>
-    </div>
 
-    <!-- Promotion & Regularization Summary Cards -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1.5rem;">
       <!-- Promotion Summary Card -->
-      <div class="card" style="cursor: pointer; padding: 16px;" onclick="openPromotionModal()" title="Click to see details">
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-          <i class='bx bx-award' style="font-size: 18px; color: var(--primary);"></i>
-          <span style="font-weight: 700; font-size: 14px;">Promotion</span>
+      <div class="card" style="cursor: pointer; padding: 16px; display: flex; flex-direction: column;" onclick="openPromotionModal()" title="Click to see details">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <i class='bx bx-award' style="font-size: 18px; color: var(--primary);"></i>
+            <span style="font-weight: 700; font-size: 14px;">Promotion</span>
+          </div>
+          <span style="font-size: 12px; color: var(--primary); display: flex; align-items: center; gap: 2px;">
+            View details <i class='bx bx-chevron-right'></i>
+          </span>
         </div>
-        <div id="promotionSummary" style="font-size: 13px; line-height: 1.5; margin-bottom: 10px;">
+        <div id="promotionSummary" style="font-size: 13px; line-height: 1.6; flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 6px;">
           <i class='bx bx-loader-alt bx-spin'></i> Loading...
-        </div>
-        <div style="font-size: 11px; color: var(--primary); display: flex; align-items: center; gap: 3px; margin-top: auto;">
-          View details <i class='bx bx-chevron-right' style="font-size: 14px;"></i>
         </div>
       </div>
 
       <!-- Regularization Summary Card -->
-      <div class="card" style="cursor: pointer; padding: 16px;" onclick="openRegularizationModal()" title="Click to see details">
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-          <i class='bx bx-check-circle' style="font-size: 18px; color: var(--primary);"></i>
-          <span style="font-weight: 700; font-size: 14px;">Regularization</span>
+      <div class="card" style="cursor: pointer; padding: 16px; display: flex; flex-direction: column;" onclick="openRegularizationModal()" title="Click to see details">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <i class='bx bx-check-circle' style="font-size: 18px; color: var(--primary);"></i>
+            <span style="font-weight: 700; font-size: 14px;">Regularization</span>
+          </div>
+          <span style="font-size: 12px; color: var(--primary); display: flex; align-items: center; gap: 2px;">
+            View details <i class='bx bx-chevron-right'></i>
+          </span>
         </div>
-        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-          <div id="regularizationDonut" style="display: flex; align-items: center; justify-content: center;">
+        <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;">
+          <div id="regularizationDonut" style="display: flex; align-items: center; justify-content: center; width: 100%;">
             <i class='bx bx-loader-alt bx-spin'></i>
           </div>
-          <div id="regularizationSummary" style="font-size: 13px;">Loading...</div>
-        </div>
-        <div style="font-size: 11px; color: var(--primary); display: flex; align-items: center; justify-content: center; gap: 3px; margin-top: 10px;">
-          View details <i class='bx bx-chevron-right' style="font-size: 14px;"></i>
+          <div id="regularizationSummary" style="font-size: 13px; text-align: center;">Loading...</div>
         </div>
       </div>
+
     </div>
   </div>
 
@@ -142,6 +147,24 @@
       <div class="card-body" id="classScheduleBody">
         <div class="schedule-loading" style="text-align: center; padding: 1rem; color: #6b7280;">
           <i class='bx bx-loader-alt bx-spin'></i> Loading schedule...
+        </div>
+      </div>
+    </div>
+
+    <!-- Attendance Status Distribution -->
+    <div class="card" style="padding:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="font-weight:700;font-size:14px;">Status Distribution</div>
+        <div style="font-size:12px;color:var(--muted);">Current Semester</div>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;">Class Attendance</div>
+        <div style="position:relative;height:120px; margin-bottom:16px;">
+          <canvas id="dashClassDistChart"></canvas>
+        </div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;">Campus Attendance</div>
+        <div style="position:relative;height:120px;">
+          <canvas id="dashCampusDistChart"></canvas>
         </div>
       </div>
     </div>
@@ -190,7 +213,6 @@
   let dashboardData = null;
   let evalChartInstance = null;
   let comparisonChartInstance = null;
-  let deanDeptChartInstance = null;
 
   async function fetchDashboardData() {
     try {
@@ -557,6 +579,7 @@
         }).join('');
 
         card.style.display = 'block';
+        document.getElementById('cards-row').style.gridTemplateColumns = '2fr 1fr 1fr';
       })
       .catch(() => {});
   }
@@ -609,7 +632,7 @@
 
           const stages = [
             { label: 'HR Review', icon: 'bx-user-check' },
-            { label: 'VPA Review', icon: 'bx-user-circle' },
+            { label: 'VPAA Review', icon: 'bx-user-circle' },
             { label: 'President Approval', icon: 'bx-crown' }
           ];
 
@@ -829,16 +852,16 @@
 
         if (status === 'Regular' || status === 'Tenured') {
           badgeColor = '#16a34a'; badgeText = status; badgeIcon = 'bx-check-circle';
-          donutHTML = `<div style="width:64px;height:64px;border-radius:50%;background:#dcfce7;
-              display:flex;align-items:center;justify-content:center;margin:0 auto 4px;">
-            <i class='bx bx-check' style="font-size:32px;color:#16a34a;"></i>
+          donutHTML = `<div style="width:80px;height:80px;border-radius:50%;background:#dcfce7;
+              display:flex;align-items:center;justify-content:center;">
+            <i class='bx bx-check' style="font-size:40px;color:#16a34a;"></i>
           </div>`;
         } else if (status === 'Probationary') {
           badgeColor = '#f59e0b'; badgeText = `Probationary · ${percent}%`; badgeIcon = 'bx-time-five';
           const circumference = 2 * Math.PI * 35;
           const strokeDashoffset = circumference - (percent / 100) * circumference;
           donutHTML = `
-            <svg width="80" height="80" viewBox="0 0 80 80">
+            <svg viewBox="0 0 80 80" style="width:90px;height:90px;">
               <circle cx="40" cy="40" r="35" fill="none" stroke="#e5e7eb" stroke-width="5" />
               <circle cx="40" cy="40" r="35" fill="none" stroke="#f59e0b" stroke-width="5"
                 stroke-dasharray="${circumference}" stroke-dashoffset="${strokeDashoffset}"
@@ -847,9 +870,9 @@
             </svg>`;
         } else {
           badgeColor = '#6b7280'; badgeText = status || 'Contractual'; badgeIcon = 'bx-id-card';
-          donutHTML = `<div style="width:64px;height:64px;border-radius:50%;background:#f3f4f6;
-              display:flex;align-items:center;justify-content:center;margin:0 auto 4px;">
-            <i class='bx bx-id-card' style="font-size:28px;color:#6b7280;"></i>
+          donutHTML = `<div style="width:80px;height:80px;border-radius:50%;background:#f3f4f6;
+              display:flex;align-items:center;justify-content:center;">
+            <i class='bx bx-id-card' style="font-size:36px;color:#6b7280;"></i>
           </div>`;
         }
 
@@ -918,6 +941,7 @@
 
   document.addEventListener('DOMContentLoaded', function() {
     fetchDashboardData();
+    fetchAttendanceDist();
     loadLicenseStatusCard();
     loadPromotionSummary();
     loadRegularizationSummary();

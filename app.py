@@ -8572,7 +8572,359 @@ def faculty_dashboard():
 @require_auth([20001, 20002])
 def faculty_attendance():
     faculty_info = get_faculty_info(session['user_id'])
+    is_dean = session.get('user_role') == 20002
+    faculty_info['is_dean'] = is_dean
+    faculty_info['college_id'] = None
+    if is_dean:
+        try:
+            conn = db_pool.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT college_id FROM personnel WHERE user_id = %s", (session['user_id'],))
+            row = cursor.fetchone()
+            faculty_info['college_id'] = row[0] if row else None
+            cursor.close()
+            db_pool.return_connection(conn)
+        except Exception as e:
+            print(f"Error fetching dean college_id: {e}")
     return render_template('faculty&dean/faculty-attendance.html', **faculty_info)
+
+@app.route('/api/dean/college-attendance')
+@require_auth([20002])
+def api_dean_college_attendance():
+    """Class attendance logs for all faculty in the dean's college."""
+    conn = None
+    cursor = None
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT college_id FROM personnel WHERE user_id = %s", (session['user_id'],))
+        row = cursor.fetchone()
+        if not row or not row[0]:
+            return jsonify({'success': False, 'error': 'College not found for this dean'})
+        college_id = row[0]
+
+        philippines_tz = pytz.timezone('Asia/Manila')
+        semester_id = request.args.get('semester_id')
+        sem_start = sem_end = None
+        if semester_id:
+            cursor.execute("SELECT semesterstart, semesterend FROM acadcalendar WHERE acadcalendar_id = %s", (int(semester_id),))
+            sem = cursor.fetchone()
+            if sem:
+                sem_start, sem_end = sem[0], sem[1]
+
+        date_filter = "AND a.timein::date BETWEEN %s AND %s" if (sem_start and sem_end) else ""
+        params = [college_id] + ([sem_start, sem_end] if (sem_start and sem_end) else [])
+
+        cursor.execute("""
+            SELECT
+                p.firstname, p.lastname, p.honorifics,
+                a.attendancestatus, a.timein, a.timeout,
+                sch.classroom, sub.subjectcode, sub.subjectname,
+                sch.classsection, pr.position, pr.employmentstatus
+            FROM attendance a
+            JOIN personnel p ON a.personnel_id = p.personnel_id
+            JOIN schedule sch ON a.class_id = sch.class_id
+            JOIN subjects sub ON sch.subject_id = sub.subject_id
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            WHERE p.college_id = %s AND p.role_id IN (20001, 20002)
+            """ + date_filter + """
+            ORDER BY a.timein DESC, p.lastname, p.firstname
+        """, params)
+
+        logs = []
+        for rec in cursor.fetchall():
+            (firstname, lastname, honorifics, status, timein, timeout,
+             classroom, subject_code, subject_name, class_section,
+             position, employment_status) = rec
+            name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
+            date_str = time_in_str = time_out_str = '—'
+            if timein:
+                timein_ph = timein.astimezone(philippines_tz) if timein.tzinfo else philippines_tz.localize(timein)
+                date_str = timein_ph.strftime('%Y-%m-%d')
+                time_in_str = timein_ph.strftime('%H:%M')
+            if timeout:
+                timeout_ph = timeout.astimezone(philippines_tz) if timeout.tzinfo else philippines_tz.localize(timeout)
+                time_out_str = timeout_ph.strftime('%H:%M')
+            logs.append({
+                'name': name, 'status': status, 'date': date_str,
+                'time_in': time_in_str, 'time_out': time_out_str,
+                'room': classroom or 'N/A',
+                'class_name': f"{subject_code} - {subject_name}",
+                'class_section': class_section or 'N/A',
+                'position': position or 'N/A',
+                'employment_status': employment_status or 'N/A',
+            })
+        return jsonify({'success': True, 'logs': logs})
+    except Exception as e:
+        print(f"Error in dean college attendance: {e}")
+        if conn:
+            try: conn.rollback()
+            except: pass
+        return jsonify({'success': False, 'error': str(e)})
+    finally:
+        if cursor: cursor.close()
+        if conn: db_pool.return_connection(conn)
+
+
+@app.route('/api/dean/college-campus-attendance')
+@require_auth([20002])
+def api_dean_college_campus_attendance():
+    """Campus attendance records for all faculty in the dean's college."""
+    conn = None
+    cursor = None
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT college_id FROM personnel WHERE user_id = %s", (session['user_id'],))
+        row = cursor.fetchone()
+        if not row or not row[0]:
+            return jsonify({'success': False, 'error': 'College not found for this dean'})
+        college_id = row[0]
+
+        semester_id = request.args.get('semester_id')
+        sem_start = sem_end = None
+        if semester_id:
+            cursor.execute("SELECT semesterstart, semesterend FROM acadcalendar WHERE acadcalendar_id = %s", (int(semester_id),))
+            sem = cursor.fetchone()
+            if sem:
+                sem_start, sem_end = sem[0], sem[1]
+
+        date_filter = "AND ca.attendance_date BETWEEN %s AND %s" if (sem_start and sem_end) else ""
+        params = [college_id] + ([sem_start, sem_end] if (sem_start and sem_end) else [])
+
+        cursor.execute("""
+            SELECT
+                ca.campus_attendance_id,
+                CONCAT(p.lastname, ', ', p.firstname,
+                    CASE WHEN p.honorifics IS NOT NULL AND p.honorifics <> ''
+                         THEN ', ' || p.honorifics ELSE '' END) AS person_name,
+                ca.attendance_date, ca.session,
+                ca.time_in, ca.time_out, ca.status,
+                pr.position, pr.employmentstatus
+            FROM campus_attendance ca
+            INNER JOIN personnel p ON ca.personnel_id = p.personnel_id
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            WHERE p.college_id = %s
+            """ + date_filter + """
+            ORDER BY ca.attendance_date DESC, person_name, ca.session
+        """, params)
+
+        records = []
+        for row in cursor.fetchall():
+            records.append({
+                'id': row[0], 'name': row[1],
+                'date': row[2].isoformat() if row[2] else None,
+                'session': row[3],
+                'time_in': row[4].isoformat() if row[4] else None,
+                'time_out': row[5].isoformat() if row[5] else None,
+                'status': row[6],
+                'position': row[7] or 'N/A',
+                'employment_status': row[8] or 'N/A',
+            })
+        return jsonify({'success': True, 'records': records})
+    except Exception as e:
+        print(f"Error in dean college campus attendance: {e}")
+        if conn:
+            try: conn.rollback()
+            except: pass
+        return jsonify({'success': False, 'error': str(e)})
+    finally:
+        if cursor: cursor.close()
+        if conn: db_pool.return_connection(conn)
+
+
+@app.route('/api/dean/college-analytics')
+@require_auth([20002])
+def api_dean_college_analytics():
+    """Class attendance analytics for all faculty in the dean's college."""
+    conn = None
+    cursor = None
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT college_id FROM personnel WHERE user_id = %s", (session['user_id'],))
+        row = cursor.fetchone()
+        if not row or not row[0]:
+            return jsonify({'success': False, 'error': 'College not found'})
+        college_id = row[0]
+
+        semester_id = request.args.get('semester_id')
+        sem_start = sem_end = None
+        if semester_id:
+            cursor.execute("SELECT semesterstart, semesterend FROM acadcalendar WHERE acadcalendar_id = %s", (int(semester_id),))
+            sem = cursor.fetchone()
+            if sem:
+                sem_start, sem_end = sem[0], sem[1]
+
+        date_filter = "AND a.timein::date BETWEEN %s AND %s" if (sem_start and sem_end) else ""
+        params_date = [sem_start, sem_end] if (sem_start and sem_end) else []
+
+        # KPIs
+        cursor.execute(f"""
+            SELECT
+                COUNT(*) FILTER (WHERE a.attendancestatus = 'Present') AS present,
+                COUNT(*) FILTER (WHERE a.attendancestatus = 'Late')    AS late,
+                COUNT(*) FILTER (WHERE a.attendancestatus = 'Absent')  AS absent,
+                COUNT(*) FILTER (WHERE a.attendancestatus = 'Excused') AS excused,
+                COUNT(*) AS total
+            FROM attendance a
+            JOIN personnel p ON a.personnel_id = p.personnel_id
+            WHERE p.college_id = %s AND p.role_id IN (20001, 20002)
+            {date_filter}
+        """, [college_id] + params_date)
+        krow = cursor.fetchone() or (0, 0, 0, 0, 0)
+        kp, kl, ka, ke, kt = (int(x) for x in krow)
+        avg_rate = round(((kp + ke + kl * 0.75) / kt) * 100, 1) if kt > 0 else 0.0
+
+        # Trends (weekly)
+        trends = []
+        if sem_start and sem_end:
+            cursor.execute("""
+                WITH weeks AS (
+                    SELECT generate_series(DATE_TRUNC('week', %s::date),
+                                           DATE_TRUNC('week', %s::date),
+                                           INTERVAL '1 week')::date AS week_start
+                ),
+                agg AS (
+                    SELECT DATE_TRUNC('week', a.timein::date)::date AS week_start,
+                        COUNT(*) FILTER (WHERE a.attendancestatus = 'Present') AS present,
+                        COUNT(*) FILTER (WHERE a.attendancestatus = 'Late')    AS late,
+                        COUNT(*) FILTER (WHERE a.attendancestatus = 'Absent')  AS absent,
+                        COUNT(*) AS total
+                    FROM attendance a
+                    JOIN personnel p ON a.personnel_id = p.personnel_id
+                    WHERE p.college_id = %s AND p.role_id IN (20001, 20002)
+                      AND a.timein::date BETWEEN %s AND %s
+                    GROUP BY 1
+                )
+                SELECT w.week_start, COALESCE(a.present,0), COALESCE(a.late,0),
+                       COALESCE(a.absent,0), COALESCE(a.total,0)
+                FROM weeks w LEFT JOIN agg a ON a.week_start = w.week_start
+                ORDER BY w.week_start
+            """, (sem_start, sem_end, college_id, sem_start, sem_end))
+            for r in cursor.fetchall():
+                ws, wp, wl, wa, wt = r
+                rate = round(((int(wp) + int(wl) * 0.75) / int(wt)) * 100, 1) if int(wt) > 0 else 0.0
+                trends.append({'label': ws.strftime('%b %d') if ws else '', 'avg_rate': rate,
+                                'total_present': int(wp), 'total_late': int(wl), 'total_absent': int(wa)})
+
+        cursor.close()
+        db_pool.return_connection(conn)
+        return jsonify({
+            'success': True,
+            'kpis': {'avg_rate': avg_rate, 'total_present': kp, 'total_late': kl,
+                     'total_absent': ka, 'total_excused': ke},
+            'distribution': {'present': kp, 'late': kl, 'absent': ka, 'excused': ke},
+            'trends': trends,
+        })
+    except Exception as e:
+        print(f"Error in dean college analytics: {e}")
+        if conn:
+            try: conn.rollback()
+            except: pass
+        return jsonify({'success': False, 'error': str(e)})
+    finally:
+        if cursor: cursor.close()
+        if conn:
+            try: db_pool.return_connection(conn)
+            except: pass
+
+
+@app.route('/api/dean/college-campus-analytics')
+@require_auth([20002])
+def api_dean_college_campus_analytics():
+    """Campus attendance analytics for all faculty in the dean's college."""
+    conn = None
+    cursor = None
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT college_id FROM personnel WHERE user_id = %s", (session['user_id'],))
+        row = cursor.fetchone()
+        if not row or not row[0]:
+            return jsonify({'success': False, 'error': 'College not found'})
+        college_id = row[0]
+
+        semester_id = request.args.get('semester_id')
+        sem_start = sem_end = None
+        if semester_id:
+            cursor.execute("SELECT semesterstart, semesterend FROM acadcalendar WHERE acadcalendar_id = %s", (int(semester_id),))
+            sem = cursor.fetchone()
+            if sem:
+                sem_start, sem_end = sem[0], sem[1]
+
+        date_filter = "AND ca.attendance_date BETWEEN %s AND %s" if (sem_start and sem_end) else ""
+        params_date = [sem_start, sem_end] if (sem_start and sem_end) else []
+
+        # KPIs
+        cursor.execute(f"""
+            SELECT
+                COUNT(*) FILTER (WHERE ca.status = 'Present') AS present,
+                COUNT(*) FILTER (WHERE ca.status = 'Late')    AS late,
+                COUNT(*) FILTER (WHERE ca.status = 'Absent')  AS absent,
+                COUNT(*) FILTER (WHERE ca.status = 'Excused') AS excused,
+                COUNT(*) AS total
+            FROM campus_attendance ca
+            JOIN personnel p ON ca.personnel_id = p.personnel_id
+            WHERE p.college_id = %s
+            {date_filter}
+        """, [college_id] + params_date)
+        krow = cursor.fetchone() or (0, 0, 0, 0, 0)
+        kp, kl, ka, ke, kt = (int(x) for x in krow)
+        avg_rate = round(((kp + ke + kl * 0.75) / kt) * 100, 1) if kt > 0 else 0.0
+
+        # Trends (weekly)
+        trends = []
+        if sem_start and sem_end:
+            cursor.execute("""
+                WITH weeks AS (
+                    SELECT generate_series(DATE_TRUNC('week', %s::date),
+                                           DATE_TRUNC('week', %s::date),
+                                           INTERVAL '1 week')::date AS week_start
+                ),
+                agg AS (
+                    SELECT DATE_TRUNC('week', ca.attendance_date)::date AS week_start,
+                        COUNT(*) FILTER (WHERE ca.status = 'Present') AS present,
+                        COUNT(*) FILTER (WHERE ca.status = 'Late')    AS late,
+                        COUNT(*) FILTER (WHERE ca.status = 'Absent')  AS absent,
+                        COUNT(*) AS total
+                    FROM campus_attendance ca
+                    JOIN personnel p ON ca.personnel_id = p.personnel_id
+                    WHERE p.college_id = %s AND ca.attendance_date BETWEEN %s AND %s
+                    GROUP BY 1
+                )
+                SELECT w.week_start, COALESCE(a.present,0), COALESCE(a.late,0),
+                       COALESCE(a.absent,0), COALESCE(a.total,0)
+                FROM weeks w LEFT JOIN agg a ON a.week_start = w.week_start
+                ORDER BY w.week_start
+            """, (sem_start, sem_end, college_id, sem_start, sem_end))
+            for r in cursor.fetchall():
+                ws, wp, wl, wa, wt = r
+                rate = round(((int(wp) + int(wl) * 0.75) / int(wt)) * 100, 1) if int(wt) > 0 else 0.0
+                trends.append({'label': ws.strftime('%b %d') if ws else '', 'avg_rate': rate,
+                                'total_present': int(wp), 'total_late': int(wl), 'total_absent': int(wa)})
+
+        cursor.close()
+        db_pool.return_connection(conn)
+        return jsonify({
+            'success': True,
+            'kpis': {'avg_rate': avg_rate, 'total_present': kp, 'total_late': kl,
+                     'total_absent': ka, 'total_excused': ke},
+            'distribution': {'present': kp, 'late': kl, 'absent': ka, 'excused': ke},
+            'trends': trends,
+        })
+    except Exception as e:
+        print(f"Error in dean college campus analytics: {e}")
+        if conn:
+            try: conn.rollback()
+            except: pass
+        return jsonify({'success': False, 'error': str(e)})
+    finally:
+        if cursor: cursor.close()
+        if conn:
+            try: db_pool.return_connection(conn)
+            except: pass
+
 
 @app.route('/faculty_evaluations')
 @require_auth([20001, 20002])
@@ -9172,13 +9524,14 @@ def faculty_promotion():
 
     lock_reasons = []
     available_ranks = []
+    degree_met = True
+    degree_req_label = ''
 
     # Promotion window: June 1 – August 31
-    # DEV: window check disabled for testing
-    # if not (6 <= today.month <= 8):
-    #     lock_reasons.append(
-    #         f"Submission window closed. Promotion applications are only accepted June 1 – August 31 each year."
-    #     )
+    if not (6 <= today.month <= 8):
+        lock_reasons.append(
+            "Submission window closed. Promotion applications are only accepted June 1 – August 31 each year."
+        )
 
     # Active application check
     cursor.execute(
@@ -9246,11 +9599,16 @@ def faculty_promotion():
 
         rank_lock_reasons = []
 
-        # Degree check (doctorate satisfies master's requirement)
-        if req_degree == "doctorate" and not has_doctorate:
-            rank_lock_reasons.append(f"{target_rank} requires a Doctorate Degree.")
-        elif req_degree == "master" and not (has_aligned_master or has_doctorate):
-            rank_lock_reasons.append(f"{target_rank} requires an aligned Master's Degree.")
+        # Degree is no longer a hard lock for submission — shown as a reminder only.
+        if req_degree == "doctorate":
+            degree_met = bool(has_doctorate)
+            degree_req_label = "Doctorate Degree"
+        elif req_degree == "master":
+            degree_met = bool(has_aligned_master or has_doctorate)
+            degree_req_label = "Aligned Master's Degree"
+        else:
+            degree_met = True
+            degree_req_label = "Bachelor's Degree"
 
         # Experience check (years from hire date)
         if years_decimal < req_years:
@@ -9355,14 +9713,6 @@ def faculty_promotion():
     
     at_highest_rank = current_rank == 'Professor'
 
-    # DEV: disable all promotion locks for testing
-    lock_reasons.clear()
-    if not available_ranks and not at_highest_rank:
-        # determine target rank so the form has something to submit
-        target_idx = RANK_ORDER.index(current_rank) + 1 if current_rank in RANK_ORDER else 0
-        if target_idx < len(RANK_ORDER):
-            available_ranks = [RANK_ORDER[target_idx]]
-
     # Stepper display vars — always sourced from latest_row so they persist after approval/rejection
     _STAGE_STATUS = {
         'hrmd': 'Under HR Review',
@@ -9410,6 +9760,9 @@ def faculty_promotion():
         'days_remaining_regular': _days_remaining_regular,
         'expected_regular_date': _expected_regular_date,
         'has_aligned_master': bool(has_aligned_master),
+        'has_doctorate': bool(has_doctorate),
+        'degree_met': degree_met,
+        'degree_req_label': degree_req_label,
         'prob_start_date': _prob_start_date,
         'total_service_days': total_days,
         'current_rank': current_rank,
@@ -11481,7 +11834,7 @@ def hr_promotions():
         
         # === FETCH PROMOTIONS ===
         cursor.execute("""
-            SELECT 
+            SELECT
                 pa.application_id,
                 pa.faculty_id,
                 p.firstname,
@@ -11494,7 +11847,10 @@ def hr_promotions():
                 pa.date_submitted,
                 pa.hrmd_approval_date,
                 pa.vpa_approval_date,
-                pa.pres_approval_date
+                pa.pres_approval_date,
+                pr.highest_degree_level,
+                pr.has_aligned_master,
+                pr.has_doctorate
             FROM promotion_application pa
             JOIN personnel p ON pa.faculty_id = p.personnel_id
             LEFT JOIN college c ON p.college_id = c.college_id
@@ -11508,8 +11864,9 @@ def hr_promotions():
         promotions_list = []
         for promo in promotions:
             (application_id, faculty_id, firstname, lastname, honorifics, collegename,
-             current_rank, requested_rank, current_status, date_submitted, 
-             hrmd_approval, vpa_approval, pres_approval) = promo
+             current_rank, requested_rank, current_status, date_submitted,
+             hrmd_approval, vpa_approval, pres_approval,
+             highest_degree_level, has_aligned_master, has_doctorate) = promo
             
             if honorifics:
                 fullname = f"{lastname}, {firstname}, {honorifics}"
@@ -11526,7 +11883,10 @@ def hr_promotions():
                 'currentrank': current_rank or 'Instructor',
                 'requestedrank': requested_rank or 'Not Specified',
                 'status': status_display,
-                'submitteddate': date_submitted.strftime('%Y-%m-%d') if date_submitted else 'N/A'
+                'submitteddate': date_submitted.strftime('%Y-%m-%d') if date_submitted else 'N/A',
+                'highest_degree_level': highest_degree_level or '',
+                'has_aligned_master': bool(has_aligned_master),
+                'has_doctorate': bool(has_doctorate),
             })
         
         # === FETCH ELIGIBLE FACULTY + ACTIVE REGULARIZATIONS ===
@@ -12412,15 +12772,14 @@ def promotion_document_upload():
     if not userid:
         return "Unauthorized", 401
 
-    # DEV: submission window check disabled for testing
     # Enforce the official promotion submission window: June 1 – August 31
-    # from datetime import date as _date
-    # _today = _date.today()
-    # if not (6 <= _today.month <= 8):
-    #     return (
-    #         "Promotion applications are only accepted between June 1 and August 31 each year. "
-    #         "Please resubmit during the official submission period."
-    #     ), 403
+    from datetime import date as _date
+    _today = _date.today()
+    if not (6 <= _today.month <= 8):
+        return (
+            "Promotion applications are only accepted between June 1 and August 31 each year. "
+            "Please resubmit during the official submission period."
+        ), 403
 
     conn = db_pool.get_connection()
     cursor = conn.cursor()
@@ -12436,6 +12795,16 @@ def promotion_document_upload():
         return "Faculty record not found for the current user.", 400
 
     faculty_id = result[0]
+
+    # Prevent duplicate submissions: block if an active application already exists
+    cursor.execute(
+        "SELECT COUNT(*) FROM promotion_application WHERE faculty_id = %s AND final_decision IS NULL",
+        (faculty_id,)
+    )
+    if cursor.fetchone()[0] > 0:
+        cursor.close()
+        db_pool.return_connection(conn)
+        return "You already have an active promotion application under review. Please wait for the current application to be resolved before submitting a new one.", 400
 
     # Get requested rank from form
     requested_rank = request.form.get('requested_rank')
