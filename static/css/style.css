@@ -4357,6 +4357,47 @@ table:has(#campusEntryBody) thead th:nth-child(4) {
   color: var(--spc-maroon);
 }
 
+/* Bell ring animation — triggered when unread license alerts exist */
+@keyframes bell-ring {
+  0%, 100% { transform: rotate(0deg); }
+  10%       { transform: rotate(-20deg); }
+  20%       { transform: rotate(20deg); }
+  30%       { transform: rotate(-15deg); }
+  40%       { transform: rotate(15deg); }
+  50%       { transform: rotate(-10deg); }
+  60%       { transform: rotate(10deg); }
+  70%       { transform: rotate(-5deg); }
+  80%       { transform: rotate(5deg); }
+  90%       { transform: rotate(-2deg); }
+}
+
+@keyframes license-glow {
+  0%, 100% { box-shadow: 0 0 0 2px #fed7aa, var(--shadow); }
+  50%       { box-shadow: 0 0 0 4px #fdba74, 0 0 16px rgba(234,88,12,.35); }
+}
+
+.notif-bell-btn.has-license-alert {
+  background: #fff7ed;
+  color: #ea580c;
+  animation: license-glow 2s ease-in-out infinite;
+  transform-origin: top center;
+}
+
+.notif-bell-btn.has-license-alert i {
+  display: inline-block;
+  animation: bell-ring 1.8s ease-in-out infinite;
+  transform-origin: top center;
+}
+
+.notif-bell-btn.has-license-alert:hover {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.notif-bell-btn.has-license-alert .notif-badge {
+  background: #ea580c;
+}
+
 .notif-badge {
   position: absolute;
   top: -4px;

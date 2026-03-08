@@ -172,6 +172,36 @@
         <div><span style="color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:2px;">Uploaded</span><strong id="modal-date-uploaded">—</strong></div>
       </div>
     </div>
+
+    <!-- Degree details panel — sibling of license panel, shown when a degree is clicked -->
+    <div id="degree-details-panel" style="display:none;background:#f0fdf4;padding:12px 18px;border-bottom:1px solid #bbf7d0;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;font-size:13px;flex-wrap:wrap;">
+        <div style="display:flex;gap:24px;">
+          <div>
+            <span style="color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:2px;">Master's Status</span>
+            <strong id="modal-degree-status">—</strong>
+          </div>
+          <div>
+            <span style="color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:2px;">Probation Start</span>
+            <strong id="modal-probation-start">—</strong>
+          </div>
+        </div>
+        <div id="degree-verify-section" style="display:none;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <div>
+              <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:3px;">Set probation start date</label>
+              <input type="date" id="degree-verify-date"
+                     style="padding:5px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;">
+            </div>
+            <button id="degree-verify-btn"
+                    style="padding:7px 16px;background:#16a34a;color:#fff;border:none;border-radius:7px;
+                           font-size:12px;font-weight:600;cursor:pointer;margin-top:14px;">
+              ✓ Verify as Master's
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="modal-body">
       <div id="document-container" style="width:100%;height:70vh;overflow:auto;background:#f5f5f5;border-radius:8px;">
         <iframe id="document-viewer" style="width:100%;height:100%;border:none;display:none;"></iframe>
@@ -188,6 +218,7 @@
 
 {% block extra_scripts %}
 <script>
+const __isHrViewing = {{ is_hr_viewing | tojson }};
 let currentProfile = {};
 let allSemesters = [];
 let currentSemesterIndex = 0;
@@ -413,7 +444,11 @@ function displayProfile() {
   }
   
   displayDocuments('licenses', currentProfile.licenses || [], currentProfile.licenses_filename || [], currentProfile.licenses_tracker || []);
-  displayDocuments('degrees', currentProfile.degrees || [], currentProfile.degrees_filename || []);
+  displayDocuments('degrees', currentProfile.degrees || [], currentProfile.degrees_filename || [], null, {
+    has_aligned_master:      !!currentProfile.has_aligned_master,
+    probationary_start_date: currentProfile.probationary_start_date || null,
+    personnel_id:            currentProfile.personnel_id,
+  });
   displayDocuments('certificates', currentProfile.certificates || [], currentProfile.certificates_filename || []);
   displayDocuments('publications', currentProfile.publications || [], currentProfile.publications_filename || []);
   displayDocuments('awards', currentProfile.awards || [], currentProfile.awards_filename || []);
@@ -445,7 +480,7 @@ function getExpiryBadge(expirationDate) {
   return `<span style="display:inline-block;margin-top:5px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;background:#dcfce7;color:#16a34a;"><i class="fas fa-check-circle" style="margin-right:3px;"></i>Valid</span>`;
 }
 
-function displayDocuments(docType, documents, filenames, trackerData) {
+function displayDocuments(docType, documents, filenames, trackerData, degreeInfo) {
   const displayElement = document.getElementById(docType + '-display');
   if (!displayElement) return;
 
@@ -462,41 +497,53 @@ function displayDocuments(docType, documents, filenames, trackerData) {
     const tracker = (docType === 'licenses' && trackerData && trackerData[index]) ? trackerData[index] : null;
 
     let icon = 'fa-file';
-    if (['pdf'].includes(ext)) {
-      icon = 'fa-file-pdf';
-    } else if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
-      icon = 'fa-file-image';
-    } else if (['doc', 'docx'].includes(ext)) {
-      icon = 'fa-file-word';
-    }
+    if (['pdf'].includes(ext))                        icon = 'fa-file-pdf';
+    else if (['jpg','jpeg','png','gif'].includes(ext)) icon = 'fa-file-image';
+    else if (['doc','docx'].includes(ext))            icon = 'fa-file-word';
 
     const card = document.createElement('div');
     card.className = 'document-card';
-    card.onclick = () => viewDocument(doc, filename, ext, tracker);
 
+    // License metadata
     const metaHtml = tracker ? `
       ${tracker.license_number ? `<div style="font-size:11px;color:#555;margin-top:4px;"><i class="fas fa-id-badge" style="margin-right:3px;"></i>No. ${tracker.license_number}</div>` : ''}
       ${tracker.expiration_date ? `<div style="font-size:11px;color:#888;margin-top:2px;"><i class="fas fa-calendar-alt" style="margin-right:3px;"></i>Exp: ${tracker.expiration_date}</div>` : ''}
       ${tracker.expiration_date ? getExpiryBadge(tracker.expiration_date) : ''}
     ` : '';
 
+    // Degree verification badge
+    let degreeBadge = '';
+    if (docType === 'degrees' && degreeInfo) {
+      if (degreeInfo.has_aligned_master) {
+        degreeBadge = `<div style="margin-top:5px;display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;background:#dcfce7;color:#16a34a;">
+          <i class="fas fa-check-circle"></i> Master's Verified</div>`;
+      } else {
+        degreeBadge = `<div style="margin-top:5px;display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;background:#fef9c3;color:#ca8a04;">
+          <i class="fas fa-exclamation-circle"></i> Unverified</div>`;
+      }
+    }
+
+    card.onclick = () => viewDocument(doc, filename, ext, tracker,
+      docType === 'degrees' ? degreeInfo : null);
+
     card.innerHTML = `
       <i class="fas ${icon} document-icon"></i>
       <div class="document-name">${filename}</div>
-      ${metaHtml}
+      ${metaHtml}${degreeBadge}
     `;
 
     displayElement.appendChild(card);
   });
 }
 
-function viewDocument(docBase64, filename, ext, trackerInfo) {
+function viewDocument(docBase64, filename, ext, trackerInfo, degreeInfo) {
   const modal = document.getElementById('document-modal');
   const title = document.getElementById('modal-title');
   const iframe = document.getElementById('document-viewer');
   const img = document.getElementById('image-viewer');
   const container = document.getElementById('document-container');
-  const detailsPanel = document.getElementById('license-details-panel');
+  const licensePanel = document.getElementById('license-details-panel');
+  const degreePanel  = document.getElementById('degree-details-panel');
 
   title.textContent = filename;
   iframe.style.display = 'none';
@@ -504,15 +551,42 @@ function viewDocument(docBase64, filename, ext, trackerInfo) {
   iframe.src = '';
   img.src = '';
 
+  // License panel
   if (trackerInfo) {
-    detailsPanel.style.display = 'block';
+    licensePanel.style.display = 'block';
     document.getElementById('modal-license-type').textContent = trackerInfo.license_type || '—';
     document.getElementById('modal-license-number').textContent = trackerInfo.license_number || '—';
     document.getElementById('modal-expiration-date').textContent = trackerInfo.expiration_date || '—';
     const uploaded = trackerInfo.date_uploaded ? trackerInfo.date_uploaded.split(' ')[0] : '—';
     document.getElementById('modal-date-uploaded').textContent = uploaded;
   } else {
-    detailsPanel.style.display = 'none';
+    licensePanel.style.display = 'none';
+  }
+
+  // Degree panel
+  if (degreeInfo) {
+    degreePanel.style.display = 'block';
+    const verified = !!degreeInfo.has_aligned_master;
+    document.getElementById('modal-degree-status').innerHTML = verified
+      ? '<span style="color:#16a34a;font-weight:700;">✓ Master\'s Verified</span>'
+      : '<span style="color:#ca8a04;font-weight:700;">⚠ Not yet verified</span>';
+    document.getElementById('modal-probation-start').textContent =
+      degreeInfo.probationary_start_date || '—';
+
+    // Show verify controls only for HR and only when not yet verified
+    const verifySection = document.getElementById('degree-verify-section');
+    if (window.__isHrViewing && !verified) {
+      verifySection.style.display = 'block';
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('degree-verify-date').value = today;
+      document.getElementById('degree-verify-btn').onclick = function() {
+        verifyMasterDegree(degreeInfo.personnel_id, document.getElementById('degree-verify-date').value);
+      };
+    } else {
+      verifySection.style.display = 'none';
+    }
+  } else {
+    degreePanel.style.display = 'none';
   }
   
   if (['jpg', 'jpeg', 'png', 'gif'].includes(ext.toLowerCase())) {
@@ -599,6 +673,37 @@ function closeDocumentModal() {
   container.style.overflow = 'auto';
   container.style.padding = '0';
   document.getElementById('license-details-panel').style.display = 'none';
+  document.getElementById('degree-details-panel').style.display = 'none';
+}
+
+async function verifyMasterDegree(personnelId, probStart) {
+  const btn = document.getElementById('degree-verify-btn');
+  btn.disabled = true;
+  btn.textContent = 'Verifying...';
+  try {
+    const res = await fetch('/api/hr/verify-master-degree', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ personnel_id: personnelId, probationary_start_date: probStart })
+    });
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('modal-degree-status').innerHTML =
+        '<span style="color:#16a34a;font-weight:700;">✓ Master\'s Verified</span>';
+      document.getElementById('modal-probation-start').textContent = data.probationary_start_date;
+      document.getElementById('degree-verify-section').style.display = 'none';
+      // Refresh the degree cards
+      loadProfile();
+    } else {
+      alert('Verification failed: ' + (data.error || 'Unknown error'));
+      btn.disabled = false;
+      btn.textContent = '✓ Verify as Master\'s';
+    }
+  } catch (err) {
+    alert('Network error. Please try again.');
+    btn.disabled = false;
+    btn.textContent = '✓ Verify as Master\'s';
+  }
 }
 
 window.onclick = function(event) {

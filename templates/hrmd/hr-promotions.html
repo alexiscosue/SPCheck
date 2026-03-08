@@ -397,6 +397,13 @@
                   </a>
                   {% if reg.has_application %}
                     <span class="status {{ reg.status_class }}" style="font-size:11px;">{{ reg.status }}</span>
+                  {% elif reg.needs_master_check %}
+                    <a href="/hr_employee_profile/{{ reg.personnel_id }}"
+                       style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;
+                              background:#f59e0b;color:#fff;border-radius:7px;font-size:12px;
+                              font-weight:600;text-decoration:none;">
+                      <i class='bx bx-certification' style="font-size:14px;"></i> Check Master's Degree
+                    </a>
                   {% else %}
                     <button class="btn-action initiate-reg-btn"
                             style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#7b1113;color:#fff;border-radius:7px;font-size:12px;font-weight:600;border:none;cursor:pointer;"
