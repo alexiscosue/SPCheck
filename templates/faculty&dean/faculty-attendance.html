@@ -71,6 +71,7 @@
         <button id="prevPage" class="pagination-btn">‹</button>
         <span id="pageInfo">1 of 1 (0 records)</span>
         <button id="nextPage" class="pagination-btn">›</button>
+        {% if is_dean %}<button id="exportClassPdfBtn" onclick="exportClassAttendancePdf()" style="margin-left:auto;padding:6px 14px;background:#7b1113;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;"><i class='bx bx-download'></i> Export PDF</button>{% endif %}
       </div>
       <div class="table">
         <table class="attendance-table" id="logsTable">
@@ -96,6 +97,7 @@
         <button id="campusPrevPage" class="hr-pagination-btn">‹</button>
         <span id="campusPageInfo">0 records</span>
         <button id="campusNextPage" class="hr-pagination-btn">›</button>
+        {% if is_dean %}<button id="exportCampusPdfBtn" onclick="exportCampusAttendancePdf()" style="margin-left:auto;padding:6px 14px;background:#7b1113;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;"><i class='bx bx-download'></i> Export PDF</button>{% endif %}
       </div>
       <div class="table">
         <table class="hr-attendance-table" id="campusTable">
@@ -134,10 +136,6 @@
 
     <!-- Analytics Tab -->
     <div id="analytics" class="tab-content" style="padding:16px;">
-      <div id="collegeViewLabel" style="display:none; align-items:center; gap:8px; margin-bottom:12px; padding:8px 12px; background:#fdf2f2; border:1px solid #fca5a5; border-radius:8px;">
-        <i class='bx bx-buildings' style="color:var(--spc-maroon); font-size:15px;"></i>
-        <span id="collegeViewLabelText" style="font-size:13px; color:var(--spc-maroon);"></span>
-      </div>
       <div class="attendance-sub-tabs">
         <div class="attendance-sub-tab active" data-subtab="sub-analytics-class">Class Attendance</div>
         <div class="attendance-sub-tab" data-subtab="sub-analytics-campus">Campus Attendance</div>
@@ -183,7 +181,8 @@
           </div>
         </div>
 
-        <div style="margin-top:20px">
+        <!-- Self mode: simple class breakdown -->
+        <div id="selfClassBreakdown" style="margin-top:20px">
           <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Class Breakdown</div>
           <div class="pagination-controls">
             <button id="cbPrev" class="pagination-btn">‹</button>
@@ -202,12 +201,74 @@
                   <th style="text-align:center;cursor:pointer" data-sort-cb="excused">Excused <span class="cb-sort-icon">↕</span></th>
                   <th style="text-align:center;cursor:pointer" data-sort-cb="total">Total <span class="cb-sort-icon">↕</span></th>
                   <th style="text-align:center;cursor:pointer" data-sort-cb="rate">Rate <span class="cb-sort-icon">↑</span></th>
+                  {% if is_dean %}<th style="text-align:center">PDF</th>{% endif %}
                 </tr>
               </thead>
               <tbody id="cbBody">
                 <tr><td colspan="8" style="text-align:center;padding:2rem;color:#6b7280">Select a semester to view breakdown</td></tr>
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <!-- College mode: inner sub-tabs (Class Attendance + Total Class Attendance) -->
+        <div id="collegeClassBreakdown" style="display:none; margin-top:20px">
+          <div class="attendance-sub-tabs" style="margin-bottom:12px">
+            <div class="attendance-sub-tab active" data-collegesubtab="sub-college-classbd">Class Attendance</div>
+            <div class="attendance-sub-tab" data-collegesubtab="sub-college-facultybd">Total Class Attendance</div>
+          </div>
+
+          <div id="sub-college-classbd" class="sub-tab-content active">
+            <div class="pagination-controls">
+              <button id="collegeBdPrev" class="pagination-btn">‹</button>
+              <span id="collegeBdPageInfo">0 records</span>
+              <button id="collegeBdNext" class="pagination-btn">›</button>
+            </div>
+            <div class="table">
+              <table class="attendance-table">
+                <thead><tr>
+                  <th style="cursor:pointer" data-sort-collegebd="faculty_name">Faculty <span class="collegebd-sort-icon">↕</span></th>
+                  <th style="cursor:pointer" data-sort-collegebd="subject_code">Subject <span class="collegebd-sort-icon">↕</span></th>
+                  <th style="cursor:pointer" data-sort-collegebd="section">Section <span class="collegebd-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegebd="present">Present <span class="collegebd-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegebd="late">Late <span class="collegebd-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegebd="absent">Absent <span class="collegebd-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegebd="excused">Excused <span class="collegebd-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegebd="total">Total <span class="collegebd-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegebd="rate">Rate <span class="collegebd-sort-icon">↑</span></th>
+                  {% if is_dean %}<th style="text-align:center">PDF</th>{% endif %}
+                </tr></thead>
+                <tbody id="collegeBdBody">
+                  <tr><td colspan="9" style="text-align:center;padding:2rem;color:#6b7280">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="sub-college-facultybd" class="sub-tab-content">
+            <div class="pagination-controls">
+              <button id="collegeFbPrev" class="pagination-btn">‹</button>
+              <span id="collegeFbPageInfo">0 records</span>
+              <button id="collegeFbNext" class="pagination-btn">›</button>
+            </div>
+            <div class="table">
+              <table class="attendance-table">
+                <thead><tr>
+                  <th style="cursor:pointer" data-sort-collegefb="faculty_name">Faculty <span class="collegefb-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegefb="classes">Classes <span class="collegefb-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegefb="present">Present <span class="collegefb-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegefb="late">Late <span class="collegefb-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegefb="absent">Absent <span class="collegefb-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegefb="excused">Excused <span class="collegefb-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegefb="total">Total <span class="collegefb-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegefb="rate">Rate <span class="collegefb-sort-icon">↑</span></th>
+                  {% if is_dean %}<th style="text-align:center">PDF</th>{% endif %}
+                </tr></thead>
+                <tbody id="collegeFbBody">
+                  <tr><td colspan="8" style="text-align:center;padding:2rem;color:#6b7280">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div><!-- /sub-analytics-class -->
@@ -248,6 +309,41 @@
               <canvas id="caDistChart"></canvas>
             </div>
             <div id="caDistLegend" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center"></div>
+          </div>
+        </div>
+
+        <!-- College mode: faculty campus breakdown table -->
+        <div id="collegeCaSection" style="display:none; margin-top:20px">
+          <div class="pagination-controls">
+            <button id="collegeCaPrev" class="pagination-btn">‹</button>
+            <span id="collegeCaPageInfo">0 records</span>
+            <button id="collegeCaNext" class="pagination-btn">›</button>
+          </div>
+          <div class="table">
+            <table class="attendance-table">
+              <thead>
+                <tr>
+                  <th rowspan="2" style="vertical-align:middle;cursor:pointer" data-sort-collegeca="faculty_name">Faculty <span class="collegeca-sort-icon">↕</span></th>
+                  <th colspan="3" style="text-align:center">Morning</th>
+                  <th colspan="3" style="text-align:center">Afternoon</th>
+                  <th colspan="2" style="text-align:center">Overall</th>
+                  {% if is_dean %}<th rowspan="2" style="text-align:center;vertical-align:middle">PDF</th>{% endif %}
+                </tr>
+                <tr>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegeca="morning_present">Present <span class="collegeca-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegeca="morning_late">Late <span class="collegeca-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegeca="morning_absent">Absent <span class="collegeca-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegeca="afternoon_present">Present <span class="collegeca-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegeca="afternoon_late">Late <span class="collegeca-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegeca="afternoon_absent">Absent <span class="collegeca-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegeca="total_sessions">Sessions <span class="collegeca-sort-icon">↕</span></th>
+                  <th style="text-align:center;cursor:pointer" data-sort-collegeca="rate">Rate <span class="collegeca-sort-icon">↑</span></th>
+                </tr>
+              </thead>
+              <tbody id="collegeCaBody">
+                <tr><td colspan="10" style="text-align:center;padding:2rem;color:#6b7280">Loading...</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -307,10 +403,11 @@
   });
 
   // ── Analytics sub-tab switching ────────────────────────────────
-  document.querySelectorAll('#analytics .attendance-sub-tab').forEach(btn => {
+  document.querySelectorAll('#analytics > .attendance-sub-tabs > [data-subtab]').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('#analytics .attendance-sub-tab').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('#analytics .sub-tab-content').forEach(c => c.classList.remove('active'));
+      document.querySelectorAll('#analytics > .attendance-sub-tabs > [data-subtab]').forEach(b => b.classList.remove('active'));
+      document.getElementById('sub-analytics-class').classList.remove('active');
+      document.getElementById('sub-analytics-campus').classList.remove('active');
       btn.classList.add('active');
       document.getElementById(btn.dataset.subtab).classList.add('active');
     });
@@ -401,6 +498,7 @@
     if (data.action === 'entry') { icon = 'bx-log-in-circle'; colorClass = 'success'; title = 'Entry Recorded'; }
     else if (data.action === 'exit') { icon = 'bx-log-out-circle'; colorClass = 'success'; title = 'Exit Recorded'; }
     else if (data.action === 'buffer_period') { icon = 'bx-time'; colorClass = 'info'; title = 'Already Scanned'; }
+    else if (data.action === 'outside_buffer') { icon = 'bx-time-five'; colorClass = 'warning'; title = 'Outside Session Hours'; }
     else if (data.action === 'unknown_biometric') { icon = 'bx-error-circle'; colorClass = 'error'; title = 'Unknown Fingerprint'; }
     notification.classList.add(colorClass);
     let content = `
@@ -412,10 +510,20 @@
       <div class="notification-body">
         <div class="notification-time">${formatTapTime(data.tap_time)}</div>`;
     if (data.person_name) content += `<div class="notification-class"><strong>${data.person_name}</strong></div>`;
+    if (data.session) {
+      const sessionIcon = data.session === 'Morning' ? 'bx-sun' : 'bx-moon';
+      content += `<div class="notification-class" style="font-size:12px;color:#6b7280"><i class='bx ${sessionIcon}' style="vertical-align:middle;margin-right:3px"></i>${data.session} Session</div>`;
+    }
     content += `<div class="notification-message">${data.message}</div></div>`;
     notification.innerHTML = content;
     container.appendChild(notification);
     setTimeout(() => notification.classList.add('show'), 10);
+    setTimeout(() => {
+      if (notification.parentElement) {
+        notification.classList.remove('show');
+        setTimeout(() => { if (notification.parentElement) notification.remove(); }, 300);
+      }
+    }, 10000);
   }
 
   // ── State ──────────────────────────────────────────────────────
@@ -450,6 +558,19 @@
   let collegeAnalyticsTrendChart = null, collegeAnalyticsDistChart = null;
   let collegeCaTrendChart = null, collegeCaDistChart = null;
   const colPerPage = 10;
+
+  // College class breakdown state
+  let collegeBdAllData = [], collegeBdFiltered = [], collegeBdPage = 1;
+  let collegeBdSort = { column: 'rate', direction: 'asc' };
+  const collegeBdPerPage = 10;
+  // College faculty-total breakdown state
+  let collegeFbAllData = [], collegeFbFiltered = [], collegeFbPage = 1;
+  let collegeFbSort = { column: 'rate', direction: 'asc' };
+  const collegeFbPerPage = 10;
+  // College campus breakdown state
+  let collegeCaAllData = [], collegeCaFiltered = [], collegeCaPage = 1;
+  let collegeCaSort = { column: 'faculty_name', direction: 'asc' };
+  const collegeCaPerPage = 10;
 
   // ── Semesters & logs data fetch ────────────────────────────────
   async function fetchSemesters() {
@@ -753,14 +874,18 @@
     const slice = cbFiltered.slice(start, start + cbPerPage);
 
     if (slice.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:#6b7280">' +
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:2rem;color:#6b7280">' +
         (cbAllData.length === 0 ? 'No data for this semester' : 'No records match your search') +
         '</td></tr>';
     } else {
+      const semId = document.getElementById('globalSemesterSelect')?.value || '';
       tbody.innerHTML = slice.map(function(r) {
         const rate = r.rate;
         const rateColor = rate >= 80 ? '#16a34a' : rate >= 60 ? '#92400e' : '#b91c1c';
         const rateBg    = rate >= 80 ? '#d1fae5' : rate >= 60 ? '#fef3c7' : '#fee2e2';
+        const dlBtn = IS_DEAN && r.class_id && currentPersonnelId
+          ? '<button onclick="downloadClassPdf(' + currentPersonnelId + ',' + r.class_id + ',\'' + semId + '\')" title="Download PDF" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:#7b1113;font-size:16px;"><i class=\'bx bx-download\'></i></button>'
+          : '';
         return '<tr>' +
           '<td>' + r.subject_code + ' — ' + r.subject_name + '</td>' +
           '<td>' + r.section + '</td>' +
@@ -771,6 +896,7 @@
           '<td style="text-align:center">' + r.total + '</td>' +
           '<td style="text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;background:' +
           rateBg + ';color:' + rateColor + '">' + rate.toFixed(1) + '%</span></td>' +
+          (IS_DEAN ? '<td style="text-align:center">' + dlBtn + '</td>' : '') +
           '</tr>';
       }).join('');
     }
@@ -846,6 +972,16 @@
             label: 'Absent Sessions',
             data: trends.map(t => t.total_absent),
             borderColor: '#ef4444',
+            backgroundColor: 'transparent',
+            tension: 0.4,
+            yAxisID: 'yCounts',
+            pointRadius: 3,
+            borderDash: [5, 3]
+          },
+          {
+            label: 'Excused Sessions',
+            data: trends.map(t => t.total_excused || 0),
+            borderColor: '#8b5cf6',
             backgroundColor: 'transparent',
             tension: 0.4,
             yAxisID: 'yCounts',
@@ -941,7 +1077,8 @@
           { label: 'Avg. Rate (%)', data: trends.map(t => t.avg_rate), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', fill: true, tension: 0.4, yAxisID: 'yRate', pointRadius: 4, pointHoverRadius: 6 },
           { label: 'Present Sessions', data: trends.map(t => t.total_present), borderColor: '#10b981', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
           { label: 'Late Sessions', data: trends.map(t => t.total_late), borderColor: '#f59e0b', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
-          { label: 'Absent Sessions', data: trends.map(t => t.total_absent), borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] }
+          { label: 'Absent Sessions', data: trends.map(t => t.total_absent), borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
+          { label: 'Excused Sessions', data: trends.map(t => t.total_excused || 0), borderColor: '#8b5cf6', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] }
         ]
       },
       options: {
@@ -1068,12 +1205,7 @@
     viewMode = mode;
     const semId = document.getElementById('globalSemesterSelect')?.value;
     const calTab = document.querySelector('[data-tab="calendar"]');
-    const label = document.getElementById('collegeViewLabel');
-    const labelText = document.getElementById('collegeViewLabelText');
     if (mode === 'college') {
-      // Show college label in analytics tab
-      if (label) { label.style.display = 'flex'; }
-      if (labelText) { labelText.textContent = 'Viewing: {{ college }} — College Attendance'; }
       // Hide Calendar tab in college mode
       if (calTab) calTab.style.display = 'none';
       // If calendar was active, switch to logs
@@ -1087,8 +1219,6 @@
       fetchCollegeLogs(semId);
       fetchCollegeCampusLogs(semId);
     } else {
-      // Hide college label
-      if (label) { label.style.display = 'none'; }
       // Show Calendar tab
       if (calTab) calTab.style.display = '';
       // Restore original headers
@@ -1098,9 +1228,28 @@
       if (currentSemesterId) fetchAttendanceData(currentSemesterId);
       if (campusSemesterLoaded) fetchCampusAttendance(semId);
     }
-    // Reset analytics loaded flag so it reloads for the new mode
+    // Show/hide self vs college breakdown panels
+    const selfBd   = document.getElementById('selfClassBreakdown');
+    const collegeBd = document.getElementById('collegeClassBreakdown');
+    const collegeCaSec = document.getElementById('collegeCaSection');
+    if (mode === 'college') {
+      if (selfBd)      selfBd.style.display      = 'none';
+      if (collegeBd)   collegeBd.style.display   = '';
+      if (collegeCaSec) collegeCaSec.style.display = '';
+    } else {
+      if (selfBd)      selfBd.style.display      = '';
+      if (collegeBd)   collegeBd.style.display   = 'none';
+      if (collegeCaSec) collegeCaSec.style.display = 'none';
+    }
+
+    // If analytics tab is currently active, reload it immediately for the new mode
     analyticsLoaded = false;
     campusSemesterLoaded = false;
+    if (document.getElementById('analytics')?.classList.contains('active')) {
+      if (mode === 'college') fetchCollegeAnalytics(semId);
+      else fetchAnalytics(semId);
+      analyticsLoaded = true;
+    }
   }
 
   async function fetchCollegeLogs(semId) {
@@ -1215,11 +1364,14 @@
         updateAnalyticsKPIs(classData.kpis);
         renderCollegeAnalyticsTrend(classData.trends);
         renderCollegeAnalyticsDist(classData.distribution);
+        renderCollegeBd(classData.faculty_breakdown || []);
+        renderCollegeFb(buildCollegeFacultyOverall(classData.faculty_breakdown || []));
       }
       if (campusData.success) {
         updateCaKPIs(campusData.kpis);
         renderCollegeCaTrend(campusData.trends);
         renderCollegeCaDist(campusData.distribution);
+        renderCollegeCa(campusData.campus_breakdown || []);
       }
     } catch(e) { console.error('Error fetching college analytics:', e); }
   }
@@ -1236,7 +1388,8 @@
           { label: 'Avg. Rate (%)', data: trends.map(t => t.avg_rate), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', fill: true, tension: 0.4, yAxisID: 'yRate', pointRadius: 4, pointHoverRadius: 6 },
           { label: 'Present', data: trends.map(t => t.total_present), borderColor: '#10b981', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
           { label: 'Late', data: trends.map(t => t.total_late), borderColor: '#f59e0b', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
-          { label: 'Absent', data: trends.map(t => t.total_absent), borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] }
+          { label: 'Absent', data: trends.map(t => t.total_absent), borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
+          { label: 'Excused', data: trends.map(t => t.total_excused || 0), borderColor: '#8b5cf6', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] }
         ]
       },
       options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
@@ -1282,7 +1435,8 @@
           { label: 'Avg. Rate (%)', data: trends.map(t => t.avg_rate), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', fill: true, tension: 0.4, yAxisID: 'yRate', pointRadius: 4, pointHoverRadius: 6 },
           { label: 'Present', data: trends.map(t => t.total_present), borderColor: '#10b981', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
           { label: 'Late', data: trends.map(t => t.total_late), borderColor: '#f59e0b', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
-          { label: 'Absent', data: trends.map(t => t.total_absent), borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] }
+          { label: 'Absent', data: trends.map(t => t.total_absent), borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
+          { label: 'Excused', data: trends.map(t => t.total_excused || 0), borderColor: '#8b5cf6', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] }
         ]
       },
       options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
@@ -1316,6 +1470,258 @@
     }).join('');
   }
 
+  // ── College Class Breakdown (per-class per-faculty) ────────────
+  function buildCollegeFacultyOverall(breakdown) {
+    const map = {};
+    (breakdown || []).forEach(function(r) {
+      const k = r.personnel_id || r.faculty_name;
+      if (!map[k]) {
+        map[k] = { faculty_name: r.faculty_name, personnel_id: r.personnel_id, classes: 0, present: 0, late: 0, absent: 0, excused: 0, total: 0 };
+      }
+      map[k].classes++;
+      map[k].present  += r.present;
+      map[k].late     += r.late;
+      map[k].absent   += r.absent;
+      map[k].excused  += r.excused;
+      map[k].total    += r.total;
+    });
+    return Object.values(map).map(function(f) {
+      f.rate = f.total > 0 ? ((f.present + f.late * 0.75) / f.total) * 100 : 0;
+      return f;
+    });
+  }
+
+  function renderCollegeBd(breakdown) {
+    collegeBdAllData = breakdown || [];
+    collegeBdPage = 1;
+    collegeBdSort = { column: 'rate', direction: 'asc' };
+    applyCollegeBdFilters();
+    updateCollegeBdSortIcons();
+  }
+
+  function applyCollegeBdFilters() {
+    const q = (document.getElementById('globalSearch')?.value || '').toLowerCase();
+    collegeBdFiltered = collegeBdAllData.filter(function(r) {
+      return !q ||
+        r.faculty_name.toLowerCase().includes(q) ||
+        r.subject_code.toLowerCase().includes(q) ||
+        r.subject_name.toLowerCase().includes(q) ||
+        r.section.toLowerCase().includes(q);
+    });
+    collegeBdFiltered = collegeBdFiltered.slice().sort(function(a, b) {
+      let av = a[collegeBdSort.column], bv = b[collegeBdSort.column];
+      if (typeof av === 'string') av = av.toLowerCase();
+      if (typeof bv === 'string') bv = bv.toLowerCase();
+      if (av < bv) return collegeBdSort.direction === 'asc' ? -1 : 1;
+      if (av > bv) return collegeBdSort.direction === 'asc' ?  1 : -1;
+      return 0;
+    });
+    renderCollegeBdPage();
+  }
+
+  function renderCollegeBdPage() {
+    const tbody = document.getElementById('collegeBdBody');
+    const total = collegeBdFiltered.length;
+    const totalPages = Math.max(1, Math.ceil(total / collegeBdPerPage));
+    if (collegeBdPage > totalPages) collegeBdPage = totalPages;
+    const start = (collegeBdPage - 1) * collegeBdPerPage;
+    const slice = collegeBdFiltered.slice(start, start + collegeBdPerPage);
+    if (slice.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:2rem;color:#6b7280">' +
+        (collegeBdAllData.length === 0 ? 'No data for this semester' : 'No records match your search') + '</td></tr>';
+    } else {
+      const semId = document.getElementById('globalSemesterSelect')?.value || '';
+      tbody.innerHTML = slice.map(function(r) {
+        const rate = r.rate || 0;
+        const rateColor = rate >= 80 ? '#16a34a' : rate >= 60 ? '#92400e' : '#b91c1c';
+        const rateBg    = rate >= 80 ? '#d1fae5' : rate >= 60 ? '#fef3c7' : '#fee2e2';
+        const dlBtn = IS_DEAN && r.personnel_id && r.class_id
+          ? '<button onclick="downloadClassPdf(' + r.personnel_id + ',' + r.class_id + ',\'' + semId + '\')" title="Download PDF" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:#7b1113;font-size:16px;"><i class=\'bx bx-download\'></i></button>'
+          : '';
+        return '<tr>' +
+          '<td>' + r.faculty_name + '</td>' +
+          '<td>' + r.subject_code + ' — ' + r.subject_name + '</td>' +
+          '<td>' + r.section + '</td>' +
+          '<td style="text-align:center">' + r.present + '</td>' +
+          '<td style="text-align:center">' + r.late + '</td>' +
+          '<td style="text-align:center">' + r.absent + '</td>' +
+          '<td style="text-align:center">' + r.excused + '</td>' +
+          '<td style="text-align:center">' + r.total + '</td>' +
+          '<td style="text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;background:' +
+          rateBg + ';color:' + rateColor + '">' + rate.toFixed(1) + '%</span></td>' +
+          (IS_DEAN ? '<td style="text-align:center">' + dlBtn + '</td>' : '') + '</tr>';
+      }).join('');
+    }
+    const from = total === 0 ? 0 : start + 1;
+    const to = Math.min(start + collegeBdPerPage, total);
+    document.getElementById('collegeBdPageInfo').textContent = total === 0 ? '0 records' : from + '–' + to + ' of ' + total;
+    document.getElementById('collegeBdPrev').disabled = collegeBdPage <= 1;
+    document.getElementById('collegeBdNext').disabled = collegeBdPage >= totalPages;
+  }
+
+  function updateCollegeBdSortIcons() {
+    document.querySelectorAll('[data-sort-collegebd]').forEach(function(th) {
+      const icon = th.querySelector('.collegebd-sort-icon');
+      if (!icon) return;
+      const col = th.getAttribute('data-sort-collegebd');
+      icon.textContent = col === collegeBdSort.column ? (collegeBdSort.direction === 'asc' ? '↑' : '↓') : '↕';
+    });
+  }
+
+  // ── College Faculty Total Breakdown ────────────────────────────
+  function renderCollegeFb(facData) {
+    collegeFbAllData = facData || [];
+    collegeFbPage = 1;
+    collegeFbSort = { column: 'rate', direction: 'asc' };
+    applyCollegeFbFilters();
+    updateCollegeFbSortIcons();
+  }
+
+  function applyCollegeFbFilters() {
+    const q = (document.getElementById('globalSearch')?.value || '').toLowerCase();
+    collegeFbFiltered = collegeFbAllData.filter(function(r) {
+      return !q || r.faculty_name.toLowerCase().includes(q);
+    });
+    collegeFbFiltered = collegeFbFiltered.slice().sort(function(a, b) {
+      let av = a[collegeFbSort.column], bv = b[collegeFbSort.column];
+      if (typeof av === 'string') av = av.toLowerCase();
+      if (typeof bv === 'string') bv = bv.toLowerCase();
+      if (av < bv) return collegeFbSort.direction === 'asc' ? -1 : 1;
+      if (av > bv) return collegeFbSort.direction === 'asc' ?  1 : -1;
+      return 0;
+    });
+    renderCollegeFbPage();
+  }
+
+  function renderCollegeFbPage() {
+    const tbody = document.getElementById('collegeFbBody');
+    const total = collegeFbFiltered.length;
+    const totalPages = Math.max(1, Math.ceil(total / collegeFbPerPage));
+    if (collegeFbPage > totalPages) collegeFbPage = totalPages;
+    const start = (collegeFbPage - 1) * collegeFbPerPage;
+    const slice = collegeFbFiltered.slice(start, start + collegeFbPerPage);
+    if (slice.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:2rem;color:#6b7280">' +
+        (collegeFbAllData.length === 0 ? 'No data for this semester' : 'No records match your search') + '</td></tr>';
+    } else {
+      const semId = document.getElementById('globalSemesterSelect')?.value || '';
+      tbody.innerHTML = slice.map(function(r) {
+        const rate = r.rate || 0;
+        const rateColor = rate >= 80 ? '#16a34a' : rate >= 60 ? '#92400e' : '#b91c1c';
+        const rateBg    = rate >= 80 ? '#d1fae5' : rate >= 60 ? '#fef3c7' : '#fee2e2';
+        const dlBtn = IS_DEAN && r.personnel_id
+          ? '<button onclick="downloadFacultyPdf(' + r.personnel_id + ',\'' + semId + '\')" title="Download PDF" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:#7b1113;font-size:16px;"><i class=\'bx bx-download\'></i></button>'
+          : '';
+        return '<tr>' +
+          '<td>' + r.faculty_name + '</td>' +
+          '<td style="text-align:center">' + r.classes + '</td>' +
+          '<td style="text-align:center">' + r.present + '</td>' +
+          '<td style="text-align:center">' + r.late + '</td>' +
+          '<td style="text-align:center">' + r.absent + '</td>' +
+          '<td style="text-align:center">' + r.excused + '</td>' +
+          '<td style="text-align:center">' + r.total + '</td>' +
+          '<td style="text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;background:' +
+          rateBg + ';color:' + rateColor + '">' + rate.toFixed(1) + '%</span></td>' +
+          (IS_DEAN ? '<td style="text-align:center">' + dlBtn + '</td>' : '') + '</tr>';
+      }).join('');
+    }
+    const from = total === 0 ? 0 : start + 1;
+    const to = Math.min(start + collegeFbPerPage, total);
+    document.getElementById('collegeFbPageInfo').textContent = total === 0 ? '0 records' : from + '–' + to + ' of ' + total;
+    document.getElementById('collegeFbPrev').disabled = collegeFbPage <= 1;
+    document.getElementById('collegeFbNext').disabled = collegeFbPage >= totalPages;
+  }
+
+  function updateCollegeFbSortIcons() {
+    document.querySelectorAll('[data-sort-collegefb]').forEach(function(th) {
+      const icon = th.querySelector('.collegefb-sort-icon');
+      if (!icon) return;
+      const col = th.getAttribute('data-sort-collegefb');
+      icon.textContent = col === collegeFbSort.column ? (collegeFbSort.direction === 'asc' ? '↑' : '↓') : '↕';
+    });
+  }
+
+  // ── College Campus Breakdown ────────────────────────────────────
+  function renderCollegeCa(breakdown) {
+    collegeCaAllData = (breakdown || []).map(function(r) {
+      const total   = r.morning_present + r.morning_late + r.morning_absent +
+                      r.afternoon_present + r.afternoon_late + r.afternoon_absent;
+      const present = r.morning_present + r.afternoon_present;
+      const late    = r.morning_late    + r.afternoon_late;
+      const rate    = total > 0 ? ((present + late * 0.75) / total) * 100 : 0;
+      return Object.assign({}, r, { total_sessions: total, rate: rate });
+    });
+    collegeCaPage = 1;
+    collegeCaSort = { column: 'faculty_name', direction: 'asc' };
+    applyCollegeCaFilters();
+    updateCollegeCaSortIcons();
+  }
+
+  function applyCollegeCaFilters() {
+    const q = (document.getElementById('globalSearch')?.value || '').toLowerCase();
+    collegeCaFiltered = collegeCaAllData.filter(function(r) {
+      return !q || r.faculty_name.toLowerCase().includes(q);
+    });
+    collegeCaFiltered = collegeCaFiltered.slice().sort(function(a, b) {
+      let av = a[collegeCaSort.column], bv = b[collegeCaSort.column];
+      if (typeof av === 'string') av = av.toLowerCase();
+      if (typeof bv === 'string') bv = bv.toLowerCase();
+      if (av < bv) return collegeCaSort.direction === 'asc' ? -1 : 1;
+      if (av > bv) return collegeCaSort.direction === 'asc' ?  1 : -1;
+      return 0;
+    });
+    renderCollegeCaPage();
+  }
+
+  function renderCollegeCaPage() {
+    const tbody = document.getElementById('collegeCaBody');
+    const total = collegeCaFiltered.length;
+    const totalPages = Math.max(1, Math.ceil(total / collegeCaPerPage));
+    if (collegeCaPage > totalPages) collegeCaPage = totalPages;
+    const start = (collegeCaPage - 1) * collegeCaPerPage;
+    const slice = collegeCaFiltered.slice(start, start + collegeCaPerPage);
+    if (slice.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:2rem;color:#6b7280">' +
+        (collegeCaAllData.length === 0 ? 'No data for this semester' : 'No records match your search') + '</td></tr>';
+    } else {
+      const semId = document.getElementById('globalSemesterSelect')?.value || '';
+      tbody.innerHTML = slice.map(function(r) {
+        const rate = r.rate || 0;
+        const rateColor = rate >= 80 ? '#16a34a' : rate >= 60 ? '#92400e' : '#b91c1c';
+        const rateBg    = rate >= 80 ? '#d1fae5' : rate >= 60 ? '#fef3c7' : '#fee2e2';
+        const dlBtn = IS_DEAN && r.personnel_id
+          ? '<button onclick="downloadCampusPdf(' + r.personnel_id + ',\'' + semId + '\')" title="Download PDF" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:#7b1113;font-size:16px;"><i class=\'bx bx-download\'></i></button>'
+          : '';
+        return '<tr>' +
+          '<td>' + r.faculty_name + '</td>' +
+          '<td style="text-align:center">' + r.morning_present + '</td>' +
+          '<td style="text-align:center">' + r.morning_late + '</td>' +
+          '<td style="text-align:center">' + r.morning_absent + '</td>' +
+          '<td style="text-align:center">' + r.afternoon_present + '</td>' +
+          '<td style="text-align:center">' + r.afternoon_late + '</td>' +
+          '<td style="text-align:center">' + r.afternoon_absent + '</td>' +
+          '<td style="text-align:center">' + r.total_sessions + '</td>' +
+          '<td style="text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;background:' +
+          rateBg + ';color:' + rateColor + '">' + rate.toFixed(1) + '%</span></td>' +
+          (IS_DEAN ? '<td style="text-align:center">' + dlBtn + '</td>' : '') + '</tr>';
+      }).join('');
+    }
+    const from = total === 0 ? 0 : start + 1;
+    const to = Math.min(start + collegeCaPerPage, total);
+    document.getElementById('collegeCaPageInfo').textContent = total === 0 ? '0 records' : from + '–' + to + ' of ' + total;
+    document.getElementById('collegeCaPrev').disabled = collegeCaPage <= 1;
+    document.getElementById('collegeCaNext').disabled = collegeCaPage >= totalPages;
+  }
+
+  function updateCollegeCaSortIcons() {
+    document.querySelectorAll('[data-sort-collegeca]').forEach(function(th) {
+      const icon = th.querySelector('.collegeca-sort-icon');
+      if (!icon) return;
+      const col = th.getAttribute('data-sort-collegeca');
+      icon.textContent = col === collegeCaSort.column ? (collegeCaSort.direction === 'asc' ? '↑' : '↓') : '↕';
+    });
+  }
+
   // ── Helpers ────────────────────────────────────────────────────
   function rerenderActiveTab() {
     const activeTabEl = document.querySelector('.chart-large .eval-page-tab.active');
@@ -1324,6 +1730,11 @@
     if (viewMode === 'college') {
       if (tab === 'logs') { collegeLogsPage = 1; renderCollegeLogs(); }
       else if (tab === 'campus-attendance') { collegeCampusPage = 1; renderCollegeCampusLogs(); }
+      else if (tab === 'analytics') {
+        collegeBdPage = 1; applyCollegeBdFilters();
+        collegeFbPage = 1; applyCollegeFbFilters();
+        collegeCaPage = 1; applyCollegeCaFilters();
+      }
     } else {
       if (tab === 'logs') { currentPage = 1; renderLogs(); }
       else if (tab === 'campus-attendance') { campusPage = 1; renderCampusLogs(); }
@@ -1410,6 +1821,80 @@
       const totalPages = Math.ceil(campusFiltered.length / campusPerPage);
       if (campusPage < totalPages) { campusPage++; renderCampusLogs(); }
     }
+  });
+
+  // ── PDF Export helpers ─────────────────────────────────────────
+  function downloadClassPdf(personnelId, classId, semesterId) {
+    const semParam = semesterId ? '?semester_id=' + semesterId : '';
+    window.open('/api/hr/faculty-class-attendance-pdf/' + personnelId + '/' + classId + semParam, '_blank');
+  }
+
+  function downloadFacultyPdf(personnelId, semesterId) {
+    const semParam = semesterId ? '?semester_id=' + semesterId : '';
+    window.open('/api/hr/faculty-attendance-report-pdf/' + personnelId + semParam, '_blank');
+  }
+
+  function downloadCampusPdf(personnelId, semesterId) {
+    const semParam = semesterId ? '?semester_id=' + semesterId : '';
+    window.open('/api/hr/campus-attendance-report-pdf/' + personnelId + semParam, '_blank');
+  }
+
+  function exportClassAttendancePdf() {
+    if (!currentPersonnelId) return;
+    const semId = document.getElementById('globalSemesterSelect')?.value || '';
+    downloadFacultyPdf(currentPersonnelId, semId);
+  }
+
+  function exportCampusAttendancePdf() {
+    if (!currentPersonnelId) return;
+    const semId = document.getElementById('globalSemesterSelect')?.value || '';
+    downloadCampusPdf(currentPersonnelId, semId);
+  }
+
+  // ── College inner sub-tab switching ───────────────────────────
+  document.querySelectorAll('[data-collegesubtab]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('[data-collegesubtab]').forEach(function(b) { b.classList.remove('active'); });
+      document.querySelectorAll('#collegeClassBreakdown .sub-tab-content').forEach(function(c) { c.classList.remove('active'); });
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.collegesubtab).classList.add('active');
+    });
+  });
+
+  // ── College class breakdown listeners ─────────────────────────
+  document.getElementById('collegeBdPrev').addEventListener('click', function() { collegeBdPage--; renderCollegeBdPage(); updateCollegeBdSortIcons(); });
+  document.getElementById('collegeBdNext').addEventListener('click', function() { collegeBdPage++; renderCollegeBdPage(); updateCollegeBdSortIcons(); });
+  document.querySelectorAll('[data-sort-collegebd]').forEach(function(th) {
+    th.addEventListener('click', function() {
+      const col = th.getAttribute('data-sort-collegebd');
+      if (collegeBdSort.column === col) { collegeBdSort.direction = collegeBdSort.direction === 'asc' ? 'desc' : 'asc'; }
+      else { collegeBdSort.column = col; collegeBdSort.direction = 'asc'; }
+      collegeBdPage = 1; applyCollegeBdFilters(); updateCollegeBdSortIcons();
+    });
+  });
+
+  // ── College faculty total breakdown listeners ──────────────────
+  document.getElementById('collegeFbPrev').addEventListener('click', function() { collegeFbPage--; renderCollegeFbPage(); updateCollegeFbSortIcons(); });
+  document.getElementById('collegeFbNext').addEventListener('click', function() { collegeFbPage++; renderCollegeFbPage(); updateCollegeFbSortIcons(); });
+  document.querySelectorAll('[data-sort-collegefb]').forEach(function(th) {
+    th.addEventListener('click', function() {
+      const col = th.getAttribute('data-sort-collegefb');
+      if (collegeFbSort.column === col) { collegeFbSort.direction = collegeFbSort.direction === 'asc' ? 'desc' : 'asc'; }
+      else { collegeFbSort.column = col; collegeFbSort.direction = 'asc'; }
+      collegeFbPage = 1; applyCollegeFbFilters(); updateCollegeFbSortIcons();
+    });
+  });
+
+  // ── College campus breakdown listeners ────────────────────────
+  document.getElementById('collegeCaPrev').addEventListener('click', function() { collegeCaPage--; renderCollegeCaPage(); updateCollegeCaSortIcons(); });
+  document.getElementById('collegeCaNext').addEventListener('click', function() { collegeCaPage++; renderCollegeCaPage(); updateCollegeCaSortIcons(); });
+  document.querySelectorAll('[data-sort-collegeca]').forEach(function(th) {
+    th.addEventListener('click', function() {
+      const col = th.getAttribute('data-sort-collegeca');
+      if (collegeCaSort.column === col) { collegeCaSort.direction = collegeCaSort.direction === 'asc' ? 'desc' : 'asc'; }
+      else { collegeCaSort.column = col; collegeCaSort.direction = 'asc'; }
+      collegeCaPage = 1; applyCollegeCaFilters(); updateCollegeCaSortIcons();
+    });
   });
 
   // ── Init ───────────────────────────────────────────────────────

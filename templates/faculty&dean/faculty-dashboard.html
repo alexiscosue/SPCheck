@@ -18,7 +18,7 @@
     <div class="kpi card">
       <div class="icon eval"><i class='bx bx-star'></i></div>
       <div>
-        <div class="title">Evaluation Score</div>
+        <div class="title">{% if session.get('user_role') == 20002 %}Dept. Avg Score{% else %}Evaluation Score{% endif %}</div>
         <div class="value" id="evaluationScore">Loading... <i class='bx bx-loader-alt bx-spin'></i></div>
       </div>
     </div>
@@ -52,6 +52,7 @@
     </div>
     -->
 
+    {% if session.get('user_role') != 20002 %}
     <div class="chart-card card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
         <div style="font-weight:700;">Evaluation Breakdown</div>
@@ -59,7 +60,20 @@
       </div>
       <canvas id="myEvalChart" height="170"></canvas>
     </div>
+    {% endif %}
 
+    {% if session.get('user_role') == 20002 %}
+    <div class="chart-card card">
+      <div class="card-header">
+        <i class='bx bx-buildings'></i>
+        <span>Avg Rating by Department</span>
+        <div id="dean-dept-badge" style="display:none;margin-left:auto;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;background:#f3f4f6;color:#6b7280;"></div>
+      </div>
+      <canvas id="deanDeptChart" height="170"></canvas>
+    </div>
+    {% endif %}
+
+    {% if session.get('user_role') != 20002 %}
     <div class="chart-card card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
         <div style="font-weight:700;">Score vs. College Average</div>
@@ -67,6 +81,7 @@
       </div>
       <canvas id="myComparisonChart" height="130"></canvas>
     </div>
+    {% endif %}
 
     <!-- License + Promotion + Regularization row (2:1:1 when license is visible) -->
     <div id="cards-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
@@ -192,28 +207,76 @@
 {% block extra_scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+  const IS_DEAN = {{ 'true' if session.get('user_role') == 20002 else 'false' }};
+  const DEAN_COLLEGE = '{{ college|default("") }}';
+
   let dashboardData = null;
   let evalChartInstance = null;
   let comparisonChartInstance = null;
+  let deanDeptChartInstance = null;
   let dashClassDistChart = null;
   let dashCampusDistChart = null;
 
+  function showDistNoData(canvasId) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    canvas.style.display = 'none';
+    const existing = canvas.parentNode.querySelector('.dist-no-data');
+    if (!existing) {
+      const msg = document.createElement('div');
+      msg.className = 'dist-no-data';
+      msg.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;font-size:12px;color:var(--muted);';
+      msg.textContent = 'No attendance data for this semester.';
+      canvas.parentNode.appendChild(msg);
+    }
+  }
+
   async function fetchAttendanceDist() {
     try {
+      // Deans have no personal class attendance — use college-wide analytics instead
+      const classUrl = IS_DEAN
+        ? '/api/dean/college-analytics'
+        : '/api/faculty/attendance-analytics';
+
       const [classResp, campusResp] = await Promise.all([
-        fetch('/api/faculty/attendance-analytics'),
+        fetch(classUrl),
         fetch('/api/faculty/campus-attendance-analytics')
       ]);
       const classData  = await classResp.json();
       const campusData = await campusResp.json();
-      if (classData.success && classData.distribution)   renderDashDist('dashClassDistChart',  classData.distribution,  true);
-      if (campusData.success && campusData.distribution) renderDashDist('dashCampusDistChart', campusData.distribution, false);
-    } catch(e) { console.error('Error fetching attendance distribution:', e); }
+      if (classData.success && classData.distribution) {
+        const d = classData.distribution;
+        if ((d.present || 0) + (d.late || 0) + (d.absent || 0) + (d.excused || 0) > 0) {
+          renderDashDist('dashClassDistChart', d, true);
+        } else {
+          showDistNoData('dashClassDistChart');
+        }
+      } else {
+        showDistNoData('dashClassDistChart');
+      }
+      if (campusData.success && campusData.distribution) {
+        const d = campusData.distribution;
+        if ((d.present || 0) + (d.late || 0) + (d.absent || 0) + (d.excused || 0) > 0) {
+          renderDashDist('dashCampusDistChart', d, false);
+        } else {
+          showDistNoData('dashCampusDistChart');
+        }
+      } else {
+        showDistNoData('dashCampusDistChart');
+      }
+    } catch(e) {
+      console.error('Error fetching attendance distribution:', e);
+      showDistNoData('dashClassDistChart');
+      showDistNoData('dashCampusDistChart');
+    }
   }
 
   function renderDashDist(canvasId, dist, isClass) {
-    const ctx    = document.getElementById(canvasId);
+    const ctx = document.getElementById(canvasId);
     if (!ctx) return;
+    ctx.style.display = '';
+    const existing = ctx.parentNode.querySelector('.dist-no-data');
+    if (existing) existing.remove();
     const colors = ['#16a34a', '#f59e0b', '#ef4444', '#8b5cf6'];
     const labels = ['Present', 'Late', 'Absent', 'Excused'];
     const values = [dist.present || 0, dist.late || 0, dist.absent || 0, dist.excused || 0];
@@ -229,14 +292,15 @@
         datasets: [{ data: values, backgroundColor: colors, borderRadius: 4, borderSkipped: false }]
       },
       options: {
+        indexAxis: 'y',
         responsive: true, maintainAspectRatio: false,
         plugins: {
           legend: { display: false },
-          tooltip: { callbacks: { label: c => ` ${c.parsed.y} sessions` } }
+          tooltip: { callbacks: { label: c => ` ${c.parsed.x} sessions` } }
         },
         scales: {
-          y: { beginAtZero: true, ticks: { font: { size: 10 }, stepSize: 1 }, grid: { color: 'rgba(0,0,0,0.05)' } },
-          x: { grid: { display: false }, ticks: { font: { size: 10 } } }
+          x: { beginAtZero: true, ticks: { font: { size: 10 }, maxTicksLimit: 4, padding: 4 }, grid: { color: 'rgba(0,0,0,0.05)' } },
+          y: { grid: { display: false }, ticks: { font: { size: 10 } } }
         }
       }
     });
@@ -284,7 +348,9 @@
   */
 
   function renderEvaluationChart(data, kpis) {
-    const evalCtx = document.getElementById('myEvalChart').getContext('2d');
+    const canvas = document.getElementById('myEvalChart');
+    if (!canvas) return;
+    const evalCtx = canvas.getContext('2d');
 
     if (evalChartInstance) {
       evalChartInstance.destroy();
@@ -339,7 +405,9 @@
   }
 
   function renderComparisonChart(comparison) {
-    const ctx = document.getElementById('myComparisonChart').getContext('2d');
+    const canvas = document.getElementById('myComparisonChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
 
     if (comparisonChartInstance) {
       comparisonChartInstance.destroy();
@@ -403,29 +471,20 @@
     
     attendanceRateElement.innerHTML = `${attendanceRate}% <i class='bx bx-${trend}' style="color:${trendColor}"></i>`;
 
-    // Evaluation Score KPI
+    // Evaluation Score KPI (Dept. Average for deans, personal score for faculty)
     const evalScoreElement = document.getElementById('evaluationScore');
-    // Using the combined overall_eval_score from the main data fetch (or fallback if it was overwritten)
-    const overallScore = parseFloat(dashboardData.overall_eval_score || dashboardData.kpis.overall_average); 
-    const scoreDisplay = overallScore.toFixed(2);
-    
-    // Scale is 1–4. Green ≥ 3.5, amber 3.0–3.49, red < 3.0 (aligns with promotion lock)
-    let evalTrend = 'right-arrow-alt';
-    let evalTrendColor = '#6b7280';
-
-    if (overallScore >= 3.5) {
-        evalTrend = 'up-arrow-alt';
-        evalTrendColor = '#10b981';
-    } else if (overallScore < 3.0 && overallScore > 0) {
-        evalTrend = 'down-arrow-alt';
-        evalTrendColor = '#ef4444';
-    }
-
-    // If score is 0.0, show N/A
-    if (overallScore === 0.0) {
-        evalScoreElement.innerHTML = `N/A <i class='bx bx-minus' style="color:#6b7280"></i>`;
+    if (IS_DEAN) {
+      const deptAvg = parseFloat(dashboardData.comparison?.dept_avg || 0);
+      evalScoreElement.innerHTML = deptAvg > 0 ? `${deptAvg.toFixed(2)} / 4` : 'N/A';
     } else {
-        evalScoreElement.innerHTML = `${scoreDisplay} / 4 <i class='bx bx-${evalTrend}' style="color:${evalTrendColor}"></i>`;
+      const overallScore = parseFloat(dashboardData.overall_eval_score || dashboardData.kpis.overall_average);
+      const scoreDisplay = overallScore.toFixed(2);
+      let evalTrend = 'right-arrow-alt', evalTrendColor = '#6b7280';
+      if (overallScore >= 3.5) { evalTrend = 'up-arrow-alt'; evalTrendColor = '#10b981'; }
+      else if (overallScore < 3.0 && overallScore > 0) { evalTrend = 'down-arrow-alt'; evalTrendColor = '#ef4444'; }
+      evalScoreElement.innerHTML = overallScore === 0.0
+        ? `N/A <i class='bx bx-minus' style="color:#6b7280"></i>`
+        : `${scoreDisplay} / 4 <i class='bx bx-${evalTrend}' style="color:${evalTrendColor}"></i>`;
     }
 
     // Teaching Load KPI
@@ -924,12 +983,64 @@
       });
   }
 
+  async function loadDeanDeptChart() {
+    try {
+      const semRes = await fetch('/api/faculty/semesters');
+      const semData = await semRes.json();
+      let termId = 0;
+      if (semData.success && semData.semesters) {
+        const curr = semData.semesters.find(s => s.is_current);
+        termId = curr ? curr.id : (semData.semesters[0]?.id || 0);
+      }
+      const url = termId ? `/api/hr/evaluations?term=${termId}` : '/api/hr/evaluations';
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.all_dept_averages && data.all_dept_averages.length > 0) {
+        renderDeanDeptChart(data.all_dept_averages);
+      }
+    } catch(e) {}
+  }
+
+  function renderDeanDeptChart(deptAverages) {
+    const canvas = document.getElementById('deanDeptChart');
+    if (!canvas) return;
+    const depts = deptAverages.map(d => d.dept);
+    const avgs  = deptAverages.map(d => parseFloat(d.avg.toFixed(2)));
+    const colors = depts.map(d => d === DEAN_COLLEGE ? 'rgba(123,17,19,1)' : 'rgba(123,17,19,0.4)');
+
+    // Show dept avg in the badge
+    const badge = document.getElementById('dean-dept-badge');
+    if (badge && DEAN_COLLEGE) {
+      const myEntry = deptAverages.find(d => d.dept === DEAN_COLLEGE);
+      if (myEntry) {
+        const avg = parseFloat(myEntry.avg);
+        const bc = avg >= 3.5 ? { bg:'#dcfce7', c:'#16a34a' }
+                 : avg >= 3.0 ? { bg:'#fef9c3', c:'#ca8a04' }
+                 :              { bg:'#fee2e2', c:'#dc2626' };
+        badge.textContent = `${DEAN_COLLEGE}: ${avg.toFixed(2)} / 4`;
+        badge.style.cssText = `display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;background:${bc.bg};color:${bc.c};`;
+      }
+    }
+
+    if (deanDeptChartInstance) deanDeptChartInstance.destroy();
+    deanDeptChartInstance = new Chart(canvas.getContext('2d'), {
+      type: 'bar',
+      data: { labels: depts, datasets: [{ label: 'Avg Rating', data: avgs, backgroundColor: colors, borderRadius: 6, borderSkipped: false }] },
+      options: {
+        indexAxis: 'y', responsive: true,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.x.toFixed(2)} / 4` } } },
+        scales: { x: { beginAtZero: true, max: 4, ticks: { stepSize: 1 }, grid: { color: 'rgba(0,0,0,0.05)' } }, y: { grid: { display: false }, ticks: { font: { size: 11 } } } }
+      }
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
     fetchDashboardData();
     fetchAttendanceDist();
     loadLicenseStatusCard();
     loadPromotionSummary();
     loadRegularizationSummary();
+    if (IS_DEAN) loadDeanDeptChart();
 
     setInterval(fetchDashboardData, 5 * 60 * 1000);
   });

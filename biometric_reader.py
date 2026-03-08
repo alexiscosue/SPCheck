@@ -98,11 +98,15 @@ class BiometricReader:
     # ------------------------------------------------------------------
 
     def _get_session(self, dt):
-        """Return 'Morning', 'Afternoon', or None based on tap time."""
+        """Return 'Morning', 'Afternoon', or None based on tap time.
+        Saturday Afternoon is always rejected (returns None even if time matches).
+        """
         tap_mins = dt.hour * 60 + dt.minute
         if 420 <= tap_mins <= 764:
             return 'Morning'
         elif 765 <= tap_mins <= 1065:
+            if dt.weekday() == 5:  # Saturday — no Afternoon session
+                return None
             return 'Afternoon'
         return None
 
@@ -116,6 +120,25 @@ class BiometricReader:
             current_time = self._truncate_timestamp(datetime.now(self.manila_tz))
             day_name = current_time.strftime('%A')
             session = self._get_session(current_time)
+
+            # ── Reject Sunday and Saturday Afternoon entirely ──────────────
+            if day_name == 'Sunday':
+                remarks = f"[Rejected] Scanned on Sunday — no campus attendance on Sundays"
+                self._log_biometric_scan(cursor, None, current_time, 'outside_buffer', remarks)
+                conn.commit()
+                self._trigger_notification({
+                    'biometric_uid': biometric_uid,
+                    'person_name': 'Unknown',
+                    'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
+                    'action': 'outside_buffer',
+                    'status': 'outside_buffer',
+                    'session': None,
+                    'message': 'No campus attendance recorded on Sundays'
+                })
+                self._send_to_arduino("OUTSIDE:Sunday")
+                print(f"🚫 Scan rejected — Sunday, no campus attendance")
+                return
+            # ──────────────────────────────────────────────────────────────
 
             if biometric_uid == "UNKNOWN":
                 remarks = f"[Unknown] Unregistered fingerprint scanned on {day_name}"
@@ -162,6 +185,31 @@ class BiometricReader:
 
             biometric_id, personnel_id, firstname, lastname = result
             person_name = f"{lastname}, {firstname}" if firstname and lastname else f"Personnel #{personnel_id}"
+
+            # ── Outside session window guard ───────────────────────────────
+            # If the tap time falls outside both the morning (07:00–12:44) and
+            # afternoon (12:45–17:45) windows, treat it like RFID's outside_buffer:
+            # log the scan but do NOT create an Entry/Exit campus attendance record.
+            if session is None:
+                remarks = f"[Outside Window] Scanned outside session hours on {day_name} at {current_time.strftime('%H:%M')}"
+                self._log_biometric_scan(cursor, biometric_id, current_time, 'outside_buffer', remarks)
+                conn.commit()
+                notification_data = {
+                    'biometric_uid': biometric_uid,
+                    'biometric_id': biometric_id,
+                    'personnel_id': personnel_id,
+                    'person_name': person_name,
+                    'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
+                    'action': 'outside_buffer',
+                    'status': 'outside_buffer',
+                    'session': None,
+                    'message': f'{person_name} - Scanned outside session hours ({current_time.strftime("%H:%M")})'
+                }
+                self._trigger_notification(notification_data)
+                self._send_to_arduino(f"OUTSIDE:{person_name}")
+                print(f"⏰ {person_name}: Tapped outside session time windows at {current_time.strftime('%H:%M')}")
+                return
+            # ──────────────────────────────────────────────────────────────
 
             status, remarks, is_buffer = self._determine_status(cursor, biometric_id, current_time, day_name)
             self._log_biometric_scan(cursor, biometric_id, current_time, status, remarks)

@@ -60,28 +60,20 @@
       </div>
 
       <div class="chart-large">
-        <div class="card">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <div style="font-weight:700">Recent Attendance Logs</div>
-            <div style="font-size:13px;color:var(--muted)">Live feed</div>
+        <div class="card" style="padding:16px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <div style="font-weight:700;font-size:14px;">Status Distribution</div>
+            <div style="font-size:12px;color:var(--muted);">All Faculty · Current Semester</div>
           </div>
-
-          <div class="table">
-            <table aria-label="Recent attendance logs">
-              <thead>
-                <tr>
-                  <th style="text-align:center">Name</th>
-                  <th style="text-align:center">Date</th>
-                  <th style="text-align:center">Room</th>
-                  <th style="text-align:center">Time In</th>
-                  <th style="text-align:center">Time Out</th>
-                  <th style="text-align:center">Status</th>
-                </tr>
-              </thead>
-              <tbody id="recentLogs">
-                <tr><td colspan="6" style="text-align:center;padding:2rem;color:#6b7280">Loading attendance data...</td></tr>
-              </tbody>
-            </table>
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;">Class Attendance</div>
+            <div style="position:relative;height:130px;margin-bottom:20px;">
+              <canvas id="hrDashClassDistChart"></canvas>
+            </div>
+            <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;">Campus Attendance</div>
+            <div style="position:relative;height:130px;">
+              <canvas id="hrDashCampusDistChart"></canvas>
+            </div>
           </div>
 
           <!-- Expiring Licenses Section -->
@@ -102,21 +94,35 @@
       </div>
 
       <div class="chart-side">
-        <div class="chart-card card">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <div style="font-weight:700">Evaluation Status Breakdown</div>
-            <div style="font-size:13px;color:var(--muted)">This semester</div>
+        <div class="chart-card card" style="padding:0;overflow:hidden;">
+          <div style="background:#f8fafc;padding:12px 16px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;">
+            <div style="font-weight:700;font-size:13px;color:#374151;"><i class='bx bx-bar-chart-alt-2' style="margin-right:5px;color:var(--muted);"></i>Evaluation Snapshot</div>
+            <div style="font-size:12px;color:var(--muted);">This semester</div>
           </div>
-          <canvas id="scoreChart" height="130"></canvas>
+          <div style="padding:14px 16px;">
+            <div id="ratingSnapshot">
+              <div style="text-align:center;color:var(--muted);padding:20px;font-size:13px;">Loading...</div>
+            </div>
+          </div>
         </div>
 
-        <div class="card chart-card">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <div style="font-weight:700">Top 5 Departments by Average Score</div>
-            <div style="font-size:13px;color:var(--muted)">This semester</div>
+        <div class="card chart-card" style="padding:0;overflow:hidden;">
+          <div style="background:#f8fafc;padding:12px 16px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;">
+            <div style="font-weight:700;font-size:13px;color:#374151;"><i class='bx bx-buildings' style="color:var(--spc-maroon);margin-right:5px;"></i>Avg Rating by Department</div>
+            <div style="display:flex;gap:4px;">
+              <button id="dashDeptToggle-bar" onclick="switchDashDeptView('bar')"
+                style="padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--spc-maroon);background:var(--spc-maroon);color:#fff;transition:all .15s;">
+                <i class='bx bx-bar-chart-alt-2'></i> Bar
+              </button>
+              <button id="dashDeptToggle-line" onclick="switchDashDeptView('line')"
+                style="padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #e5e7eb;background:#fff;color:var(--muted);transition:all .15s;">
+                <i class='bx bx-line-chart'></i> Trend
+              </button>
+            </div>
           </div>
-          <div class="chart-wrapper">
+          <div style="padding:14px 16px;">
             <canvas id="topDeptChart"></canvas>
+            <canvas id="topDeptTrendChart" style="display:none;"></canvas>
           </div>
         </div>
       </div>
@@ -191,7 +197,83 @@
 <script>
   // --- Chart Initialization Functions ---
 
-  // === Top Departments Chart Initialization ===
+  // === Dept Chart View Toggle ===
+  let dashDeptTrendChartInstance = null;
+  let hrDashClassDistChart  = null;
+  let hrDashCampusDistChart = null;
+
+  function switchDashDeptView(view) {
+    const barBtn  = document.getElementById('dashDeptToggle-bar');
+    const lineBtn = document.getElementById('dashDeptToggle-line');
+    const isBar   = view === 'bar';
+
+    barBtn.style.background  = isBar ? 'var(--spc-maroon)' : '#fff';
+    barBtn.style.color        = isBar ? '#fff' : 'var(--muted)';
+    barBtn.style.borderColor  = isBar ? 'var(--spc-maroon)' : '#e5e7eb';
+    lineBtn.style.background  = isBar ? '#fff' : 'var(--spc-maroon)';
+    lineBtn.style.color       = isBar ? 'var(--muted)' : '#fff';
+    lineBtn.style.borderColor = isBar ? '#e5e7eb' : 'var(--spc-maroon)';
+
+    document.getElementById('topDeptChart').style.display      = isBar ? '' : 'none';
+    document.getElementById('topDeptTrendChart').style.display = isBar ? 'none' : '';
+
+    if (!isBar && !dashDeptTrendChartInstance) loadDashDeptTrend();
+  }
+
+  async function loadDashDeptTrend() {
+    try {
+      const res  = await fetch('/api/hr/dept-trends');
+      const data = await res.json();
+      if (!data.success) return;
+      renderDashDeptTrendChart(data.semesters, data.depts);
+    } catch (err) {
+      console.error('Failed to load dept trends:', err);
+    }
+  }
+
+  function renderDashDeptTrendChart(semesters, depts) {
+    if (dashDeptTrendChartInstance) dashDeptTrendChartInstance.destroy();
+
+    const palette = [
+      '#7b1113','#2563eb','#d97706','#16a34a','#7c3aed',
+      '#db2777','#0891b2','#65a30d','#ea580c','#6b7280'
+    ];
+    const datasets = Object.keys(depts).map((name, i) => ({
+      label: name,
+      data: depts[name],
+      borderColor: palette[i % palette.length],
+      backgroundColor: palette[i % palette.length],
+      tension: 0.3,
+      borderWidth: 2,
+      pointRadius: 4,
+      pointBackgroundColor: palette[i % palette.length],
+      spanGaps: true,
+    }));
+
+    const ctx = document.getElementById('topDeptTrendChart').getContext('2d');
+    dashDeptTrendChartInstance = new Chart(ctx, {
+      type: 'line',
+      data: { labels: semesters, datasets },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 14, padding: 10 } }
+        },
+        scales: {
+          y: {
+            min: 0, max: 4,
+            grid: { color: '#f1f5f9' },
+            title: { display: true, text: 'Score (0–4)', font: { size: 11 } },
+            ticks: { stepSize: 1 }
+          },
+          x: { grid: { display: false }, ticks: { font: { size: 10 } } }
+        }
+      }
+    });
+  }
+
+  // === Avg Rating by Department Bar Chart ===
   function initializeTopDeptChart(labels, data) {
     const topDeptCtx = document.getElementById('topDeptChart').getContext('2d');
     new Chart(topDeptCtx, {
@@ -199,47 +281,81 @@
         data: {
             labels: labels,
             datasets: [{
-                label: 'Average Score',
+                label: 'Avg Rating',
                 data: data,
-                backgroundColor: '#7b1113'
+                backgroundColor: 'rgba(123,17,19,0.75)',
+                borderRadius: 6,
+                borderSkipped: false,
             }]
         },
         options: {
             indexAxis: 'y',
             responsive: true,
-            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
             scales: {
-                x: {
-                    min: 0,
-                    max: 5,
-                    ticks: { stepSize: 1 }
-                },
-                y: { beginAtZero: true }
-            },
-            plugins: { legend: { display: false } }
+                x: { beginAtZero: true, max: 4, grid: { color: '#f1f5f9' } },
+                y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+            }
         }
     });
   }
 
-  // === Evaluation Score Chart Initialization ===
-  function initializeScoreChart(data) {
-    const scoreCtx = document.getElementById('scoreChart').getContext('2d');
-    new Chart(scoreCtx, {
-        type: 'doughnut',
-        data: {
-            labels:['Above Average','Average','Below Average'],
-            datasets:[{
-                data: data,
-                backgroundColor:['#16a34a','#f59e0b','#dc2626'],
-                hoverOffset:6
-            }]
-        },
-        options:{
-            responsive:true,
-            maintainAspectRatio:true,
-            plugins:{ legend:{ position:'bottom' } }
-        }
-    });
+  // === Evaluation Snapshot (replaces doughnut chart) ===
+  function updateRatingSnapshot(above, average, below) {
+    const total = above + average + below;
+    const el = document.getElementById('ratingSnapshot');
+    if (total === 0) {
+      el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px;">No evaluation data for this semester.</div>';
+      return;
+    }
+    const pctAbove = Math.round((above / total) * 100);
+    const pctAvg   = Math.round((average / total) * 100);
+    const pctBelow = Math.round((below / total) * 100);
+    el.innerHTML = `
+      <div style="margin-bottom:12px;padding:10px 12px;background:#f8fafc;border-radius:8px;display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+        <span style="color:var(--muted);">Total Evaluated</span>
+        <span style="font-weight:700;color:#1f2937;">${total} faculty</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+            <div style="display:flex;align-items:center;gap:7px;font-size:13px;">
+              <i class='bx bx-trending-up' style="color:#16a34a;font-size:15px;"></i> Above Average
+            </div>
+            <div style="font-size:13px;font-weight:700;color:#16a34a;">${above} <span style="color:var(--muted);font-weight:400;font-size:12px;">(${pctAbove}%)</span></div>
+          </div>
+          <div style="background:#e5e7eb;border-radius:4px;height:6px;overflow:hidden;">
+            <div style="background:#16a34a;height:100%;width:${pctAbove}%;border-radius:4px;"></div>
+          </div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+            <div style="display:flex;align-items:center;gap:7px;font-size:13px;">
+              <i class='bx bx-minus-circle' style="color:#f59e0b;font-size:15px;"></i> Average
+            </div>
+            <div style="font-size:13px;font-weight:700;color:#f59e0b;">${average} <span style="color:var(--muted);font-weight:400;font-size:12px;">(${pctAvg}%)</span></div>
+          </div>
+          <div style="background:#e5e7eb;border-radius:4px;height:6px;overflow:hidden;">
+            <div style="background:#f59e0b;height:100%;width:${pctAvg}%;border-radius:4px;"></div>
+          </div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+            <div style="display:flex;align-items:center;gap:7px;font-size:13px;">
+              <i class='bx bx-trending-down' style="color:#dc2626;font-size:15px;"></i> Below Average
+            </div>
+            <div style="font-size:13px;font-weight:700;color:#dc2626;">${below} <span style="color:var(--muted);font-weight:400;font-size:12px;">(${pctBelow}%)</span></div>
+          </div>
+          <div style="background:#e5e7eb;border-radius:4px;height:6px;overflow:hidden;">
+            <div style="background:#dc2626;height:100%;width:${pctBelow}%;border-radius:4px;"></div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:14px;padding-top:10px;border-top:1px solid #e5e7eb;text-align:center;">
+        <a href="/hr_evaluations" style="font-size:12px;color:var(--spc-maroon);font-weight:600;text-decoration:none;">
+          View full evaluations &nbsp;<i class='bx bx-right-arrow-alt'></i>
+        </a>
+      </div>`;
   }
   
   // --- Main Fetch Function ---
@@ -272,16 +388,14 @@
       }
 
       // 2. Fetch other data concurrently
-      const [facultyResponse, attendanceResponse, evaluationResponse] = await Promise.all([
+      const [facultyResponse, evaluationResponse] = await Promise.all([
           fetch('/api/hr/faculty-list'),
-          fetch('/api/hr/faculty-attendance'),
-          fetch('/api/hr/evaluation-dashboard-data') 
+          fetch('/api/hr/evaluation-dashboard-data')
       ]);
-      
-      const facultyData = await facultyResponse.json();
-      const attendanceData = await attendanceResponse.json();
-      const evaluationData = await evaluationResponse.json(); 
-      
+
+      const facultyData    = await facultyResponse.json();
+      const evaluationData = await evaluationResponse.json();
+
       // --- Update Faculty KPI ---
       if (facultyData.success) {
         document.getElementById('kpi-fac').textContent = facultyData.faculty_list.length || 0;
@@ -289,12 +403,8 @@
         document.getElementById('kpi-fac').textContent = 'Error';
       }
 
-      // --- Update Attendance Logs ---
-      if (attendanceData.success) {
-        updateRecentLogs(attendanceData.attendance_logs || []);
-      } else {
-        document.getElementById('recentLogs').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#6b7280">Error loading attendance data</td></tr>';
-      }
+      // --- Status Distribution ---
+      fetchHrAttDist();
 
       // --- Update Evaluation KPIs and Charts ---
       if (evaluationData.success) {
@@ -302,13 +412,9 @@
         const avgEval = evaluationData.kpi_avg_eval;
         document.getElementById('kpi-eval').textContent = avgEval === 'N/A' ? 'N/A' : parseFloat(avgEval).toFixed(2);
 
-        // Doughnut Chart: Rating Breakdown
-        const totalRatings = evaluationData.rating_breakdown.reduce((a, b) => a + b, 0);
-        if (totalRatings > 0) {
-            initializeScoreChart(evaluationData.rating_breakdown);
-        } else {
-             document.getElementById('scoreChart').parentElement.innerHTML = '<div style="text-align:center; color:var(--muted); padding:30px;">No evaluation data available</div>';
-        }
+        // Rating Snapshot: Distribution breakdown
+        const [above, average, below] = evaluationData.rating_breakdown;
+        updateRatingSnapshot(above || 0, average || 0, below || 0);
 
         // Bar Chart: Top Departments
         if (evaluationData.top_departments && evaluationData.top_departments.length > 0) {
@@ -316,13 +422,15 @@
             const data = evaluationData.top_departments.map(d => d.score);
             initializeTopDeptChart(labels, data);
         } else {
-            document.getElementById('topDeptChart').parentElement.innerHTML = '<div style="text-align:center; color:var(--muted); padding:30px;">No departmental scores available</div>';
+            document.getElementById('topDeptChart').style.display = 'none';
+            document.getElementById('topDeptTrendChart').style.display = 'none';
+            document.getElementById('topDeptChart').insertAdjacentHTML('afterend', '<div style="text-align:center;color:var(--muted);padding:30px;font-size:13px;">No departmental scores available.</div>');
         }
 
       } else {
         document.getElementById('kpi-eval').textContent = 'Error';
-        document.getElementById('scoreChart').parentElement.innerHTML = '<div style="text-align:center; color:var(--muted); padding:30px;">Error loading evaluation data</div>';
-        document.getElementById('topDeptChart').parentElement.innerHTML = '<div style="text-align:center; color:var(--muted); padding:30px;">Error loading evaluation data</td></tr>';
+        document.getElementById('ratingSnapshot').innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px;">Error loading evaluation data.</div>';
+        document.getElementById('topDeptChart').style.display = 'none';
       }
 
       const promoRequestsResponse = await fetch('/api/promotion/list?status=hrmd');
@@ -349,49 +457,79 @@
       document.getElementById('kpi-att-subtitle').textContent = 'Connection failed';
       document.getElementById('kpi-fac').textContent = 'Error';
       document.getElementById('kpi-eval').textContent = 'Error';
-      document.getElementById('recentLogs').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#6b7280">Error loading data</td></tr>';
     }
   }
   
-  // --- Helper Function ---
+  // --- Attendance Distribution Helpers ---
 
-  function updateRecentLogs(logs) {
-    const tbody = document.getElementById('recentLogs');
-    tbody.innerHTML = '';
-
-    const recentLogs = logs.slice(0, 10);
-
-    if (recentLogs.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#6b7280">No attendance data available</td></tr>';
-      return;
+  function showHrDashDistNoData(canvasId) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    canvas.style.display = 'none';
+    if (!canvas.parentNode.querySelector('.dist-no-data')) {
+      const msg = document.createElement('div');
+      msg.className = 'dist-no-data';
+      msg.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;font-size:12px;color:var(--muted);';
+      msg.textContent = 'No attendance data for this semester.';
+      canvas.parentNode.appendChild(msg);
     }
+  }
 
-    recentLogs.forEach(log => {
-      const tr = document.createElement('tr');
-      let statusClass = log.status.toLowerCase();
-      
-      // Fix: Check if time_in is "00:00" and convert to dash
-      let timeInDisplay = log.time_in;
-      if (timeInDisplay === '00:00' || timeInDisplay === '0:00') {
-        timeInDisplay = '—';
+  function renderHrDashDist(canvasId, dist, chartRef) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return null;
+    canvas.style.display = '';
+    const existing = canvas.parentNode.querySelector('.dist-no-data');
+    if (existing) existing.remove();
+    const colors = ['#16a34a', '#f59e0b', '#ef4444', '#8b5cf6'];
+    const labels = ['Present', 'Late', 'Absent', 'Excused'];
+    const values = [dist.present || 0, dist.late || 0, dist.absent || 0, dist.excused || 0];
+    if (chartRef) chartRef.destroy();
+    return new Chart(canvas.getContext('2d'), {
+      type: 'bar',
+      data: { labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: c => ` ${c.parsed.x} sessions` } }
+        },
+        scales: {
+          x: { beginAtZero: true, ticks: { font: { size: 10 }, maxTicksLimit: 4, padding: 8 }, grid: { color: 'rgba(0,0,0,0.05)' } },
+          y: { grid: { display: false }, ticks: { font: { size: 10 } } }
+        }
       }
-      
-      // Fix: Check if time_out is "00:00" and convert to dash
-      let timeOutDisplay = log.time_out;
-      if (timeOutDisplay === '00:00' || timeOutDisplay === '0:00') {
-        timeOutDisplay = '—';
-      }
-      
-      tr.innerHTML = `
-        <td style="text-align:center">${log.name}</td>
-        <td style="text-align:center">${log.date}</td>
-        <td style="text-align:center">${log.room || 'N/A'}</td>
-        <td style="text-align:center">${timeInDisplay}</td>
-        <td style="text-align:center">${timeOutDisplay}</td>
-        <td style="text-align:center"><span class="status ${statusClass}">${log.status}</span></td>
-      `;
-      tbody.appendChild(tr);
     });
+  }
+
+  async function fetchHrAttDist() {
+    try {
+      const [classResp, campusResp] = await Promise.all([
+        fetch('/api/hr/attendance-analytics'),
+        fetch('/api/hr/campus-attendance-analytics')
+      ]);
+      const classData  = await classResp.json();
+      const campusData = await campusResp.json();
+
+      if (classData.success && classData.distribution) {
+        const d = classData.distribution;
+        if ((d.present||0)+(d.late||0)+(d.absent||0)+(d.excused||0) > 0) {
+          hrDashClassDistChart = renderHrDashDist('hrDashClassDistChart', d, hrDashClassDistChart);
+        } else { showHrDashDistNoData('hrDashClassDistChart'); }
+      } else { showHrDashDistNoData('hrDashClassDistChart'); }
+
+      if (campusData.success && campusData.distribution) {
+        const d = campusData.distribution;
+        if ((d.present||0)+(d.late||0)+(d.absent||0)+(d.excused||0) > 0) {
+          hrDashCampusDistChart = renderHrDashDist('hrDashCampusDistChart', d, hrDashCampusDistChart);
+        } else { showHrDashDistNoData('hrDashCampusDistChart'); }
+      } else { showHrDashDistNoData('hrDashCampusDistChart'); }
+    } catch(e) {
+      console.error('Error fetching HR attendance distribution:', e);
+      showHrDashDistNoData('hrDashClassDistChart');
+      showHrDashDistNoData('hrDashCampusDistChart');
+    }
   }
 
   // --- DOM Ready ---
