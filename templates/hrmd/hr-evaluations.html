@@ -726,38 +726,48 @@
     </div>
     
     <div id="linkModal" class="hr-modal-wrapper" style="display: none;">
-        <div class="hr-modal-content" style="max-width: 500px;">
+        <div class="hr-modal-content" style="max-width: 520px;">
             <div class="emp-modal-header" style="background: #3b82f6;">
-                <h2 id="linkModalTitle" style="color: white; font-size: 1.2rem;">Generate Link for Faculty: N/A</h2>
+                <h2 id="linkModalTitle" style="color: white; font-size: 1.2rem;">Fetch Links: N/A</h2>
                 <span class="emp-close" onclick="closeLinkModal()" style="color: white;">&times;</span>
             </div>
             <div class="emp-modal-body">
-                <p style="margin-bottom: 20px;">
-                    Select the evaluator type to generate a pre-filled Google Form link for <strong id="linkFacultyName">N/A</strong>.
+                <input type="hidden" id="linkPersonnelId">
+                <input type="hidden" id="linkAcadCalendarId">
+
+                <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:12px 14px; margin-bottom:16px; font-size:13px;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                        <i class='bx bx-user' style="color:#3b82f6; font-size:16px;"></i>
+                        <span style="font-weight:600; color:#1e40af;" id="linkInfoName">—</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <i class='bx bx-calendar' style="color:#3b82f6; font-size:16px;"></i>
+                        <span style="color:#374151;" id="linkInfoTerm">—</span>
+                    </div>
+                </div>
+
+                <p style="font-size:13px; color:var(--muted); margin-bottom:14px;">
+                    Fetches pre-filled <strong>Student</strong> and <strong>Supervisor</strong> evaluation form links from the Google Sheet for each class assigned to this faculty.
                 </p>
-                <form id="linkForm">
-                    <input type="hidden" id="linkPersonnelId">
-                    <input type="hidden" id="linkAcadCalendarId">
 
-                    <label for="evaluatorType">Evaluator Type</label>
-                    <select id="evaluatorType" required>
-                        <option value="">Select Evaluator</option>
-                        <option value="student">Student</option>
-                        <option value="supervisor">Supervisor</option>
-                        <option value="peer">Peer</option>
-                    </select>
+                <button class="btn primary" id="fetchLinksBtn" style="width:100%; background:#3b82f6; display:flex; align-items:center; justify-content:center; gap:6px;">
+                    <i class='bx bx-link-alt'></i> Fetch Links
+                </button>
 
-                    <button type="submit" class="btn primary" id="generateLinkBtn" style="width: 100%; margin-top: 15px; background: #3b82f6;">
-                        <i class='bx bx-link-alt'></i>&nbsp; Generate Link
-                    </button>
-                </form>
+                <div id="linkResultsContainer" style="margin-top:16px; display:none;">
+                    <div style="margin-bottom:14px;">
+                        <p style="font-weight:700; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">Student Forms</p>
+                        <div id="studentLinksContainer"></div>
+                    </div>
+                    <div>
+                        <p style="font-weight:700; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">Supervisor Forms</p>
+                        <div id="supervisorLinksContainer"></div>
+                    </div>
+                </div>
 
-                <div id="linkResultBox" class="card" style="margin-top: 20px; display:none; background: #f0fdf4; border: 1px solid #d1fae5;">
-                    <p style="font-weight: 600; color: #065f46; margin-bottom: 8px;">✅ Link Generated:</p>
-                    <textarea id="generatedLink" rows="3" readonly style="width: 100%; border: 1px solid #d1fae5; padding: 10px; resize: none; font-size: 13px; background: white;"></textarea>
-                    <button class="btn secondary" id="copyLinkBtn" style="margin-top: 10px;">
-                        <i class='bx bx-copy'></i>&nbsp; Copy to Clipboard
-                    </button>
+                <div id="linkNoResults" style="display:none; text-align:center; padding:24px 0; color:var(--muted);">
+                    <i class='bx bx-info-circle' style="font-size:28px;"></i>
+                    <p style="margin-top:8px; font-size:13px;">No links found for this faculty in the selected semester.</p>
                 </div>
             </div>
         </div>
@@ -1005,6 +1015,7 @@ function renderTablePage(pageNumber) {
         
         const peerScoreDisplay = parseFloat(row.peer_score) > 0 ? peerScore : '—';
 
+        const safeName = row.name.replace(/'/g, "\\'");
         const actionButtons = `
             <button class="btn action" onclick="openModal(${row.personnelid}, '${row.name}', ${rating.toFixed(2)}, ${studentResponses})">
                 <i class='bx bx-show-alt'></i>&nbsp;View
@@ -1012,6 +1023,11 @@ function renderTablePage(pageNumber) {
             <button class="btn secondary" onclick="downloadReport(${row.personnelid})" ${disableDownload}>
                 <i class='bx bx-download'></i>
             </button>
+            <!-- Link button hidden until fully implemented
+            <button class="btn secondary" onclick="openLinkModal(${row.personnelid}, '${safeName}')" title="Get Evaluation Form Links">
+                <i class='bx bx-link-alt'></i>
+            </button>
+            -->
         `;
 
         tbody.append(
@@ -1488,20 +1504,36 @@ function downloadReport(personnelId) {
 
 function openLinkModal(personnelId, facultyName) {
     const currentTermId = $('#semesterFilter').val() || window.CURRENT_TERM_ID;
-    
-    $('#linkForm')[0].reset();
-    $('#linkResultBox').hide();
-    $('#linkModalTitle').text(`Generate Link for Faculty: N/A`);
-    $('#linkFacultyName').text(facultyName);
-    
+    const termLabel = $('#termDisplay').text().replace('📅', '').trim() || `Term ID ${currentTermId}`;
+
+    $('#linkResultsContainer').hide();
+    $('#linkNoResults').hide();
+    $('#linkModalTitle').text(`Fetch Links: ${facultyName}`);
+    $('#linkInfoName').text(facultyName);
+    $('#linkInfoTerm').text(termLabel);
     $('#linkPersonnelId').val(personnelId);
     $('#linkAcadCalendarId').val(currentTermId);
+    $('#fetchLinksBtn').prop('disabled', false).html("<i class='bx bx-link-alt'></i> Fetch Links");
 
     $('#linkModal').css('display', 'flex');
 }
 
 function closeLinkModal() {
     $('#linkModal').css('display', 'none');
+}
+
+function buildLinkRow(offerName, link) {
+    if (!link) return '';
+    const escaped = $('<div>').text(offerName).html();
+    return `<div style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; margin-bottom:6px;">
+        <span style="flex:1; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escaped}">${escaped}</span>
+        <a href="${link}" target="_blank" class="btn action" style="font-size:12px; padding:4px 10px; white-space:nowrap; text-decoration:none;">
+            <i class='bx bx-link-external'></i> Open
+        </a>
+        <button class="btn secondary copy-link-btn" data-link="${link}" style="font-size:12px; padding:4px 10px; white-space:nowrap;">
+            <i class='bx bx-copy'></i> Copy
+        </button>
+    </div>`;
 }
 
 
@@ -1835,56 +1867,54 @@ $(document).ready(function() {
         }
     });
     
-    // 7. Link Generation Form Handler
-    $('#linkForm').submit(function(e) {
-        e.preventDefault();
-        
-        const btn = $('#generateLinkBtn');
-        const originalHtml = btn.html();
-        
+    // 7. Fetch Links Button Handler
+    $('#fetchLinksBtn').click(function() {
+        const btn = $(this);
         const facultyId = $('#linkPersonnelId').val();
         const termId = $('#linkAcadCalendarId').val();
-        const evaluatorType = $('#evaluatorType').val();
 
-        btn.prop('disabled', true).html("<i class='bx bx-loader-alt bx-spin'></i>&nbsp; Generating...");
-        
+        btn.prop('disabled', true).html("<i class='bx bx-loader-alt bx-spin'></i> Fetching...");
+        $('#linkResultsContainer').hide();
+        $('#linkNoResults').hide();
+
         $.ajax({
             url: '/api/hr/generate-evaluation-link',
             type: 'POST',
             contentType: 'application/json',
-            data: JSON.stringify({
-                personnel_id: facultyId,
-                acadcalendar_id: termId,
-                evaluator_type: evaluatorType
-            }),
+            data: JSON.stringify({ personnel_id: facultyId, acadcalendar_id: termId }),
             success: function(response) {
-                if (response.success && response.link) {
-                    $('#generatedLink').val(response.link);
-                    $('#linkResultBox').show();
-                } else {
-                    showToast(`Error generating link: ${response.error}`, 'error');
-                    $('#linkResultBox').hide();
+                btn.prop('disabled', false).html("<i class='bx bx-link-alt'></i> Fetch Links");
+                if (!response.success) {
+                    showToast(`Error: ${response.error}`, 'error');
+                    return;
                 }
-                btn.prop('disabled', false).html(originalHtml);
+                if (!response.links || response.links.length === 0) {
+                    $('#linkNoResults').show();
+                    return;
+                }
+
+                const studentHtml = response.links.map(item => buildLinkRow(item.offer, item.student_link)).join('');
+                const supervisorHtml = response.links.map(item => buildLinkRow(item.offer, item.supervisor_link)).join('');
+
+                $('#studentLinksContainer').html(studentHtml || '<p style="font-size:13px;color:var(--muted);">—</p>');
+                $('#supervisorLinksContainer').html(supervisorHtml || '<p style="font-size:13px;color:var(--muted);">—</p>');
+                $('#linkResultsContainer').show();
             },
             error: function(xhr) {
-                showToast(`API Error: ${xhr.responseJSON?.error || 'Server error generating link.'}`, 'error');
-                btn.prop('disabled', false).html(originalHtml);
+                btn.prop('disabled', false).html("<i class='bx bx-link-alt'></i> Fetch Links");
+                showToast(`API Error: ${xhr.responseJSON?.error || 'Server error fetching links.'}`, 'error');
             }
         });
     });
-    
-    // 8. Copy Link Button Handler
-    $('#copyLinkBtn').click(function() {
-        const linkField = $('#generatedLink');
-        linkField.select();
-        document.execCommand('copy');
-        
-        const originalText = $(this).html();
-        $(this).html("<i class='bx bx-check'></i>&nbsp; Copied!");
-        setTimeout(() => {
-            $(this).html(originalText);
-        }, 1500);
+
+    // 8. Copy Link Button Handler (delegated)
+    $(document).on('click', '.copy-link-btn', function() {
+        const link = $(this).data('link');
+        navigator.clipboard.writeText(link).then(() => {
+            const originalHtml = $(this).html();
+            $(this).html("<i class='bx bx-check'></i> Copied!");
+            setTimeout(() => $(this).html(originalHtml), 1500);
+        });
     });
 
     // 9. Live preview for new cycle modal

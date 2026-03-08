@@ -928,6 +928,11 @@ def _get_gsheets_creds(scopes):
         return Credentials.from_service_account_info(_json.loads(creds_json), scopes=scopes)
     return Credentials.from_service_account_file('spcheck-ingest-key.json', scopes=scopes)
 
+SPREADSHEET_URL = os.getenv(
+    'GOOGLE_SPREADSHEET_URL',
+    'https://docs.google.com/spreadsheets/d/1uWiA1_c5fVqYf1dNwAZgtA5xAaUrgMAHH3BtABIZh-Y/edit'
+)
+
 def get_students_score_records():
     SERVICE_ACCOUNT_FILE = 'spcheck-ingest-key.json'
     SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
@@ -938,10 +943,9 @@ def get_students_score_records():
         gc = gspread.authorize(creds)
         print("✅ [SHEETS] Authorization successful.")
         
-        url = 'https://docs.google.com/spreadsheets/d/1uWiA1_c5fVqYf1dNwAZgtA5xAaUrgMAHH3BtABIZh-Y/edit'
         SHEET_NAME = 'Students Score'
-        
-        sh = gc.open_by_url(url)
+
+        sh = gc.open_by_url(SPREADSHEET_URL)
         print(f"✅ [SHEETS] Opened spreadsheet: {sh.title}")
         
         worksheet = sh.worksheet(SHEET_NAME)
@@ -974,9 +978,8 @@ def get_supervisors_score_records():
         creds = _get_gsheets_creds(SCOPES)
         gc = gspread.authorize(creds)
         
-        url = 'https://docs.google.com/spreadsheets/d/1uWiA1_c5fVqYf1dNwAZgtA5xAaUrgMAHH3BtABIZh-Y/edit'
-        sh = gc.open_by_url(url)
-        
+        sh = gc.open_by_url(SPREADSHEET_URL)
+
         worksheet = sh.worksheet(SHEET_NAME)
         records = worksheet.get_all_records()
         print(f"✅ [SHEETS] Successfully fetched {len(records)} records from {SHEET_NAME}.")
@@ -1005,9 +1008,8 @@ def get_peers_score_records():
         creds = _get_gsheets_creds(SCOPES)
         gc = gspread.authorize(creds)
         
-        url = 'https://docs.google.com/spreadsheets/d/1uWiA1_c5fVqYf1dNwAZgtA5xAaUrgMAHH3BtABIZh-Y/edit'
-        sh = gc.open_by_url(url)
-        
+        sh = gc.open_by_url(SPREADSHEET_URL)
+
         worksheet = sh.worksheet(SHEET_NAME)
         records = worksheet.get_all_records()
         print(f"✅ [SHEETS] Successfully fetched {len(records)} records from {SHEET_NAME}.")
@@ -1024,6 +1026,36 @@ def get_peers_score_records():
     except Exception as e:
         print(f"❌ [SHEETS] Unhandled error fetching {SHEET_NAME} data: {e}")
         return []
+
+
+def get_prefilled_links_for_faculty(personnel_id, acadcalendar_id):
+    """Fetch pre-filled form links from the 'Pre-Filled Links' sheet tab for a given faculty and term."""
+    SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+    SHEET_NAME = 'Pre-Filled Links'
+    try:
+        creds = _get_gsheets_creds(SCOPES)
+        gc = gspread.authorize(creds)
+        sh = gc.open_by_url(SPREADSHEET_URL)
+        worksheet = sh.worksheet(SHEET_NAME)
+        records = worksheet.get_all_records()
+
+        results = []
+        for row in records:
+            if (str(row.get('Faculty Personnel ID:', '')).strip() == str(personnel_id) and
+                    str(row.get('Semester_AY ID:', '')).strip() == str(acadcalendar_id)):
+                results.append({
+                    'offer': row.get('Offer Number', ''),
+                    'student_link': row.get('Students', ''),
+                    'supervisor_link': row.get('Supervisors', '')
+                })
+        print(f"✅ [SHEETS] Found {len(results)} pre-filled link rows for personnel {personnel_id}, term {acadcalendar_id}.")
+        return results
+    except gspread.exceptions.WorksheetNotFound:
+        print(f"❌ [SHEETS] ERROR: Worksheet '{SHEET_NAME}' not found.")
+        return []
+    except Exception as e:
+        print(f"❌ [SHEETS] Error fetching pre-filled links: {e}")
+        raise
 
 
 # Helper function for ReportLab 
@@ -10005,7 +10037,7 @@ def api_hr_evaluation_dashboard_data():
                         GROUP BY rating_group
                      ) AS breakdown_counts) AS rating_counts_json,
                     
-                    -- Chart Data: Top Departments
+                    -- Chart Data: All Departments
                     (SELECT json_agg(json_build_object('department', collegename, 'avg_score', dept_avg))
                      FROM (
                         SELECT collegename, AVG(overall_score) AS dept_avg
@@ -10013,7 +10045,6 @@ def api_hr_evaluation_dashboard_data():
                         WHERE overall_score > 0
                         GROUP BY collegename
                         ORDER BY dept_avg DESC
-                        LIMIT 5
                      ) AS dept_averages) AS dept_scores_json
                 
                 FROM faculty_eval_scores
@@ -11843,67 +11874,31 @@ def fetch_evaluations():
         return jsonify(message=f"Critical error processing evaluations. Check logs for details. Error: {str(e)}"), 500
 
 
-# --- PLACEHOLDER GOOGLE FORM CONFIGURATION ---
-GOOGLE_FORM_CONFIG = {
-    'base_url': "https://docs.google.com/forms/d/e/1FAIpQLSfP_YOUR_FORM_ID_HERE/viewform",
-    'entry_ids': {
-        'personnel_id': 'entry.123456789',   
-        'acadcalendar_id': 'entry.987654321', 
-        'evaluator_type': 'entry.112233445'  
-    }
-}
-# -----------------------------------------------
-
-
 @app.route('/api/hr/generate-evaluation-link', methods=['POST'])
 @require_auth([20003])
 def api_hr_generate_evaluation_link():
-    """Generates a pre-filled Google Form link for a specific evaluation."""
+    """Fetches pre-filled evaluation form links from the Google Sheet for a specific faculty and term."""
     try:
         data = request.get_json()
         personnel_id = data.get('personnel_id')
         acadcalendar_id = data.get('acadcalendar_id')
-        evaluator_type = data.get('evaluator_type')
-        
-        if not all([personnel_id, acadcalendar_id, evaluator_type]):
-            return jsonify({'success': False, 'error': 'Missing personnel ID, term ID, or evaluator type.'}), 400
 
-        # 1. Fetch Faculty Name for logging
-        conn = db_pool.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT firstname, lastname FROM personnel WHERE personnel_id = %s", (personnel_id,))
-        faculty_info = cursor.fetchone()
-        cursor.close()
-        db_pool.return_connection(conn)
-        
-        if not faculty_info:
-            return jsonify({'success': False, 'error': 'Faculty not found.'}), 404
-        
-        faculty_name = f"{faculty_info[0]} {faculty_info[1]}"
-        
-        # 2. Build the pre-filled link
-        config = GOOGLE_FORM_CONFIG
-        
-        prefill_url = (
-            f"{config['base_url']}?"
-            f"&{config['entry_ids']['personnel_id']}={personnel_id}"
-            f"&{config['entry_ids']['acadcalendar_id']}={acadcalendar_id}"
-            f"&{config['entry_ids']['evaluator_type']}={evaluator_type.capitalize()}"
-            f"&usp=pp_url" # Ensures the URL is correctly formatted for pre-filling
-        )
-        
-        # 3. Log Audit Action
+        if not all([personnel_id, acadcalendar_id]):
+            return jsonify({'success': False, 'error': 'Missing personnel ID or term ID.'}), 400
+
+        links = get_prefilled_links_for_faculty(personnel_id, acadcalendar_id)
+
         hr_personnel_info = get_personnel_info(session['user_id'])
         log_audit_action(
             hr_personnel_info.get('personnel_id'),
-            "Evaluation Link Generated",
-            f"Generated {evaluator_type.capitalize()} link for {faculty_name} (ID: {personnel_id}) for Term ID {acadcalendar_id}"
+            "Evaluation Links Fetched",
+            f"Fetched evaluation form links for Personnel ID {personnel_id}, Term ID {acadcalendar_id}"
         )
 
-        return jsonify({'success': True, 'link': prefill_url})
-        
+        return jsonify({'success': True, 'links': links})
+
     except Exception as e:
-        print(f"Error generating evaluation link: {e}")
+        print(f"Error fetching evaluation links: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
