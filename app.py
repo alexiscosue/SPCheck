@@ -1057,14 +1057,8 @@ def get_current_acadcalendar_info(acadcalendar_id):
         if result:
             semester, acadyear, semesterend = result
             
-            # 1. Clean the semester name (ensure "Semester" is included)
-            if 'semester' not in semester.lower():
-                semester_display = f"{semester} Semester"
-            else:
-                semester_display = semester
-            
-            # 2. Clean the academic year (remove leading 'AY' if present)
-            acadyear_clean = acadyear.upper().lstrip('AY').strip()
+            semester_display = semester
+            acadyear_clean = acadyear
             
             return {
                 'semester_name': semester_display,
@@ -2700,22 +2694,8 @@ def api_faculty_semesters():
         for sem in semesters:
             acadcalendar_id, semester, acadyear, start_date, end_date, is_current, has_data = sem
 
-            if 'Semester' not in semester:
-                if 'First' in semester:
-                    semester_display = 'First Semester'
-                elif 'Second' in semester:
-                    semester_display = 'Second Semester'
-                elif 'Summer' in semester:
-                    semester_display = 'Summer Semester'
-                else:
-                    semester_display = semester + ' Semester'
-            else:
-                semester_display = semester
-
-            if 'AY' in acadyear:
-                year_display = acadyear
-            else:
-                year_display = f'AY {acadyear}'
+            semester_display = semester
+            year_display = f'AY {acadyear}'
 
             if is_current and current_semester_id is None:
                 current_semester_id = acadcalendar_id
