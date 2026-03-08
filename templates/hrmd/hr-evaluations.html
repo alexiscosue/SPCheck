@@ -1465,8 +1465,7 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
                 $('#noPeerFeedback').show();
             }
 
-            let cleanedReportSemester = report.semester_display.replace('AY AY', 'AY').replace('  ', ' ').trim();
-            $('#reportSemester').text(cleanedReportSemester);
+            $('#reportSemester').text(report.semester_display);
         } else {
             $('#ratingBreakdownBody').html('<tr><td colspan="2" style="text-align:center; color:#ef4444;">Failed to load report details.</td></tr>');
             $('#noFeedback').show().text('Error loading qualitative feedback.');
