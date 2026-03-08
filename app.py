@@ -1017,36 +1017,6 @@ def get_supervisors_score_records():
         print(f"❌ [SHEETS] Unhandled error fetching {SHEET_NAME} data: {e}")
         return []
 
-def get_peers_score_records():
-    """Fetch all score records from the 'Peer Score' tab of the Google Sheet."""
-    SERVICE_ACCOUNT_FILE = 'spcheck-ingest-key.json'
-    SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
-    SHEET_NAME = 'Peers Score'  
-    
-    try:
-        print(f"🟡 [SHEETS] Attempting to fetch records from: {SHEET_NAME}")
-        creds = _get_gsheets_creds(SCOPES)
-        gc = gspread.authorize(creds)
-        
-        sh = gc.open_by_url(SPREADSHEET_URL)
-
-        worksheet = sh.worksheet(SHEET_NAME)
-        records = worksheet.get_all_records()
-        print(f"✅ [SHEETS] Successfully fetched {len(records)} records from {SHEET_NAME}.")
-        return records
-    except FileNotFoundError:
-        print(f"❌ [SHEETS] ERROR: Service account file '{SERVICE_ACCOUNT_FILE}' not found for {SHEET_NAME}.")
-        raise
-    except gspread.exceptions.SpreadsheetNotFound:
-        print(f"❌ [SHEETS] ERROR: Spreadsheet URL not found or unauthorized for {SHEET_NAME}.")
-        return []
-    except gspread.exceptions.WorksheetNotFound:
-        print(f"❌ [SHEETS] ERROR: Worksheet '{SHEET_NAME}' not found. Returning empty list.")
-        return []
-    except Exception as e:
-        print(f"❌ [SHEETS] Unhandled error fetching {SHEET_NAME} data: {e}")
-        return []
-
 
 def get_prefilled_links_for_faculty(personnel_id, acadcalendar_id):
     """Fetch pre-filled form links from the 'Pre-Filled Links' sheet tab for a given faculty and term."""
@@ -11918,7 +11888,6 @@ def fetch_evaluations():
     sources = [
         {'type': 'student', 'fetcher': get_students_score_records},
         {'type': 'supervisor', 'fetcher': get_supervisors_score_records},
-        {'type': 'peer', 'fetcher': get_peers_score_records}
     ]
 
     total_updated = 0
