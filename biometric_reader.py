@@ -98,11 +98,15 @@ class BiometricReader:
     # ------------------------------------------------------------------
 
     def _get_session(self, dt):
-        """Return 'Morning', 'Afternoon', or None based on tap time."""
+        """Return 'Morning', 'Afternoon', or None based on tap time.
+        Saturday Afternoon is always rejected (returns None even if time matches).
+        """
         tap_mins = dt.hour * 60 + dt.minute
         if 420 <= tap_mins <= 764:
             return 'Morning'
         elif 765 <= tap_mins <= 1065:
+            if dt.weekday() == 5:  # Saturday — no Afternoon session
+                return None
             return 'Afternoon'
         return None
 
@@ -116,6 +120,25 @@ class BiometricReader:
             current_time = self._truncate_timestamp(datetime.now(self.manila_tz))
             day_name = current_time.strftime('%A')
             session = self._get_session(current_time)
+
+            # ── Reject Sunday and Saturday Afternoon entirely ──────────────
+            if day_name == 'Sunday':
+                remarks = f"[Rejected] Scanned on Sunday — no campus attendance on Sundays"
+                self._log_biometric_scan(cursor, None, current_time, 'outside_buffer', remarks)
+                conn.commit()
+                self._trigger_notification({
+                    'biometric_uid': biometric_uid,
+                    'person_name': 'Unknown',
+                    'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
+                    'action': 'outside_buffer',
+                    'status': 'outside_buffer',
+                    'session': None,
+                    'message': 'No campus attendance recorded on Sundays'
+                })
+                self._send_to_arduino("OUTSIDE:Sunday")
+                print(f"🚫 Scan rejected — Sunday, no campus attendance")
+                return
+            # ──────────────────────────────────────────────────────────────
 
             if biometric_uid == "UNKNOWN":
                 remarks = f"[Unknown] Unregistered fingerprint scanned on {day_name}"

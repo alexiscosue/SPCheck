@@ -292,14 +292,15 @@
         datasets: [{ data: values, backgroundColor: colors, borderRadius: 4, borderSkipped: false }]
       },
       options: {
+        indexAxis: 'y',
         responsive: true, maintainAspectRatio: false,
         plugins: {
           legend: { display: false },
-          tooltip: { callbacks: { label: c => ` ${c.parsed.y} sessions` } }
+          tooltip: { callbacks: { label: c => ` ${c.parsed.x} sessions` } }
         },
         scales: {
-          y: { beginAtZero: true, ticks: { font: { size: 10 }, stepSize: 1 }, grid: { color: 'rgba(0,0,0,0.05)' } },
-          x: { grid: { display: false }, ticks: { font: { size: 10 } } }
+          x: { beginAtZero: true, ticks: { font: { size: 10 }, maxTicksLimit: 4, padding: 4 }, grid: { color: 'rgba(0,0,0,0.05)' } },
+          y: { grid: { display: false }, ticks: { font: { size: 10 } } }
         }
       }
     });

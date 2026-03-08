@@ -51,28 +51,20 @@
       </div>
 
       <div class="chart-large">
-        <div class="card" style="padding:0;overflow:hidden;">
-          <div style="background:#f8fafc;padding:12px 16px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;">
-            <div style="font-weight:700;font-size:13px;color:#374151;"><i class='bx bx-time-five' style="margin-right:5px;color:var(--muted);"></i>Recent Attendance Logs</div>
-            <div style="font-size:12px;color:var(--muted);">Live feed</div>
+        <div class="card" style="padding:16px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <div style="font-weight:700;font-size:14px;">Status Distribution</div>
+            <div style="font-size:12px;color:var(--muted);">All Faculty · Current Semester</div>
           </div>
-
-          <div class="table" style="padding:12px 16px;">
-            <table aria-label="Recent attendance logs">
-              <thead>
-                <tr>
-                  <th style="text-align:center">Name</th>
-                  <th style="text-align:center">Date</th>
-                  <th style="text-align:center">Room</th>
-                  <th style="text-align:center">Time In</th>
-                  <th style="text-align:center">Time Out</th>
-                  <th style="text-align:center">Status</th>
-                </tr>
-              </thead>
-              <tbody id="recentLogs">
-                <tr><td colspan="6" style="text-align:center;padding:2rem;color:#6b7280">Loading attendance data...</td></tr>
-              </tbody>
-            </table>
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;">Class Attendance</div>
+            <div style="position:relative;height:130px;margin-bottom:20px;">
+              <canvas id="hrDashClassDistChart"></canvas>
+            </div>
+            <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;">Campus Attendance</div>
+            <div style="position:relative;height:130px;">
+              <canvas id="hrDashCampusDistChart"></canvas>
+            </div>
           </div>
         </div>
       </div>
@@ -119,6 +111,8 @@
 
   // === Dept Chart View Toggle ===
   let dashDeptTrendChartInstance = null;
+  let hrDashClassDistChart  = null;
+  let hrDashCampusDistChart = null;
 
   function switchDashDeptView(view) {
     const barBtn  = document.getElementById('dashDeptToggle-bar');
@@ -306,16 +300,14 @@
       }
 
       // 2. Fetch other data concurrently
-      const [facultyResponse, attendanceResponse, evaluationResponse] = await Promise.all([
+      const [facultyResponse, evaluationResponse] = await Promise.all([
           fetch('/api/hr/faculty-list'),
-          fetch('/api/hr/faculty-attendance'),
-          fetch('/api/hr/evaluation-dashboard-data') 
+          fetch('/api/hr/evaluation-dashboard-data')
       ]);
-      
-      const facultyData = await facultyResponse.json();
-      const attendanceData = await attendanceResponse.json();
-      const evaluationData = await evaluationResponse.json(); 
-      
+
+      const facultyData    = await facultyResponse.json();
+      const evaluationData = await evaluationResponse.json();
+
       // --- Update Faculty KPI ---
       if (facultyData.success) {
         document.getElementById('kpi-fac').textContent = facultyData.faculty_list.length || 0;
@@ -323,12 +315,8 @@
         document.getElementById('kpi-fac').textContent = 'Error';
       }
 
-      // --- Update Attendance Logs ---
-      if (attendanceData.success) {
-        updateRecentLogs(attendanceData.attendance_logs || []);
-      } else {
-        document.getElementById('recentLogs').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#6b7280">Error loading attendance data</td></tr>';
-      }
+      // --- Status Distribution ---
+      fetchHrAttDist();
 
       // --- Update Evaluation KPIs and Charts ---
       if (evaluationData.success) {
@@ -381,49 +369,79 @@
       document.getElementById('kpi-att-subtitle').textContent = 'Connection failed';
       document.getElementById('kpi-fac').textContent = 'Error';
       document.getElementById('kpi-eval').textContent = 'Error';
-      document.getElementById('recentLogs').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#6b7280">Error loading data</td></tr>';
     }
   }
   
-  // --- Helper Function ---
+  // --- Attendance Distribution Helpers ---
 
-  function updateRecentLogs(logs) {
-    const tbody = document.getElementById('recentLogs');
-    tbody.innerHTML = '';
-
-    const recentLogs = logs.slice(0, 10);
-
-    if (recentLogs.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#6b7280">No attendance data available</td></tr>';
-      return;
+  function showHrDashDistNoData(canvasId) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    canvas.style.display = 'none';
+    if (!canvas.parentNode.querySelector('.dist-no-data')) {
+      const msg = document.createElement('div');
+      msg.className = 'dist-no-data';
+      msg.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;font-size:12px;color:var(--muted);';
+      msg.textContent = 'No attendance data for this semester.';
+      canvas.parentNode.appendChild(msg);
     }
+  }
 
-    recentLogs.forEach(log => {
-      const tr = document.createElement('tr');
-      let statusClass = log.status.toLowerCase();
-      
-      // Fix: Check if time_in is "00:00" and convert to dash
-      let timeInDisplay = log.time_in;
-      if (timeInDisplay === '00:00' || timeInDisplay === '0:00') {
-        timeInDisplay = '—';
+  function renderHrDashDist(canvasId, dist, chartRef) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return null;
+    canvas.style.display = '';
+    const existing = canvas.parentNode.querySelector('.dist-no-data');
+    if (existing) existing.remove();
+    const colors = ['#16a34a', '#f59e0b', '#ef4444', '#8b5cf6'];
+    const labels = ['Present', 'Late', 'Absent', 'Excused'];
+    const values = [dist.present || 0, dist.late || 0, dist.absent || 0, dist.excused || 0];
+    if (chartRef) chartRef.destroy();
+    return new Chart(canvas.getContext('2d'), {
+      type: 'bar',
+      data: { labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: c => ` ${c.parsed.x} sessions` } }
+        },
+        scales: {
+          x: { beginAtZero: true, ticks: { font: { size: 10 }, maxTicksLimit: 4, padding: 8 }, grid: { color: 'rgba(0,0,0,0.05)' } },
+          y: { grid: { display: false }, ticks: { font: { size: 10 } } }
+        }
       }
-      
-      // Fix: Check if time_out is "00:00" and convert to dash
-      let timeOutDisplay = log.time_out;
-      if (timeOutDisplay === '00:00' || timeOutDisplay === '0:00') {
-        timeOutDisplay = '—';
-      }
-      
-      tr.innerHTML = `
-        <td style="text-align:center">${log.name}</td>
-        <td style="text-align:center">${log.date}</td>
-        <td style="text-align:center">${log.room || 'N/A'}</td>
-        <td style="text-align:center">${timeInDisplay}</td>
-        <td style="text-align:center">${timeOutDisplay}</td>
-        <td style="text-align:center"><span class="status ${statusClass}">${log.status}</span></td>
-      `;
-      tbody.appendChild(tr);
     });
+  }
+
+  async function fetchHrAttDist() {
+    try {
+      const [classResp, campusResp] = await Promise.all([
+        fetch('/api/hr/attendance-analytics'),
+        fetch('/api/hr/campus-attendance-analytics')
+      ]);
+      const classData  = await classResp.json();
+      const campusData = await campusResp.json();
+
+      if (classData.success && classData.distribution) {
+        const d = classData.distribution;
+        if ((d.present||0)+(d.late||0)+(d.absent||0)+(d.excused||0) > 0) {
+          hrDashClassDistChart = renderHrDashDist('hrDashClassDistChart', d, hrDashClassDistChart);
+        } else { showHrDashDistNoData('hrDashClassDistChart'); }
+      } else { showHrDashDistNoData('hrDashClassDistChart'); }
+
+      if (campusData.success && campusData.distribution) {
+        const d = campusData.distribution;
+        if ((d.present||0)+(d.late||0)+(d.absent||0)+(d.excused||0) > 0) {
+          hrDashCampusDistChart = renderHrDashDist('hrDashCampusDistChart', d, hrDashCampusDistChart);
+        } else { showHrDashDistNoData('hrDashCampusDistChart'); }
+      } else { showHrDashDistNoData('hrDashCampusDistChart'); }
+    } catch(e) {
+      console.error('Error fetching HR attendance distribution:', e);
+      showHrDashDistNoData('hrDashClassDistChart');
+      showHrDashDistNoData('hrDashCampusDistChart');
+    }
   }
 
   // --- DOM Ready ---

@@ -71,7 +71,7 @@
         <button id="prevPage" class="pagination-btn">‹</button>
         <span id="pageInfo">1 of 1 (0 records)</span>
         <button id="nextPage" class="pagination-btn">›</button>
-        {% if not is_dean %}<button id="exportClassPdfBtn" onclick="exportClassAttendancePdf()" style="margin-left:auto;padding:6px 14px;background:#7b1113;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;"><i class='bx bx-download'></i> Export PDF</button>{% endif %}
+        {% if is_dean %}<button id="exportClassPdfBtn" onclick="exportClassAttendancePdf()" style="margin-left:auto;padding:6px 14px;background:#7b1113;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;"><i class='bx bx-download'></i> Export PDF</button>{% endif %}
       </div>
       <div class="table">
         <table class="attendance-table" id="logsTable">
@@ -97,7 +97,7 @@
         <button id="campusPrevPage" class="hr-pagination-btn">‹</button>
         <span id="campusPageInfo">0 records</span>
         <button id="campusNextPage" class="hr-pagination-btn">›</button>
-        {% if not is_dean %}<button id="exportCampusPdfBtn" onclick="exportCampusAttendancePdf()" style="margin-left:auto;padding:6px 14px;background:#7b1113;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;"><i class='bx bx-download'></i> Export PDF</button>{% endif %}
+        {% if is_dean %}<button id="exportCampusPdfBtn" onclick="exportCampusAttendancePdf()" style="margin-left:auto;padding:6px 14px;background:#7b1113;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;"><i class='bx bx-download'></i> Export PDF</button>{% endif %}
       </div>
       <div class="table">
         <table class="hr-attendance-table" id="campusTable">
@@ -201,7 +201,7 @@
                   <th style="text-align:center;cursor:pointer" data-sort-cb="excused">Excused <span class="cb-sort-icon">↕</span></th>
                   <th style="text-align:center;cursor:pointer" data-sort-cb="total">Total <span class="cb-sort-icon">↕</span></th>
                   <th style="text-align:center;cursor:pointer" data-sort-cb="rate">Rate <span class="cb-sort-icon">↑</span></th>
-                  <th style="text-align:center">PDF</th>
+                  {% if is_dean %}<th style="text-align:center">PDF</th>{% endif %}
                 </tr>
               </thead>
               <tbody id="cbBody">
@@ -236,7 +236,7 @@
                   <th style="text-align:center;cursor:pointer" data-sort-collegebd="excused">Excused <span class="collegebd-sort-icon">↕</span></th>
                   <th style="text-align:center;cursor:pointer" data-sort-collegebd="total">Total <span class="collegebd-sort-icon">↕</span></th>
                   <th style="text-align:center;cursor:pointer" data-sort-collegebd="rate">Rate <span class="collegebd-sort-icon">↑</span></th>
-                  <th style="text-align:center">PDF</th>
+                  {% if is_dean %}<th style="text-align:center">PDF</th>{% endif %}
                 </tr></thead>
                 <tbody id="collegeBdBody">
                   <tr><td colspan="9" style="text-align:center;padding:2rem;color:#6b7280">Loading...</td></tr>
@@ -262,7 +262,7 @@
                   <th style="text-align:center;cursor:pointer" data-sort-collegefb="excused">Excused <span class="collegefb-sort-icon">↕</span></th>
                   <th style="text-align:center;cursor:pointer" data-sort-collegefb="total">Total <span class="collegefb-sort-icon">↕</span></th>
                   <th style="text-align:center;cursor:pointer" data-sort-collegefb="rate">Rate <span class="collegefb-sort-icon">↑</span></th>
-                  <th style="text-align:center">PDF</th>
+                  {% if is_dean %}<th style="text-align:center">PDF</th>{% endif %}
                 </tr></thead>
                 <tbody id="collegeFbBody">
                   <tr><td colspan="8" style="text-align:center;padding:2rem;color:#6b7280">Loading...</td></tr>
@@ -327,7 +327,7 @@
                   <th colspan="3" style="text-align:center">Morning</th>
                   <th colspan="3" style="text-align:center">Afternoon</th>
                   <th colspan="2" style="text-align:center">Overall</th>
-                  <th rowspan="2" style="text-align:center;vertical-align:middle">PDF</th>
+                  {% if is_dean %}<th rowspan="2" style="text-align:center;vertical-align:middle">PDF</th>{% endif %}
                 </tr>
                 <tr>
                   <th style="text-align:center;cursor:pointer" data-sort-collegeca="morning_present">Present <span class="collegeca-sort-icon">↕</span></th>
@@ -883,7 +883,7 @@
         const rate = r.rate;
         const rateColor = rate >= 80 ? '#16a34a' : rate >= 60 ? '#92400e' : '#b91c1c';
         const rateBg    = rate >= 80 ? '#d1fae5' : rate >= 60 ? '#fef3c7' : '#fee2e2';
-        const dlBtn = r.class_id && currentPersonnelId
+        const dlBtn = IS_DEAN && r.class_id && currentPersonnelId
           ? '<button onclick="downloadClassPdf(' + currentPersonnelId + ',' + r.class_id + ',\'' + semId + '\')" title="Download PDF" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:#7b1113;font-size:16px;"><i class=\'bx bx-download\'></i></button>'
           : '';
         return '<tr>' +
@@ -896,7 +896,7 @@
           '<td style="text-align:center">' + r.total + '</td>' +
           '<td style="text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;background:' +
           rateBg + ';color:' + rateColor + '">' + rate.toFixed(1) + '%</span></td>' +
-          '<td style="text-align:center">' + dlBtn + '</td>' +
+          (IS_DEAN ? '<td style="text-align:center">' + dlBtn + '</td>' : '') +
           '</tr>';
       }).join('');
     }
@@ -972,6 +972,16 @@
             label: 'Absent Sessions',
             data: trends.map(t => t.total_absent),
             borderColor: '#ef4444',
+            backgroundColor: 'transparent',
+            tension: 0.4,
+            yAxisID: 'yCounts',
+            pointRadius: 3,
+            borderDash: [5, 3]
+          },
+          {
+            label: 'Excused Sessions',
+            data: trends.map(t => t.total_excused || 0),
+            borderColor: '#8b5cf6',
             backgroundColor: 'transparent',
             tension: 0.4,
             yAxisID: 'yCounts',
@@ -1067,7 +1077,8 @@
           { label: 'Avg. Rate (%)', data: trends.map(t => t.avg_rate), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', fill: true, tension: 0.4, yAxisID: 'yRate', pointRadius: 4, pointHoverRadius: 6 },
           { label: 'Present Sessions', data: trends.map(t => t.total_present), borderColor: '#10b981', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
           { label: 'Late Sessions', data: trends.map(t => t.total_late), borderColor: '#f59e0b', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
-          { label: 'Absent Sessions', data: trends.map(t => t.total_absent), borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] }
+          { label: 'Absent Sessions', data: trends.map(t => t.total_absent), borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
+          { label: 'Excused Sessions', data: trends.map(t => t.total_excused || 0), borderColor: '#8b5cf6', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] }
         ]
       },
       options: {
@@ -1377,7 +1388,8 @@
           { label: 'Avg. Rate (%)', data: trends.map(t => t.avg_rate), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', fill: true, tension: 0.4, yAxisID: 'yRate', pointRadius: 4, pointHoverRadius: 6 },
           { label: 'Present', data: trends.map(t => t.total_present), borderColor: '#10b981', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
           { label: 'Late', data: trends.map(t => t.total_late), borderColor: '#f59e0b', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
-          { label: 'Absent', data: trends.map(t => t.total_absent), borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] }
+          { label: 'Absent', data: trends.map(t => t.total_absent), borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
+          { label: 'Excused', data: trends.map(t => t.total_excused || 0), borderColor: '#8b5cf6', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] }
         ]
       },
       options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
@@ -1423,7 +1435,8 @@
           { label: 'Avg. Rate (%)', data: trends.map(t => t.avg_rate), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', fill: true, tension: 0.4, yAxisID: 'yRate', pointRadius: 4, pointHoverRadius: 6 },
           { label: 'Present', data: trends.map(t => t.total_present), borderColor: '#10b981', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
           { label: 'Late', data: trends.map(t => t.total_late), borderColor: '#f59e0b', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
-          { label: 'Absent', data: trends.map(t => t.total_absent), borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] }
+          { label: 'Absent', data: trends.map(t => t.total_absent), borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] },
+          { label: 'Excused', data: trends.map(t => t.total_excused || 0), borderColor: '#8b5cf6', backgroundColor: 'transparent', tension: 0.4, yAxisID: 'yCounts', pointRadius: 3, borderDash: [5,3] }
         ]
       },
       options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
@@ -1522,7 +1535,7 @@
         const rate = r.rate || 0;
         const rateColor = rate >= 80 ? '#16a34a' : rate >= 60 ? '#92400e' : '#b91c1c';
         const rateBg    = rate >= 80 ? '#d1fae5' : rate >= 60 ? '#fef3c7' : '#fee2e2';
-        const dlBtn = r.personnel_id && r.class_id
+        const dlBtn = IS_DEAN && r.personnel_id && r.class_id
           ? '<button onclick="downloadClassPdf(' + r.personnel_id + ',' + r.class_id + ',\'' + semId + '\')" title="Download PDF" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:#7b1113;font-size:16px;"><i class=\'bx bx-download\'></i></button>'
           : '';
         return '<tr>' +
@@ -1536,7 +1549,7 @@
           '<td style="text-align:center">' + r.total + '</td>' +
           '<td style="text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;background:' +
           rateBg + ';color:' + rateColor + '">' + rate.toFixed(1) + '%</span></td>' +
-          '<td style="text-align:center">' + dlBtn + '</td></tr>';
+          (IS_DEAN ? '<td style="text-align:center">' + dlBtn + '</td>' : '') + '</tr>';
       }).join('');
     }
     const from = total === 0 ? 0 : start + 1;
@@ -1596,7 +1609,7 @@
         const rate = r.rate || 0;
         const rateColor = rate >= 80 ? '#16a34a' : rate >= 60 ? '#92400e' : '#b91c1c';
         const rateBg    = rate >= 80 ? '#d1fae5' : rate >= 60 ? '#fef3c7' : '#fee2e2';
-        const dlBtn = r.personnel_id
+        const dlBtn = IS_DEAN && r.personnel_id
           ? '<button onclick="downloadFacultyPdf(' + r.personnel_id + ',\'' + semId + '\')" title="Download PDF" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:#7b1113;font-size:16px;"><i class=\'bx bx-download\'></i></button>'
           : '';
         return '<tr>' +
@@ -1609,7 +1622,7 @@
           '<td style="text-align:center">' + r.total + '</td>' +
           '<td style="text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;background:' +
           rateBg + ';color:' + rateColor + '">' + rate.toFixed(1) + '%</span></td>' +
-          '<td style="text-align:center">' + dlBtn + '</td></tr>';
+          (IS_DEAN ? '<td style="text-align:center">' + dlBtn + '</td>' : '') + '</tr>';
       }).join('');
     }
     const from = total === 0 ? 0 : start + 1;
@@ -1676,7 +1689,7 @@
         const rate = r.rate || 0;
         const rateColor = rate >= 80 ? '#16a34a' : rate >= 60 ? '#92400e' : '#b91c1c';
         const rateBg    = rate >= 80 ? '#d1fae5' : rate >= 60 ? '#fef3c7' : '#fee2e2';
-        const dlBtn = r.personnel_id
+        const dlBtn = IS_DEAN && r.personnel_id
           ? '<button onclick="downloadCampusPdf(' + r.personnel_id + ',\'' + semId + '\')" title="Download PDF" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:#7b1113;font-size:16px;"><i class=\'bx bx-download\'></i></button>'
           : '';
         return '<tr>' +
@@ -1690,7 +1703,7 @@
           '<td style="text-align:center">' + r.total_sessions + '</td>' +
           '<td style="text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;background:' +
           rateBg + ';color:' + rateColor + '">' + rate.toFixed(1) + '%</span></td>' +
-          '<td style="text-align:center">' + dlBtn + '</td></tr>';
+          (IS_DEAN ? '<td style="text-align:center">' + dlBtn + '</td>' : '') + '</tr>';
       }).join('');
     }
     const from = total === 0 ? 0 : start + 1;
