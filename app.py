@@ -8836,8 +8836,9 @@ def api_hr_colleges_list():
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT college_id, collegename 
-            FROM college 
+            SELECT college_id, collegename
+            FROM college
+            WHERE collegename != 'Office of the President'
             ORDER BY collegename
         """)
         
@@ -10635,9 +10636,13 @@ def api_hr_evaluations():
 
     # --- KPI 1, 2, 3, & 4 Calculation (Combined Query) ---
     kpi_dept_clause = "AND p.college_id = (SELECT college_id FROM college WHERE collegename = %s)" if dept else ""
+    # Param order: schedule %s, fe %s (faculty_data), dept %s (if set),
+    #              fe %s (all_dept_scores), dept-or-empty %s (dept_rank subquery)
     kpi_params = [current_term_id, current_term_id]
     if dept:
-        kpi_params.append(dept)  # appended after the two acadcalendar_id params
+        kpi_params.append(dept)
+    kpi_params.append(current_term_id)   # all_dept_scores
+    kpi_params.append(dept or '')        # dept_rank subquery (NULL result when empty)
     cursor.execute(f"""
         WITH faculty_data AS (
             SELECT
@@ -10669,21 +10674,37 @@ def api_hr_evaluations():
             WHERE p.role_id = 20001 {kpi_dept_clause}
             GROUP BY p.personnel_id, p.college_id
         ),
-        department_avg AS (
+        -- Always scans all colleges — used for leading dept and dept rank
+        all_dept_scores AS (
             SELECT
-                fd.college_id,
-                AVG(fd.overall_score) AS dept_avg_score
-            FROM faculty_data fd
-            WHERE fd.overall_score > 0
-            GROUP BY fd.college_id
-            ORDER BY dept_avg_score DESC
+                p.personnel_id,
+                p.college_id,
+                COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END), 0) * 0.55 +
+                COALESCE(MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END), 0) * 0.35 +
+                COALESCE(MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END), 0) * 0.10
+                    AS overall_score
+            FROM personnel p
+            LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s
+            WHERE p.role_id = 20001
+            GROUP BY p.personnel_id, p.college_id
+        ),
+        dept_avgs AS (
+            SELECT college_id, AVG(overall_score) AS dept_avg
+            FROM all_dept_scores
+            WHERE overall_score > 0
+            GROUP BY college_id
+        ),
+        department_avg AS (
+            SELECT college_id, dept_avg
+            FROM dept_avgs
+            ORDER BY dept_avg DESC
             LIMIT 1
         )
         SELECT
             -- General KPIs
             (SELECT COUNT(fd.personnel_id) FROM faculty_data fd) AS total_faculty,
             (SELECT COALESCE(AVG(fd.overall_score), 0) FROM faculty_data fd) AS average_rating,
-            -- Met response rate: faculty whose responses >= threshold based on total enrolled students
+            -- Met response rate
             (SELECT SUM(CASE
                 WHEN fd.total_students = 0 THEN 0
                 WHEN fd.student_responses_count >= fd.total_students * CASE
@@ -10696,31 +10717,47 @@ def api_hr_evaluations():
                 ELSE 0
             END) FROM faculty_data fd) AS met_response_rate_count,
             (SELECT COUNT(fd.personnel_id) FROM faculty_data fd) AS faculty_with_data,
-
-            -- Leading Department KPI
-            c.collegename AS best_department_name
+            -- Leading Department KPI (always institution-wide)
+            c.collegename AS best_department_name,
+            -- Dept rank: position of the filtered dept among all colleges
+            (SELECT ranked.rk FROM (
+                SELECT college_id, RANK() OVER (ORDER BY dept_avg DESC) AS rk
+                FROM dept_avgs
+             ) ranked
+             JOIN college c2 ON ranked.college_id = c2.college_id
+             WHERE c2.collegename = %s) AS dept_rank_num,
+            (SELECT COUNT(*) FROM dept_avgs) AS dept_total
         FROM department_avg da
         JOIN college c ON da.college_id = c.college_id
     """, tuple(kpi_params))
 
     kpi_results = cursor.fetchone()
-    
-    # Map results
+
+    def ordinal(n):
+        if 11 <= (n % 100) <= 13:
+            return f"{n}th"
+        return f"{n}{['th','st','nd','rd','th'][min(n % 10, 4)]}"
+
     if kpi_results:
+        rank_num   = kpi_results[5]
+        dept_total = int(kpi_results[6]) if kpi_results[6] else 0
+        dept_rank_display = f"{ordinal(int(rank_num))} of {dept_total}" if rank_num else "N/A"
         kpis = {
             "total_faculty": kpi_results[0],
             "avg_rating": kpi_results[1],
             "met_response_rate_count": kpi_results[2],
             "faculty_with_data": kpi_results[3],
-            "best_department_name": kpi_results[4] if kpi_results[4] else "N/A"
+            "best_department_name": kpi_results[4] if kpi_results[4] else "N/A",
+            "dept_rank": dept_rank_display
         }
     else:
-         kpis = {
+        kpis = {
             "total_faculty": 0,
             "avg_rating": 0,
             "met_response_rate_count": 0,
             "faculty_with_data": 0,
-            "best_department_name": "N/A"
+            "best_department_name": "N/A",
+            "dept_rank": "N/A"
         }
     # --- END KPI CALCULATION ---
     
@@ -11071,11 +11108,14 @@ def api_hr_evaluation_trends():
 @require_auth([20002, 20003])
 def api_hr_dept_trends():
     """Per-department weighted avg score per semester, ordered chronologically."""
+    dept_filter = request.args.get('dept', '').strip()
     conn = None
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("""
+        where_extra = "AND c.collegename = %s" if dept_filter else ""
+        params = (dept_filter,) if dept_filter else ()
+        cur.execute(f"""
             SELECT
                 ac.acadcalendar_id,
                 ac.semester,
@@ -11089,10 +11129,10 @@ def api_hr_dept_trends():
             JOIN acadcalendar ac  ON fe.acadcalendar_id = ac.acadcalendar_id
             JOIN personnel p      ON fe.personnel_id    = p.personnel_id
             JOIN college c        ON p.college_id       = c.college_id
-            WHERE p.role_id = 20001
+            WHERE p.role_id = 20001 {where_extra}
             GROUP BY ac.acadcalendar_id, ac.semester, ac.acadyear, ac.semesterstart, c.collegename
             ORDER BY ac.semesterstart ASC, c.collegename ASC
-        """)
+        """, params)
         rows = cur.fetchall()
 
         # Build ordered semester label list and per-dept score map
@@ -11154,11 +11194,15 @@ def api_hr_dept_trends():
 @require_auth([20002, 20003])
 def api_hr_distribution_trends():
     """Per-semester count of faculty in each rating bucket (0-1, 1-2, 2-3, 3-4)."""
+    dept_filter = request.args.get('dept', '').strip()
     conn = None
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("""
+        dept_join  = "JOIN college c ON p.college_id = c.college_id" if dept_filter else ""
+        dept_where = "AND c.collegename = %s" if dept_filter else ""
+        params = (dept_filter,) if dept_filter else ()
+        cur.execute(f"""
             WITH faculty_sem_scores AS (
                 SELECT
                     fe.acadcalendar_id,
@@ -11169,7 +11213,8 @@ def api_hr_distribution_trends():
                         AS overall
                 FROM faculty_evaluations fe
                 JOIN personnel p ON fe.personnel_id = p.personnel_id
-                WHERE p.role_id = 20001
+                {dept_join}
+                WHERE p.role_id = 20001 {dept_where}
                 GROUP BY fe.acadcalendar_id, fe.personnel_id
             )
             SELECT
@@ -11186,7 +11231,7 @@ def api_hr_distribution_trends():
             WHERE fss.overall > 0
             GROUP BY ac.acadcalendar_id, ac.semester, ac.acadyear, ac.semesterstart
             ORDER BY ac.semesterstart ASC
-        """)
+        """, params)
         rows = cur.fetchall()
 
         sem_labels = []
