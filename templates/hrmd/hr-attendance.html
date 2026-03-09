@@ -189,7 +189,6 @@
             <span id="biometricStatusText">Biometric Offline</span>
           </div>
           <button class="edit-time-btn" id="editCampusTimeBtn"><i class='bx bx-time'></i><span id="editCampusTimeBtnText">Edit Time In/Out</span></button>
-          <button id="campusAttRefreshBtn" onclick="syncCampusAttendance()" style="margin-left:auto;padding:7px 14px;border:none;border-radius:7px;background:var(--spc-maroon);color:#fff;font-weight:600;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:5px;"><i class='bx bx-refresh'></i> Refresh</button>
         </div>
       </div>
 
@@ -2681,10 +2680,8 @@
     renderCampusAttendance();
   }
 
-  // Full sync then reload — called only by the Refresh button
+  // Full sync then reload — called by the biometric reader after processing
   async function syncCampusAttendance() {
-    const btn = document.getElementById('campusAttRefreshBtn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Syncing...'; }
     document.getElementById('campusAttBody').innerHTML =
       '<tr><td colspan="7" style="text-align:center;padding:2rem;color:#6b7280;">Syncing data...</td></tr>';
     try {
@@ -2693,7 +2690,6 @@
       console.warn('Sync warning:', e);
     }
     await fetchCampusAttendance(document.getElementById('campusAttSemesterSelect')?.value);
-    if (btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
   }
 
   function fmtISOTime(isoStr) {
@@ -3518,7 +3514,7 @@
   let fbFiltered  = [];
   let fbPage      = 1;
   const fbPerPage = 10;
-  let fbSort      = { column: 'faculty_name', direction: 'asc' };
+  let fbSort      = { column: 'rate', direction: 'asc' };
 
   function buildFacultyOverallData(breakdown) {
     const map = {};
@@ -3555,7 +3551,7 @@
   function renderFacultyOverall(breakdown) {
     fbAllData = buildFacultyOverallData(breakdown);
     fbPage    = 1;
-    fbSort    = { column: 'faculty_name', direction: 'asc' };
+    fbSort    = { column: 'rate', direction: 'asc' };
     applyFbFilters();
     updateFbSortIcons();
   }
@@ -3647,7 +3643,7 @@
   let caFiltered  = [];
   let caPage      = 1;
   const caPerPage = 10;
-  let caSort      = { column: 'faculty_name', direction: 'asc' };
+  let caSort      = { column: 'rate', direction: 'asc' };
 
   function renderCampusAttAnalytics(breakdown) {
     caAllData = (breakdown || []).map(function (f) {
@@ -3662,7 +3658,7 @@
       });
     });
     caPage = 1;
-    caSort = { column: 'faculty_name', direction: 'asc' };
+    caSort = { column: 'rate', direction: 'asc' };
     applyCaFilters();
     updateCaSortIcons();
   }

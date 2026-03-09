@@ -569,7 +569,7 @@
   const collegeFbPerPage = 10;
   // College campus breakdown state
   let collegeCaAllData = [], collegeCaFiltered = [], collegeCaPage = 1;
-  let collegeCaSort = { column: 'faculty_name', direction: 'asc' };
+  let collegeCaSort = { column: 'rate', direction: 'asc' };
   const collegeCaPerPage = 10;
 
   // ── Semesters & logs data fetch ────────────────────────────────
@@ -1652,7 +1652,7 @@
       return Object.assign({}, r, { total_sessions: total, rate: rate });
     });
     collegeCaPage = 1;
-    collegeCaSort = { column: 'faculty_name', direction: 'asc' };
+    collegeCaSort = { column: 'rate', direction: 'asc' };
     applyCollegeCaFilters();
     updateCollegeCaSortIcons();
   }

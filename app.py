@@ -249,22 +249,32 @@ class ConnectionPool:
         cursor.close()
         return conn
     
+    def _is_healthy(self, conn):
+        """Return True if conn is usable (IDLE or in a transaction but socket alive)."""
+        try:
+            conn.execute_simple("SELECT 1")
+            return True
+        except Exception:
+            return False
+
     def get_connection(self):
         try:
             conn = self.pool.get(block=False)
+            # Always reset any in-progress transaction first using simple protocol
             try:
-                cursor = conn.cursor()
-                cursor.execute("SELECT 1")
-                cursor.close()
-                return conn
-            except:
+                conn.execute_simple("ROLLBACK")
+            except Exception:
+                pass
+            # Validate the connection is still alive
+            if not self._is_healthy(conn):
                 try:
                     conn.close()
                 except Exception:
                     pass
                 with self.lock:
                     self.current_connections -= 1
-                return self._create_connection()
+                conn = self._create_connection()
+            return conn
         except Empty:
             with self.lock:
                 if self.current_connections < self.max_connections:
@@ -274,21 +284,40 @@ class ConnectionPool:
             return self.pool.get(block=True, timeout=5)
 
     def return_connection(self, conn):
-        # Use the simple query protocol for ROLLBACK so it works even when
-        # the extended query protocol state is broken. If the rollback itself
-        # fails (dead/corrupted connection), close the connection rather than
-        # returning it to the pool where it would corrupt the next request.
+        if conn is None:
+            return
+
+        with self.lock:
+            if conn in self.pool.queue:
+                return  # Prevent double-return of the same connection
+
+        # Always attempt a ROLLBACK via simple protocol so that:
+        # (a) any open transaction is closed, and
+        # (b) any broken extended-query-protocol state is cleared
         try:
-            if conn._in_transaction:
-                conn.execute_simple("ROLLBACK")
-            self.pool.put(conn, block=False)
+            conn.execute_simple("ROLLBACK")
         except Exception:
+            # Connection is dead — discard it instead of returning it to the pool
             try:
                 conn.close()
             except Exception:
                 pass
             with self.lock:
                 self.current_connections -= 1
+            return
+
+        try:
+            self.pool.put(conn, block=False)
+        except Exception:
+            # Pool is full — just close the extra connection
+            try:
+                conn.close()
+            except Exception:
+                pass
+            with self.lock:
+                self.current_connections -= 1
+
+
 
 db_pool = ConnectionPool(min_connections=1, max_connections=15)
 
@@ -2106,7 +2135,7 @@ def api_hr_campus_attendance_analytics():
                     ON r.personnel_id = p.personnel_id AND r.acadcalendar_id = %s
                 WHERE p.role_id IN (20001, 20002, 20003)
                   {college_clause}
-                ORDER BY p.lastname, p.firstname
+                ORDER BY attendance_rate ASC, p.lastname, p.firstname
             """, bd_params)
         else:
             bd_params_no_sem = ([int(college_id)] if college_id else [])
@@ -2136,7 +2165,7 @@ def api_hr_campus_attendance_analytics():
                 WHERE p.role_id IN (20001, 20002, 20003)
                   {college_clause}
                 GROUP BY p.personnel_id, faculty_name, c.collegename, pr.position, pr.employmentstatus
-                ORDER BY p.lastname, p.firstname
+                ORDER BY attendance_rate ASC, p.lastname, p.firstname
             """)
 
         rows = cursor.fetchall()
@@ -3720,24 +3749,31 @@ def api_faculty_campus_attendance_analytics():
             if sem:
                 sem_start, sem_end = sem[0], sem[1]
 
-        # KPIs
-        date_filter = ""
-        params_base = [personnel_id]
-        if sem_start and sem_end:
-            date_filter = "AND ca.attendance_date BETWEEN %s AND %s"
-            params_base += [sem_start, sem_end]
-        cursor.execute(f"""
-            SELECT
-                COUNT(*) FILTER (WHERE ca.status = 'Present')  AS present,
-                COUNT(*) FILTER (WHERE ca.status = 'Late')     AS late,
-                COUNT(*) FILTER (WHERE ca.status = 'Absent')   AS absent,
-                COUNT(*) FILTER (WHERE ca.status = 'Excused')  AS excused,
-                COUNT(*) AS total
-            FROM campus_attendance ca
-            WHERE ca.personnel_id = %s {date_filter}
-        """, params_base)
+        # KPIs from campus_attendance_report (source of truth)
+        if semester_id:
+            cursor.execute("""
+                SELECT
+                    COALESCE(SUM(r.morning_present + r.afternoon_present), 0),
+                    COALESCE(SUM(r.morning_late    + r.afternoon_late),    0),
+                    COALESCE(SUM(r.morning_absent  + r.afternoon_absent),  0),
+                    COALESCE(SUM(r.morning_excused + r.afternoon_excused), 0),
+                    COALESCE(SUM(r.total_sessions), 0)
+                FROM campus_attendance_report r
+                WHERE r.personnel_id = %s AND r.acadcalendar_id = %s
+            """, (personnel_id, semester_id))
+        else:
+            cursor.execute("""
+                SELECT
+                    COALESCE(SUM(r.morning_present + r.afternoon_present), 0),
+                    COALESCE(SUM(r.morning_late    + r.afternoon_late),    0),
+                    COALESCE(SUM(r.morning_absent  + r.afternoon_absent),  0),
+                    COALESCE(SUM(r.morning_excused + r.afternoon_excused), 0),
+                    COALESCE(SUM(r.total_sessions), 0)
+                FROM campus_attendance_report r
+                WHERE r.personnel_id = %s
+            """, (personnel_id,))
         row = cursor.fetchone()
-        present, late, absent, excused, total = (row or (0, 0, 0, 0, 0))
+        present, late, absent, excused, total = (int(x) for x in (row or (0, 0, 0, 0, 0)))
         avg_rate = round(((present + excused + late * 0.75) / total) * 100, 1) if total > 0 else 0.0
 
         # Weekly trend — fill all weeks in range so graph is continuous
@@ -3772,7 +3808,7 @@ def api_faculty_campus_attendance_analytics():
                 ORDER BY w.week_start
             """, (sem_start, sem_end, personnel_id, sem_start, sem_end))
         else:
-            cursor.execute(f"""
+            cursor.execute("""
                 SELECT
                     DATE_TRUNC('week', ca.attendance_date)::date AS week_start,
                     COUNT(*) FILTER (WHERE ca.status = 'Present')  AS present,
@@ -3781,20 +3817,22 @@ def api_faculty_campus_attendance_analytics():
                     COUNT(*) FILTER (WHERE ca.status = 'Excused')  AS excused,
                     COUNT(*) AS total
                 FROM campus_attendance ca
-                WHERE ca.personnel_id = %s {date_filter}
+                WHERE ca.personnel_id = %s
                 GROUP BY week_start
                 ORDER BY week_start
-            """, params_base)
+            """, (personnel_id,))
         trends = []
         for r in cursor.fetchall():
             wk_start, wp, wl, wa, we, wt = r
+            wp, wl, wa, we, wt = int(wp), int(wl), int(wa), int(we), int(wt)
             rate = round(((wp + we + wl * 0.75) / wt) * 100, 1) if wt > 0 else 0.0
             trends.append({
-                'label': wk_start.strftime('%b %d') if wk_start else '',
-                'avg_rate': rate,
+                'label':         wk_start.strftime('%b %d') if wk_start else '',
+                'avg_rate':      rate,
                 'total_present': wp,
-                'total_late': wl,
-                'total_absent': wa,
+                'total_late':    wl,
+                'total_absent':  wa,
+                'total_excused': we,
             })
 
         return jsonify({
@@ -4058,6 +4096,7 @@ def api_faculty_dashboard():
         if not result or result[0] is None:
             cursor.close()
             db_pool.return_connection(conn)
+            conn = None
             return {'success': False, 'error': 'No active academic calendar found'}
 
         semester_info_json, schedule_json, attendance_json, teaching_load, overall_eval_score = result
@@ -4074,6 +4113,7 @@ def api_faculty_dashboard():
 
         cursor.close()
         db_pool.return_connection(conn)
+        conn = None
 
         # Compute regularization status
         from datetime import date as _date_cls
@@ -6919,7 +6959,81 @@ def api_hr_add_employee():
                     ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[],
                     ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[])
         """, (new_profile_id, new_personnel_id, employment_status, position))
-        
+
+        # Generate past campus attendance records (Absent) for all past dates in the current semester
+        cursor.execute("""
+            WITH sem AS (
+                SELECT acadcalendar_id, semesterstart, semesterend
+                FROM acadcalendar
+                WHERE semesterstart <= CURRENT_DATE AND semesterend >= CURRENT_DATE
+                LIMIT 1
+            ),
+            dates AS (
+                SELECT generate_series(sem.semesterstart, CURRENT_DATE - 1, '1 day'::interval)::date AS attendance_date
+                FROM sem
+            ),
+            sessions(session) AS (VALUES ('Morning'), ('Afternoon')),
+            valid_combinations AS (
+                SELECT d.attendance_date, s.session
+                FROM dates d, sessions s
+                WHERE EXTRACT(DOW FROM d.attendance_date) != 0
+                  AND NOT (EXTRACT(DOW FROM d.attendance_date) = 6 AND s.session = 'Afternoon')
+            )
+            INSERT INTO campus_attendance (personnel_id, attendance_date, session, time_in, time_out, status)
+            SELECT %s, vc.attendance_date, vc.session, NULL, NULL, 'Absent'
+            FROM valid_combinations vc
+            ON CONFLICT (personnel_id, attendance_date, session) DO NOTHING
+        """, (new_personnel_id,))
+
+        # Build campus_attendance_report for this new employee
+        cursor.execute("""
+            INSERT INTO campus_attendance_report (
+                personnel_id, acadcalendar_id,
+                morning_present, morning_late, morning_absent, morning_excused, morning_total,
+                afternoon_present, afternoon_late, afternoon_absent, afternoon_excused, afternoon_total,
+                total_sessions, attendance_rate, lastupdated
+            )
+            SELECT
+                ca.personnel_id,
+                ac.acadcalendar_id,
+                SUM(CASE WHEN ca.session='Morning'   AND ca.status='Present'  THEN 1 ELSE 0 END),
+                SUM(CASE WHEN ca.session='Morning'   AND ca.status='Late'     THEN 1 ELSE 0 END),
+                SUM(CASE WHEN ca.session='Morning'   AND ca.status='Absent'   THEN 1 ELSE 0 END),
+                SUM(CASE WHEN ca.session='Morning'   AND ca.status='Excused'  THEN 1 ELSE 0 END),
+                SUM(CASE WHEN ca.session='Morning'   THEN 1 ELSE 0 END),
+                SUM(CASE WHEN ca.session='Afternoon' AND ca.status='Present'  THEN 1 ELSE 0 END),
+                SUM(CASE WHEN ca.session='Afternoon' AND ca.status='Late'     THEN 1 ELSE 0 END),
+                SUM(CASE WHEN ca.session='Afternoon' AND ca.status='Absent'   THEN 1 ELSE 0 END),
+                SUM(CASE WHEN ca.session='Afternoon' AND ca.status='Excused'  THEN 1 ELSE 0 END),
+                SUM(CASE WHEN ca.session='Afternoon' THEN 1 ELSE 0 END),
+                COUNT(*),
+                ROUND(
+                    (SUM(CASE WHEN ca.status='Present' THEN 1 ELSE 0 END)
+                   + SUM(CASE WHEN ca.status='Excused' THEN 1 ELSE 0 END)
+                   + SUM(CASE WHEN ca.status='Late'    THEN 1 ELSE 0 END) * 0.75)
+                    / NULLIF(COUNT(*), 0) * 100
+                , 2),
+                NOW()
+            FROM campus_attendance ca
+            JOIN acadcalendar ac ON ca.attendance_date BETWEEN ac.semesterstart AND ac.semesterend
+            WHERE ca.personnel_id = %s
+            GROUP BY ca.personnel_id, ac.acadcalendar_id
+            ON CONFLICT (personnel_id, acadcalendar_id) DO UPDATE SET
+                morning_present   = EXCLUDED.morning_present,
+                morning_late      = EXCLUDED.morning_late,
+                morning_absent    = EXCLUDED.morning_absent,
+                morning_excused   = EXCLUDED.morning_excused,
+                morning_total     = EXCLUDED.morning_total,
+                afternoon_present = EXCLUDED.afternoon_present,
+                afternoon_late    = EXCLUDED.afternoon_late,
+                afternoon_absent  = EXCLUDED.afternoon_absent,
+                afternoon_excused = EXCLUDED.afternoon_excused,
+                afternoon_total   = EXCLUDED.afternoon_total,
+                total_sessions    = EXCLUDED.total_sessions,
+                attendance_rate   = EXCLUDED.attendance_rate,
+                lastupdated       = EXCLUDED.lastupdated
+        """, (new_personnel_id,))
+
         conn.commit()
         cursor.close()
         db_pool.return_connection(conn)
@@ -6984,6 +7098,17 @@ def api_hr_delete_employee():
         
         user_id = user_result[0]
         cursor.execute("BEGIN")
+        # Delete child records in dependency order before removing personnel
+        cursor.execute("DELETE FROM peer_evaluation_submissions WHERE evaluator_id = %s OR evaluatee_id = %s", (personnel_id, personnel_id))
+        cursor.execute("DELETE FROM peer_assignments WHERE evaluator_id = %s OR evaluatee_id = %s", (personnel_id, personnel_id))
+        cursor.execute("DELETE FROM faculty_evaluations WHERE personnel_id = %s", (personnel_id,))
+        cursor.execute("DELETE FROM faculty_license_tracker WHERE personnel_id = %s", (personnel_id,))
+        cursor.execute("DELETE FROM attendancereport WHERE personnel_id = %s", (personnel_id,))
+        cursor.execute("DELETE FROM attendance WHERE personnel_id = %s", (personnel_id,))
+        cursor.execute("DELETE FROM campus_attendance WHERE personnel_id = %s", (personnel_id,))
+        cursor.execute("DELETE FROM notifications WHERE target_personnel_id = %s OR tapped_personnel_id = %s", (personnel_id, personnel_id))
+        cursor.execute("DELETE FROM promotion_application WHERE faculty_id = %s", (personnel_id,))
+        cursor.execute("DELETE FROM regularization_application WHERE faculty_id = %s", (personnel_id,))
         cursor.execute("DELETE FROM profile WHERE personnel_id = %s", (personnel_id,))
         cursor.execute("DELETE FROM schedule WHERE personnel_id = %s", (personnel_id,))
         cursor.execute("DELETE FROM personnel WHERE personnel_id = %s", (personnel_id,))
@@ -6998,7 +7123,7 @@ def api_hr_delete_employee():
             "Employee deleted",
             f"HR deleted employee: {employee_name} (Personnel ID: {personnel_id})",
             before_value=f"Employee existed in system",
-            after_value="Employee records deleted from users, personnel, profile, and schedule tables"
+            after_value="Employee records deleted from users, personnel, profile, schedule, attendance, attendancereport, campus_attendance, faculty_evaluations, faculty_license_tracker, peer_assignments, peer_evaluation_submissions, notifications, promotion_application, and regularization_application tables"
         )
         
         cursor.close()
@@ -8898,6 +9023,18 @@ def api_dean_college_analytics():
 
         semester_id = request.args.get('semester_id')
         sem_start = sem_end = None
+        if not semester_id:
+            cursor.execute("""
+                SELECT acadcalendar_id FROM acadcalendar
+                WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                ORDER BY semesterstart DESC LIMIT 1
+            """)
+            row = cursor.fetchone()
+            if not row:
+                cursor.execute("SELECT acadcalendar_id FROM acadcalendar ORDER BY semesterstart DESC LIMIT 1")
+                row = cursor.fetchone()
+            if row:
+                semester_id = str(row[0])
         if semester_id:
             cursor.execute(
                 "SELECT semesterstart, semesterend FROM acadcalendar WHERE acadcalendar_id::text = %s",
@@ -9037,6 +9174,18 @@ def api_dean_college_campus_analytics():
 
         semester_id = request.args.get('semester_id')
         sem_start = sem_end = None
+        if not semester_id:
+            cursor.execute("""
+                SELECT acadcalendar_id FROM acadcalendar
+                WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                ORDER BY semesterstart DESC LIMIT 1
+            """)
+            row = cursor.fetchone()
+            if not row:
+                cursor.execute("SELECT acadcalendar_id FROM acadcalendar ORDER BY semesterstart DESC LIMIT 1")
+                row = cursor.fetchone()
+            if row:
+                semester_id = str(row[0])
         if semester_id:
             cursor.execute(
                 "SELECT semesterstart, semesterend FROM acadcalendar WHERE acadcalendar_id::text = %s",
@@ -9046,27 +9195,36 @@ def api_dean_college_campus_analytics():
             if sem:
                 sem_start, sem_end = sem[0], sem[1]
 
-        date_filter = "AND ca.attendance_date BETWEEN %s AND %s" if (sem_start and sem_end) else ""
-        params_date = [sem_start, sem_end] if (sem_start and sem_end) else []
-
-        # KPIs
-        cursor.execute(f"""
-            SELECT
-                COUNT(*) FILTER (WHERE ca.status = 'Present') AS present,
-                COUNT(*) FILTER (WHERE ca.status = 'Late')    AS late,
-                COUNT(*) FILTER (WHERE ca.status = 'Absent')  AS absent,
-                COUNT(*) FILTER (WHERE ca.status = 'Excused') AS excused,
-                COUNT(*) AS total
-            FROM campus_attendance ca
-            JOIN personnel p ON ca.personnel_id = p.personnel_id
-            WHERE p.college_id = %s
-            {date_filter}
-        """, [college_id] + params_date)
+        # KPIs from campus_attendance_report (source of truth)
+        if semester_id:
+            cursor.execute("""
+                SELECT
+                    COALESCE(SUM(r.morning_present + r.afternoon_present), 0),
+                    COALESCE(SUM(r.morning_late    + r.afternoon_late),    0),
+                    COALESCE(SUM(r.morning_absent  + r.afternoon_absent),  0),
+                    COALESCE(SUM(r.morning_excused + r.afternoon_excused), 0),
+                    COALESCE(SUM(r.total_sessions), 0)
+                FROM campus_attendance_report r
+                JOIN personnel p ON r.personnel_id = p.personnel_id
+                WHERE p.college_id = %s AND r.acadcalendar_id = %s
+            """, (college_id, semester_id))
+        else:
+            cursor.execute("""
+                SELECT
+                    COALESCE(SUM(r.morning_present + r.afternoon_present), 0),
+                    COALESCE(SUM(r.morning_late    + r.afternoon_late),    0),
+                    COALESCE(SUM(r.morning_absent  + r.afternoon_absent),  0),
+                    COALESCE(SUM(r.morning_excused + r.afternoon_excused), 0),
+                    COALESCE(SUM(r.total_sessions), 0)
+                FROM campus_attendance_report r
+                JOIN personnel p ON r.personnel_id = p.personnel_id
+                WHERE p.college_id = %s
+            """, (college_id,))
         krow = cursor.fetchone() or (0, 0, 0, 0, 0)
         kp, kl, ka, ke, kt = (int(x) for x in krow)
         avg_rate = round(((kp + ke + kl * 0.75) / kt) * 100, 1) if kt > 0 else 0.0
 
-        # Trends (weekly)
+        # Trends (weekly) from campus_attendance for date granularity
         trends = []
         if sem_start and sem_end:
             cursor.execute("""
@@ -9080,6 +9238,7 @@ def api_dean_college_campus_analytics():
                         COUNT(*) FILTER (WHERE ca.status = 'Present') AS present,
                         COUNT(*) FILTER (WHERE ca.status = 'Late')    AS late,
                         COUNT(*) FILTER (WHERE ca.status = 'Absent')  AS absent,
+                        COUNT(*) FILTER (WHERE ca.status = 'Excused') AS excused,
                         COUNT(*) AS total
                     FROM campus_attendance ca
                     JOIN personnel p ON ca.personnel_id = p.personnel_id
@@ -9087,43 +9246,82 @@ def api_dean_college_campus_analytics():
                     GROUP BY 1
                 )
                 SELECT w.week_start, COALESCE(a.present,0), COALESCE(a.late,0),
-                       COALESCE(a.absent,0), COALESCE(a.total,0)
+                       COALESCE(a.absent,0), COALESCE(a.excused,0), COALESCE(a.total,0)
                 FROM weeks w LEFT JOIN agg a ON a.week_start = w.week_start
                 ORDER BY w.week_start
             """, (sem_start, sem_end, college_id, sem_start, sem_end))
             for r in cursor.fetchall():
-                ws, wp, wl, wa, wt = r
-                rate = round(((int(wp) + int(wl) * 0.75) / int(wt)) * 100, 1) if int(wt) > 0 else 0.0
-                trends.append({'label': ws.strftime('%b %d') if ws else '', 'avg_rate': rate,
-                                'total_present': int(wp), 'total_late': int(wl), 'total_absent': int(wa)})
+                ws, wp, wl, wa, we, wt = r
+                wp, wl, wa, we, wt = int(wp), int(wl), int(wa), int(we), int(wt)
+                rate = round(((wp + we + wl * 0.75) / wt) * 100, 1) if wt > 0 else 0.0
+                trends.append({
+                    'label':         ws.strftime('%b %d') if ws else '',
+                    'avg_rate':      rate,
+                    'total_present': wp,
+                    'total_late':    wl,
+                    'total_absent':  wa,
+                    'total_excused': we,
+                })
 
-        # Per-faculty campus breakdown (morning/afternoon) for this college
+        # Per-faculty breakdown from campus_attendance_report (source of truth)
         campus_breakdown = []
-        cursor.execute(f"""
-            SELECT
-                p.personnel_id,
-                CONCAT(p.lastname, ', ', p.firstname,
-                       CASE WHEN p.honorifics IS NOT NULL AND p.honorifics <> ''
-                            THEN CONCAT(', ', p.honorifics) ELSE '' END) AS faculty_name,
-                COALESCE(SUM(CASE WHEN ca.session = 'Morning'   AND ca.status = 'Present' THEN 1 ELSE 0 END), 0) AS morning_present,
-                COALESCE(SUM(CASE WHEN ca.session = 'Morning'   AND ca.status = 'Late'    THEN 1 ELSE 0 END), 0) AS morning_late,
-                COALESCE(SUM(CASE WHEN ca.session = 'Morning'   AND ca.status = 'Absent'  THEN 1 ELSE 0 END), 0) AS morning_absent,
-                COALESCE(SUM(CASE WHEN ca.session = 'Afternoon' AND ca.status = 'Present' THEN 1 ELSE 0 END), 0) AS afternoon_present,
-                COALESCE(SUM(CASE WHEN ca.session = 'Afternoon' AND ca.status = 'Late'    THEN 1 ELSE 0 END), 0) AS afternoon_late,
-                COALESCE(SUM(CASE WHEN ca.session = 'Afternoon' AND ca.status = 'Absent'  THEN 1 ELSE 0 END), 0) AS afternoon_absent
-            FROM personnel p
-            LEFT JOIN campus_attendance ca
-                ON ca.personnel_id = p.personnel_id {date_filter}
-            WHERE p.college_id = %s AND p.role_id IN (20001, 20002)
-            GROUP BY p.personnel_id, faculty_name
-            ORDER BY p.lastname, p.firstname
-        """, params_date + [college_id])
+        if semester_id:
+            cursor.execute("""
+                SELECT
+                    p.personnel_id,
+                    CONCAT(p.lastname, ', ', p.firstname,
+                           CASE WHEN p.honorifics IS NOT NULL AND p.honorifics <> ''
+                                THEN CONCAT(', ', p.honorifics) ELSE '' END) AS faculty_name,
+                    COALESCE(r.morning_present,   0),
+                    COALESCE(r.morning_late,      0),
+                    COALESCE(r.morning_absent,    0),
+                    COALESCE(r.morning_excused,   0),
+                    COALESCE(r.afternoon_present, 0),
+                    COALESCE(r.afternoon_late,    0),
+                    COALESCE(r.afternoon_absent,  0),
+                    COALESCE(r.afternoon_excused, 0),
+                    COALESCE(r.total_sessions,    0),
+                    COALESCE(r.attendance_rate,   0)
+                FROM personnel p
+                LEFT JOIN campus_attendance_report r
+                    ON r.personnel_id = p.personnel_id AND r.acadcalendar_id = %s
+                WHERE p.college_id = %s AND p.role_id IN (20001, 20002)
+                ORDER BY COALESCE(r.attendance_rate, 0) ASC, p.lastname, p.firstname
+            """, (semester_id, college_id))
+        else:
+            cursor.execute("""
+                SELECT
+                    p.personnel_id,
+                    CONCAT(p.lastname, ', ', p.firstname,
+                           CASE WHEN p.honorifics IS NOT NULL AND p.honorifics <> ''
+                                THEN CONCAT(', ', p.honorifics) ELSE '' END) AS faculty_name,
+                    COALESCE(SUM(r.morning_present),   0),
+                    COALESCE(SUM(r.morning_late),      0),
+                    COALESCE(SUM(r.morning_absent),    0),
+                    COALESCE(SUM(r.morning_excused),   0),
+                    COALESCE(SUM(r.afternoon_present), 0),
+                    COALESCE(SUM(r.afternoon_late),    0),
+                    COALESCE(SUM(r.afternoon_absent),  0),
+                    COALESCE(SUM(r.afternoon_excused), 0),
+                    COALESCE(SUM(r.total_sessions),    0),
+                    ROUND(AVG(r.attendance_rate), 2)
+                FROM personnel p
+                LEFT JOIN campus_attendance_report r ON r.personnel_id = p.personnel_id
+                WHERE p.college_id = %s AND p.role_id IN (20001, 20002)
+                GROUP BY p.personnel_id, faculty_name
+                ORDER BY ROUND(AVG(r.attendance_rate), 2) ASC, p.lastname, p.firstname
+            """, (college_id,))
         for row in cursor.fetchall():
-            pid, fname, mp, ml, ma, ap, al, aa = row
+            pid, fname, mp, ml, ma, me, ap, al, aa, ae, total_sess, rate = row
             campus_breakdown.append({
-                'personnel_id': pid, 'faculty_name': fname,
-                'morning_present': int(mp), 'morning_late': int(ml), 'morning_absent': int(ma),
-                'afternoon_present': int(ap), 'afternoon_late': int(al), 'afternoon_absent': int(aa),
+                'personnel_id':    pid,
+                'faculty_name':    fname,
+                'morning_present':   int(mp), 'morning_late':     int(ml),
+                'morning_absent':    int(ma), 'morning_excused':  int(me),
+                'afternoon_present': int(ap), 'afternoon_late':   int(al),
+                'afternoon_absent':  int(aa), 'afternoon_excused': int(ae),
+                'total_sessions':  int(total_sess),
+                'rate':            float(rate) if rate else 0.0,
             })
 
         cursor.close()
