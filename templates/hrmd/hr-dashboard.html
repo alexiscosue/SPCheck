@@ -48,6 +48,15 @@
             <div class="value" id="kpi-reg">Loading...</div>
           </div>
         </div>
+
+        <div class="kpi card" id="kpi-license-card" style="gap:14px;">
+          <div class="icon" id="kpi-license-icon" style="background:#fff7ed"><i class='bx bx-certification' style="color:#ea580c;font-size:20px"></i></div>
+          <div>
+            <div class="title">Expiring Licenses</div>
+            <div class="value" id="kpi-license">—</div>
+            <div class="subtitle" id="kpi-license-subtitle" style="font-size:11px;color:var(--muted)">within 90 days</div>
+          </div>
+        </div>
       </div>
 
       <div class="chart-large">
@@ -64,6 +73,21 @@
             <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;">Campus Attendance</div>
             <div style="position:relative;height:130px;">
               <canvas id="hrDashCampusDistChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Expiring Licenses Section -->
+          <div style="margin-top:24px;border-top:1px solid #f0f0f0;padding-top:16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <i class='bx bx-certification' style="font-size:18px;color:#ea580c;"></i>
+                <span style="font-weight:700;">Expiring Licenses</span>
+                <span id="licenseInlineCount" style="display:none;background:#ea580c;color:#fff;border-radius:999px;font-size:10px;font-weight:700;padding:1px 7px;line-height:16px;"></span>
+              </div>
+              <span style="font-size:12px;color:var(--muted);">Within 90 days</span>
+            </div>
+            <div id="licenseInlineTable">
+              <div style="text-align:center;padding:1.5rem;color:#6b7280;font-size:13px;">Loading license data...</div>
             </div>
           </div>
         </div>
@@ -103,6 +127,8 @@
         </div>
       </div>
     </section>
+
+
 {% endblock %}
 
 {% block extra_scripts %}
@@ -446,14 +472,158 @@
 
   // --- DOM Ready ---
   document.addEventListener('DOMContentLoaded', function() {
-    // Initialize chart that uses static data first
-    // initializeAttendanceChart();
-    
-    // Fetch dynamic data
     fetchDashboardData();
-    
-    // Refresh data every 5 minutes
+    checkLicenseExpiry();
+
+    // Refresh dashboard data every 5 minutes
     setInterval(fetchDashboardData, 300000);
   });
+
+  // ── License Expiry ────────────────────────────────────────────────────────
+
+  async function checkLicenseExpiry() {
+    try {
+      const res = await fetch('/api/hr/license-expiry');
+      const data = await res.json();
+
+      const count = data.success ? (data.count || 0) : 0;
+      const expiring = (data.success && data.expiring) ? data.expiring : [];
+      const expiredCount = expiring.filter(l => l.days < 0).length;
+
+      // Always update the KPI card regardless of count
+      const kpiLicense = document.getElementById('kpi-license');
+      const kpiLicenseCard = document.getElementById('kpi-license-card');
+      const kpiLicenseIcon = document.getElementById('kpi-license-icon');
+      if (kpiLicense) kpiLicense.textContent = count;
+      if (kpiLicenseCard) {
+        kpiLicenseCard.style.borderColor =
+          count === 0 ? '#e5e7eb' : expiredCount > 0 ? '#dc2626' : '#ea580c';
+      }
+      if (kpiLicenseIcon) {
+        kpiLicenseIcon.style.background =
+          count === 0 ? '#f9fafb' : expiredCount > 0 ? '#fee2e2' : '#fff7ed';
+        const icon = kpiLicenseIcon.querySelector('i');
+        if (icon) icon.style.color =
+          count === 0 ? '#9ca3af' : expiredCount > 0 ? '#dc2626' : '#ea580c';
+      }
+
+      // Always render the inline table (even when empty)
+      const inlineContainer = document.getElementById('licenseInlineTable');
+      const inlineCount     = document.getElementById('licenseInlineCount');
+
+      if (expiring.length === 0) {
+        inlineContainer.innerHTML =
+          '<div style="text-align:center;padding:1.2rem;color:#6b7280;font-size:13px;">' +
+          '<i class=\'bx bx-check-circle\' style="font-size:18px;vertical-align:middle;margin-right:6px;color:#16a34a"></i>' +
+          'No licenses expiring within 90 days.</div>';
+        if (inlineCount) inlineCount.style.display = 'none';
+        return;
+      }
+
+      // Show badge on the section header
+      if (inlineCount) {
+        inlineCount.textContent = count;
+        inlineCount.style.display = '';
+        inlineCount.style.background = expiredCount > 0 ? '#dc2626' : '#ea580c';
+      }
+
+      // Helper: build a status badge style
+      function licBadge(d) {
+        if (d < 0)      return { bg: '#fee2e2', color: '#dc2626', label: 'Expired' };
+        if (d <= 30)    return { bg: '#ffedd5', color: '#ea580c', label: `${d}d left` };
+        return              { bg: '#fef9c3', color: '#ca8a04', label: `${d}d left` };
+      }
+
+      // Build inline table
+      inlineContainer.innerHTML = `
+        <div class="table" style="margin-top:4px;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;" aria-label="Expiring licenses">
+            <thead>
+              <tr style="background:#fafafa;">
+                <th style="padding:8px 12px;text-align:left;font-weight:600;color:#6b7280;border-bottom:1px solid #e5e7eb;">Faculty</th>
+                <th style="padding:8px 12px;text-align:left;font-weight:600;color:#6b7280;border-bottom:1px solid #e5e7eb;">License Type</th>
+                <th style="padding:8px 12px;text-align:left;font-weight:600;color:#6b7280;border-bottom:1px solid #e5e7eb;">No.</th>
+                <th style="padding:8px 12px;text-align:left;font-weight:600;color:#6b7280;border-bottom:1px solid #e5e7eb;">Expires</th>
+                <th style="padding:8px 12px;text-align:left;font-weight:600;color:#6b7280;border-bottom:1px solid #e5e7eb;">Status</th>
+                <th style="padding:8px 12px;border-bottom:1px solid #e5e7eb;"></th>
+              </tr>
+            </thead>
+            <tbody id="licenseInlineRows"></tbody>
+          </table>
+        </div>`;
+
+      const inlineBody = document.getElementById('licenseInlineRows');
+      expiring.forEach(lic => {
+        const { bg, color, label } = licBadge(lic.days);
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #f3f4f6';
+        tr.innerHTML = `
+          <td style="padding:9px 12px;font-weight:600;color:#111;">${lic.name}</td>
+          <td style="padding:9px 12px;color:#374151;">${lic.license_type}</td>
+          <td style="padding:9px 12px;color:#6b7280;font-size:12px;">${lic.license_number}</td>
+          <td style="padding:9px 12px;color:#374151;white-space:nowrap;">${lic.expiration_date}</td>
+          <td style="padding:9px 12px;">
+            <span style="padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;
+                         background:${bg};color:${color};">${label}</span>
+          </td>
+          <td style="padding:9px 12px;text-align:right;white-space:nowrap;">
+            <button onclick="notifyFaculty(${lic.personnel_id},'${esc(lic.license_type)}','${esc(lic.license_number)}','${esc(lic.expiration_date)}',${lic.days},this)"
+                    style="padding:4px 10px;background:#7b1113;color:#fff;border:none;border-radius:6px;
+                           font-size:11px;font-weight:600;cursor:pointer;margin-right:8px;">
+              Notify
+            </button>
+            <a href="/hr_employee_profile/${lic.personnel_id}"
+               style="font-size:12px;color:#7b1113;font-weight:600;text-decoration:none;">View →</a>
+          </td>`;
+        inlineBody.appendChild(tr);
+      });
+
+    } catch (err) {
+      console.error('License expiry check failed:', err);
+      const inlineContainer = document.getElementById('licenseInlineTable');
+      if (inlineContainer) {
+        inlineContainer.innerHTML =
+          '<div style="text-align:center;padding:1.2rem;color:#6b7280;font-size:13px;">Could not load license data.</div>';
+      }
+    }
+  }
+
+  // Escape single quotes for inline JS string literals
+  function esc(str) { return String(str || '').replace(/'/g, "\\'"); }
+
+  async function notifyFaculty(personnelId, licenseType, licenseNumber, expirationDate, days, btn) {
+    btn.disabled = true;
+    btn.textContent = '...';
+    try {
+      const res = await fetch('/api/hr/notify-faculty-license', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          personnel_id:    personnelId,
+          license_type:    licenseType,
+          license_number:  licenseNumber,
+          expiration_date: expirationDate,
+          days:            days
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        btn.textContent = '✓ Sent';
+        btn.style.background = '#16a34a';
+      } else {
+        btn.textContent = 'Failed';
+        btn.style.background = '#dc2626';
+      }
+    } catch (_) {
+      btn.textContent = 'Error';
+      btn.style.background = '#dc2626';
+    }
+    setTimeout(() => {
+      btn.textContent = 'Notify';
+      btn.style.background = '#7b1113';
+      btn.disabled = false;
+    }, 3000);
+  }
+
 </script>
 {% endblock %}

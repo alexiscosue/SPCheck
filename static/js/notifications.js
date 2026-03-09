@@ -280,9 +280,17 @@ const NotifSystem = (function () {
   }
 
   function _updateBadge() {
-    var count = _load().filter(function (n) { return !n.read; }).length;
+    var notifs = _load();
+    var count = notifs.filter(function (n) { return !n.read; }).length;
     elBadge.textContent = count > 99 ? '99+' : String(count);
     elBadge.style.display = count > 0 ? '' : 'none';
+
+    // Highlight the bell with a ring animation when there are unread license alerts
+    var bellBtn = document.getElementById('notifBellBtn');
+    if (bellBtn) {
+      var hasUnreadLicense = notifs.some(function (n) { return !n.read && n.type === 'license'; });
+      bellBtn.classList.toggle('has-license-alert', hasUnreadLicense);
+    }
   }
 
   /* ------------------------------------------------------------------ */

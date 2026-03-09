@@ -81,6 +81,40 @@
     {% block content %}{% endblock %}
   </div>
 
+  <!-- HR License Reminder Popup — shown once per set of unread reminders -->
+  <div id="licenseReminderOverlay" class="hr-modal-wrapper">
+    <div style="width:560px;max-width:95%;max-height:85vh;display:flex;flex-direction:column;
+                background:#fff;border-radius:16px;border-top:4px solid #7b1113;
+                box-shadow:0 8px 24px rgba(0,0,0,.3);animation:hrFadeIn .2s ease-in-out;">
+      <!-- Header -->
+      <div style="padding:18px 22px;display:flex;align-items:center;gap:12px;
+                  border-bottom:1px solid #f0f0f0;flex-shrink:0;">
+        <div style="width:40px;height:40px;border-radius:50%;flex-shrink:0;
+                    background:linear-gradient(135deg,#7b1113,#9f1239);
+                    display:flex;align-items:center;justify-content:center;">
+          <i class='bx bx-error-circle' style="font-size:20px;color:#fff;"></i>
+        </div>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:15px;color:#111;">License Expiry Reminder</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:2px;">
+            HR has flagged the following license(s) requiring your attention.
+          </div>
+        </div>
+      </div>
+      <!-- Body -->
+      <div id="licenseReminderBody" style="overflow-y:auto;flex:1;padding:16px 22px;"></div>
+      <!-- Footer -->
+      <div style="padding:14px 22px;border-top:1px solid #f0f0f0;display:flex;
+                  justify-content:flex-end;flex-shrink:0;">
+        <button id="licenseReminderDismissBtn"
+                style="padding:9px 24px;background:#7b1113;color:#fff;border:none;
+                       border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;">
+          Acknowledge &amp; Dismiss
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Notification Panel -->
   <div class="notif-overlay" id="notifOverlay"></div>
   <div class="notif-panel" id="notifPanel">
@@ -147,9 +181,74 @@
               storageKey: 'spcheck_notifs_' + data.personnel_id,
               sseUrl: '/api/rfid/notifications/' + data.personnel_id
             });
+
+            // Check for HR-initiated license reminders (shown once until dismissed)
+            fetch('/api/faculty/license-popup')
+              .then(r => r.json())
+              .then(resp => {
+                if (!resp.success || !resp.reminders || resp.reminders.length === 0) return;
+                _showLicenseReminderPopup(resp.reminders);
+              })
+              .catch(() => {});
           }
         })
         .catch(error => console.error('Error fetching personnel ID:', error));
+    });
+
+    // ── License Reminder Popup ──────────────────────────────────────────────
+    function _showLicenseReminderPopup(reminders) {
+      var overlay = document.getElementById('licenseReminderOverlay');
+      var body    = document.getElementById('licenseReminderBody');
+      if (!overlay || !body) return;
+
+      var html = '';
+      reminders.forEach(function(r) {
+        var d = r.days;
+        var badgeBg, badgeColor, badgeLabel;
+        if (d === null || d === undefined) {
+          badgeBg = '#e5e7eb'; badgeColor = '#374151'; badgeLabel = 'Check required';
+        } else if (d < 0) {
+          badgeBg = '#fee2e2'; badgeColor = '#dc2626'; badgeLabel = 'Expired';
+        } else if (d <= 30) {
+          badgeBg = '#ffedd5'; badgeColor = '#ea580c'; badgeLabel = d + 'd left';
+        } else {
+          badgeBg = '#fef9c3'; badgeColor = '#ca8a04'; badgeLabel = d + 'd left';
+        }
+        html +=
+          '<div style="padding:12px 0;border-bottom:1px solid #f3f4f6;">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">' +
+              '<div>' +
+                '<div style="font-weight:600;font-size:14px;color:#111;">' +
+                  _escHtml(r.license_type) +
+                  (r.license_number && r.license_number !== '—'
+                    ? '<span style="font-size:12px;color:#6b7280;font-weight:400;"> &nbsp;No. ' + _escHtml(r.license_number) + '</span>'
+                    : '') +
+                '</div>' +
+                '<div style="font-size:12px;color:#374151;margin-top:3px;">Expires: ' + _escHtml(r.expiration_date) + '</div>' +
+              '</div>' +
+              '<span style="padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;' +
+                     'background:' + badgeBg + ';color:' + badgeColor + ';">' + badgeLabel + '</span>' +
+            '</div>' +
+            '<div style="font-size:12px;color:#6b7280;margin-top:6px;">' + _escHtml(r.message) + '</div>' +
+          '</div>';
+      });
+      if (html === '') return;
+      body.innerHTML = html;
+      overlay.style.display = 'flex';
+    }
+
+    function _escHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    document.getElementById('licenseReminderDismissBtn').addEventListener('click', function() {
+      document.getElementById('licenseReminderOverlay').style.display = 'none';
+      // Mark these reminders as read so the popup doesn't show on next login
+      fetch('/api/faculty/dismiss-license-popup', { method: 'POST' }).catch(function() {});
     });
 
     // Save sidebar state to localStorage when toggled

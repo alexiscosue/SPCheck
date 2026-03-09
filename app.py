@@ -703,9 +703,125 @@ def stop_absence_checker():
 start_absence_checker()
 atexit.register(stop_absence_checker)
 
+def _create_blank_profile(cursor, personnel_id, bio=''):
+    cursor.execute("SELECT COALESCE(MAX(profile_id), 90000) FROM profile")
+    max_profile_id = cursor.fetchone()[0]
+    new_profile_id = max_profile_id + 1
+    cursor.execute("""
+        INSERT INTO profile (
+            profile_id, personnel_id, bio, profilepic,
+            licenses, degrees, certificates, publications, awards,
+            licensesname, degreesname, certificatesname, publicationsname, awardsname,
+            employmentstatus, position
+        )
+        VALUES (%s, %s, %s, NULL,
+                ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[],
+                ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[],
+                'Contractual', NULL)
+    """, (new_profile_id, personnel_id, bio))
+    return new_profile_id
+
+
 # ========== LICENSE EXPIRY CHECKER ==========
 license_expiry_checker_running = False
 license_expiry_checker_thread = None
+
+
+def send_license_expiry_email(alerts):
+    """Send a single HTML digest email to HR listing all newly-triggered license alerts.
+
+    Requires these environment variables (set in .env):
+        SMTP_HOST       — default: smtp.gmail.com
+        SMTP_PORT       — default: 587
+        SMTP_USER       — sender address (e.g. spcheck@yourdomain.com)
+        SMTP_PASSWORD   — sender password / app-password
+        HR_EMAIL        — recipient address; falls back to SMTP_USER if omitted
+    """
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    smtp_host     = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
+    smtp_port     = int(os.environ.get('SMTP_PORT', '587'))
+    smtp_user     = os.environ.get('SMTP_USER', '')
+    smtp_password = os.environ.get('SMTP_PASSWORD', '')
+    hr_email      = os.environ.get('HR_EMAIL', smtp_user)
+
+    if not smtp_user or not smtp_password or not hr_email:
+        print("⚠️  License expiry email skipped: SMTP_USER / SMTP_PASSWORD / HR_EMAIL not configured.")
+        return
+
+    subject = f"SPCheck: {len(alerts)} Faculty License{'s' if len(alerts) != 1 else ''} Expiring / Expired"
+
+    rows_html = ""
+    for lic in alerts:
+        d = lic['days']
+        if d < 0:
+            badge_style = "background:#fee2e2;color:#dc2626"
+            badge_label = "Expired"
+        elif d <= 30:
+            badge_style = "background:#ffedd5;color:#ea580c"
+            badge_label = f"{d}d left"
+        else:
+            badge_style = "background:#fef9c3;color:#ca8a04"
+            badge_label = f"{d}d left"
+        rows_html += (
+            f"<tr>"
+            f"<td style='padding:8px 14px;border-bottom:1px solid #e5e7eb'>{lic['name']}</td>"
+            f"<td style='padding:8px 14px;border-bottom:1px solid #e5e7eb'>{lic['license_type']}</td>"
+            f"<td style='padding:8px 14px;border-bottom:1px solid #e5e7eb'>{lic['license_number']}</td>"
+            f"<td style='padding:8px 14px;border-bottom:1px solid #e5e7eb'>{lic['expiration_date']}</td>"
+            f"<td style='padding:8px 14px;border-bottom:1px solid #e5e7eb'>"
+            f"<span style='padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;{badge_style}'>"
+            f"{badge_label}</span></td>"
+            f"</tr>"
+        )
+
+    html_body = f"""
+<html><body style="font-family:Arial,sans-serif;color:#111;margin:0;padding:0">
+  <div style="max-width:680px;margin:32px auto;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden">
+    <div style="background:#7b1113;padding:18px 24px">
+      <h2 style="margin:0;color:#fff;font-size:18px">SPCheck — License Expiry Alert</h2>
+      <p style="margin:4px 0 0;color:rgba(255,255,255,.8);font-size:13px">
+        {len(alerts)} license{'s' if len(alerts) != 1 else ''} require attention
+      </p>
+    </div>
+    <div style="padding:20px 24px">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:#fafafa">
+            <th style="padding:8px 14px;text-align:left;border-bottom:2px solid #e5e7eb;white-space:nowrap">Faculty</th>
+            <th style="padding:8px 14px;text-align:left;border-bottom:2px solid #e5e7eb;white-space:nowrap">License Type</th>
+            <th style="padding:8px 14px;text-align:left;border-bottom:2px solid #e5e7eb;white-space:nowrap">No.</th>
+            <th style="padding:8px 14px;text-align:left;border-bottom:2px solid #e5e7eb;white-space:nowrap">Expiry Date</th>
+            <th style="padding:8px 14px;text-align:left;border-bottom:2px solid #e5e7eb;white-space:nowrap">Status</th>
+          </tr>
+        </thead>
+        <tbody>{rows_html}</tbody>
+      </table>
+    </div>
+    <div style="padding:12px 24px;background:#fafafa;font-size:12px;color:#6b7280;border-top:1px solid #e5e7eb">
+      This is an automated message from SPCheck. Log in to the HR Portal to take action.
+    </div>
+  </div>
+</body></html>"""
+
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = subject
+    msg['From']    = smtp_user
+    msg['To']      = hr_email
+    msg.attach(MIMEText(html_body, 'html'))
+
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_user, [hr_email], msg.as_string())
+        print(f"📧 License expiry digest sent to {hr_email} ({len(alerts)} alert(s))")
+    except Exception as e:
+        print(f"⚠️  Failed to send license expiry email: {e}")
+
 
 def check_license_expiry():
     """Background thread: runs daily and broadcasts alerts for expiring/expired licenses."""
@@ -715,6 +831,7 @@ def check_license_expiry():
     while license_expiry_checker_running:
         conn = None
         cursor = None
+        new_alerts = []  # collect newly-triggered alerts for email digest
         try:
             today = datetime.now(philippines_tz).date()
 
@@ -799,7 +916,15 @@ def check_license_expiry():
                     'expiration_date': str(expiration_date),
                     'days_until_expiry': days,
                 }
-                _push_to_queue(personnel_id, notification_data)
+                _push_to_queue(personnel_id, notification_data)          # notify the faculty member
+                _push_to_queue('hr_all_notifications', notification_data) # notify HR bell panel
+                new_alerts.append({
+                    'name': f"{firstname} {lastname}",
+                    'license_type': license_type or '—',
+                    'license_number': license_number or '—',
+                    'expiration_date': str(expiration_date),
+                    'days': days,
+                })
                 print(f"📋 License expiry notification sent to faculty {personnel_id}: {action} — {msg}")
 
         except Exception as e:
@@ -810,6 +935,10 @@ def check_license_expiry():
                     db_pool.return_connection(conn)
                 except:
                     pass
+
+        # Send a single daily digest email to HR for all newly-triggered alerts
+        if new_alerts:
+            send_license_expiry_email(new_alerts)
 
         time.sleep(86400)  # re-check once every 24 hours
 
@@ -1021,36 +1150,6 @@ def get_supervisors_score_records():
     SERVICE_ACCOUNT_FILE = 'spcheck-ingest-key.json'
     SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
     SHEET_NAME = 'Supervisors Score'  
-    
-    try:
-        print(f"🟡 [SHEETS] Attempting to fetch records from: {SHEET_NAME}")
-        creds = _get_gsheets_creds(SCOPES)
-        gc = gspread.authorize(creds)
-        
-        sh = gc.open_by_url(SPREADSHEET_URL)
-
-        worksheet = sh.worksheet(SHEET_NAME)
-        records = worksheet.get_all_records()
-        print(f"✅ [SHEETS] Successfully fetched {len(records)} records from {SHEET_NAME}.")
-        return records
-    except FileNotFoundError:
-        print(f"❌ [SHEETS] ERROR: Service account file '{SERVICE_ACCOUNT_FILE}' not found for {SHEET_NAME}.")
-        raise
-    except gspread.exceptions.SpreadsheetNotFound:
-        print(f"❌ [SHEETS] ERROR: Spreadsheet URL not found or unauthorized for {SHEET_NAME}.")
-        return []
-    except gspread.exceptions.WorksheetNotFound:
-        print(f"❌ [SHEETS] ERROR: Worksheet '{SHEET_NAME}' not found. Returning empty list.")
-        return []
-    except Exception as e:
-        print(f"❌ [SHEETS] Unhandled error fetching {SHEET_NAME} data: {e}")
-        return []
-
-def get_peers_score_records():
-    """Fetch all score records from the 'Peer Score' tab of the Google Sheet."""
-    SERVICE_ACCOUNT_FILE = 'spcheck-ingest-key.json'
-    SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
-    SHEET_NAME = 'Peers Score'  
     
     try:
         print(f"🟡 [SHEETS] Attempting to fetch records from: {SHEET_NAME}")
@@ -4074,9 +4173,9 @@ def api_faculty_dashboard():
                 -- Calculate Overall Weighted Evaluation Score (55/35/10)
                 SELECT
                     COALESCE(
-                        SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
-                        SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
-                        SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
+                        AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END) * 0.55 +
+                        MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END) * 0.35 +
+                        MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END) * 0.10,
                     0) AS overall_average
                 FROM faculty_evaluations fe
                 CROSS JOIN personnel_data pd
@@ -4104,7 +4203,7 @@ def api_faculty_dashboard():
         # Fetch regularization data for the dashboard
         cursor.execute("""
             SELECT p.hiredate, pr.employmentstatus, pr.has_aligned_master,
-                   COALESCE(pr.probationary_start_date, p.hiredate) as prob_start
+                   pr.probationary_start_date as prob_start
             FROM personnel p
             LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
             WHERE p.user_id = %s
@@ -4514,20 +4613,23 @@ def api_get_faculty_profile():
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT 
+            SELECT
                 pe.phone,
-                pr.bio, 
-                pr.profilepic, 
-                pr.licenses, 
-                pr.degrees, 
-                pr.certificates, 
-                pr.publications, 
+                pr.bio,
+                pr.profilepic,
+                pr.licenses,
+                pr.degrees,
+                pr.certificates,
+                pr.publications,
                 pr.awards,
-                pr.licensesname, 
-                pr.degreesname, 
-                pr.certificatesname, 
-                pr.publicationsname, 
-                pr.awardsname
+                pr.licensesname,
+                pr.degreesname,
+                pr.certificatesname,
+                pr.publicationsname,
+                pr.awardsname,
+                pr.has_aligned_master,
+                pr.probationary_start_date,
+                pe.personnel_id
             FROM personnel pe
             LEFT JOIN profile pr ON pe.personnel_id = pr.personnel_id
             WHERE pe.personnel_id = %s
@@ -4535,55 +4637,48 @@ def api_get_faculty_profile():
         
         profile_result = cursor.fetchone()
         
+        if (not profile_result or profile_result[1] is None) and viewing_personnel_id:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return {'success': False, 'error': 'Profile not found for this employee'}
+
         if not profile_result or profile_result[1] is None:
             if not viewing_personnel_id:
                 print(f"Profile not found for personnel_id: {personnel_id}. Creating new profile...")
                 
-                cursor.execute("SELECT COALESCE(MAX(profile_id), 90000) FROM profile")
-                max_profile_id = cursor.fetchone()[0]
-                new_profile_id = max_profile_id + 1
-                
-                cursor.execute("""
-                    INSERT INTO profile (
-                        profile_id, personnel_id, bio, profilepic, 
-                        licenses, degrees, certificates, publications, awards,
-                        licensesname, degreesname, certificatesname,
-                        publicationsname, awardsname,
-                        employmentstatus, position
-                    )
-                    VALUES (%s, %s, '', NULL, 
-                            ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[],
-                            ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[],
-                            'Regular', 'Full-Time Employee')
-                """, (new_profile_id, personnel_id))
+                new_profile_id = _create_blank_profile(cursor, personnel_id)
                 conn.commit()
-                
+
                 cursor.execute("""
-                    SELECT 
+                    SELECT
                         pe.phone,
-                        pr.bio, 
-                        pr.profilepic, 
-                        pr.licenses, 
-                        pr.degrees, 
-                        pr.certificates, 
-                        pr.publications, 
+                        pr.bio,
+                        pr.profilepic,
+                        pr.licenses,
+                        pr.degrees,
+                        pr.certificates,
+                        pr.publications,
                         pr.awards,
-                        pr.licensesname, 
-                        pr.degreesname, 
-                        pr.certificatesname, 
-                        pr.publicationsname, 
-                        pr.awardsname
+                        pr.licensesname,
+                        pr.degreesname,
+                        pr.certificatesname,
+                        pr.publicationsname,
+                        pr.awardsname,
+                        pr.has_aligned_master,
+                        pr.probationary_start_date,
+                        pe.personnel_id
                     FROM personnel pe
                     LEFT JOIN profile pr ON pe.personnel_id = pr.personnel_id
                     WHERE pe.personnel_id = %s
                 """, (personnel_id,))
                 profile_result = cursor.fetchone()
-                
+
                 print(f"New profile created with ID: {new_profile_id} for personnel_id: {personnel_id}")
         
         (phone, bio, profilepic, licenses, degrees, certificates, publications, awards,
-         licenses_fn, degrees_fn, certificates_fn, publications_fn, awards_fn) = profile_result
-        
+         licenses_fn, degrees_fn, certificates_fn, publications_fn, awards_fn,
+         has_aligned_master, probationary_start_date, fetched_personnel_id) = profile_result
+
         import base64
         profile_data = {
             'phone': str(phone) if phone else '',
@@ -4598,7 +4693,10 @@ def api_get_faculty_profile():
             'degrees_filename': degrees_fn or [],
             'certificates_filename': certificates_fn or [],
             'publications_filename': publications_fn or [],
-            'awards_filename': awards_fn or []
+            'awards_filename': awards_fn or [],
+            'has_aligned_master': bool(has_aligned_master),
+            'probationary_start_date': probationary_start_date.isoformat() if probationary_start_date else None,
+            'personnel_id': fetched_personnel_id,
         }
         
         if profilepic:
@@ -4729,9 +4827,9 @@ def api_get_profile_stats():
                 -- Calculate Overall Weighted Evaluation Score (55/35/10)
                 SELECT
                     COALESCE(
-                        SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
-                        SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
-                        SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
+                        AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END) * 0.55 +
+                        MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END) * 0.35 +
+                        MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END) * 0.10,
                     0) AS overall_eval_score
                 FROM faculty_evaluations fe
                 WHERE fe.personnel_id = %s AND fe.acadcalendar_id = %s
@@ -4847,22 +4945,7 @@ def api_update_personal_info():
                 UPDATE profile SET bio = %s WHERE personnel_id = %s
             """, (bio, personnel_id))
         else:
-            cursor.execute("SELECT COALESCE(MAX(profile_id), 90000) FROM profile")
-            max_profile_id = cursor.fetchone()[0]
-            new_profile_id = max_profile_id + 1
-            
-            cursor.execute("""
-                INSERT INTO profile (
-                    profile_id, personnel_id, bio, profilepic, 
-                    licenses, degrees, certificates, publications, awards,
-                    licensesname, degreesname, certificatesname, publicationsname, awardsname,
-                    employmentstatus, position
-                )
-                VALUES (%s, %s, %s, NULL, 
-                        ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[],
-                        ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[],
-                        'Regular', 'Full-Time Employee')
-            """, (new_profile_id, personnel_id, bio))
+            _create_blank_profile(cursor, personnel_id, bio)
         
         conn.commit()
         cursor.close()
@@ -4927,22 +5010,7 @@ def api_update_documents():
         profile_exists = cursor.fetchone()
         
         if not profile_exists:
-            cursor.execute("SELECT COALESCE(MAX(profile_id), 90000) FROM profile")
-            max_profile_id = cursor.fetchone()[0]
-            new_profile_id = max_profile_id + 1
-            
-            cursor.execute("""
-                INSERT INTO profile (
-                    profile_id, personnel_id, bio, profilepic, 
-                    licenses, degrees, certificates, publications, awards,
-                    licensesname, degreesname, certificatesname, publicationsname, awardsname,
-                    employmentstatus, position
-                )
-                VALUES (%s, %s, '', NULL,
-                        ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[], ARRAY[]::bytea[],
-                        ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[],
-                        'Regular', 'Full-Time Employee')
-            """, (new_profile_id, personnel_id))
+            new_profile_id = _create_blank_profile(cursor, personnel_id)
             conn.commit()
             print(f"Created new profile with ID: {new_profile_id} for personnel_id: {personnel_id}")
         
@@ -6579,24 +6647,24 @@ def api_faculty_evaluations_data():
                 (SELECT c.collegename FROM personnel p JOIN college c ON p.college_id = c.college_id WHERE p.personnel_id = %s) AS faculty_college_name,
                 
                 (SELECT AVG(overall_score) FROM (
-                    SELECT 
-                        COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
-                                 SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
-                                 SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) AS overall_score
+                    SELECT
+                        COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END) * 0.55 +
+                                 MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END) * 0.35 +
+                                 MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END) * 0.10, 0) AS overall_score
                         FROM personnel p
                         LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = (SELECT acadcalendar_id FROM current_term)
                         WHERE p.role_id IN (20001, 20002) AND fe.score IS NOT NULL
                         GROUP BY p.personnel_id
                 ) AS comparison_scores) AS college_wide_avg,
                 
-                (SELECT AVG(cb.overall_score) 
+                (SELECT AVG(cb.overall_score)
                  FROM (
-                     SELECT 
+                     SELECT
                         fe.personnel_id,
                         p.college_id,
-                        COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
-                                 SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
-                                 SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) AS overall_score
+                        COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END) * 0.55 +
+                                 MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END) * 0.35 +
+                                 MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END) * 0.10, 0) AS overall_score
                      FROM faculty_evaluations fe
                      JOIN personnel p ON fe.personnel_id = p.personnel_id
                      WHERE fe.acadcalendar_id = (SELECT acadcalendar_id FROM current_term) AND p.role_id IN (20001, 20002) AND fe.score IS NOT NULL
@@ -6812,6 +6880,51 @@ def api_hr_faculty_degree_info(personnel_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/hr/verify-master-degree', methods=['POST'])
+@require_auth([20003])
+def api_hr_verify_master_degree():
+    """Quick-verify a faculty member's aligned Master's degree and set probationary start date."""
+    try:
+        from datetime import date as _date
+        data = request.get_json()
+        personnel_id = data.get('personnel_id')
+        prob_start   = data.get('probationary_start_date') or str(_date.today())
+
+        if not personnel_id:
+            return jsonify({'success': False, 'error': 'personnel_id required'}), 400
+
+        conn   = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        # Only updates has_aligned_master / probationary_start_date / employmentstatus;
+        # other profile columns (has_doctorate, highest_degree_level, etc.) are untouched.
+        cursor.execute("""
+            UPDATE profile
+            SET has_aligned_master      = TRUE,
+                probationary_start_date = %s,
+                employmentstatus        = CASE
+                    WHEN employmentstatus IN ('Regular', 'Tenured') THEN employmentstatus
+                    ELSE 'Probationary'
+                END
+            WHERE personnel_id = %s
+        """, (prob_start, personnel_id))
+        conn.commit()
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        hr_info = get_personnel_info(session['user_id'])
+        log_audit_action(
+            hr_info.get('personnel_id'),
+            "Master's degree verified",
+            f"HR verified aligned Master's degree for personnel_id {personnel_id}; prob_start={prob_start}",
+        )
+        return jsonify({'success': True, 'probationary_start_date': prob_start})
+
+    except Exception as e:
+        print(f"Error verifying master degree: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/hr/update-degree-info', methods=['POST'])
 @require_auth([20003])
 def api_hr_update_degree_info():
@@ -6837,23 +6950,38 @@ def api_hr_update_degree_info():
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT has_aligned_master, has_doctorate, highest_degree_level, probationary_start_date
+            SELECT has_aligned_master, has_doctorate, highest_degree_level,
+                   probationary_start_date, employmentstatus
             FROM profile WHERE personnel_id = %s
         """, (personnel_id,))
         before = cursor.fetchone()
         before_value = (
             f"aligned_master={before[0]}, doctorate={before[1]}, "
-            f"degree_level={before[2]}, prob_start={before[3]}"
+            f"degree_level={before[2]}, prob_start={before[3]}, status={before[4]}"
         ) if before else "N/A"
+
+        current_status = before[4] if before else None
+
+        # Only transition status when it makes sense:
+        # - Confirming master's + date → Probationary (if currently Contractual)
+        # - Unchecking master's         → Contractual  (only if currently Probationary; never downgrade Regular/Tenured)
+        if has_aligned_master and probationary_start_date:
+            new_status = 'Probationary' if current_status == 'Contractual' else current_status
+        elif not has_aligned_master and current_status == 'Probationary':
+            new_status = 'Contractual'
+        else:
+            new_status = current_status  # Regular / Tenured — leave untouched
 
         cursor.execute("""
             UPDATE profile
-            SET has_aligned_master = %s,
-                has_doctorate = %s,
-                highest_degree_level = %s,
-                probationary_start_date = %s
+            SET has_aligned_master      = %s,
+                has_doctorate           = %s,
+                highest_degree_level    = %s,
+                probationary_start_date = %s,
+                employmentstatus        = %s
             WHERE personnel_id = %s
-        """, (has_aligned_master, has_doctorate, highest_degree_level, probationary_start_date, personnel_id))
+        """, (has_aligned_master, has_doctorate, highest_degree_level,
+              probationary_start_date, new_status, personnel_id))
         conn.commit()
         cursor.close()
         db_pool.return_connection(conn)
@@ -8531,9 +8659,8 @@ def hr_employee_profile(personnel_id):
             full_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             
             employee_info = {
-                'hr_name': hr_info['hr_name'],  
-                'college': hr_info['college'],  
-                'profile_image_base64': hr_info['profile_image_base64'], 
+                'hr_name': hr_info['hr_name'],
+                'profile_image_base64': hr_info['profile_image_base64'],
                 'employee_name': full_name,
                 'college': collegename or 'College of Computer Studies',
                 'employee_no': employee_no,
@@ -8558,9 +8685,10 @@ def hr_employee_profile(personnel_id):
 @app.route('/faculty_employee_profile/<int:personnel_id>')
 @require_auth([20003, 20004])
 def faculty_employee_profile(personnel_id):
-    """HR view of faculty/dean profile"""
+    """HR/VP view of faculty/dean profile"""
     try:
         hr_info = get_personnel_info(session['user_id'])
+        user_role = session.get('user_role')
         
         conn = db_pool.get_connection()
         cursor = conn.cursor()
@@ -8594,9 +8722,8 @@ def faculty_employee_profile(personnel_id):
             full_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             
             employee_info = {
-                'hr_name': hr_info['hr_name'],  
-                'college': hr_info['college'],   
-                'profile_image_base64': hr_info['profile_image_base64'], 
+                'hr_name': hr_info['hr_name'],
+                'profile_image_base64': hr_info['profile_image_base64'],
                 'faculty_name': full_name,
                 'college': collegename or 'College of Computer Studies',
                 'employee_no': employee_no,
@@ -8604,8 +8731,8 @@ def faculty_employee_profile(personnel_id):
                 'position': position or 'Full-Time Employee',
                 'employment_status': employmentstatus or 'Regular',
                 'firstname': firstname,
-                'is_hr_viewing': True,
-                'is_vp_viewing': False
+                'is_hr_viewing': user_role == 20003,  # HR role
+                'is_vp_viewing': user_role == 20004   # VP role
             }
             
             session['viewing_personnel_id'] = personnel_id
@@ -8658,9 +8785,8 @@ def vp_employee_profile(personnel_id):
             full_name = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             
             employee_info = {
-                'hr_name': hr_info['hr_name'],  
-                'college': hr_info['college'],  
-                'profile_image_base64': hr_info['profile_image_base64'],  
+                'hr_name': hr_info['hr_name'],
+                'profile_image_base64': hr_info['profile_image_base64'],
                 'vp_name': full_name,
                 'college': collegename or 'College of Computer Studies',
                 'employee_no': employee_no,
@@ -8686,12 +8812,14 @@ def vp_employee_profile(personnel_id):
 @require_auth([20003])
 def api_hr_employee_profile(personnel_id):
     """API endpoint to get employee profile data for HR viewing"""
+    session['viewing_personnel_id'] = personnel_id
     return api_get_faculty_profile()
 
 @app.route('/api/hr/employee/profile/stats/<int:personnel_id>')
 @require_auth([20003])
 def api_hr_employee_profile_stats(personnel_id):
     """API endpoint to get employee profile statistics for HR viewing"""
+    session['viewing_personnel_id'] = personnel_id
     return api_get_profile_stats()
 
 @app.route('/api/hr/colleges-list')
@@ -9948,11 +10076,11 @@ def faculty_promotion():
     degree_met = True
     degree_req_label = ''
 
-    # Promotion window: June 1 – August 31
-    if not (6 <= today.month <= 8):
-        lock_reasons.append(
-            "Submission window closed. Promotion applications are only accepted June 1 – August 31 each year."
-        )
+    # # Promotion window: June 1 – August 31
+    # if not (6 <= today.month <= 8):
+    #     lock_reasons.append(
+    #         "Submission window closed. Promotion applications are only accepted June 1 – August 31 each year."
+    #     )
 
     # Active application check
     cursor.execute(
@@ -10236,7 +10364,11 @@ def faculty_promotion():
 @require_auth([20001, 20002, 20003])
 def faculty_profile():
     faculty_info = get_faculty_info(session['user_id'])
-    return render_template('faculty&dean/faculty-profile.html', **faculty_info)
+    # Pass viewing flags without mutating the cached dict
+    return render_template('faculty&dean/faculty-profile.html',
+                           **faculty_info,
+                           is_hr_viewing=False,
+                           is_vp_viewing=False)
 
 @app.route('/faculty_settings')
 @require_auth([20001, 20002])
@@ -10320,15 +10452,14 @@ def api_hr_evaluation_dashboard_data():
         # The main SELECT statement is restructured to pull aggregated data from the CTEs directly.
         cursor.execute("""
             WITH faculty_eval_scores AS (
-                SELECT 
+                SELECT
                     p.personnel_id,
                     c.collegename,
-                    -- Weighted Overall Score (55/35/10)
-                    COALESCE(
-                        SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
-                        SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
-                        SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
-                    0) AS overall_score
+                    -- Weighted Overall Score (55/35/10), partial scores included
+                    COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END), 0) * 0.55 +
+                    COALESCE(MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END), 0) * 0.35 +
+                    COALESCE(MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END), 0) * 0.10
+                        AS overall_score
                 FROM personnel p
                 LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s
                 LEFT JOIN college c ON p.college_id = c.college_id
@@ -10660,12 +10791,13 @@ def api_hr_evaluations():
     
     # Apply Rating Status Filter
     if status:
+        _weighted_expr = "COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student' THEN fe.score END) * 0.55 + MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END) * 0.35 + MAX(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score END) * 0.10, 0)"
         if status == 'above-average':
-            query += " AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) >= 3.0"
+            query += f" AND {_weighted_expr} >= 3.0"
         elif status == 'average':
-            query += " AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) >= 2.0 AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) < 3.0"
+            query += f" AND {_weighted_expr} >= 2.0 AND {_weighted_expr} < 3.0"
         elif status == 'below-average':
-            query += " AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) > 0.0 AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) < 2.0"
+            query += f" AND {_weighted_expr} > 0.0 AND {_weighted_expr} < 2.0"
             
     # Response Rate Filter is applied in Python after fetch (dynamic threshold based on total_students)
             
@@ -11031,7 +11163,7 @@ def api_hr_distribution_trends():
                 SELECT
                     fe.acadcalendar_id,
                     fe.personnel_id,
-                    COALESCE(MAX(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END), 0) * 0.55 +
+                    COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END), 0) * 0.55 +
                     COALESCE(MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END), 0) * 0.35 +
                     COALESCE(MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END), 0) * 0.10
                         AS overall
@@ -12116,7 +12248,6 @@ def fetch_evaluations():
     sources = [
         {'type': 'student', 'fetcher': get_students_score_records},
         {'type': 'supervisor', 'fetcher': get_supervisors_score_records},
-        {'type': 'peer', 'fetcher': get_peers_score_records}
     ]
 
     total_updated = 0
@@ -12312,20 +12443,21 @@ def hr_promotions():
                 p.firstname,
                 p.lastname,
                 p.honorifics,
-                COALESCE(pr.probationary_start_date, p.hiredate) AS prob_start,
+                pr.probationary_start_date AS prob_start,
                 c.collegename,
                 pr.position as current_rank,
-                (CURRENT_DATE - COALESCE(pr.probationary_start_date, p.hiredate))::float / 365.25
-                    AS years_of_service,
+                (CURRENT_DATE - pr.probationary_start_date)::float / 365.25 AS years_of_service,
                 NULL::text as reg_status,
-                NULL::timestamp as date_initiated
+                NULL::timestamp as date_initiated,
+                pr.has_aligned_master
             FROM personnel p
             LEFT JOIN college c ON p.college_id = c.college_id
             LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
             WHERE
-                pr.has_aligned_master = TRUE
-                AND COALESCE(pr.probationary_start_date, p.hiredate) IS NOT NULL
-                AND (CURRENT_DATE - COALESCE(pr.probationary_start_date, p.hiredate)) >= 1095
+                p.role_id IN (20001, 20002)
+                AND pr.probationary_start_date IS NOT NULL
+                AND pr.employmentstatus = 'Probationary'
+                AND (CURRENT_DATE - pr.probationary_start_date) >= 1095
                 AND p.personnel_id NOT IN (
                     SELECT faculty_id
                     FROM regularization_application
@@ -12339,26 +12471,25 @@ def hr_promotions():
                 p.firstname,
                 p.lastname,
                 p.honorifics,
-                COALESCE(pr.probationary_start_date, p.hiredate) AS prob_start,
+                pr.probationary_start_date AS prob_start,
                 c.collegename,
                 pr.position as current_rank,
                 ra.years_of_service,
                 ra.current_status::text as reg_status,
-                ra.date_initiated
+                ra.date_initiated,
+                pr.has_aligned_master
             FROM regularization_application ra
             JOIN personnel p ON ra.faculty_id = p.personnel_id
             LEFT JOIN college c ON p.college_id = c.college_id
             LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
             WHERE ra.final_decision IS NULL
 
-            ORDER BY prob_start ASC
+            ORDER BY prob_start ASC NULLS LAST
         """)
-
         all_faculty = cursor.fetchall()
         cursor.close()
 
         # === FETCH CONTRACTUAL FACULTY (no aligned Master's) ===
-        # Use a fresh cursor to avoid pg8000 cursor-reuse issues after UNION ALL.
         # IS NOT TRUE matches both FALSE and NULL safely.
         cursor = conn.cursor()
         cursor.execute("""
@@ -12389,18 +12520,20 @@ def hr_promotions():
                 p.firstname,
                 p.lastname,
                 p.honorifics,
-                COALESCE(pr.probationary_start_date, p.hiredate) AS prob_start,
+                pr.probationary_start_date AS prob_start,
                 c.collegename,
                 pr.position AS current_rank,
-                (CURRENT_DATE - COALESCE(pr.probationary_start_date, p.hiredate))::float / 365.25
+                (CURRENT_DATE - pr.probationary_start_date)::float / 365.25
                     AS years_of_service
             FROM personnel p
             LEFT JOIN college c ON p.college_id = c.college_id
             LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
             WHERE
-                pr.has_aligned_master = TRUE
-                AND COALESCE(pr.probationary_start_date, p.hiredate) IS NOT NULL
-                AND (CURRENT_DATE - COALESCE(pr.probationary_start_date, p.hiredate)) < 1095
+                p.role_id IN (20001, 20002)
+                AND pr.employmentstatus = 'Probationary'
+                AND pr.has_aligned_master = TRUE
+                AND pr.probationary_start_date IS NOT NULL
+                AND (CURRENT_DATE - pr.probationary_start_date) < 1095
                 AND p.personnel_id NOT IN (
                     SELECT faculty_id FROM regularization_application
                     WHERE final_decision IS NULL
@@ -12451,19 +12584,18 @@ def hr_promotions():
         regularizations_list = []
         for f in all_faculty:
             (personnel_id, firstname, lastname, honorifics, prob_start,
-             college, rank, years, reg_status, date_initiated) = f
+             college, rank, years, reg_status, date_initiated, has_aligned_master) = f
 
             fullname = f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}"
             years = float(years) if years else 0
+            needs_master_check = not bool(has_aligned_master)
 
             if years >= 7:
                 eligible_for = "Tenured"
                 current_tenure = "Regular"
-            elif years >= 3:
+            else:
                 eligible_for = "Regular"
                 current_tenure = "Probationary"
-            else:
-                continue
 
             # Determine status display
             if reg_status:
@@ -12482,6 +12614,9 @@ def hr_promotions():
                 else:
                     status_display = "In Progress"
                     status_class = "pending"
+            elif needs_master_check:
+                status_display = "Pending Master's"
+                status_class = "warn"
             else:
                 status_display = "Eligible"
                 status_class = "ok"
@@ -12498,7 +12633,8 @@ def hr_promotions():
                 'status': status_display,
                 'status_class': status_class,
                 'reg_status': reg_status or 'eligible',
-                'has_application': bool(reg_status)
+                'has_application': bool(reg_status),
+                'needs_master_check': needs_master_check,
             })
         
         return render_template('hrmd/hr-promotions.html',
@@ -12620,7 +12756,7 @@ def vp_promotions():
         cursor.execute("""
             SELECT
                 p.personnel_id, p.firstname, p.lastname, p.honorifics,
-                COALESCE(pr.probationary_start_date, p.hiredate) AS prob_start,
+                pr.probationary_start_date AS prob_start,
                 c.collegename, pr.position as current_rank,
                 ra.years_of_service, ra.current_status as reg_status,
                 ra.date_initiated, ra.regularization_id
@@ -12653,7 +12789,8 @@ def vp_promotions():
                 eligible_for = "Regular"
                 current_tenure = "Probationary"
             else:
-                continue
+                eligible_for = "Regular"
+                current_tenure = "Probationary"
 
             regularizations_list.append({
                 'regularization_id': regularization_id,
@@ -12677,12 +12814,12 @@ def vp_promotions():
         cursor.execute("""
             SELECT
                 COUNT(CASE WHEN pr.has_aligned_master = TRUE
-                      AND COALESCE(pr.probationary_start_date, p.hiredate) IS NOT NULL
-                      AND (CURRENT_DATE - COALESCE(pr.probationary_start_date, p.hiredate)) >= 1095
+                      AND pr.probationary_start_date IS NOT NULL
+                      AND (CURRENT_DATE - pr.probationary_start_date) >= 1095
                       THEN 1 END) AS eligible_count,
                 COUNT(CASE WHEN pr.has_aligned_master = TRUE
-                      AND COALESCE(pr.probationary_start_date, p.hiredate) IS NOT NULL
-                      AND (CURRENT_DATE - COALESCE(pr.probationary_start_date, p.hiredate)) < 1095
+                      AND pr.probationary_start_date IS NOT NULL
+                      AND (CURRENT_DATE - pr.probationary_start_date) < 1095
                       THEN 1 END) AS probationary_count,
                 COUNT(CASE WHEN pr.has_aligned_master IS NOT TRUE THEN 1 END) AS contractual_count
             FROM personnel p
@@ -13183,110 +13320,109 @@ def test_db():
 @require_auth([20001, 20002])
 def promotion_document_upload():
     userid = session.get("user_id")
-    if not userid:
-        return "Unauthorized", 401
 
     # Enforce the official promotion submission window: June 1 – August 31
+    # NOTE: Disabled during testing. Re-enable before production deploy.
     from datetime import date as _date
     _today = _date.today()
     if not (6 <= _today.month <= 8):
-        return (
-            "Promotion applications are only accepted between June 1 and August 31 each year. "
-            "Please resubmit during the official submission period."
-        ), 403
+        pass  # TODO: restore the 403 below for production
+    # if not (6 <= _today.month <= 8):
+    #     return (
+    #         "Promotion applications are only accepted between June 1 and August 31 each year. "
+    #         "Please resubmit during the official submission period."
+    #     ), 403
 
-    conn = db_pool.get_connection()
-    cursor = conn.cursor()
+    conn = None
+    cursor = None
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
 
-    # Get faculty_id from personnel via user_id
-    cursor.execute("""
-        SELECT personnel_id FROM personnel WHERE user_id = %s
-    """, (userid,))
-    result = cursor.fetchone()
-    if not result:
-        cursor.close()
-        db_pool.return_connection(conn)
-        return "Faculty record not found for the current user.", 400
+        # Get faculty_id from personnel via user_id
+        cursor.execute("""
+            SELECT personnel_id FROM personnel WHERE user_id = %s
+        """, (userid,))
+        result = cursor.fetchone()
+        if not result:
+            return "Faculty record not found for the current user.", 400
 
-    faculty_id = result[0]
+        faculty_id = result[0]
 
-    # Prevent duplicate submissions: block if an active application already exists
-    cursor.execute(
-        "SELECT COUNT(*) FROM promotion_application WHERE faculty_id = %s AND final_decision IS NULL",
-        (faculty_id,)
-    )
-    if cursor.fetchone()[0] > 0:
-        cursor.close()
-        db_pool.return_connection(conn)
-        return "You already have an active promotion application under review. Please wait for the current application to be resolved before submitting a new one.", 400
+        # Prevent duplicate submissions: block if an active application already exists
+        cursor.execute(
+            "SELECT COUNT(*) FROM promotion_application WHERE faculty_id = %s AND final_decision IS NULL",
+            (faculty_id,)
+        )
+        if cursor.fetchone()[0] > 0:
+            return "You already have an active promotion application under review. Please wait for the current application to be resolved before submitting a new one.", 400
 
-    # Get requested rank from form
-    requested_rank = request.form.get('requested_rank')
+        # Get requested rank from form
+        requested_rank = request.form.get('requested_rank')
 
-    if not requested_rank:
-        cursor.close()
-        db_pool.return_connection(conn)
-        return "Please select a rank to apply for.", 400
+        if not requested_rank:
+            return "Please select a rank to apply for.", 400
 
-    resume_cv_data = None
-    resume_cv_filename = None
-    cover_letter_data = None
-    cover_letter_filename = None
+        resume_cv_data = None
+        resume_cv_filename = None
+        cover_letter_data = None
+        cover_letter_filename = None
 
-    # Get resume file using request.files.get()
-    resume_file = request.files.get('resume_cv')
-    if resume_file and resume_file.filename:
-        resume_cv_data = resume_file.read()
-        resume_cv_filename = resume_file.filename
+        # Get resume file using request.files.get()
+        resume_file = request.files.get('resume_cv')
+        if resume_file and resume_file.filename:
+            resume_cv_data = resume_file.read()
+            resume_cv_filename = resume_file.filename
 
-    # Get cover letter file using request.files.get()
-    cover_letter_file = request.files.get('cover_letter')
-    if cover_letter_file and cover_letter_file.filename:
-        cover_letter_data = cover_letter_file.read()
-        cover_letter_filename = cover_letter_file.filename
+        # Get cover letter file using request.files.get()
+        cover_letter_file = request.files.get('cover_letter')
+        if cover_letter_file and cover_letter_file.filename:
+            cover_letter_data = cover_letter_file.read()
+            cover_letter_filename = cover_letter_file.filename
 
-    # Validate that both files are uploaded
-    if not resume_cv_data or not cover_letter_data:
-        cursor.close()
-        db_pool.return_connection(conn)
-        return "Both Resume/CV and Cover Letter are required.", 400
-    
-    # 1. Capture the new files from the form
-    # Note: 'tor' and 'diploma' must match the 'name' attribute in your HTML <input>
-    tor_file = request.files.get('tor')
-    diploma_file = request.files.get('diploma')
-    
-    # capturing data and filenames
-    tor_data = tor_file.read() if tor_file and tor_file.filename else None
-    tor_name = tor_file.filename if tor_file and tor_file.filename else None
-    
-    diploma_data = diploma_file.read() if diploma_file and diploma_file.filename else None
-    diploma_name = diploma_file.filename if diploma_file and diploma_file.filename else None
-    
-    # Insert new application row with requested_rank
-    cursor.execute("""
-        INSERT INTO promotion_application (
-            faculty_id, cover_letter, resume, resume_filename, cover_letter_filename, 
-            requested_rank, date_submitted, current_status,
-            tor, tor_filename, diploma, diploma_filename
-        ) VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s)
-    """, (
-        faculty_id, 
-        cover_letter_data, resume_cv_data, resume_cv_filename, cover_letter_filename, 
-        requested_rank, 'hrmd',
-        tor_data, tor_name, diploma_data, diploma_name
-    ))
+        # Validate that both files are uploaded
+        if not resume_cv_data or not cover_letter_data:
+            return "Both Resume/CV and Cover Letter are required.", 400
 
-    
-    
-    # Fetch faculty name for audit log and notification
-    cursor.execute("SELECT firstname, lastname FROM personnel WHERE personnel_id = %s", (faculty_id,))
-    fac_row = cursor.fetchone()
-    fac_full_name = f"{fac_row[1]}, {fac_row[0]}" if fac_row else "A Faculty Member"
+        # 1. Capture the new files from the form
+        # Note: 'tor' and 'diploma' must match the 'name' attribute in your HTML <input>
+        tor_file = request.files.get('tor')
+        diploma_file = request.files.get('diploma')
 
-    conn.commit()
-    cursor.close()
-    db_pool.return_connection(conn)
+        # capturing data and filenames
+        tor_data = tor_file.read() if tor_file and tor_file.filename else None
+        tor_name = tor_file.filename if tor_file and tor_file.filename else None
+
+        diploma_data = diploma_file.read() if diploma_file and diploma_file.filename else None
+        diploma_name = diploma_file.filename if diploma_file and diploma_file.filename else None
+
+        # Insert new application row with requested_rank
+        cursor.execute("""
+            INSERT INTO promotion_application (
+                faculty_id, cover_letter, resume, resume_filename, cover_letter_filename,
+                requested_rank, date_submitted, current_status,
+                tor, tor_filename, diploma, diploma_filename
+            ) VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s)
+        """, (
+            faculty_id,
+            cover_letter_data, resume_cv_data, resume_cv_filename, cover_letter_filename,
+            requested_rank, 'hrmd',
+            tor_data, tor_name, diploma_data, diploma_name
+        ))
+
+        # Fetch faculty name for audit log and notification
+        cursor.execute("SELECT firstname, lastname FROM personnel WHERE personnel_id = %s", (faculty_id,))
+        fac_row = cursor.fetchone()
+        fac_full_name = f"{fac_row[1]}, {fac_row[0]}" if fac_row else "A Faculty Member"
+
+        conn.commit()
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return str(e), 500
+    finally:
+        if cursor: cursor.close()
+        if conn: db_pool.return_connection(conn)
 
     log_audit_action(
         faculty_id,
@@ -13306,8 +13442,6 @@ def promotion_document_upload():
 @require_auth([20001, 20002])
 def view_resume():
     userid = session.get("user_id")
-    if not userid:
-        return "Unauthorized", 401
 
     conn = db_pool.get_connection()
     cursor = conn.cursor()
@@ -13342,8 +13476,6 @@ def view_resume():
 @require_auth([20001, 20002])
 def view_cover_letter():
     userid = session.get("user_id")
-    if not userid:
-        return "Unauthorized", 401
 
     conn = db_pool.get_connection()
     cursor = conn.cursor()
@@ -13397,6 +13529,11 @@ def view_tor():
     else:
         target_faculty_id = viewing_id
 
+    if not target_faculty_id:
+        cursor.close()
+        db_pool.return_connection(conn)
+        return "Faculty record not found", 400
+
     cursor.execute("""
         SELECT tor, tor_filename FROM promotion_application
         WHERE faculty_id = %s ORDER BY date_submitted DESC LIMIT 1
@@ -13427,6 +13564,11 @@ def view_diploma():
     else:
         target_faculty_id = viewing_id
 
+    if not target_faculty_id:
+        cursor.close()
+        db_pool.return_connection(conn)
+        return "Faculty record not found", 400
+
     cursor.execute("""
         SELECT diploma, diploma_filename FROM promotion_application
         WHERE faculty_id = %s ORDER BY date_submitted DESC LIMIT 1
@@ -13448,8 +13590,6 @@ def view_diploma():
 @require_auth([20001, 20002])
 def delete_submission():
     userid = session.get("user_id")
-    if not userid:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
 
     conn = db_pool.get_connection()
     cursor = conn.cursor()
@@ -13725,7 +13865,7 @@ def forward_to_vpaa():
             cursor.close()
             db_pool.return_connection(conn)
             return jsonify(success=False, error='Application not found'), 404
-        if status_row[0] not in ('hrmd', 'pending'):
+        if status_row[0] != 'hrmd':
             cursor.close()
             db_pool.return_connection(conn)
             return jsonify(success=False, error='Application is not at HRMD review stage'), 400
@@ -13827,17 +13967,27 @@ def approve_promotion():
         
         # Get application details
         cursor.execute(
-            "SELECT faculty_id, requested_rank FROM promotion_application WHERE application_id = %s",
+            "SELECT faculty_id, requested_rank, current_status, final_decision FROM promotion_application WHERE application_id = %s",
             (application_id,)
         )
         result = cursor.fetchone()
-        
+
         if not result:
             cursor.close()
             db_pool.return_connection(conn)
             return jsonify(success=False, error='Application not found'), 404
-        
-        faculty_id, requested_rank = result
+
+        faculty_id, requested_rank, current_status, final_decision = result
+
+        if final_decision is not None:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify(success=False, error='Application has already been finalized'), 400
+
+        if current_status != 'pres':
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify(success=False, error='Application is not at President review stage'), 400
 
         cursor.execute("SELECT firstname, lastname FROM personnel WHERE personnel_id = %s", (faculty_id,))
         name_row = cursor.fetchone()
@@ -14220,21 +14370,23 @@ def get_eligible_faculty():
                 p.hiredate,
                 c.collegename,
                 pr.position as current_rank,
-                COALESCE(pr.probationary_start_date, p.hiredate) AS prob_start,
-                (CURRENT_DATE - COALESCE(pr.probationary_start_date, p.hiredate))::float / 365.25 AS years_of_service
+                pr.probationary_start_date AS prob_start,
+                (CURRENT_DATE - pr.probationary_start_date)::float / 365.25 AS years_of_service
             FROM personnel p
             LEFT JOIN college c ON p.college_id = c.college_id
             LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
             WHERE
-                p.hiredate IS NOT NULL
+                p.role_id IN (20001, 20002)
+                AND pr.probationary_start_date IS NOT NULL
                 AND pr.has_aligned_master = TRUE
-                AND (CURRENT_DATE - COALESCE(pr.probationary_start_date, p.hiredate))::float / 365.25 >= 3
+                AND pr.employmentstatus = 'Probationary'
+                AND (CURRENT_DATE - pr.probationary_start_date)::float / 365.25 >= 3
                 AND p.personnel_id NOT IN (
                     SELECT faculty_id
                     FROM regularization_application
                     WHERE final_decision IS NULL
                 )
-            ORDER BY COALESCE(pr.probationary_start_date, p.hiredate) ASC
+            ORDER BY pr.probationary_start_date ASC
         """)
         
         eligible_faculty = cursor.fetchall()
@@ -14264,10 +14416,10 @@ def get_eligible_faculty():
                 'current_rank': rank or 'Instructor',
                 'current_tenure': current_tenure,
                 'years_of_service': round(float(years), 2) if years else 0,
-                'hiredate': hiredate.strftime('%Y-%m-%d') if hiredate else 'N/A',
+                'hiredate': prob_start.strftime('%Y-%m-%d') if prob_start else 'N/A',
                 'eligible_for': eligible_for
             })
-        
+
         return jsonify({'success': True, 'eligible_faculty': faculty_list})
     
     except Exception as e:
@@ -14290,7 +14442,7 @@ def initiate_regularization():
         # Fetch hire date, aligned master flag, and probationary start date
         cursor.execute("""
             SELECT p.hiredate, pr.has_aligned_master,
-                   COALESCE(pr.probationary_start_date, p.hiredate) AS prob_start
+                   pr.probationary_start_date AS prob_start
             FROM personnel p
             LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
             WHERE p.personnel_id = %s
@@ -14312,9 +14464,14 @@ def initiate_regularization():
                 'error': 'Faculty is not eligible. An aligned Master\'s Degree is required to begin the probationary period.'
             }), 400
 
+        if not prob_start:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify({'success': False, 'error': 'Faculty is not eligible. No probationary start date has been set.'}), 400
+
         from datetime import date
         today = date.today()
-        years_of_service = (today - prob_start).days / 365.25 if prob_start else 0
+        years_of_service = (today - prob_start).days / 365.25
 
         if years_of_service < 3:
             cursor.close()
@@ -14426,153 +14583,155 @@ def get_promotion_eligibility():
     if not user_id:
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
 
-    conn = db_pool.get_connection()
-    cursor = conn.cursor()
-
-    # Get faculty info, hire date, employment status, degree flags, current rank, and current term
-    cursor.execute("""
-        SELECT
-            p.personnel_id,
-            p.hiredate,
-            pr.employmentstatus,
-            pr.position,
-            pr.has_aligned_master,
-            pr.has_doctorate,
-            (SELECT acadcalendar_id
-             FROM acadcalendar
-             WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
-             ORDER BY semesterstart DESC
-             LIMIT 1)
-        FROM personnel p
-        LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
-        WHERE p.user_id = %s
-    """, (user_id,))
-
-    result = cursor.fetchone()
-    if not result:
-        cursor.close()
-        db_pool.return_connection(conn)
-        return jsonify({'success': False, 'error': 'Faculty not found'}), 404
-
-    faculty_id, hire_date, employment_status, current_rank, has_aligned_master, has_doctorate, current_term_id = result
-
-    # Calculate years of teaching from hire date
-    from datetime import date
-    today = date.today()
-    years_employed = 0
-
-    if hire_date:
-        years_employed = today.year - hire_date.year
-        if (today.month < hire_date.month) or (today.month == hire_date.month and today.day < hire_date.day):
-            years_employed -= 1
-
-    # Check attendance rate
-    cursor.execute("""
-        SELECT COALESCE(AVG(ar.attendancerate), 0) AS avg_attendance_rate
-        FROM attendancereport ar
-        WHERE ar.personnel_id = %s AND ar.acadcalendar_id = %s
-    """, (faculty_id, current_term_id))
-    avg_attendance_rate = float(cursor.fetchone()[0] or 0)
-
-    # Check weighted evaluation score
-    cursor.execute("""
-        SELECT COALESCE(
-            SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
-            SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
-            SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
-            0
-        ) AS weighted_eval_score
-        FROM faculty_evaluations fe
-        WHERE fe.personnel_id = %s AND fe.acadcalendar_id = %s
-    """, (faculty_id, current_term_id))
-    weighted_eval_score = float(cursor.fetchone()[0] or 0)
-
-    # Check for active application
-    cursor.execute("""
-        SELECT COUNT(*)
-        FROM promotion_application
-        WHERE faculty_id = %s AND final_decision IS NULL
-    """, (faculty_id,))
-    has_active_application = cursor.fetchone()[0] > 0
-
-    cursor.close()
-    db_pool.return_connection(conn)
-
-    # --- Determine next rank and rank-based requirements ---
-
-    # Find the faculty's position in the ladder; default to bottom if unrecognized
+    conn = None
+    cursor = None
     try:
-        current_index = _RANK_LADDER.index(current_rank)
-    except (ValueError, TypeError):
-        current_index = -1  # treat as below Associate Instructor
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
 
-    if current_index >= len(_RANK_LADDER) - 1:
-        # Already at the top rank — cannot promote further
+        # Get faculty info, hire date, employment status, degree flags, current rank, and current term
+        cursor.execute("""
+            SELECT
+                p.personnel_id,
+                p.hiredate,
+                pr.employmentstatus,
+                pr.position,
+                pr.has_aligned_master,
+                pr.has_doctorate,
+                (SELECT acadcalendar_id
+                 FROM acadcalendar
+                 WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+                 ORDER BY semesterstart DESC
+                 LIMIT 1)
+            FROM personnel p
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            WHERE p.user_id = %s
+        """, (user_id,))
+
+        result = cursor.fetchone()
+        if not result:
+            return jsonify({'success': False, 'error': 'Faculty not found'}), 404
+
+        faculty_id, hire_date, employment_status, current_rank, has_aligned_master, has_doctorate, current_term_id = result
+
+        # Calculate years of teaching from hire date
+        from datetime import date
+        today = date.today()
+        years_employed = 0
+
+        if hire_date:
+            years_employed = today.year - hire_date.year
+            if (today.month < hire_date.month) or (today.month == hire_date.month and today.day < hire_date.day):
+                years_employed -= 1
+
+        # Check attendance rate
+        cursor.execute("""
+            SELECT COALESCE(AVG(ar.attendancerate), 0) AS avg_attendance_rate
+            FROM attendancereport ar
+            WHERE ar.personnel_id = %s AND ar.acadcalendar_id = %s
+        """, (faculty_id, current_term_id))
+        avg_attendance_rate = float(cursor.fetchone()[0] or 0)
+
+        # Check weighted evaluation score
+        cursor.execute("""
+            SELECT COALESCE(
+                SUM(CASE WHEN evaluator_type = 'student'    THEN avg_score * 0.55 ELSE 0 END) +
+                SUM(CASE WHEN evaluator_type = 'supervisor' THEN avg_score * 0.35 ELSE 0 END) +
+                SUM(CASE WHEN evaluator_type = 'peer'       THEN avg_score * 0.10 ELSE 0 END),
+                0
+            )
+            FROM (
+                SELECT evaluator_type, AVG(score) AS avg_score
+                FROM faculty_evaluations
+                WHERE personnel_id = %s AND acadcalendar_id = %s
+                GROUP BY evaluator_type
+            ) scores
+        """, (faculty_id, current_term_id))
+        weighted_eval_score = float(cursor.fetchone()[0] or 0)
+
+        # Check for active application
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM promotion_application
+            WHERE faculty_id = %s AND final_decision IS NULL
+        """, (faculty_id,))
+        has_active_application = cursor.fetchone()[0] > 0
+
+        # --- Determine next rank and rank-based requirements ---
+
+        # Find the faculty's position in the ladder; default to bottom if unrecognized
+        try:
+            current_index = _RANK_LADDER.index(current_rank)
+        except (ValueError, TypeError):
+            current_index = -1  # treat as below Associate Instructor
+
+        if current_index >= len(_RANK_LADDER) - 1:
+            # Already at the top rank — cannot promote further
+            return jsonify({
+                'success': True,
+                'can_apply': False,
+                'has_active_application': has_active_application,
+                'tenure_type': employment_status or 'Regular',
+                'years_employed': years_employed,
+                'attendance_rate': avg_attendance_rate,
+                'eval_score': weighted_eval_score,
+                'current_rank': current_rank,
+                'next_rank': None,
+                'required_degree': None,
+                'required_years': None,
+                'lock_reasons': ['Already at the highest rank (Professor)']
+            })
+
+        next_rank = _RANK_LADDER[current_index + 1]
+        req = _RANK_REQUIREMENTS[next_rank]
+        required_degree = req['degree']
+        required_years = req['years']
+
+        is_degree_ok = _has_degree(required_degree, has_aligned_master, has_doctorate)
+        is_years_ok = years_employed >= required_years
+        is_attendance_ok = avg_attendance_rate >= 80.0
+        is_eval_ok = weighted_eval_score >= 3.0
+
+        can_apply = is_degree_ok and is_years_ok and is_attendance_ok and is_eval_ok
+
+        # Determine tenure type for display
+        tenure_type = employment_status
+        if not tenure_type:
+            tenure_type = 'Contractual'
+
+        lock_reasons = []
+
+        if not is_degree_ok:
+            lock_reasons.append(f"Degree: {required_degree}'s Degree required for {next_rank}")
+        if not is_years_ok:
+            years_needed = required_years - years_employed
+            lock_reasons.append(f"Teaching experience: {years_needed} more year(s) needed (requires {required_years} years for {next_rank})")
+        if not is_attendance_ok:
+            lock_reasons.append(f"Attendance: {avg_attendance_rate:.1f}% (needs 80%+)")
+        if not is_eval_ok:
+            lock_reasons.append(f"Evaluation: {weighted_eval_score:.2f} (needs 3.00+)")
+
         return jsonify({
             'success': True,
-            'can_apply': False,
+            'can_apply': can_apply and not has_active_application,
             'has_active_application': has_active_application,
-            'tenure_type': employment_status or 'Regular',
+            'tenure_type': tenure_type,
             'years_employed': years_employed,
             'attendance_rate': avg_attendance_rate,
             'eval_score': weighted_eval_score,
             'current_rank': current_rank,
-            'next_rank': None,
-            'required_degree': None,
-            'required_years': None,
-            'lock_reasons': ['Already at the highest rank (Professor)']
+            'next_rank': next_rank,
+            'required_degree': required_degree,
+            'required_years': required_years,
+            'is_degree_ok': is_degree_ok,
+            'is_years_ok': is_years_ok,
+            'lock_reasons': lock_reasons
         })
-
-    next_rank = _RANK_LADDER[current_index + 1]
-    req = _RANK_REQUIREMENTS[next_rank]
-    required_degree = req['degree']
-    required_years = req['years']
-
-    is_degree_ok = _has_degree(required_degree, has_aligned_master, has_doctorate)
-    is_years_ok = years_employed >= required_years
-    is_attendance_ok = avg_attendance_rate >= 80.0
-    is_eval_ok = weighted_eval_score >= 3.0
-
-    can_apply = is_degree_ok and is_years_ok and is_attendance_ok and is_eval_ok
-
-    # Determine tenure type for display
-    tenure_type = employment_status
-    if not tenure_type:
-        if years_employed >= 7:
-            tenure_type = 'Tenured'
-        elif years_employed >= 3:
-            tenure_type = 'Regular'
-        else:
-            tenure_type = 'Probationary'
-
-    lock_reasons = []
-
-    if not is_degree_ok:
-        lock_reasons.append(f"Degree: {required_degree}'s Degree required for {next_rank}")
-    if not is_years_ok:
-        years_needed = required_years - years_employed
-        lock_reasons.append(f"Teaching experience: {years_needed} more year(s) needed (requires {required_years} years for {next_rank})")
-    if not is_attendance_ok:
-        lock_reasons.append(f"Attendance: {avg_attendance_rate:.1f}% (needs 80%+)")
-    if not is_eval_ok:
-        lock_reasons.append(f"Evaluation: {weighted_eval_score:.2f} (needs 3.00+)")
-
-    return jsonify({
-        'success': True,
-        'can_apply': can_apply and not has_active_application,
-        'has_active_application': has_active_application,
-        'tenure_type': tenure_type,
-        'years_employed': years_employed,
-        'attendance_rate': avg_attendance_rate,
-        'eval_score': weighted_eval_score,
-        'current_rank': current_rank,
-        'next_rank': next_rank,
-        'required_degree': required_degree,
-        'required_years': required_years,
-        'is_degree_ok': is_degree_ok,
-        'is_years_ok': is_years_ok,
-        'lock_reasons': lock_reasons
-    })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if cursor: cursor.close()
+        if conn: db_pool.return_connection(conn)
 
 
 @app.route('/api/promotion/list')
@@ -14670,13 +14829,15 @@ def get_audit_logs():
 @app.route('/api/regularization/check-status/<int:faculty_id>')
 @require_auth([20001, 20002, 20003, 20004])
 def check_regularization_status(faculty_id):
+    conn = None
+    cursor = None
     try:
         conn = db_pool.get_connection()
         cursor = conn.cursor()
 
         cursor.execute("""
             SELECT pr.has_aligned_master,
-                   COALESCE(pr.probationary_start_date, p.hiredate) AS prob_start,
+                   pr.probationary_start_date AS prob_start,
                    pr.employmentstatus
             FROM profile pr
             JOIN personnel p ON pr.personnel_id = p.personnel_id
@@ -14685,8 +14846,6 @@ def check_regularization_status(faculty_id):
 
         res = cursor.fetchone()
         if not res:
-            cursor.close()
-            db_pool.return_connection(conn)
             return jsonify({'eligible': False, 'category': 'Unknown', 'reason': 'Faculty record not found.'}), 404
         has_master, prob_start, current_status = res
 
@@ -14706,10 +14865,215 @@ def check_regularization_status(faculty_id):
                 'reason': f'Probation in progress ({round(years_diff, 1)}/3 years completed from probationary start).'
             })
 
-        return jsonify({'eligible': True, 'category': 'Regular', 'reason': 'Ready for HRMD final review.'})
+        category = 'Tenured' if years_diff >= 7 else 'Regular'
+        return jsonify({'eligible': True, 'category': category, 'reason': 'Ready for HRMD final review.'})
     finally:
+        if cursor: cursor.close()
+        if conn: db_pool.return_connection(conn)
+
+
+@app.route('/api/hr/license-expiry')
+@require_auth([20003])
+def api_hr_license_expiry():
+    """Return all faculty licenses expiring within 90 days (or already expired), sorted expired-first.
+    Reads directly from faculty_license_tracker — the same source as the employee profile page."""
+    try:
+        from datetime import date as _date
+        today = _date.today()
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT
+                lt.tracker_id,
+                lt.personnel_id,
+                p.firstname || ' ' || p.lastname AS full_name,
+                lt.license_type,
+                lt.license_number,
+                lt.expiration_date
+            FROM faculty_license_tracker lt
+            JOIN personnel p ON lt.personnel_id = p.personnel_id
+            WHERE lt.expiration_date IS NOT NULL
+              AND p.role_id IN (20001, 20002)
+        """)
+        rows = cursor.fetchall()
         cursor.close()
         db_pool.return_connection(conn)
+
+        expiring = []
+        for tracker_id, personnel_id, name, license_type, license_number, expiration_date in rows:
+            if not expiration_date:
+                continue
+            try:
+                exp_date = expiration_date if hasattr(expiration_date, 'year') else _date.fromisoformat(str(expiration_date)[:10])
+                days = (exp_date - today).days
+                if days <= 90:
+                    expiring.append({
+                        'personnel_id': personnel_id,
+                        'name': name,
+                        'license_type': license_type or '—',
+                        'license_number': license_number or '—',
+                        'expiration_date': exp_date.strftime('%b %d, %Y'),
+                        'days': days,
+                    })
+            except (ValueError, TypeError):
+                continue
+
+        # Sort: expired first (most negative days), then soonest-expiring
+        expiring.sort(key=lambda x: x['days'])
+
+        return jsonify({'success': True, 'expiring': expiring, 'count': len(expiring)})
+
+    except Exception as e:
+        print(f"Error fetching license expiry data: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/hr/notify-faculty-license', methods=['POST'])
+@require_auth([20003])
+def api_hr_notify_faculty_license():
+    """HR manually sends a one-time license expiry reminder to a specific faculty member."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data'}), 400
+
+        personnel_id = data.get('personnel_id')
+        if not personnel_id:
+            return jsonify({'success': False, 'error': 'Missing personnel_id'}), 400
+
+        license_type     = data.get('license_type', 'License')
+        license_number   = data.get('license_number', '')
+        expiration_date  = data.get('expiration_date', '')
+        days             = int(data.get('days', 0))
+
+        philippines_tz = pytz.timezone('Asia/Manila')
+        now_str = datetime.now(philippines_tz).strftime('%A, %B %d, %Y %I:%M %p')
+
+        # Look up faculty name so the notification doesn't show as "Unknown"
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT firstname || ' ' || lastname FROM personnel WHERE personnel_id = %s",
+            (personnel_id,)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        db_pool.return_connection(conn)
+        faculty_name = row[0] if row else f"Faculty #{personnel_id}"
+
+        lic_desc = f'{license_type}'
+        if license_number and license_number not in ('', '—'):
+            lic_desc += f' (No. {license_number})'
+
+        if days < 0:
+            msg = f'HR Reminder: Your {lic_desc} has expired as of {expiration_date}. Please renew it immediately.'
+        else:
+            msg = f'HR Reminder: Your {lic_desc} expires in {days} day(s) on {expiration_date}. Please take action to renew it.'
+
+        notification_data = {
+            'notification_type': 'license',
+            'action':            'hr_reminder',
+            'personnel_id':      personnel_id,
+            'person_name':       faculty_name,
+            'message':           msg,
+            # Stored in spare DB columns for history retrieval
+            'subject_code':      license_type,
+            'subject_name':      license_number if license_number not in ('', '—') else '',
+            'class_section':     expiration_date,
+            'classroom':         str(days),
+            'rfid_uid':          '',
+            'tap_time':          now_str,
+            # Extra fields for live SSE rendering
+            'license_type':      license_type,
+            'license_number':    license_number,
+            'expiration_date':   expiration_date,
+            'days_until_expiry': days,
+        }
+
+        _push_to_queue(personnel_id, notification_data)
+        return jsonify({'success': True, 'message': 'Notification sent to faculty.'})
+
+    except Exception as e:
+        print(f"Error sending faculty license notification: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/faculty/license-popup')
+@require_auth([20001, 20002])
+def api_faculty_license_popup():
+    """Return unread HR-initiated license reminders for the currently logged-in faculty member.
+    Used to drive the one-time popup shown on login."""
+    try:
+        user_id = session['user_id']
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT notif_id, message, subject_code, subject_name,
+                   class_section, classroom, tap_time
+            FROM notifications
+            WHERE target_audience    = 'faculty'
+              AND target_personnel_id = %s
+              AND notification_type  = 'license'
+              AND action             = 'hr_reminder'
+              AND is_read            = FALSE
+            ORDER BY created_at DESC
+        """, (user_id,))
+        rows = cursor.fetchall()
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        reminders = []
+        for notif_id, message, license_type, license_number, expiration_date, days_str, tap_time in rows:
+            try:
+                days_val = int(days_str) if days_str and days_str.lstrip('-').isdigit() else None
+            except (ValueError, TypeError):
+                days_val = None
+            reminders.append({
+                'notif_id':        notif_id,
+                'message':         message or '',
+                'license_type':    license_type or '—',
+                'license_number':  license_number or '—',
+                'expiration_date': expiration_date or '—',
+                'days':            days_val,
+            })
+
+        return jsonify({'success': True, 'reminders': reminders, 'count': len(reminders)})
+
+    except Exception as e:
+        print(f"Error fetching faculty license popup: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/faculty/dismiss-license-popup', methods=['POST'])
+@require_auth([20001, 20002])
+def api_faculty_dismiss_license_popup():
+    """Mark all unread HR-initiated license reminders as read for the current faculty member,
+    so the popup is not shown again on subsequent logins."""
+    try:
+        user_id = session['user_id']
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE notifications
+            SET is_read = TRUE
+            WHERE target_audience    = 'faculty'
+              AND target_personnel_id = %s
+              AND notification_type  = 'license'
+              AND action             = 'hr_reminder'
+              AND is_read            = FALSE
+        """, (user_id,))
+        conn.commit()
+        cursor.close()
+        db_pool.return_connection(conn)
+        return jsonify({'success': True})
+
+    except Exception as e:
+        print(f"Error dismissing license popup: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 if __name__ == "__main__":
