@@ -4135,9 +4135,9 @@ def api_faculty_dashboard():
                 -- Calculate Overall Weighted Evaluation Score (55/35/10)
                 SELECT
                     COALESCE(
-                        SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
-                        SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
-                        SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
+                        AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END) * 0.55 +
+                        MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END) * 0.35 +
+                        MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END) * 0.10,
                     0) AS overall_average
                 FROM faculty_evaluations fe
                 CROSS JOIN personnel_data pd
@@ -4787,9 +4787,9 @@ def api_get_profile_stats():
                 -- Calculate Overall Weighted Evaluation Score (55/35/10)
                 SELECT
                     COALESCE(
-                        SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
-                        SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
-                        SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
+                        AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END) * 0.55 +
+                        MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END) * 0.35 +
+                        MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END) * 0.10,
                     0) AS overall_eval_score
                 FROM faculty_evaluations fe
                 WHERE fe.personnel_id = %s AND fe.acadcalendar_id = %s
@@ -6607,24 +6607,24 @@ def api_faculty_evaluations_data():
                 (SELECT c.collegename FROM personnel p JOIN college c ON p.college_id = c.college_id WHERE p.personnel_id = %s) AS faculty_college_name,
                 
                 (SELECT AVG(overall_score) FROM (
-                    SELECT 
-                        COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
-                                 SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
-                                 SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) AS overall_score
+                    SELECT
+                        COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END) * 0.55 +
+                                 MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END) * 0.35 +
+                                 MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END) * 0.10, 0) AS overall_score
                         FROM personnel p
                         LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = (SELECT acadcalendar_id FROM current_term)
                         WHERE p.role_id IN (20001, 20002) AND fe.score IS NOT NULL
                         GROUP BY p.personnel_id
                 ) AS comparison_scores) AS college_wide_avg,
                 
-                (SELECT AVG(cb.overall_score) 
+                (SELECT AVG(cb.overall_score)
                  FROM (
-                     SELECT 
+                     SELECT
                         fe.personnel_id,
                         p.college_id,
-                        COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
-                                 SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
-                                 SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) AS overall_score
+                        COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END) * 0.55 +
+                                 MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END) * 0.35 +
+                                 MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END) * 0.10, 0) AS overall_score
                      FROM faculty_evaluations fe
                      JOIN personnel p ON fe.personnel_id = p.personnel_id
                      WHERE fe.acadcalendar_id = (SELECT acadcalendar_id FROM current_term) AND p.role_id IN (20001, 20002) AND fe.score IS NOT NULL
@@ -10237,15 +10237,14 @@ def api_hr_evaluation_dashboard_data():
         # The main SELECT statement is restructured to pull aggregated data from the CTEs directly.
         cursor.execute("""
             WITH faculty_eval_scores AS (
-                SELECT 
+                SELECT
                     p.personnel_id,
                     c.collegename,
-                    -- Weighted Overall Score (55/35/10)
-                    COALESCE(
-                        SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) +
-                        SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) +
-                        SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END),
-                    0) AS overall_score
+                    -- Weighted Overall Score (55/35/10), partial scores included
+                    COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END), 0) * 0.55 +
+                    COALESCE(MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END), 0) * 0.35 +
+                    COALESCE(MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END), 0) * 0.10
+                        AS overall_score
                 FROM personnel p
                 LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s
                 LEFT JOIN college c ON p.college_id = c.college_id
@@ -10577,12 +10576,13 @@ def api_hr_evaluations():
     
     # Apply Rating Status Filter
     if status:
+        _weighted_expr = "COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student' THEN fe.score END) * 0.55 + MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END) * 0.35 + MAX(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score END) * 0.10, 0)"
         if status == 'above-average':
-            query += " AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) >= 3.0"
+            query += f" AND {_weighted_expr} >= 3.0"
         elif status == 'average':
-            query += " AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) >= 2.0 AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) < 3.0"
+            query += f" AND {_weighted_expr} >= 2.0 AND {_weighted_expr} < 3.0"
         elif status == 'below-average':
-            query += " AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) > 0.0 AND COALESCE(SUM(CASE WHEN fe.evaluator_type = 'student' THEN fe.score * 0.55 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score * 0.35 ELSE 0 END) + SUM(CASE WHEN fe.evaluator_type = 'peer' THEN fe.score * 0.10 ELSE 0 END), 0) < 2.0"
+            query += f" AND {_weighted_expr} > 0.0 AND {_weighted_expr} < 2.0"
             
     # Response Rate Filter is applied in Python after fetch (dynamic threshold based on total_students)
             
@@ -10948,7 +10948,7 @@ def api_hr_distribution_trends():
                 SELECT
                     fe.acadcalendar_id,
                     fe.personnel_id,
-                    COALESCE(MAX(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END), 0) * 0.55 +
+                    COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END), 0) * 0.55 +
                     COALESCE(MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END), 0) * 0.35 +
                     COALESCE(MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END), 0) * 0.10
                         AS overall
