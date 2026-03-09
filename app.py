@@ -11561,9 +11561,9 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
     story.append(breakdown_table)
     story.append(Spacer(1, 0.3 * inch))
 
-    # 6. QUALITATIVE FEEDBACK
-    
-    story.append(Paragraph("<b>Qualitative Feedback</b>", styles['h3']))
+    # 6. STUDENT FEEDBACK
+
+    story.append(Paragraph("<b>Student Feedback</b>", styles['h3']))
     
     bullet_style = ParagraphStyle(
         'BulletPoint', 
@@ -11597,12 +11597,59 @@ def api_hr_faculty_evaluation_report_pdf(personnel_id):
     if clean_comments_for_pdf:
         for final_comment in clean_comments_for_pdf:
             story.append(Paragraph(
-                final_comment, 
-                bullet_style, 
+                final_comment,
+                bullet_style,
                 bulletText=bullet_text
             ))
     else:
         story.append(Paragraph("No qualitative feedback available.", styles['Italic']))
+
+    # 6b. PEER EVALUATION QUALITATIVE FEEDBACK
+    peer_submissions = report_data.get('peer_submissions', [])
+    peer_has_qualitative = any(
+        s.get('strengths') or s.get('growth') or s.get('comments')
+        for s in peer_submissions
+    )
+
+    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph("<b>Peer Evaluation Feedback</b>", styles['h3']))
+
+    subsection_label_style = ParagraphStyle(
+        'SubsectionLabel',
+        parent=styles['Normal'],
+        fontSize=9,
+        textColor=colors.HexColor('#555555'),
+        spaceAfter=1,
+        spaceBefore=4,
+        fontName='Helvetica-Bold',
+    )
+
+    if peer_has_qualitative:
+        for idx, sub in enumerate(peer_submissions, start=1):
+            evaluator = sub.get('evaluator_name', 'Anonymous')
+            story.append(Paragraph(
+                f"<b>Peer Evaluator {idx}:</b> {evaluator}",
+                styles['Normal']
+            ))
+            for field_label, field_key in [
+                ('Strengths', 'strengths'),
+                ('Areas for Growth', 'growth'),
+                ('Additional Comments', 'comments'),
+            ]:
+                text = sub.get(field_key, '').strip()
+                if text:
+                    story.append(Paragraph(f"{field_label}:", subsection_label_style))
+                    for line in text.split('\n'):
+                        line = line.strip()
+                        if line:
+                            story.append(Paragraph(
+                                line,
+                                bullet_style,
+                                bulletText=bullet_text
+                            ))
+            story.append(Spacer(1, 0.1 * inch))
+    else:
+        story.append(Paragraph("No peer qualitative feedback available.", styles['Italic']))
 
     # 7. BUILD PDF
     doc.build(story)
