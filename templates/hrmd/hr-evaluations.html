@@ -249,7 +249,7 @@
             </div>
             <div style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; padding:16px;">
               <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
-                <div style="font-weight:700; font-size:13px; color:#374151;"><i class='bx bx-buildings' style="color:var(--spc-maroon); margin-right:5px;"></i>Avg Rating by Department</div>
+                <div style="font-weight:700; font-size:13px; color:#374151;"><i class='bx bx-buildings' style="color:var(--spc-maroon); margin-right:5px;"></i>Average Rating by Department</div>
                 <div style="display:flex; gap:4px;">
                   <button id="deptChartToggle-bar" onclick="switchDeptChartView('bar')"
                     style="padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid var(--spc-maroon); background:var(--spc-maroon); color:#fff; transition:all .15s;">
@@ -1454,9 +1454,8 @@ function openModal(personnelId, facultyName, overallRating, studentResponses) {
                 if (cleanFeedback.length > 0) {
                     cleanFeedback.forEach(function(comment) {
                         $('#feedbackList').append(`
-                            <li style="margin-bottom: 12px; padding: 10px; border-left: 3px solid var(--spc-gold); background: #fcfcfd; border-radius: 4px;">
-                                <i class='bx bxs-quote-alt-left' style="font-size: 1.1rem; color: var(--spc-gold); margin-right: 5px;"></i>
-                                <span style="font-style: italic; color: #333;">${comment}</span>
+                            <li style="margin-bottom: 5px; padding: 5px 10px; border-left: 3px solid var(--spc-gold); background: #fcfcfd; border-radius: 4px;">
+                                <span style="font-size: 12px; color: #333;">${comment}</span>
                             </li>
                         `);
                     });

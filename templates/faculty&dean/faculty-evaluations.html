@@ -185,7 +185,7 @@
       <div class="kpi card" style="gap:14px">
         <div class="icon eval"><i class='bx bx-check-shield'></i></div>
         <div>
-          <div class="title">Avg Rating (term)</div>
+          <div class="title">Average Rating (Term)</div>
           <div class="value" id="kpiAvg">—</div>
         </div>
       </div>
@@ -206,7 +206,7 @@
       <div class="kpi card" style="gap:14px">
         <div class="icon att"><i class='bx bx-user'></i></div>
         <div>
-          <div class="title">Leading Dept.</div>
+          <div class="title">Department Rank</div>
           <div class="value" id="kpiBestDept">—</div>
         </div>
       </div>
@@ -326,7 +326,7 @@
               <i class='bx bx-star' style="font-size:20px; color:#d97706;"></i>
             </div>
             <div>
-              <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted);">Avg Rating</div>
+              <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted);">Average Rating</div>
               <div style="font-size:1.5rem; font-weight:800; color:#1f2937; line-height:1.2;" id="an-avgRating">—</div>
             </div>
           </div>
@@ -381,7 +381,7 @@
           </div>
           <div style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; padding:16px;">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
-              <div style="font-weight:700; font-size:13px; color:#374151;"><i class='bx bx-buildings' style="color:var(--spc-maroon); margin-right:5px;"></i>Avg Rating by Department</div>
+              <div style="font-weight:700; font-size:13px; color:#374151;"><i class='bx bx-buildings' style="color:var(--spc-maroon); margin-right:5px;"></i>Average Rating by Department</div>
               <div style="display:flex; gap:4px;">
                 <button id="deptChartToggle-bar" onclick="switchDeptChartView('bar')"
                   style="padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; border:1.5px solid var(--spc-maroon); background:var(--spc-maroon); color:#fff; transition:all .15s;">
@@ -1229,7 +1229,7 @@ function loadEvaluations() {
             $('#kpiAvg').text(parseFloat(kpis.avg_rating).toFixed(2));
             $('#kpiTotalFaculty').text(kpis.total_faculty);
             $('#kpiMetRate').text(`${kpis.met_response_rate_count}/${kpis.total_faculty}`);
-            $('#kpiBestDept').text(kpis.best_department_name);
+            $('#kpiBestDept').text(kpis.dept_rank || '—');
         }
         if (data.acadcalendar_info) {
             const info = data.acadcalendar_info;

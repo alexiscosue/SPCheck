@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(PGPASSWORD=RyCugEVE4EDUXZCpDbsgc6RcPMc2HhqA psql -h dpg-d6lg7s94tr6s739s64n0-a.oregon-postgres.render.com -U spcheck_user -d spcheck_b86i -c \"SELECT pg_terminate_backend\\(pid\\) FROM pg_stat_activity WHERE datname=''spcheck_b86i'' AND pid <> pg_backend_pid\\(\\) AND state IN \\(''idle in transaction'',''idle in transaction \\(aborted\\)'',''active''\\) AND query LIKE ''%campus_attendance%''\")"
-    ]
-  }
-}
