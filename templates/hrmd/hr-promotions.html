@@ -595,6 +595,78 @@
       </div>
       {% endif %}
 
+      {# ── REGULAR & TENURED FACULTY (read-only, completed) ───────────── #}
+      <style>
+        .rt-avatar-tenured { background: linear-gradient(135deg,#92400e,#78350f); }
+        .rt-avatar-regular  { background: linear-gradient(135deg,#16a34a,#166534); }
+        .rt-badge-tenured   { background: #fef3c7; color: #92400e; }
+        .rt-badge-regular   { background: #dcfce7; color: #166534; }
+      </style>
+      {% set reg_ten = all_reg_faculty | selectattr('category', 'in', ['regular', 'tenured']) | list %}
+      {% if reg_ten %}
+      <div style="border-left:4px solid #16a34a;border-radius:0 10px 10px 0;background:#f0fdf4;padding:14px 18px;margin-bottom:6px;margin-top:32px;display:flex;align-items:center;gap:12px;">
+        <i class='bx bx-user-check' style="font-size:22px;color:#16a34a;flex-shrink:0;"></i>
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:700;color:#14532d;">Regularized Faculty</div>
+          <div style="font-size:11px;color:#166534;margin-top:1px;">Already Regular or Tenured — no action needed.</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          {% if regular_count %}
+          <span style="background:#dcfce7;color:#166534;font-size:12px;font-weight:700;padding:3px 12px;border-radius:20px;">{{ regular_count }} Regular</span>
+          {% endif %}
+          {% if tenured_count %}
+          <span style="background:#fef3c7;color:#92400e;font-size:12px;font-weight:700;padding:3px 12px;border-radius:20px;">{{ tenured_count }} Tenured</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="table">
+        <table>
+          <thead>
+            <tr>
+              <th>Faculty</th>
+              <th>Rank</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for f in reg_ten %}
+            <tr style="opacity:0.8;transition:opacity .15s;">
+              <td style="padding:12px 12px;">
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <div style="position:relative;width:36px;height:36px;flex-shrink:0;">
+                    <div class="rt-avatar-{{ f.category }}" style="width:36px;height:36px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;">
+                      {{ f.name[0]|upper if f.name else '?' }}
+                    </div>
+                    <img class="faculty-photo" data-personnel-id="{{ f.personnel_id }}"
+                         style="position:absolute;top:0;left:0;width:36px;height:36px;border-radius:50%;object-fit:cover;display:none;">
+                  </div>
+                  <div>
+                    <div style="font-weight:600;font-size:13px;color:#111;">{{ f.name }}</div>
+                    <div style="font-size:11px;color:#6b7280;">{{ f.department }}</div>
+                  </div>
+                </div>
+              </td>
+              <td style="padding:12px 12px;font-size:13px;font-weight:600;color:#374151;">{{ f.current_rank }}</td>
+              <td style="padding:12px 12px;">
+                <span class="rt-badge-{{ f.category }}" style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;">
+                  {{ f.current_tenure }}
+                </span>
+              </td>
+              <td style="padding:12px 12px;">
+                <a href="/hr_employee_profile/{{ f.personnel_id }}"
+                   style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#f3f4f6;color:#374151;border-radius:7px;font-size:11px;font-weight:600;text-decoration:none;border:1px solid #e5e7eb;">
+                  <i class='bx bx-user-circle' style="font-size:13px;"></i> Profile
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
     </div>
 
     <div class="tab-content" id="auditlogs" style="display: none;">
