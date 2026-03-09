@@ -66,7 +66,7 @@
     <div class="chart-card card">
       <div class="card-header">
         <i class='bx bx-buildings'></i>
-        <span>Avg Rating by Department</span>
+        <span>Average Rating by Department</span>
         <div id="dean-dept-badge" style="display:none;margin-left:auto;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;background:#f3f4f6;color:#6b7280;"></div>
       </div>
       <canvas id="deanDeptChart" height="170"></canvas>
@@ -1064,7 +1064,7 @@
     if (deanDeptChartInstance) deanDeptChartInstance.destroy();
     deanDeptChartInstance = new Chart(canvas.getContext('2d'), {
       type: 'bar',
-      data: { labels: depts, datasets: [{ label: 'Avg Rating', data: avgs, backgroundColor: colors, borderRadius: 6, borderSkipped: false }] },
+      data: { labels: depts, datasets: [{ label: 'Average', data: avgs, backgroundColor: colors, borderRadius: 6, borderSkipped: false }] },
       options: {
         indexAxis: 'y', responsive: true,
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.x.toFixed(2)} / 4` } } },
