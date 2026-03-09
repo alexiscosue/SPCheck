@@ -2066,10 +2066,7 @@ def api_sync_campus_attendance():
                 END AS status
             FROM session_agg
             ON CONFLICT (personnel_id, attendance_date, session)
-            DO UPDATE SET
-                time_in  = EXCLUDED.time_in,
-                time_out = EXCLUDED.time_out,
-                status   = EXCLUDED.status
+            DO NOTHING
         """)
 
         synced = cursor.rowcount

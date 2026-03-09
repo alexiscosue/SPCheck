@@ -238,6 +238,12 @@ class BiometricReader:
                 print(f"⏳ {person_name}: {status} - {remarks}")
             else:
                 self._send_to_arduino(f"LOGGED:{status}:{person_name}")
+                # Compute attendance status (Present/Late) for Entry taps
+                attendance_status = None
+                if status == 'Entry' and session:
+                    current_mins = current_time.hour * 60 + current_time.minute
+                    late_threshold = 495 if session == 'Morning' else 825  # 8:15 AM / 1:45 PM
+                    attendance_status = 'Present' if current_mins <= late_threshold else 'Late'
                 notification_data = {
                     'biometric_uid': biometric_uid,
                     'biometric_id': biometric_id,
@@ -247,7 +253,11 @@ class BiometricReader:
                     'action': status.lower(),
                     'status': 'success',
                     'session': session,
-                    'message': f'{person_name} - {status}'
+                    'attendance_status': attendance_status,
+                    # stored in repurposed DB fields (unused for biometric type)
+                    'class_section': session,
+                    'classroom': attendance_status,
+                    'message': f'{person_name} - {status} ({session})' if session else f'{person_name} - {status}'
                 }
                 self._trigger_notification(notification_data)
                 print(f"✅ {person_name}: {status} - {remarks}")

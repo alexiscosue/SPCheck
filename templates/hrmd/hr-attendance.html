@@ -2535,11 +2535,6 @@
 
               currentPageCampusEntry = 1;
               renderCampusEntryLogs();
-              // Also refresh campus attendance if that tab is active
-              const activeTab = document.querySelector('.hr-attendance-main .eval-page-tab.active');
-              if (activeTab && activeTab.dataset.tab === 'campusattendance') {
-                syncCampusAttendance();
-              }
           } else {
               console.error('Failed to fetch biometric logs:', data.error);
               renderCampusEntryLogs();

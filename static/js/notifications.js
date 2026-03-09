@@ -173,6 +173,9 @@ const NotifSystem = (function () {
       subject_name  : data.subject_name  || null,
       class_section : data.class_section || null,
       classroom     : data.classroom     || null,
+      // biometric session + attendance status
+      session       : data.session           || null,
+      campus_status : data.attendance_status || null,
       // license details
       license_type       : data.license_type        || null,
       license_number     : data.license_number      || null,
@@ -243,8 +246,11 @@ const NotifSystem = (function () {
             message       : n.message || '',
             subject_code  : n.subject_code  || null,
             subject_name  : n.subject_name  || null,
-            class_section      : n.class_section || null,
-            classroom          : n.classroom     || null,
+            class_section      : n.notification_type === 'biometric' ? null : (n.class_section || null),
+            classroom          : n.notification_type === 'biometric' ? null : (n.classroom     || null),
+            // biometric: session stored in class_section, attendance_status in classroom
+            session       : n.notification_type === 'biometric' ? (n.class_section || null) : null,
+            campus_status : n.notification_type === 'biometric' ? (n.classroom     || null) : null,
             license_type       : n.license_type       || null,
             license_number     : n.license_number     || null,
             expiration_date    : n.expiration_date     || null,
@@ -504,14 +510,47 @@ const NotifSystem = (function () {
         '</div>';
       }
 
-      // Biometric entry/exit direction badge
-      if (isBio && (n.action === 'entry' || n.action === 'exit')) {
+      // Biometric: session + direction + attendance status
+      if (isBio && (n.action === 'entry' || n.action === 'exit' || n.action === 'buffer_period')) {
         var bDir = n.action === 'entry'
           ? { bg: '#d1fae5', text: '#065f46', label: 'Entry' }
-          : { bg: '#dbeafe', text: '#1e40af', label: 'Exit'  };
-        details += '<div class="notif-item-detail">' +
-          'Direction: <span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:' +
-          bDir.bg + ';color:' + bDir.text + '">' + bDir.label + '</span>' +
+          : n.action === 'exit'
+          ? { bg: '#dbeafe', text: '#1e40af', label: 'Exit'  }
+          : { bg: '#fef9c3', text: '#854d0e', label: 'Buffered' };
+
+        var rowParts = [];
+
+        // Session badge
+        if (n.session) {
+          var sCol = n.session === 'Morning'
+            ? { bg: '#fff7ed', text: '#c2410c' }
+            : { bg: '#eff6ff', text: '#1d4ed8' };
+          rowParts.push(
+            '<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:' +
+            sCol.bg + ';color:' + sCol.text + '">' +
+            _esc(n.session) + '</span>'
+          );
+        }
+
+        // Direction badge
+        rowParts.push(
+          '<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:' +
+          bDir.bg + ';color:' + bDir.text + '">' + bDir.label + '</span>'
+        );
+
+        // Attendance status badge (Entry only)
+        if (n.action === 'entry' && n.campus_status) {
+          var asCol = n.campus_status === 'Present'
+            ? { bg: '#d1fae5', text: '#065f46' }
+            : { bg: '#fef3c7', text: '#92400e' };
+          rowParts.push(
+            '<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:' +
+            asCol.bg + ';color:' + asCol.text + '">' + _esc(n.campus_status) + '</span>'
+          );
+        }
+
+        details += '<div class="notif-item-detail" style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">' +
+          rowParts.join('') +
         '</div>';
       }
 
