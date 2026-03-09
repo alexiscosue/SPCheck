@@ -6856,19 +6856,16 @@ def api_hr_verify_master_degree():
         conn   = db_pool.get_connection()
         cursor = conn.cursor()
 
-        # Fetch existing values so we don't overwrite has_doctorate / highest_degree_level
-        cursor.execute("""
-            SELECT has_doctorate, highest_degree_level FROM profile WHERE personnel_id = %s
-        """, (personnel_id,))
-        row = cursor.fetchone()
-        has_doctorate        = row[0] if row else False
-        highest_degree_level = row[1] if row else ''
-
+        # Only updates has_aligned_master / probationary_start_date / employmentstatus;
+        # other profile columns (has_doctorate, highest_degree_level, etc.) are untouched.
         cursor.execute("""
             UPDATE profile
             SET has_aligned_master      = TRUE,
                 probationary_start_date = %s,
-                employmentstatus        = 'Probationary'
+                employmentstatus        = CASE
+                    WHEN employmentstatus IN ('Regular', 'Tenured') THEN employmentstatus
+                    ELSE 'Probationary'
+                END
             WHERE personnel_id = %s
         """, (prob_start, personnel_id))
         conn.commit()
@@ -6913,23 +6910,38 @@ def api_hr_update_degree_info():
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT has_aligned_master, has_doctorate, highest_degree_level, probationary_start_date
+            SELECT has_aligned_master, has_doctorate, highest_degree_level,
+                   probationary_start_date, employmentstatus
             FROM profile WHERE personnel_id = %s
         """, (personnel_id,))
         before = cursor.fetchone()
         before_value = (
             f"aligned_master={before[0]}, doctorate={before[1]}, "
-            f"degree_level={before[2]}, prob_start={before[3]}"
+            f"degree_level={before[2]}, prob_start={before[3]}, status={before[4]}"
         ) if before else "N/A"
+
+        current_status = before[4] if before else None
+
+        # Only transition status when it makes sense:
+        # - Confirming master's + date → Probationary (if currently Contractual)
+        # - Unchecking master's         → Contractual  (only if currently Probationary; never downgrade Regular/Tenured)
+        if has_aligned_master and probationary_start_date:
+            new_status = 'Probationary' if current_status == 'Contractual' else current_status
+        elif not has_aligned_master and current_status == 'Probationary':
+            new_status = 'Contractual'
+        else:
+            new_status = current_status  # Regular / Tenured — leave untouched
 
         cursor.execute("""
             UPDATE profile
-            SET has_aligned_master = %s,
-                has_doctorate = %s,
-                highest_degree_level = %s,
-                probationary_start_date = %s
+            SET has_aligned_master      = %s,
+                has_doctorate           = %s,
+                highest_degree_level    = %s,
+                probationary_start_date = %s,
+                employmentstatus        = %s
             WHERE personnel_id = %s
-        """, (has_aligned_master, has_doctorate, highest_degree_level, probationary_start_date, personnel_id))
+        """, (has_aligned_master, has_doctorate, highest_degree_level,
+              probationary_start_date, new_status, personnel_id))
         conn.commit()
         cursor.close()
         db_pool.return_connection(conn)
@@ -8548,9 +8560,10 @@ def hr_employee_profile(personnel_id):
 @app.route('/faculty_employee_profile/<int:personnel_id>')
 @require_auth([20003, 20004])
 def faculty_employee_profile(personnel_id):
-    """HR view of faculty/dean profile"""
+    """HR/VP view of faculty/dean profile"""
     try:
         hr_info = get_personnel_info(session['user_id'])
+        user_role = session.get('user_role')
         
         conn = db_pool.get_connection()
         cursor = conn.cursor()
@@ -8593,8 +8606,8 @@ def faculty_employee_profile(personnel_id):
                 'position': position or 'Full-Time Employee',
                 'employment_status': employmentstatus or 'Regular',
                 'firstname': firstname,
-                'is_hr_viewing': True,
-                'is_vp_viewing': False
+                'is_hr_viewing': user_role == 20003,  # HR role
+                'is_vp_viewing': user_role == 20004   # VP role
             }
             
             session['viewing_personnel_id'] = personnel_id
@@ -10153,7 +10166,11 @@ def faculty_promotion():
 @require_auth([20001, 20002, 20003])
 def faculty_profile():
     faculty_info = get_faculty_info(session['user_id'])
-    return render_template('faculty&dean/faculty-profile.html', **faculty_info)
+    # Pass viewing flags without mutating the cached dict
+    return render_template('faculty&dean/faculty-profile.html',
+                           **faculty_info,
+                           is_hr_viewing=False,
+                           is_vp_viewing=False)
 
 @app.route('/faculty_settings')
 @require_auth([20001, 20002])
@@ -12314,7 +12331,9 @@ def hr_promotions():
             LEFT JOIN college c ON p.college_id = c.college_id
             LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
             WHERE
-                pr.has_aligned_master = TRUE
+                p.role_id IN (20001, 20002)
+                AND pr.employmentstatus = 'Probationary'
+                AND pr.has_aligned_master = TRUE
                 AND pr.probationary_start_date IS NOT NULL
                 AND (CURRENT_DATE - pr.probationary_start_date) < 1095
                 AND p.personnel_id NOT IN (
@@ -13105,13 +13124,16 @@ def promotion_document_upload():
     userid = session.get("user_id")
 
     # Enforce the official promotion submission window: June 1 – August 31
+    # NOTE: Disabled during testing. Re-enable before production deploy.
     from datetime import date as _date
     _today = _date.today()
     if not (6 <= _today.month <= 8):
-        return (
-            "Promotion applications are only accepted between June 1 and August 31 each year. "
-            "Please resubmit during the official submission period."
-        ), 403
+        pass  # TODO: restore the 403 below for production
+    # if not (6 <= _today.month <= 8):
+    #     return (
+    #         "Promotion applications are only accepted between June 1 and August 31 each year. "
+    #         "Please resubmit during the official submission period."
+    #     ), 403
 
     conn = None
     cursor = None

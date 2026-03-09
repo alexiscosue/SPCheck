@@ -693,7 +693,7 @@ async function verifyMasterDegree(personnelId, probStart) {
       document.getElementById('modal-probation-start').textContent = data.probationary_start_date;
       document.getElementById('degree-verify-section').style.display = 'none';
       // Refresh the degree cards
-      loadProfile();
+      loadProfileData();
     } else {
       alert('Verification failed: ' + (data.error || 'Unknown error'));
       btn.disabled = false;
