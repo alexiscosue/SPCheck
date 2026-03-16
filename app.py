@@ -657,19 +657,19 @@ def start_absence_checker():
     global absence_checker_thread, absence_checker_running
     
     if absence_checker_running:
-        print("⚠️ Absence checker already running")
+        print("[WARNING] Absence checker already running")
         return
-    
+
     absence_checker_running = True
     absence_checker_thread = threading.Thread(target=check_and_record_absences, daemon=True)
     absence_checker_thread.start()
-    print("🚀 Independent absence checker started - runs every 1 minute")
+    print("[INFO] Independent absence checker started - runs every 1 minute")
 
 def stop_absence_checker():
     """Stop the absence checker thread"""
     global absence_checker_running
     absence_checker_running = False
-    print("🛑 Absence checker stopped")
+    print("[INFO] Absence checker stopped")
 
 start_absence_checker()
 atexit.register(stop_absence_checker)
