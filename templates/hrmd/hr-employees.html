@@ -6,41 +6,64 @@
 
 {% block content %}
 <!-- Search & Filters -->
-<div class="filters">
-  <input type="text" id="searchInput" placeholder="Search by Name, Role, Position, Status...">
-  <select id="collegeFilter">
-    <option value="all">All Colleges</option>
-    <!-- College options will be populated from database -->
-  </select>
-  <select id="positionFilter">
-    <option value="all">All Positions</option>
-    <option value="Instructor">Instructor</option>
-    <option value="Assistant Professor">Assistant Professor</option>
-    <option value="Associate Professor">Associate Professor</option>
-    <option value="Professor">Professor</option>
-    <option value="Dean">Dean</option>
-    <option value="HR Staff">HR Staff</option>
-    <option value="Vice President">Vice President</option>
-    <option value="President">President</option>
-  </select>
-  <select id="statusFilter">
-    <option value="all">All Status</option>
-    <option value="Regular">Regular</option>
-    <option value="Probationary">Probationary</option>
-    <option value="Contractual">Contractual</option>
-  </select>
-  
-  <!-- Add Button with Dropdown -->
-  <div class="emp-add-dropdown-container">
-    <button class="emp-add-btn" title="Add Employees/Schedule">+</button>
-    <div class="emp-add-dropdown">
-      <a href="#" onclick="openAddEmployeeModal()">Add Employee</a>
-      <a href="#" onclick="openAddScheduleModal()">Add Schedule</a>
-      <a href="#" onclick="openImportCSVModal()">Import Schedule CSV</a>
-      <!-- NEW OPTIONS -->
-      <a href="#" onclick="openDeleteEmployeeModal()">Delete Employee</a>
-      <a href="#" onclick="openDeleteScheduleModal()">Delete Schedule</a>
+<div style="margin-bottom:4px;">
+  <!-- Top bar: Search + Add -->
+  <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px;">
+    <div style="position:relative; flex:1; min-width:180px;">
+      <i class='bx bx-search' style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:15px; pointer-events:none;"></i>
+      <input type="text" id="searchInput" placeholder="Search by Name, Role, Position, Status..."
+        style="width:100%; box-sizing:border-box; padding:9px 12px 9px 34px; border:1.5px solid #e5e7eb; border-radius:8px; font-size:13px; color:#1f2937; outline:none; transition:border-color .15s;"
+        onfocus="this.style.borderColor='var(--spc-maroon)'" onblur="this.style.borderColor='#e5e7eb'">
     </div>
+    <!-- Add Button with Dropdown -->
+    <div class="emp-add-dropdown-container">
+      <button class="emp-add-btn" title="Add Employees/Schedule">+</button>
+      <div class="emp-add-dropdown">
+        <a href="#" onclick="openAddEmployeeModal()">Add Employee</a>
+        <a href="#" onclick="openAddScheduleModal()">Add Schedule</a>
+        <a href="#" onclick="openImportCSVModal()">Import Schedule CSV</a>
+        <a href="#" onclick="openDeleteEmployeeModal()">Delete Employee</a>
+        <a href="#" onclick="openDeleteScheduleModal()">Delete Schedule</a>
+      </div>
+    </div>
+  </div>
+  <!-- Filter bar -->
+  <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:#f8fafc; border:1px solid #e5e7eb; border-radius:10px; padding:10px 14px;">
+    <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted); white-space:nowrap; display:flex; align-items:center; gap:4px; flex-shrink:0;">
+      <i class='bx bx-filter-alt'></i> Filters
+    </span>
+    <div style="width:1px; height:20px; background:#e5e7eb; flex-shrink:0;"></div>
+    <select id="collegeFilter"
+      style="padding:7px 10px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; flex:1; min-width:130px; cursor:pointer;">
+      <option value="all">All Colleges</option>
+      <!-- College options will be populated from database -->
+    </select>
+    <select id="positionFilter"
+      style="padding:7px 10px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; flex:1; min-width:130px; cursor:pointer;">
+      <option value="all">All Positions</option>
+      <option value="Instructor">Instructor</option>
+      <option value="Assistant Professor">Assistant Professor</option>
+      <option value="Associate Professor">Associate Professor</option>
+      <option value="Professor">Professor</option>
+      <option value="Dean">Dean</option>
+      <option value="HR Staff">HR Staff</option>
+      <option value="Vice President">Vice President</option>
+      <option value="President">President</option>
+    </select>
+    <select id="statusFilter"
+      style="padding:7px 10px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:13px; color:#374151; background:#fff; outline:none; flex:1; min-width:130px; cursor:pointer;">
+      <option value="all">All Employment Status</option>
+      <option value="Regular">Regular</option>
+      <option value="Probationary">Probationary</option>
+      <option value="Tenured">Tenured</option>
+      <option value="Contractual">Contractual</option>
+    </select>
+    <button onclick="clearEmpFilters()"
+      style="padding:7px 12px; border:1.5px solid #e5e7eb; border-radius:7px; font-size:12px; font-weight:700; color:var(--muted); background:#fff; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:4px; flex-shrink:0; transition:all .15s;"
+      onmouseover="this.style.borderColor='#ef4444';this.style.color='#ef4444';"
+      onmouseout="this.style.borderColor='#e5e7eb';this.style.color='var(--muted)';">
+      <i class='bx bx-x'></i> Clear
+    </button>
   </div>
 </div>
 
@@ -210,20 +233,22 @@
               <div class="emp-error-message" id="semesterError"></div>
             </div>
           </div>
-          <!-- Faculty search section -->
+          <!-- Faculty selection section -->
           <div style="margin-bottom:16px">
             <label style="display:block;margin-bottom:6px;color:#374151;font-weight:500;font-size:13px">Faculty *</label>
             <input type="hidden" id="personnel_id" name="personnel_id">
+            <span id="selectedFacultyName" style="display:none;"></span>
             <!-- Search + filters row -->
-            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px">
-              <div class="emp-form-group" style="flex:2;min-width:160px;position:relative">
-                <input type="text" id="facultySearchInput" placeholder="Search faculty by name..." autocomplete="off">
-                <div id="facultySearchResults" style="display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;z-index:300;background:#fff;border:1px solid #d1d5db;border-radius:6px;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.12)"></div>
-              </div>
-              <select id="schedCollegeFilter" style="flex:1;min-width:120px">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+              <input type="text" id="schedFacultySearch" placeholder="Search by Name, College, Position..."
+                     style="flex:2;min-width:180px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;"
+                     oninput="filterAddScheduleFacultyList()">
+              <select id="schedCollegeFilter" onchange="filterAddScheduleFacultyList()"
+                      style="flex:1;min-width:120px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
                 <option value="">All Colleges</option>
               </select>
-              <select id="schedPositionFilter" style="flex:1;min-width:120px">
+              <select id="schedPositionFilter" onchange="filterAddScheduleFacultyList()"
+                      style="flex:1;min-width:120px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
                 <option value="">All Positions</option>
                 <option>Instructor</option>
                 <option>Assistant Professor</option>
@@ -234,17 +259,29 @@
                 <option>Vice President</option>
                 <option>President</option>
               </select>
-              <select id="schedEmploymentFilter" style="flex:1;min-width:120px">
+              <select id="schedEmploymentFilter" onchange="filterAddScheduleFacultyList()"
+                      style="flex:1;min-width:120px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
                 <option value="">All Employment</option>
                 <option>Regular</option>
                 <option>Probationary</option>
                 <option>Contractual</option>
               </select>
             </div>
-            <!-- Selected faculty chip -->
-            <div id="selectedFacultyDisplay" style="display:none;padding:6px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;font-size:13px;align-items:center;gap:8px;margin-bottom:4px">
-              <span id="selectedFacultyName" style="flex:1;font-weight:500;color:#1d4ed8"></span>
-              <button type="button" onclick="clearFacultySelection()" style="background:none;border:none;cursor:pointer;color:#6b7280;font-size:18px;line-height:1;padding:0">×</button>
+            <!-- Persistent faculty table -->
+            <div style="max-height:220px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px;margin-bottom:6px;">
+              <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead>
+                  <tr style="background:#f3f4f6;position:sticky;top:0;z-index:1;">
+                    <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Name</th>
+                    <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">College</th>
+                    <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Position</th>
+                    <th style="padding:10px 14px;text-align:left;border-bottom:1px solid #e5e7eb;">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="addSchedFacultyTableBody">
+                  <tr><td colspan="4" style="padding:12px;text-align:center;color:#6b7280;">Loading...</td></tr>
+                </tbody>
+              </table>
             </div>
             <div class="emp-error-message" id="personnelError"></div>
           </div>
@@ -349,8 +386,6 @@
               <input type="text" id="classsection" name="classsection" required placeholder="e.g., Section A">
               <div class="emp-error-message" id="classsectionError"></div>
             </div>
-          </div>
-          <div class="emp-form-row">
             <div class="emp-form-group">
               <label for="student_count">No. of Students *</label>
               <input type="number" id="student_count" name="student_count" required min="1" placeholder="e.g., 35">
@@ -628,6 +663,7 @@
     </div>
     <div class="emp-modal-body">
       <p>Are you sure you want to add this employee to the system?</p>
+      <div id="employeeAddSummary" style="margin:12px 0;"></div>
       <div class="emp-confirmation-actions">
         <button type="button" class="emp-btn-cancel" id="cancelEmployeeButton" onclick="closeConfirmationModal()">Cancel</button>
         <button type="button" class="emp-btn-confirm-icon" id="confirmButton" onclick="processEmployeeAddition()">
@@ -648,6 +684,7 @@
     </div>
     <div class="emp-modal-body">
       <p>Are you sure you want to add this schedule to the system?</p>
+      <div id="scheduleAddSummary" style="margin:12px 0;"></div>
       <div class="emp-confirmation-actions">
         <button type="button" class="emp-btn-cancel" id="cancelScheduleButton" onclick="closeConfirmationScheduleModal()">Cancel</button>
         <button type="button" class="emp-btn-confirm-icon" id="confirmScheduleButton" onclick="processScheduleAddition()">
@@ -669,6 +706,7 @@
     <div class="emp-modal-body">
       <p style="color: #ef4444; font-weight: 500; margin-bottom: 1rem;">⚠️ WARNING: This action cannot be undone!</p>
       <p>Are you sure you want to permanently delete this employee? This will remove all user, personnel, and profile records.</p>
+      <div id="deleteEmployeeSummary" style="margin:12px 0;"></div>
       <p><strong>Note:</strong> Audit logs and RFID logs will be preserved for record keeping.</p>
       <div class="emp-confirmation-actions">
         <button type="button" class="emp-btn-cancel" onclick="closeConfirmationDeleteEmployeeModal()">Cancel</button>
@@ -914,6 +952,7 @@ async function openAddScheduleModal() {
   resetScheduleForm();
   clearFacultySelection();
 
+  document.getElementById('schedFacultySearch').value = '';
   document.getElementById('schedCollegeFilter').value = '';
   document.getElementById('schedPositionFilter').value = '';
   document.getElementById('schedEmploymentFilter').value = '';
@@ -1046,6 +1085,10 @@ function filterDeleteEmployeeList() {
       tr.style.background = '#dbeafe';
       hiddenInput.value = emp.personnel_id;
       hiddenInput.setAttribute('data-name', emp.name);
+      hiddenInput.setAttribute('data-college', emp.college);
+      hiddenInput.setAttribute('data-role', emp.role);
+      hiddenInput.setAttribute('data-position', emp.position);
+      hiddenInput.setAttribute('data-status', emp.status);
       document.getElementById('deletePersonnelError').textContent = '';
     });
     tbody.appendChild(tr);
@@ -1246,6 +1289,29 @@ async function populateDeleteScheduleClassesDropdown(personnelId) {
 
 // Confirmation Modal Functions
 function openConfirmationModal() {
+  const d = pendingEmployeeData;
+  const collegeSel = document.getElementById('college_id');
+  const roleSel = document.getElementById('role_id');
+  const collegeName = collegeSel.options[collegeSel.selectedIndex]?.text || '—';
+  const roleName = roleSel.options[roleSel.selectedIndex]?.text || '—';
+  const fullName = [d.honorifics, d.firstname, d.lastname].filter(Boolean).join(' ');
+  const summaryRow = (label, value) =>
+    `<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid #dbeafe;">
+      <span style="min-width:140px;font-weight:600;color:#1e40af;font-size:12px;">${label}</span>
+      <span style="color:#1f2937;font-size:13px;">${value || '—'}</span>
+    </div>`;
+  document.getElementById('employeeAddSummary').innerHTML = `
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;">
+      ${summaryRow('Name', fullName)}
+      ${summaryRow('Email', d.email)}
+      ${summaryRow('Employee No.', d.employee_no)}
+      ${summaryRow('Hire Date', d.hire_date)}
+      ${summaryRow('Phone', d.phone)}
+      ${summaryRow('College', collegeName)}
+      ${summaryRow('Role', roleName)}
+      ${summaryRow('Position', d.position)}
+      ${summaryRow('Employment Status', d.employment_status)}
+    </div>`;
   document.getElementById('confirmationModal').style.display = 'block';
 }
 
@@ -1256,6 +1322,30 @@ function closeConfirmationModal() {
 }
 
 function openConfirmationScheduleModal() {
+  const d = pendingScheduleData;
+  const semSel = document.getElementById('semester_id');
+  const subSel = document.getElementById('subject_id');
+  const semesterName = semSel.options[semSel.selectedIndex]?.text || '—';
+  const subjectName = subSel.options[subSel.selectedIndex]?.text || '—';
+  const facultyName = document.getElementById('selectedFacultyName')?.textContent || '—';
+  const fmt = (day, start, end) => day ? `${day}  ${start || ''}${end ? ' – ' + end : ''}` : '—';
+  const summaryRow = (label, value) =>
+    `<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid #dbeafe;">
+      <span style="min-width:140px;font-weight:600;color:#1e40af;font-size:12px;">${label}</span>
+      <span style="color:#1f2937;font-size:13px;">${value || '—'}</span>
+    </div>`;
+  document.getElementById('scheduleAddSummary').innerHTML = `
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;">
+      ${summaryRow('Faculty', facultyName)}
+      ${summaryRow('Semester', semesterName)}
+      ${summaryRow('Class', subjectName)}
+      ${summaryRow('Units', d.units)}
+      ${summaryRow('Section', d.classsection)}
+      ${summaryRow('Room', d.classroom)}
+      ${summaryRow('Students', d.student_count)}
+      ${summaryRow('Day 1', fmt(d.classday_1, d.starttime_1, d.endtime_1))}
+      ${d.classday_2 ? summaryRow('Day 2', fmt(d.classday_2, d.starttime_2, d.endtime_2)) : ''}
+    </div>`;
   document.getElementById('confirmationScheduleModal').style.display = 'block';
 }
 
@@ -1266,6 +1356,20 @@ function closeConfirmationScheduleModal() {
 }
 
 function openConfirmationDeleteEmployeeModal() {
+  const d = pendingDeleteEmployeeData;
+  const summaryRow = (label, value) =>
+    `<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid #fee2e2;">
+      <span style="min-width:140px;font-weight:600;color:#991b1b;font-size:12px;">${label}</span>
+      <span style="color:#1f2937;font-size:13px;">${value || '—'}</span>
+    </div>`;
+  document.getElementById('deleteEmployeeSummary').innerHTML = `
+    <div style="background:#fff1f2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;">
+      ${summaryRow('Name', d.employee_name)}
+      ${summaryRow('College', d.college)}
+      ${summaryRow('Role', d.role)}
+      ${summaryRow('Position', d.position)}
+      ${summaryRow('Employment Status', d.status)}
+    </div>`;
   document.getElementById('confirmationDeleteEmployeeModal').style.display = 'block';
 }
 
@@ -1418,80 +1522,71 @@ async function populateFacultyDropdown() {
     const data = await response.json();
     if (data.success) {
       allFacultyList = data.faculty_list || [];
+      filterAddScheduleFacultyList();
     }
   } catch (error) {
     console.error('Error fetching faculty list:', error);
+    document.getElementById('addSchedFacultyTableBody').innerHTML =
+      `<tr><td colspan="4" style="padding:12px;text-align:center;color:#6b7280;">Failed to load faculty list</td></tr>`;
   }
 }
 
-function getFacultyFiltered() {
-  const q   = (document.getElementById('facultySearchInput').value || '').toLowerCase();
-  const col = document.getElementById('schedCollegeFilter').value;
-  const pos = document.getElementById('schedPositionFilter').value;
-  const emp = document.getElementById('schedEmploymentFilter').value;
-  return allFacultyList.filter(f => {
-    if (q   && !f.name.toLowerCase().includes(q)) return false;
-    if (col && f.college !== col)                  return false;
-    if (pos && f.position !== pos)                 return false;
-    if (emp && f.employment_status !== emp)        return false;
+function filterAddScheduleFacultyList() {
+  const search = (document.getElementById('schedFacultySearch').value || '').toLowerCase();
+  const col    = document.getElementById('schedCollegeFilter').value;
+  const pos    = document.getElementById('schedPositionFilter').value;
+  const emp    = document.getElementById('schedEmploymentFilter').value;
+
+  const tbody      = document.getElementById('addSchedFacultyTableBody');
+  const hiddenInput = document.getElementById('personnel_id');
+  tbody.innerHTML  = '';
+
+  const filtered = allFacultyList.filter(f => {
+    const haystack = `${f.name} ${f.college} ${f.position} ${f.employment_status}`.toLowerCase();
+    if (search && !haystack.includes(search)) return false;
+    if (col    && f.college           !== col) return false;
+    if (pos    && f.position          !== pos) return false;
+    if (emp    && f.employment_status !== emp) return false;
     return true;
   });
-}
 
-function showFacultyDropdown() {
-  const results = getFacultyFiltered();
-  const container = document.getElementById('facultySearchResults');
-  container.innerHTML = '';
-  if (results.length === 0) {
-    container.innerHTML = '<div style="padding:10px 12px;color:#6b7280;font-size:13px">No faculty found</div>';
-  } else {
-    results.forEach(f => {
-      const div = document.createElement('div');
-      div.style.cssText = 'padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f3f4f6;';
-      const nameLine = document.createElement('div');
-      nameLine.textContent = f.name;
-      div.appendChild(nameLine);
-      const subParts = [f.college, f.position, f.employment_status].filter(v => v && v !== 'N/A');
-      if (subParts.length) {
-        const sub = document.createElement('div');
-        sub.style.cssText = 'font-size:11px;color:#6b7280;margin-top:2px';
-        sub.textContent = subParts.join(' · ');
-        div.appendChild(sub);
-      }
-      div.addEventListener('mouseover', () => div.style.background = '#f0f9ff');
-      div.addEventListener('mouseout',  () => div.style.background = '');
-      div.addEventListener('mousedown', e => {
-        e.preventDefault();
-        selectFaculty(f.personnel_id, f.name);
-      });
-      container.appendChild(div);
-    });
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" style="padding:12px;text-align:center;color:#6b7280;">No faculty found</td></tr>`;
+    return;
   }
-  container.style.display = 'block';
-}
 
-function hideFacultyDropdown() {
-  document.getElementById('facultySearchResults').style.display = 'none';
-}
-
-function selectFaculty(id, name) {
-  document.getElementById('personnel_id').value = id;
-  document.getElementById('facultySearchInput').value = '';
-  hideFacultyDropdown();
-  const display = document.getElementById('selectedFacultyDisplay');
-  document.getElementById('selectedFacultyName').textContent = name;
-  display.style.display = 'flex';
-  document.getElementById('personnelError').textContent = '';
-  const subjectSelect = document.getElementById('subject_id');
-  subjectSelect.disabled = false;
-  populateSubjectsDropdown(id);
+  filtered.forEach(f => {
+    const tr = document.createElement('tr');
+    const isSelected = hiddenInput.value == f.personnel_id;
+    tr.style.cssText = `cursor:pointer;background:${isSelected ? '#dbeafe' : 'transparent'};`;
+    tr.innerHTML = `
+      <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;">
+        <div style="font-weight:500;">${formatNameSurnameFirst(f.name)}</div>
+      </td>
+      <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;">${f.college}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;">${f.position}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;">${f.employment_status}</td>
+    `;
+    tr.addEventListener('click', () => {
+      document.querySelectorAll('#addSchedFacultyTableBody tr').forEach(r => r.style.background = 'transparent');
+      tr.style.background = '#dbeafe';
+      hiddenInput.value = f.personnel_id;
+      document.getElementById('selectedFacultyName').textContent = f.name;
+      document.getElementById('personnelError').textContent = '';
+      const subjectSelect = document.getElementById('subject_id');
+      subjectSelect.disabled = false;
+      populateSubjectsDropdown(f.personnel_id);
+    });
+    tbody.appendChild(tr);
+  });
 }
 
 function clearFacultySelection() {
   document.getElementById('personnel_id').value = '';
-  document.getElementById('facultySearchInput').value = '';
-  document.getElementById('selectedFacultyDisplay').style.display = 'none';
-  hideFacultyDropdown();
+  document.getElementById('selectedFacultyName').textContent = '';
+  document.querySelectorAll('#addSchedFacultyTableBody tr').forEach(r => r.style.background = 'transparent');
+  const searchEl = document.getElementById('schedFacultySearch');
+  if (searchEl) searchEl.value = '';
   const subjectSelect = document.getElementById('subject_id');
   subjectSelect.disabled = true;
   subjectSelect.innerHTML = '<option value="">Select Faculty First</option>';
@@ -1918,11 +2013,16 @@ document.getElementById('deleteEmployeeForm').addEventListener('submit', async f
     return;
   }
 
-  const employeeName = document.getElementById('delete_personnel_id').getAttribute('data-name');
+  const hiddenEmpInput = document.getElementById('delete_personnel_id');
+  const employeeName = hiddenEmpInput.getAttribute('data-name');
 
   pendingDeleteEmployeeData = {
     personnel_id: parseInt(personnelId),
-    employee_name: employeeName
+    employee_name: employeeName,
+    college: hiddenEmpInput.getAttribute('data-college') || '—',
+    role: hiddenEmpInput.getAttribute('data-role') || '—',
+    position: hiddenEmpInput.getAttribute('data-position') || '—',
+    status: hiddenEmpInput.getAttribute('data-status') || '—'
   };
   
   document.getElementById('deleteEmployeeModal').style.display = 'none';
@@ -2222,13 +2322,7 @@ document.getElementById('starttime_1').addEventListener('change', updateEndTimes
 document.getElementById('endtime_1').addEventListener('change', handleEndTime1Change);
 document.getElementById('starttime_2').addEventListener('change', updateDay2EndTime);
 
-// Faculty search & filter listeners
-document.getElementById('facultySearchInput').addEventListener('input',  showFacultyDropdown);
-document.getElementById('facultySearchInput').addEventListener('focus',  showFacultyDropdown);
-document.getElementById('facultySearchInput').addEventListener('blur',   () => setTimeout(hideFacultyDropdown, 150));
-document.getElementById('schedCollegeFilter').addEventListener('change', showFacultyDropdown);
-document.getElementById('schedPositionFilter').addEventListener('change', showFacultyDropdown);
-document.getElementById('schedEmploymentFilter').addEventListener('change', showFacultyDropdown);
+// Faculty filter listeners (handled via oninput/onchange in the HTML)
 
 document.getElementById('subject_id').addEventListener('change', function() {
   const selectedOption = this.options[this.selectedIndex];
@@ -2441,6 +2535,15 @@ function viewEmployeeProfile(personnelId, role) {
   }
   
   window.location.href = profileUrl;
+}
+
+function clearEmpFilters() {
+  document.getElementById('searchInput').value = '';
+  document.getElementById('positionFilter').value = 'all';
+  document.getElementById('statusFilter').value = 'all';
+  document.getElementById('collegeFilter').value = 'all';
+  currentPage = 1;
+  renderEmployees();
 }
 
 function setupFilters() {

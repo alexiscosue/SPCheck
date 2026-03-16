@@ -28,7 +28,7 @@
         <div class="kpi card" style="gap:14px">
           <div class="icon eval"><i class='bx bx-check-circle'></i></div>
           <div>
-            <div class="title">Avg Evaluation</div>
+            <div class="title">Average Evaluation</div>
             <div class="value" id="kpi-eval">Loading...</div>
           </div>
         </div>
@@ -49,7 +49,7 @@
           </div>
         </div>
 
-        <div class="kpi card" id="kpi-license-card" style="gap:14px;cursor:pointer;border-left:3px solid #e5e7eb;transition:border-color .2s" onclick="document.getElementById('licenseExpiryModal').style.display='flex'" title="View expiring licenses">
+        <div class="kpi card" id="kpi-license-card" style="gap:14px;">
           <div class="icon" id="kpi-license-icon" style="background:#fff7ed"><i class='bx bx-certification' style="color:#ea580c;font-size:20px"></i></div>
           <div>
             <div class="title">Expiring Licenses</div>
@@ -108,7 +108,7 @@
 
         <div class="card chart-card" style="padding:0;overflow:hidden;">
           <div style="background:#f8fafc;padding:12px 16px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;">
-            <div style="font-weight:700;font-size:13px;color:#374151;"><i class='bx bx-buildings' style="color:var(--spc-maroon);margin-right:5px;"></i>Avg Rating by Department</div>
+            <div style="font-weight:700;font-size:13px;color:#374151;"><i class='bx bx-buildings' style="color:var(--spc-maroon);margin-right:5px;"></i>Average Rating by Department</div>
             <div style="display:flex;gap:4px;">
               <button id="dashDeptToggle-bar" onclick="switchDashDeptView('bar')"
                 style="padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--spc-maroon);background:var(--spc-maroon);color:#fff;transition:all .15s;">
@@ -128,68 +128,6 @@
       </div>
     </section>
 
-    {# ── License Expiry Alert Modal — kept inside block content so Jinja2 renders it ── #}
-    <div class="hr-modal-wrapper" id="licenseExpiryModal" style="display:none;">
-  <div style="width:700px;max-width:96%;max-height:88vh;display:flex;flex-direction:column;
-              background:#fff;border-radius:16px;border-top:4px solid #7b1113;
-              box-shadow:0 24px 64px rgba(0,0,0,.35);animation:hrFadeIn .2s ease;">
-
-    <!-- Header -->
-    <div style="padding:20px 24px;display:flex;align-items:center;justify-content:space-between;
-                border-bottom:1px solid #f0f0f0;flex-shrink:0;">
-      <div style="display:flex;align-items:center;gap:12px;">
-        <div style="width:42px;height:42px;border-radius:50%;
-                    background:linear-gradient(135deg,#7b1113,#9f1239);
-                    display:flex;align-items:center;justify-content:center;
-                    box-shadow:0 3px 10px rgba(123,17,19,.3);">
-          <i class='bx bx-error-circle' style="font-size:20px;color:#fff;"></i>
-        </div>
-        <div>
-          <div style="font-weight:700;font-size:15px;color:#111;line-height:1.2;">License Expiry Alert</div>
-          <div id="licenseExpirySubtitle" style="font-size:12px;color:#6b7280;margin-top:2px;"></div>
-        </div>
-      </div>
-      <button onclick="closeLicenseModal()"
-              style="border:none;background:#f3f4f6;color:#6b7280;width:32px;height:32px;
-                     border-radius:50%;font-size:18px;cursor:pointer;line-height:1;
-                     display:flex;align-items:center;justify-content:center;">×</button>
-    </div>
-
-    <!-- Table -->
-    <div style="overflow-y:auto;flex:1;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        <thead>
-          <tr style="background:#fafafa;position:sticky;top:0;z-index:1;">
-            <th style="padding:10px 16px;text-align:left;font-weight:600;color:#6b7280;
-                       border-bottom:1px solid #e5e7eb;white-space:nowrap;">Faculty</th>
-            <th style="padding:10px 16px;text-align:left;font-weight:600;color:#6b7280;
-                       border-bottom:1px solid #e5e7eb;white-space:nowrap;">License</th>
-            <th style="padding:10px 16px;text-align:left;font-weight:600;color:#6b7280;
-                       border-bottom:1px solid #e5e7eb;white-space:nowrap;">Expires</th>
-            <th style="padding:10px 16px;text-align:left;font-weight:600;color:#6b7280;
-                       border-bottom:1px solid #e5e7eb;white-space:nowrap;">Status</th>
-            <th style="padding:10px 16px;border-bottom:1px solid #e5e7eb;"></th>
-          </tr>
-        </thead>
-        <tbody id="licenseExpiryRows"></tbody>
-      </table>
-    </div>
-
-    <!-- Footer -->
-    <div style="padding:14px 24px;border-top:1px solid #f0f0f0;
-                display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
-      <span style="font-size:12px;color:#9ca3af;">
-        <i class='bx bx-info-circle' style="margin-right:4px;"></i>
-        Click "View" to access the faculty's credentials profile.
-      </span>
-      <button onclick="closeLicenseModal()"
-              style="padding:9px 24px;background:#7b1113;color:#fff;border:none;
-                     border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;">
-        Dismiss
-      </button>
-    </div>
-  </div>
-    </div>
 
 {% endblock %}
 
@@ -541,16 +479,7 @@
     setInterval(fetchDashboardData, 300000);
   });
 
-  // ── License Expiry Modal ──────────────────────────────────────────────────
-
-  function closeLicenseModal() {
-    document.getElementById('licenseExpiryModal').style.display = 'none';
-  }
-
-  // Close on backdrop click
-  document.getElementById('licenseExpiryModal').addEventListener('click', function(e) {
-    if (e.target === this) closeLicenseModal();
-  });
+  // ── License Expiry ────────────────────────────────────────────────────────
 
   async function checkLicenseExpiry() {
     try {
@@ -648,42 +577,6 @@
           </td>`;
         inlineBody.appendChild(tr);
       });
-
-      // Populate modal too (for the detail popup)
-      document.getElementById('licenseExpirySubtitle').textContent =
-        `${count} license${count !== 1 ? 's' : ''} require${count === 1 ? 's' : ''} attention`;
-      const modalBody = document.getElementById('licenseExpiryRows');
-      modalBody.innerHTML = '';
-      expiring.forEach(lic => {
-        const { bg, color, label } = licBadge(lic.days);
-        const tr = document.createElement('tr');
-        tr.style.borderBottom = '1px solid #f3f4f6';
-        tr.innerHTML = `
-          <td style="padding:12px 16px;font-weight:600;color:#111;">${lic.name}</td>
-          <td style="padding:12px 16px;color:#374151;">
-            ${lic.license_type}
-            <div style="font-size:11px;color:#9ca3af;margin-top:2px;">${lic.license_number}</div>
-          </td>
-          <td style="padding:12px 16px;color:#374151;white-space:nowrap;">${lic.expiration_date}</td>
-          <td style="padding:12px 16px;">
-            <span style="padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;
-                         background:${bg};color:${color};">${label}</span>
-          </td>
-          <td style="padding:12px 16px;text-align:right;white-space:nowrap;">
-            <button onclick="notifyFaculty(${lic.personnel_id},'${esc(lic.license_type)}','${esc(lic.license_number)}','${esc(lic.expiration_date)}',${lic.days},this)"
-                    style="padding:5px 12px;background:#7b1113;color:#fff;border:none;border-radius:6px;
-                           font-size:12px;font-weight:600;cursor:pointer;margin-right:8px;">
-              Notify
-            </button>
-            <a href="/hr_employee_profile/${lic.personnel_id}"
-               style="font-size:12px;color:#7b1113;font-weight:600;text-decoration:none;
-                      white-space:nowrap;">View →</a>
-          </td>`;
-        modalBody.appendChild(tr);
-      });
-
-      // Auto-open the modal alert
-      document.getElementById('licenseExpiryModal').style.display = 'flex';
 
     } catch (err) {
       console.error('License expiry check failed:', err);
