@@ -235,14 +235,17 @@ class ConnectionPool:
             self.current_connections += 1
     
     def _create_connection(self):
+        print(f"[DB] Creating connection to {os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}")
         conn = pg8000.dbapi.connect(
             host=os.getenv('DB_HOST'),
             port=int(os.getenv('DB_PORT', 5432)),
             database=os.getenv('DB_NAME'),
             user=os.getenv('DB_USER'),
             password=os.getenv('DB_PASSWORD'),
-            ssl_context=True
+            ssl_context=True,
+            timeout=10
         )
+        print("[DB] Connection established")
 
         cursor = conn.cursor()
         cursor.execute("SET TIME ZONE 'Asia/Manila'")
@@ -319,7 +322,32 @@ class ConnectionPool:
 
 
 
-db_pool = ConnectionPool(min_connections=1, max_connections=15)
+# Lazy initialization - defer database connection until first use
+_db_pool = None
+_db_pool_lock = threading.Lock()
+
+def get_db_pool():
+    """Get or create the database connection pool (lazy initialization)"""
+    global _db_pool
+    if _db_pool is None:
+        with _db_pool_lock:
+            if _db_pool is None:
+                try:
+                    _db_pool = ConnectionPool(min_connections=1, max_connections=15)
+                    print("[INFO] Database connection pool initialized")
+                except Exception as e:
+                    print(f"[ERROR] Failed to initialize database pool: {e}")
+                    raise
+    return _db_pool
+
+# Keep db_pool as a reference for backwards compatibility
+class _PoolProxy:
+    def get_connection(self):
+        return get_db_pool().get_connection()
+    def return_connection(self, conn):
+        return get_db_pool().return_connection(conn)
+
+db_pool = _PoolProxy()
 
 
 def ensure_notifications_table():
@@ -8877,9 +8905,12 @@ def login():
     if request.method == 'POST':
         email = request.form.get('email')
         password = request.form.get('password')
+        print(f"[LOGIN] Attempting login for email: {email}")
 
         try:
+            print("[LOGIN] Getting database connection...")
             conn = db_pool.get_connection()
+            print("[LOGIN] Got connection, executing query...")
             cursor = conn.cursor()
             
             cursor.execute("SELECT user_id FROM users WHERE email = %s", (email,))
