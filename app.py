@@ -8900,6 +8900,11 @@ def clear_viewing_session():
     session.pop('viewing_personnel_id', None)
     return {'success': True}
 
+@app.route('/health')
+def health_check():
+    """Health check endpoint - no database needed"""
+    return {'status': 'ok', 'message': 'App is running'}, 200
+
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
