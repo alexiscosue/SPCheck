@@ -2,6 +2,7 @@ import os
 from datetime import datetime, timedelta, date
 import pytz
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 import pg8000
 from pg8000 import dbapi
@@ -49,6 +50,7 @@ def log_audit(action, details, personnel_id=None):
 load_dotenv()
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 app.secret_key = 'spc-faculty-system-2025-secret-key'
 
 # ========== SESSION CONFIGURATION ==========
