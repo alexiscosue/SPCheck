@@ -65,6 +65,7 @@
         <option value="Present">Present</option>
         <option value="Late">Late</option>
         <option value="Absent">Absent</option>
+        <option value="Absent">Missing</option>
         <option value="Excused">Excused</option>
       </select>
       <select id="globalSessionFilter"
@@ -88,15 +89,87 @@
     <div class="hr-attendance-main chart-large card" style="padding:0; overflow:hidden;">
       <!-- Eval-style Tab Bar -->
       <div style="display:flex; border-bottom:2px solid #e5e7eb; background:#f8fafc; padding:0 16px;">
-        <button class="eval-page-tab active" data-tab="logs"><i class='bx bx-list-ul'></i> Class Attendance</button>
+        <button class="eval-page-tab active" data-tab="dailyview"><i class='bx bx-calendar-star'></i> Daily View</button>
+        <button class="eval-page-tab" data-tab="logs"><i class='bx bx-list-ul'></i> Class Attendance</button>
         <button class="eval-page-tab" data-tab="campusattendance"><i class='bx bx-building'></i> Campus Attendance</button>
         <button class="eval-page-tab" data-tab="classes"><i class='bx bx-book-open'></i> Classes</button>
         <button class="eval-page-tab" data-tab="attendancelogs"><i class='bx bx-history'></i> Attendance Logs</button>
         <button class="eval-page-tab" data-tab="analytics"><i class='bx bx-bar-chart-alt-2'></i> Analytics</button>
       </div>
 
+      <!-- Daily View Tab -->
+      <div id="dailyview" class="tab-content active" style="padding:16px;">
+        <!-- Top Nav -->
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+          <button id="dvNextDay" class="hr-pagination-btn" style="padding:8px 16px; font-weight:600;"><i class='bx bx-chevron-left'></i> Next Day</button>
+          
+          <div style="position:relative; text-align:center;">
+            <h2 id="dvCurrentDateDisplay" style="margin:0; font-size:1.3rem; color:var(--text); display:flex; align-items:center; gap:8px; cursor:pointer;" onclick="document.getElementById('dvDatePicker').showPicker()">
+              <i class='bx bx-calendar'></i> <span>Loading...</span>
+            </h2>
+            <input type="date" id="dvDatePicker" style="position:absolute; bottom:0; left:50%; transform:translateX(-50%); opacity:0; pointer-events:none;">
+          </div>
+          
+          <button id="dvPrevDay" class="hr-pagination-btn" style="padding:8px 16px; font-weight:600;">Previous Day <i class='bx bx-chevron-right'></i></button>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 300px; gap:20px;">
+          
+          <!-- Section A: Main Status Board -->
+          <div style="display:flex; flex-direction:column; gap:20px;">
+            <!-- KPI Cards -->
+            <div class="kpis" style="display:flex; gap:16px;">
+              <div class="kpi card" style="flex:1; padding:16px; gap:12px; align-items:center;">
+                <div class="icon fac" style="width:40px;height:40px;font-size:20px;"><i class='bx bx-group'></i></div>
+                <div><div class="title" style="font-size:11px;">Expected</div><div class="value" id="dvExpected" style="font-size:1.4rem;">0</div></div>
+              </div>
+              <div class="kpi card" style="flex:1; padding:16px; gap:12px; align-items:center;">
+                <div class="icon eval" style="width:40px;height:40px;font-size:20px;"><i class='bx bx-check'></i></div>
+                <div><div class="title" style="font-size:11px;">Present</div><div class="value" id="dvPresent" style="font-size:1.4rem;">0</div></div>
+              </div>
+              <div class="kpi card" style="flex:1; padding:16px; gap:12px; align-items:center;">
+                <div class="icon promo" style="width:40px;height:40px;font-size:20px; background:#fef3c7; color:#d97706;"><i class='bx bx-time'></i></div>
+                <div><div class="title" style="font-size:11px;">Late</div><div class="value" id="dvLate" style="font-size:1.4rem;">0</div></div>
+              </div>
+              <div class="kpi card" style="flex:1; padding:16px; gap:12px; align-items:center;">
+                <div class="icon att" style="width:40px;height:40px;font-size:20px;"><i class='bx bx-x'></i></div>
+                <div><div class="title" style="font-size:11px;">Missing</div><div class="value" id="dvAbsent" style="font-size:1.4rem;">0</div></div>
+              </div>
+              <div class="kpi card" style="flex:1; padding:16px; gap:12px; align-items:center;">
+                <div class="icon" style="width:40px;height:40px;font-size:20px; background:#ede9fe; color:#7c3aed;"><i class='bx bx-calendar-x'></i></div>
+                <div><div class="title" style="font-size:11px;">Excused</div><div class="value" id="dvExcused" style="font-size:1.4rem;">0</div></div>
+              </div>
+            </div>
+
+
+
+            <!-- Faculty Grid Container -->
+            <div id="dvFacultyGrid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:16px; min-height: 400px; align-content:start;">
+              <!-- Loading State -->
+              <div style="grid-column: 1 / -1; text-align:center; padding:3rem; color:#6b7280;">Loading Daily View...</div>
+            </div>
+          </div>
+
+          <!-- Section B: Live Feed Sidebar -->
+          <div class="card" style="padding:0; display:flex; flex-direction:column; height: 100%; border: 1px solid #e5e7eb; box-shadow: none;">
+            <div style="padding:16px; border-bottom:1px solid #e5e7eb; background:#f8fafc; border-radius: 12px 12px 0 0;">
+              <h3 style="margin:0; font-size:14px; font-weight:600; display:flex; align-items:center; gap:6px;">
+                <span style="display:inline-block; width:8px; height:8px; background:#10b981; border-radius:50%; animation: pulse 2s infinite;"></span>
+                Live Activity Feed
+              </h3>
+            </div>
+            <div id="dvLiveFeed" style="flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:12px; max-height: 600px;">
+              <div style="text-align:center; color:#9ca3af; font-size:12px; padding:2rem 0; font-style:italic;">
+                Activity will appear here as faculty tap in...
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
       <!-- All Faculty Logs -->
-      <div id="logs" class="tab-content active" style="padding:16px;">
+      <div id="logs" class="tab-content" style="padding:16px;">
         <!-- Hidden per-tab semester select (synced from global) -->
         <select id="logsSemesterSelect" style="display:none"><option value="">Loading...</option></select>
         <div class="hr-pagination-controls">
@@ -135,7 +208,7 @@
         </div>
         <!-- Reader Controls for Class Attendance -->
         <div id="readerControlsContainer" style="border-top:1px solid #e5e7eb;margin-top:14px;padding-top:12px;display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
-          <button class="rfid-btn" id="rfidBtn"><i class='bx bx-power-off'></i><span id="rfidBtnText">Start RFID Reader</span></button>
+          <button class="rfid-btn" id="rfidBtn" style="display:none;"><i class='bx bx-power-off'></i><span id="rfidBtnText">Start RFID Reader</span></button>
           <div class="rfid-status" id="rfidStatus">
             <span class="status-indicator" id="statusIndicator"></span>
             <span id="statusText">Reader Offline</span>
@@ -183,7 +256,7 @@
         </div>
         <!-- Biometric Controls for Campus Attendance -->
         <div id="campusAttControlsContainer" style="border-top:1px solid #e5e7eb;margin-top:14px;padding-top:12px;display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
-          <button class="rfid-btn" id="biometricBtn"><i class='bx bx-fingerprint'></i><span id="biometricBtnText">Start Biometric Reader</span></button>
+          <button class="rfid-btn" id="biometricBtn" style="display:none;"><i class='bx bx-fingerprint'></i><span id="biometricBtnText">Start Biometric Reader</span></button>
           <div class="rfid-status" id="biometricStatus">
             <span class="status-indicator" id="biometricStatusIndicator"></span>
             <span id="biometricStatusText">Biometric Offline</span>
@@ -739,6 +812,53 @@
   background: #f8fafc;
   z-index: 1;
 }
+/* Daily View Styles */
+.dv-filter-btn {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.dv-filter-btn:hover { background: #f3f4f6; }
+.dv-filter-btn.active {
+  background: var(--spc-maroon);
+  border-color: var(--spc-maroon);
+  color: #fff;
+}
+.dv-faculty-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.dv-faculty-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+.dv-status-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700;
+}
+.dv-status-Present { background: #d1fae5; color: #065f46; }
+.dv-status-Absent { background: #fee2e2; color: #991b1b; }
+.dv-status-Late { background: #fef3c7; color: #92400e; }
+.dv-status-Excused { background: #ede9fe; color: #5b21b6; }
+.dv-live-item {
+  animation: slideIn 0.3s ease-out forwards;
+}
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 <script>
@@ -1062,6 +1182,7 @@
 
   function convertTo12Hour(militaryTime) {
     if (!militaryTime || militaryTime === '—') return '—';
+    if (militaryTime.includes('AM') || militaryTime.includes('PM')) return militaryTime;
     
     const timeParts = militaryTime.split(':');
     if (timeParts.length < 2) return militaryTime;
@@ -1286,9 +1407,19 @@
         content += `<div class="notification-class"><strong>${data.person_name}</strong></div>`;
     }
 
-    if (data.session) {
-        const sessionIcon = data.session === 'Morning' ? 'bx-sun' : 'bx-moon';
-        content += `<div class="notification-class" style="font-size:12px;color:#6b7280"><i class='bx ${sessionIcon}' style="vertical-align:middle;margin-right:3px"></i>${data.session} Session</div>`;
+    if (data.session || data.attendance_status) {
+        let badges = '';
+        if (data.session) {
+            const sBg = data.session === 'Morning' ? '#fff7ed' : '#eff6ff';
+            const sClr = data.session === 'Morning' ? '#c2410c' : '#1d4ed8';
+            badges += `<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:${sBg};color:${sClr}">${data.session}</span>`;
+        }
+        if (data.attendance_status) {
+            const aBg = data.attendance_status === 'Present' ? '#d1fae5' : '#fef3c7';
+            const aClr = data.attendance_status === 'Present' ? '#065f46' : '#92400e';
+            badges += `<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:${aBg};color:${aClr};margin-left:4px">${data.attendance_status}</span>`;
+        }
+        content += `<div class="notification-class" style="margin-top:3px">${badges}</div>`;
     }
 
     content += `<div class="notification-message">${data.message}</div></div>`;
@@ -3818,6 +3949,194 @@
         document.getElementById(btn.dataset.analyticssubtab).classList.add('active');
       });
     });
+    // --- DAILY VIEW LOGIC ---
+    let dvCurrentDate = new Date();
+    let dvFacultyData = [];
+    let dvCurrentFilter = "All";
+
+    function updateDvDateDisplay() {
+      const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+      document.querySelector('#dvCurrentDateDisplay span').textContent = dvCurrentDate.toLocaleDateString('en-US', options);
+      const iso = dvCurrentDate.getFullYear() + '-' + String(dvCurrentDate.getMonth() + 1).padStart(1, '0').padStart(2, '0') + '-' + String(dvCurrentDate.getDate()).padStart(2, '0');
+      document.getElementById('dvDatePicker').value = iso;
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const isTodayOrFuture = dvCurrentDate >= today;
+      document.getElementById('dvNextDay').disabled = isTodayOrFuture;
+      document.getElementById('dvDatePicker').max = new Date().toISOString().split('T')[0];
+    }
+
+    async function fetchDailyAttendance() {
+      const iso = dvCurrentDate.getFullYear() + '-' + String(dvCurrentDate.getMonth() + 1).padStart(2, '0') + '-' + String(dvCurrentDate.getDate()).padStart(2, '0');
+      const grid = document.getElementById('dvFacultyGrid');
+      grid.innerHTML = '<div style="grid-column: 1 / -1; text-align:center; padding:3rem; color:#6b7280;">Loading...</div>';
+      
+      try {
+        const res = await fetch(`/api/hr/daily-attendance?date=${iso}&t=${new Date().getTime()}`);
+        const data = await res.json();
+        if(data.success) {
+          dvFacultyData = data.faculty || [];
+          document.getElementById('dvExpected').textContent = data.summary.expected;
+          document.getElementById('dvPresent').textContent = data.summary.present;
+          document.getElementById('dvLate').textContent = data.summary.late;
+          document.getElementById('dvAbsent').textContent = data.summary.absent;
+          document.getElementById('dvExcused').textContent = data.summary.excused;
+          renderDvGrid();
+        } else {
+          grid.innerHTML = `<div style="grid-column: 1 / -1; text-align:center; padding:3rem; color:#ef4444;">Error: ${data.error}</div>`;
+        }
+      } catch (err) {
+        console.error(err);
+        grid.innerHTML = `<div style="grid-column: 1 / -1; text-align:center; padding:3rem; color:#ef4444;">Connection Error</div>`;
+      }
+    }
+
+    function renderDvGrid() {
+      const grid = document.getElementById('dvFacultyGrid');
+      const search = (document.getElementById('globalFacultySearch')?.value || '').toLowerCase();
+      const statusFilter = document.getElementById('globalStatusFilter')?.value || '';
+      const collegeFilter = document.getElementById('globalCollegeFilter')?.value || '';
+      const positionFilter = document.getElementById('globalPositionFilter')?.value || '';
+      const employmentFilter = document.getElementById('globalEmploymentFilter')?.value || '';
+      
+      const filtered = dvFacultyData.filter(f => {
+        const matchSearch = !search || f.name.toLowerCase().includes(search) || f.college.toLowerCase().includes(search) || f.role.toLowerCase().includes(search) || f.subject.toLowerCase().includes(search);
+        const matchStatus = !statusFilter || f.status === statusFilter;
+        const matchCollege = !collegeFilter || f.college === collegeFilter;
+        const matchPosition = !positionFilter || f.role === positionFilter;
+        
+        return matchSearch && matchStatus && matchCollege && matchPosition;
+      });
+
+      if(filtered.length === 0) {
+        grid.innerHTML = '<div style="grid-column: 1 / -1; text-align:center; padding:3rem; color:#6b7280;">No faculty found for current filters</div>';
+        return;
+      }
+
+      grid.innerHTML = filtered.map(f => {
+        let scheduleDisplay = "";
+        if (f.schedule) {
+          const parts = f.schedule.split(' to ');
+          if (parts.length === 2) {
+            scheduleDisplay = `${convertTo12Hour(parts[0])} to ${convertTo12Hour(parts[1])}`;
+          } else {
+            scheduleDisplay = f.schedule;
+          }
+        }
+
+        return `
+        <div class="dv-faculty-card">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="display:flex; align-items:center;">
+              <div>
+                <div style="font-weight:600; font-size:14px; color:var(--text); line-height:1.2;">${f.name}</div>
+                <div style="font-size:11px; color:#6b7280; margin-top:2px; text-transform: capitalize;">${f.role} • ${f.college}</div>
+              </div>
+            </div>
+            <span class="dv-status-badge dv-status-${f.status}">${f.status}</span>
+          </div>
+          
+          <div style="margin-top:4px; padding-top:12px; border-top:1px dashed #e5e7eb; display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; align-items:center; gap:8px; font-size:12px; color:#4b5563; font-weight: 500;">
+              <i class='bx bx-book' style="color:#9ca3af;"></i> ${f.subject}
+            </div>
+            ${scheduleDisplay ? `
+            <div style="display:flex; align-items:center; gap:8px; font-size:11px; color:#6b7280;">
+              <i class='bx bx-time' style="color:#9ca3af;"></i> ${scheduleDisplay}
+            </div>
+            ` : ''}
+            
+            <div style="margin-top: 4px; display:flex; flex-direction:column; gap:6px;">
+                <div style="display:flex; align-items:center; gap:8px; font-size:12px; color:#4b5563;">
+                  <i class='bx bx-log-in-circle' style="color:#10b981; font-size: 14px;"></i> 
+                  <span>Time in: <strong style="color:var(--text)">${f.timein}</strong></span>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; font-size:12px; color:#4b5563;">
+                  <i class='bx bx-log-out-circle' style="color:#ef4444; font-size: 14px;"></i> 
+                  <span>Time out: <strong style="color:var(--text)">${f.timeout}</strong></span>
+                </div>
+            </div>
+          </div>
+        </div>
+      `}).join('');
+    }
+
+    document.getElementById('dvPrevDay').addEventListener('click', () => {
+      dvCurrentDate.setDate(dvCurrentDate.getDate() - 1);
+      updateDvDateDisplay();
+      fetchDailyAttendance();
+    });
+
+    document.getElementById('dvNextDay').addEventListener('click', () => {
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      if (dvCurrentDate < today) {
+        dvCurrentDate.setDate(dvCurrentDate.getDate() + 1);
+        updateDvDateDisplay();
+        fetchDailyAttendance();
+      }
+    });
+
+    document.getElementById('dvDatePicker').addEventListener('change', (e) => {
+      if(e.target.value) {
+        dvCurrentDate = new Date(e.target.value);
+        updateDvDateDisplay();
+        fetchDailyAttendance();
+      }
+    });
+
+    document.getElementById('globalFacultySearch')?.addEventListener('input', () => {
+      if(document.getElementById('dailyview').classList.contains('active')) renderDvGrid();
+    });
+    ['globalStatusFilter', 'globalCollegeFilter', 'globalPositionFilter', 'globalEmploymentFilter'].forEach(id => {
+      document.getElementById(id)?.addEventListener('change', () => {
+        if(document.getElementById('dailyview').classList.contains('active')) renderDvGrid();
+      });
+    });
+
+    // Initialize daily view
+    updateDvDateDisplay();
+    fetchDailyAttendance();
+
+    // Hook into existing SSE events for the live feed
+    function appendLiveFeed(data) {
+      const feed = document.getElementById('dvLiveFeed');
+      if(feed.querySelector('div[style*="italic"]')) feed.innerHTML = ''; // clear empty placeholder
+      
+      const isBiometric = data.notification_type === 'biometric';
+      const icon = isBiometric ? 'bx-fingerprint' : 'bx-id-card';
+      const color = (data.status === 'Present' || data.action === 'entry') ? '#10b981' : 
+                   (data.status === 'Absent' || data.action === 'exit' ? '#ef4444' : '#f59e0b');
+                   
+      let timeText = data.tap_time.split(', ')[1] || data.tap_time;
+      let nameStr = data.person_name || 'Unknown Faculty';
+      
+      const item = document.createElement('div');
+      item.className = 'dv-live-item';
+      item.style.cssText = 'background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:12px; display:flex; gap:12px; align-items:flex-start; box-shadow:0 1px 2px rgba(0,0,0,0.02);';
+      
+      item.innerHTML = `
+        <div style="width:32px; height:32px; border-radius:50%; background:${color}20; color:${color}; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0;">
+          <i class='bx ${icon}'></i>
+        </div>
+        <div style="flex:1;">
+          <div style="font-weight:600; font-size:13px; color:var(--text);">${nameStr}</div>
+          <div style="font-size:11px; color:#6b7280; margin-top:2px;">${data.message}</div>
+          <div style="font-size:10px; color:#9ca3af; margin-top:6px; display:flex; align-items:center; gap:4px;">
+            <i class='bx bx-time'></i> ${timeText}
+          </div>
+        </div>
+      `;
+      feed.insertBefore(item, feed.firstChild);
+      
+      if(feed.children.length > 50) feed.removeChild(feed.lastChild); // keep last 50
+    }
+
+    window.addEventListener('spcheck-notification', function(e) {
+      if(e.detail && e.detail.tap_time) appendLiveFeed(e.detail);
+    });
+
   });
 
 </script>
