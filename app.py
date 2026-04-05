@@ -5654,6 +5654,167 @@ def api_hr_daily_attendance():
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
 
+@app.route('/api/hr/campus-daily-attendance')
+@require_auth([20003])
+def api_hr_campus_daily_attendance():
+    """Daily summary view for Campus Attendance (Biometrics). 1 Card = 1 Campus Session (Morning/Afternoon)."""
+    try:
+        date_str = request.args.get('date')
+        philippines_tz = pytz.timezone('Asia/Manila')
+        if not date_str:
+            target_date = datetime.now(philippines_tz).date()
+        else:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        # Step 1: FETCH ALL LOGS FOR THIS DATE
+        cursor.execute("""
+            SELECT 
+                ca.personnel_id,
+                p.firstname, p.lastname, p.honorifics,
+                r.rolename,
+                c.collegename,
+                ca.session,
+                ca.time_in,
+                ca.time_out,
+                ca.status,
+                pr.employmentstatus,
+                p.college_id
+            FROM campus_attendance ca
+            JOIN personnel p ON ca.personnel_id = p.personnel_id
+            JOIN roles r ON p.role_id = r.role_id
+            LEFT JOIN college c ON p.college_id = c.college_id
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            WHERE ca.attendance_date = %s
+            ORDER BY p.lastname, p.firstname, ca.session
+        """, (target_date,))
+        
+        campus_rows = cursor.fetchall()
+
+        # Step 2: FETCH ALL ACTIVE PERSONNEL (For 'Expected' count)
+        # We assume all personnel are expected for campus unless filter logic (like week-day) is needed.
+        # To keep parity with class attendance dashboard, if it's a weekday, we count everyone.
+        cursor.execute("""
+            SELECT 
+                p.personnel_id,
+                p.firstname, p.lastname, p.honorifics,
+                r.rolename,
+                c.collegename,
+                pr.employmentstatus,
+                p.college_id
+            FROM personnel p
+            JOIN roles r ON p.role_id = r.role_id
+            LEFT JOIN college c ON p.college_id = c.college_id
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            WHERE r.rolename NOT IN ('Student') -- Example filter
+        """)
+        
+        all_personnel_rows = cursor.fetchall()
+        
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        # Helper to format dates to AM/PM Manila
+        def format_time(val):
+            if not val: return '—'
+            if hasattr(val, 'strftime'):
+                # Combine with target_date if it's a time object (no year attribute)
+                dt = datetime.combine(target_date, val) if not hasattr(val, 'year') else val
+                return dt.strftime('%I:%M %p').lstrip('0')
+            return val
+
+        # Group data by personnel_id
+        faculty_map = {}
+        
+        # Initialize with all active personnel for 'Expected' count (Monday-Saturday)
+        is_weekend = target_date.weekday() == 6 # Sunday
+        if not is_weekend:
+            for p_row in all_personnel_rows:
+                (pid, fname, lname, hon, role, coll, employment, college_id) = p_row
+                faculty_map[pid] = {
+                    'personnel_id': pid,
+                    'name': f"{lname}, {fname}, {hon}" if hon else f"{lname}, {fname}",
+                    'role': role,
+                    'college': coll or 'N/A',
+                    'college_id': college_id,
+                    'employment_status': employment or 'N/A',
+                    'morning': {'timein': '—', 'timeout': '—', 'status': 'Absent'},
+                    'afternoon': {'timein': '—', 'timeout': '—', 'status': 'Absent'}
+                }
+
+        # Overlay actual logs
+        for row in campus_rows:
+            (pid, fname, lname, hon, role, coll, sess, tin, tout, stat, employment, college_id) = row
+            if pid not in faculty_map:
+                # If they tapped but aren't in active personnel for some reason
+                faculty_map[pid] = {
+                    'personnel_id': pid,
+                    'name': f"{lname}, {fname}, {hon}" if hon else f"{lname}, {fname}",
+                    'role': role,
+                    'college': coll or 'N/A',
+                    'college_id': college_id,
+                    'employment_status': employment or 'N/A',
+                    'morning': {'timein': '—', 'timeout': '—', 'status': 'Absent'},
+                    'afternoon': {'timein': '—', 'timeout': '—', 'status': 'Absent'}
+                }
+            
+            sess_key = sess.lower() # 'morning' or 'afternoon'
+            if sess_key in faculty_map[pid]:
+                faculty_map[pid][sess_key] = {
+                    'timein': format_time(tin),
+                    'timeout': format_time(tout),
+                    'status': stat.capitalize() if stat else 'Absent'
+                }
+
+        # Calculate Status Precedence & Summary
+        # Order: Absent > Late > Excused > Present
+        summary = {'expected': len(faculty_map), 'present': 0, 'late': 0, 'absent': 0, 'excused': 0}
+        
+        all_faculty = []
+        for pid, f in faculty_map.items():
+            # Personnel Status = the "worse" of the two sessions
+            s1 = f['morning']['status'].lower()
+            s2 = f['afternoon']['status'].lower()
+            
+            # Determine combined status
+            combined_status = 'Absent'
+            if s1 == 'late' or s2 == 'late': combined_status = 'Late'
+            elif s1 == 'excused' or s2 == 'excused': combined_status = 'Excused'
+            elif s1 == 'present' or s2 == 'present': combined_status = 'Present'
+            
+            # If both are absent, it's absent. But if one is present, they are present.
+            # But the user specifically wants Absent cards for missing taps.
+            # If ANY session is logged, we count them as part of present/late.
+            # If BOTH are absent, they are absent.
+            if s1 == 'absent' and s2 == 'absent':
+                combined_status = 'Absent'
+            
+            f['status'] = combined_status
+            all_faculty.append(f)
+            
+            sk = combined_status.lower()
+            if sk in summary: summary[sk] += 1
+            else: summary['absent'] += 1
+
+        all_faculty.sort(key=lambda x: x['name'])
+
+        return {
+            'success': True,
+            'date': target_date.strftime('%Y-%m-%d'),
+            'formatted_date': target_date.strftime('%B %d, %Y'),
+            'summary': summary,
+            'faculty': all_faculty
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+        return {'success': False, 'error': str(e)}
+
 @app.route('/api/hr/faculty-attendance')
 @require_auth([20003])
 def api_hr_faculty_attendance():
