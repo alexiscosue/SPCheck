@@ -77,6 +77,10 @@
               style="display:flex; align-items:center; gap:6px; font-size:13px;">
               <i class='bx bx-calendar-plus'></i> New Cycle
             </button>
+            <button id="releaseEvalBtn"
+              style="display:flex; align-items:center; gap:6px; font-size:13px; padding:8px 14px; border-radius:8px; font-weight:700; cursor:pointer; border:1.5px solid #16a34a; background:#16a34a; color:#fff; transition:all .15s;">
+              <i class='bx bx-lock-open-alt'></i> Release Evaluations
+            </button>
           </div>
 
         </div>
@@ -144,12 +148,18 @@
                 <div style="font-weight:700;font-size:15px;" id="termDisplay">📅 Semester 1 — AY 2025–2026</div>
                 <div style="font-size:13px;color:var(--muted)">Evaluation Cycle Information</div>
               </div>
-              <div style="display:flex;gap:20px;font-size:14px;">
+              <div style="display:flex;gap:20px;font-size:14px;flex-wrap:wrap;align-items:center;">
                 <div><strong>⏳ Duration:</strong> <span id="durationDates">Loading...</span></div>
 
                 <div id="cycleStatusContainer">
                   <strong>🔔 Status:</strong>
                   <span id="cycleStatus" style="color:#f59e0b;font-weight:600;">Loading...</span>
+                </div>
+
+                <div id="releaseStatusContainer" style="display:flex;align-items:center;gap:6px;">
+                  <strong>🔓 Release:</strong>
+                  <span id="releaseStatusBadge" style="font-weight:600;color:#6b7280;">—</span>
+                  <span id="releaseTimestamp" style="font-size:12px;color:var(--muted);"></span>
                 </div>
               </div>
             </div>
@@ -776,7 +786,27 @@
             </div>
         </div>
     </div>
-    
+
+    <!-- ── Release / Revoke Confirmation Modal ── -->
+    <div id="releaseEvalModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:9999; align-items:center; justify-content:center;">
+      <div style="background:#fff; border-radius:14px; max-width:480px; width:95vw; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.25);">
+        <div id="releaseModalHeader" style="background:linear-gradient(135deg,#16a34a,#15803d); padding:18px 24px; display:flex; align-items:center; justify-content:space-between;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <i id="releaseModalIcon" class='bx bx-lock-open-alt' style="font-size:22px; color:#fff;"></i>
+            <h2 id="releaseModalTitle" style="color:#fff; font-size:1rem; margin:0; font-weight:700;">Release Evaluations</h2>
+          </div>
+          <button onclick="closeReleaseModal()" style="background:rgba(255,255,255,0.2); border:none; color:#fff; width:30px; height:30px; border-radius:7px; cursor:pointer; font-size:18px; line-height:1;">&times;</button>
+        </div>
+        <div style="padding:24px;">
+          <p id="releaseModalBody" style="font-size:14px; color:#374151; margin:0 0 20px;"></p>
+          <div style="display:flex; gap:10px; justify-content:flex-end;">
+            <button onclick="closeReleaseModal()" style="padding:9px 18px; border:1.5px solid #e5e7eb; border-radius:8px; font-size:13px; cursor:pointer; background:#fff; color:#374151;">Cancel</button>
+            <button id="confirmReleaseBtn" style="padding:9px 18px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; background:#16a34a; color:#fff; border:none;">Confirm</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
 {% endblock %}
 
 {% block extra_scripts %}
@@ -1253,6 +1283,15 @@ function loadEvaluations() {
             });
         }
         positionFilter.val(currentPositionVal); 
+
+        // --- 3b. UPDATE RELEASE STATUS UI ---
+        if (data.release_info !== undefined) {
+            updateReleaseUI(
+                data.release_info.is_released,
+                data.release_info.released_at,
+                data.release_info.is_calendar_current
+            );
+        }
 
         // --- 4. STORE DATA & RENDER FIRST PAGE ---
         if(data.success && data.evaluations.length > 0) {
@@ -1935,7 +1974,116 @@ $(document).ready(function() {
 
     // 10. Initial data load (Starts with fetching semesters)
     fetchSemestersAndPopulate();
+
+    // 11. Release Evaluations button
+    $('#releaseEvalBtn').on('click', function() {
+        const termId = parseInt($('#semesterFilter').val() || window.CURRENT_TERM_ID);
+        if (!termId) { showToast('Please select a term first.', 'error'); return; }
+        openReleaseModal(termId, window._currentTermIsReleased || false);
+    });
+
+    // 12. Confirm release/revoke
+    $('#confirmReleaseBtn').on('click', async function() {
+        if (!window._pendingReleaseTermId || !window._pendingReleaseAction) return;
+        const btn = $(this);
+        btn.prop('disabled', true).html("<i class='bx bx-loader-alt bx-spin'></i> Processing...");
+
+        const url = window._pendingReleaseAction === 'release'
+            ? '/api/hr/evaluation-release'
+            : '/api/hr/evaluation-revoke';
+
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ term_id: window._pendingReleaseTermId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                closeReleaseModal();
+                showToast(window._pendingReleaseAction === 'release'
+                    ? 'Evaluations released successfully. Faculty can now view their scores.'
+                    : 'Evaluation release revoked. Faculty scores are now hidden.');
+                loadEvaluations();
+            } else {
+                showToast(data.error || 'Action failed.', 'error');
+            }
+        } catch (e) {
+            showToast('Server error. Please try again.', 'error');
+        } finally {
+            btn.prop('disabled', false).text('Confirm');
+        }
+    });
 });
+
+// ── Evaluation Release / Revoke UI ──────────────────────────────────────────
+
+function updateReleaseUI(isReleased, releasedAt, isCalendarCurrent) {
+    const badge     = document.getElementById('releaseStatusBadge');
+    const timestamp = document.getElementById('releaseTimestamp');
+    const btn       = document.getElementById('releaseEvalBtn');
+    if (!badge || !btn) return;
+
+    window._currentTermIsReleased = isReleased;
+
+    if (isReleased) {
+        badge.textContent = 'Released';
+        badge.style.color = '#16a34a';
+        const dt = releasedAt ? new Date(releasedAt).toLocaleString() : '';
+        timestamp.textContent = dt ? `(since ${dt})` : '';
+        btn.innerHTML = "<i class='bx bx-lock-alt'></i> Revoke Release";
+        btn.style.background    = '#f59e0b';
+        btn.style.borderColor   = '#f59e0b';
+        btn.style.color         = '#fff';
+    } else {
+        badge.textContent = 'Not Released';
+        badge.style.color = '#ef4444';
+        timestamp.textContent = '';
+        btn.innerHTML = "<i class='bx bx-lock-open-alt'></i> Release Evaluations";
+        btn.style.background    = '#16a34a';
+        btn.style.borderColor   = '#16a34a';
+        btn.style.color         = '#fff';
+    }
+
+    // Only allow release/revoke for the calendar-current term
+    btn.disabled = !isCalendarCurrent;
+    btn.title    = isCalendarCurrent ? '' : 'Only the current term can be released or revoked.';
+    btn.style.opacity = isCalendarCurrent ? '1' : '0.5';
+    btn.style.cursor  = isCalendarCurrent ? 'pointer' : 'not-allowed';
+}
+
+function openReleaseModal(termId, isCurrentlyReleased) {
+    window._pendingReleaseTermId  = termId;
+    window._pendingReleaseAction  = isCurrentlyReleased ? 'revoke' : 'release';
+    const termText = $('#semesterFilter option:selected').text().trim();
+    const header   = document.getElementById('releaseModalHeader');
+    const icon     = document.getElementById('releaseModalIcon');
+    const title    = document.getElementById('releaseModalTitle');
+    const body     = document.getElementById('releaseModalBody');
+    const confirmBtn = document.getElementById('confirmReleaseBtn');
+
+    if (isCurrentlyReleased) {
+        header.style.background = 'linear-gradient(135deg,#f59e0b,#d97706)';
+        icon.className          = 'bx bx-lock-alt';
+        title.textContent       = 'Revoke Evaluation Release';
+        body.textContent        = `Revoking the release for "${termText}" will hide evaluation scores from faculty until re-released. Continue?`;
+        confirmBtn.style.background = '#f59e0b';
+    } else {
+        header.style.background = 'linear-gradient(135deg,#16a34a,#15803d)';
+        icon.className          = 'bx bx-lock-open-alt';
+        title.textContent       = 'Release Evaluations';
+        body.textContent        = `Releasing evaluations for "${termText}" will make scores visible to all faculty. Continue?`;
+        confirmBtn.style.background = '#16a34a';
+    }
+
+    document.getElementById('releaseEvalModal').style.display = 'flex';
+}
+
+function closeReleaseModal() {
+    document.getElementById('releaseEvalModal').style.display = 'none';
+    window._pendingReleaseTermId = null;
+    window._pendingReleaseAction = null;
+}
 
 function clearEvalFilters() {
     $('#deptFilter').val('');

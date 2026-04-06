@@ -39,6 +39,15 @@
     </div>
   </div>
 
+  <!-- ── Evaluation Locked Banner (shown when HR has not released current term) ── -->
+  <div id="eval-locked-banner" class="personal-view-item" style="display:none; grid-column:1/-1; background:#fef3c7; border:1.5px solid #fde68a; border-radius:10px; padding:14px 18px; align-items:center; gap:12px;">
+    <i class='bx bx-lock-alt' style="font-size:24px; color:#d97706; flex-shrink:0;"></i>
+    <div>
+      <div style="font-weight:700; color:#92400e; font-size:14px;">Evaluation Results Not Yet Available</div>
+      <div style="font-size:12px; color:#b45309; margin-top:2px;">HR has not released this term's evaluation results yet. You can still view historical terms using the semester filter above.</div>
+    </div>
+  </div>
+
   <!-- ── KPI Cards ── -->
   <div class="kpis card personal-view-item" id="evaluation-kpis" style="flex-wrap:wrap; gap:12px;">
     <div class="kpi card">
@@ -163,6 +172,11 @@
         <span id="score-badge" style="display:none; margin-left:auto; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700;"></span>
       </div>
       <canvas id="scoresChart" height="160"></canvas>
+      <div id="scores-chart-locked" style="display:none; text-align:center; padding:20px 10px; background:#fef3c7; border-radius:8px; border:1px solid #fde68a;">
+        <i class='bx bx-lock-alt' style="font-size:22px; color:#d97706; display:block; margin-bottom:6px;"></i>
+        <div style="font-size:12px; font-weight:700; color:#92400e;">Not Yet Available</div>
+        <div style="font-size:11px; color:#b45309; margin-top:3px;">Score breakdown will appear once HR releases this term's results.</div>
+      </div>
     </div>
 
     <!-- Department Comparison -->
@@ -173,12 +187,25 @@
       </div>
       <canvas id="comparisonChart" height="120"></canvas>
       <div id="comparison-scale" style="font-size:11px; color:var(--muted); text-align:right; margin-top:4px; padding-right:4px; display:none;">Scale: 0 – 4</div>
+      <div id="comparison-chart-locked" style="display:none; text-align:center; padding:16px 10px; background:#fef3c7; border-radius:8px; border:1px solid #fde68a;">
+        <i class='bx bx-lock-alt' style="font-size:20px; color:#d97706; display:block; margin-bottom:5px;"></i>
+        <div style="font-size:11px; color:#92400e;">Department comparison will be available once evaluations are released.</div>
+      </div>
     </div>
 
   </div>
 
   <!-- ── Department View ── -->
   <div id="department-view" style="display:none; grid-column:1/-1;">
+
+    <!-- Dean Locked Banner (shown when HR has not released current term) -->
+    <div id="dean-locked-banner" style="display:none; background:#fef3c7; border:1.5px solid #fde68a; border-radius:10px; padding:14px 18px; align-items:center; gap:12px; margin-bottom:8px;">
+      <i class='bx bx-lock-alt' style="font-size:24px; color:#d97706; flex-shrink:0;"></i>
+      <div>
+        <div style="font-weight:700; color:#92400e; font-size:14px;">Evaluation Results Not Yet Released</div>
+        <div style="font-size:12px; color:#b45309; margin-top:2px;">HR has not released this term's evaluation results. Faculty scores for the current term are hidden until released. Historical terms remain accessible.</div>
+      </div>
+    </div>
 
     <!-- KPI Cards -->
     <div class="kpis card" style="padding:16px">
@@ -292,6 +319,13 @@
             </div>
           </div>
         </div>
+        <!-- Locked table overlay (dean only, current term unreleased) -->
+        <div id="eval-table-locked" style="display:none; text-align:center; padding:32px 16px; background:#fef3c7; border:1.5px solid #fde68a; border-radius:10px; margin-top:12px;">
+          <i class='bx bx-lock-alt' style="font-size:32px; color:#d97706; display:block; margin-bottom:10px;"></i>
+          <div style="font-weight:700; color:#92400e; font-size:14px;">Scores Not Yet Released</div>
+          <div style="font-size:12px; color:#b45309; margin-top:4px;">Faculty evaluation scores for the current term will appear here once HR releases them. You can view previous terms using the semester filter above.</div>
+        </div>
+        <div id="eval-table-wrapper">
         <div class="table" style="margin-top:12px;">
           <table id="evalTable" aria-label="Evaluations table">
             <thead>
@@ -311,6 +345,7 @@
           </table>
           <div id="emptyState" class="table-empty" style="display:none;">No evaluations found — try clearing filters.</div>
         </div>
+        </div>
         <div class="page-controls">
           <div id="pagerInfo" style="font-size:13px;color:var(--muted)"></div>
           <button class="btn ghost" id="prevPage">Prev</button>
@@ -320,6 +355,15 @@
 
       <!-- Tab: Analytics -->
       <div id="evalTabContent-analytics" style="display:none; padding:16px;">
+
+        <!-- Locked analytics overlay -->
+        <div id="eval-analytics-locked" style="display:none; text-align:center; padding:32px 16px; background:#fef3c7; border:1.5px solid #fde68a; border-radius:10px; margin-bottom:16px;">
+          <i class='bx bx-lock-alt' style="font-size:32px; color:#d97706; display:block; margin-bottom:10px;"></i>
+          <div style="font-weight:700; color:#92400e; font-size:14px;">Analytics Not Yet Available</div>
+          <div style="font-size:12px; color:#b45309; margin-top:4px;">Analytics for the current term will be available once HR releases evaluations.</div>
+        </div>
+
+        <div id="eval-analytics-content">
         <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px;">
           <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; display:flex; align-items:center; gap:12px;">
             <div style="width:40px; height:40px; background:#fef3c7; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
@@ -427,6 +471,7 @@
             </table>
           </div>
         </div>
+        </div><!-- /#eval-analytics-content -->
       </div>
     </div>
 
@@ -528,6 +573,35 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<style>
+/* Compact KPI cards when evaluations are locked (faculty personal + dean dept view) */
+.eval-locked {
+  gap: 8px;
+}
+.eval-locked .kpi.card {
+  padding: 8px 12px;
+  gap: 8px;
+  min-width: 0;
+}
+.eval-locked .kpi.card .icon {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  background: #fef3c7 !important;
+  color: #d97706 !important;
+  border-radius: 8px;
+}
+.eval-locked .kpi.card .icon i {
+  font-size: 14px;
+  color: #d97706 !important;
+}
+.eval-locked .kpi.card .title {
+  font-size: 10px;
+}
+.eval-locked .kpi.card .value {
+  font-size: 14px;
+}
+</style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
   // ── Draw dashed min line only over the Overall bar ────────
@@ -610,12 +684,70 @@
   }
 
   // ── Main Data Load ───────────────────────────────────────
+  function showEvalLockedState() {
+    // Show locked banner
+    const banner = document.getElementById('eval-locked-banner');
+    if (banner) banner.style.display = 'flex';
+
+    // Shrink KPI cards — compact locked style
+    const kpiContainer = document.getElementById('evaluation-kpis') || document.querySelector('.kpis.card');
+    if (kpiContainer) kpiContainer.classList.add('eval-locked');
+    ['kpi-overall','kpi-student','kpi-peer','kpi-supervisor'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = `<i class='bx bx-lock-alt' style='font-size:13px;color:#d97706;vertical-align:middle;'></i>`;
+    });
+
+    const badge = document.getElementById('score-badge');
+    if (badge) badge.style.display = 'none';
+
+    // Destroy charts and show locked placeholders
+    if (scoresChartInstance)     { scoresChartInstance.destroy();     scoresChartInstance     = null; }
+    if (comparisonChartInstance) { comparisonChartInstance.destroy(); comparisonChartInstance = null; }
+    const scoresCanvas = document.getElementById('scoresChart');
+    const compCanvas   = document.getElementById('comparisonChart');
+    const scoresLocked = document.getElementById('scores-chart-locked');
+    const compLocked   = document.getElementById('comparison-chart-locked');
+    const compScale    = document.getElementById('comparison-scale');
+    if (scoresCanvas) scoresCanvas.style.display = 'none';
+    if (scoresLocked) scoresLocked.style.display = 'block';
+    if (compCanvas)   compCanvas.style.display   = 'none';
+    if (compLocked)   compLocked.style.display   = 'block';
+    if (compScale)    compScale.style.display     = 'none';
+
+    // Clear feedback sections
+    const sf = document.getElementById('student-feedback-list');
+    const pf = document.getElementById('peer-feedback-list');
+    const pending = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px;"><i class=\'bx bx-lock-alt\' style=\'font-size:18px;color:#d97706;display:block;margin-bottom:6px;\'></i>Results not yet available.</div>';
+    if (sf) sf.innerHTML = pending;
+    if (pf) pf.innerHTML = pending;
+  }
+
+  function hideEvalLockedState() {
+    const banner = document.getElementById('eval-locked-banner');
+    if (banner) banner.style.display = 'none';
+    const kpiContainer = document.getElementById('evaluation-kpis') || document.querySelector('.kpis.card');
+    if (kpiContainer) kpiContainer.classList.remove('eval-locked');
+    // Restore chart canvases
+    const scoresCanvas = document.getElementById('scoresChart');
+    const compCanvas   = document.getElementById('comparisonChart');
+    const scoresLocked = document.getElementById('scores-chart-locked');
+    const compLocked   = document.getElementById('comparison-chart-locked');
+    if (scoresCanvas) scoresCanvas.style.display = '';
+    if (scoresLocked) scoresLocked.style.display = 'none';
+    if (compCanvas)   compCanvas.style.display   = '';
+    if (compLocked)   compLocked.style.display   = 'none';
+  }
+
   async function loadEvaluationData() {
     if (!currentTermId) return;
     setKpiLoading();
     try {
       const res  = await fetch(`/api/faculty/evaluations-data?term_id=${currentTermId}`);
       const data = await res.json();
+
+      if (data.locked) { showEvalLockedState(); return; }
+      hideEvalLockedState();
+
       if (!data.success) { setKpiError(); return; }
 
       const { kpis, comparison, recent_feedback, peer_feedback } = data;
@@ -1224,12 +1356,24 @@ function loadEvaluations() {
     $('#cycleStatusContainer').html('<strong>🔔 Status:</strong> <span id="cycleStatus">Loading...</span>');
 
     $.get('/api/hr/evaluations', { term: termIdToUse, dept, status, search, position, response_rate: responseRate }, function(data) {
+
+        // ── Release lock check (dean view, current term only) ──
+        const isLocked = data.release_info && !data.release_info.is_released && data.release_info.is_calendar_current;
+        applyDeanLockedState(isLocked);
+
         if (data.kpis) {
             const kpis = data.kpis;
-            $('#kpiAvg').text(parseFloat(kpis.avg_rating).toFixed(2));
-            $('#kpiTotalFaculty').text(kpis.total_faculty);
-            $('#kpiMetRate').text(`${kpis.met_response_rate_count}/${kpis.total_faculty}`);
-            $('#kpiBestDept').text(kpis.dept_rank || '—');
+            if (isLocked) {
+                ['kpiAvg','kpiTotalFaculty','kpiMetRate','kpiBestDept'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.innerHTML = `<i class='bx bx-lock-alt' style='font-size:13px;color:#d97706;'></i>`;
+                });
+            } else {
+                $('#kpiAvg').text(parseFloat(kpis.avg_rating).toFixed(2));
+                $('#kpiTotalFaculty').text(kpis.total_faculty);
+                $('#kpiMetRate').text(`${kpis.met_response_rate_count}/${kpis.total_faculty}`);
+                $('#kpiBestDept').text(kpis.dept_rank || '—');
+            }
         }
         if (data.acadcalendar_info) {
             const info = data.acadcalendar_info;
@@ -1271,17 +1415,40 @@ function loadEvaluations() {
         }
         positionFilter.val(currentPositionVal);
 
-        if (data.all_dept_averages) ALL_DEPT_AVERAGES = data.all_dept_averages;
-        if (data.success && data.evaluations.length > 0) {
-            EVALUATIONS_DATA = data.evaluations; CURRENT_PAGE = 1; renderTablePage(CURRENT_PAGE);
-        } else {
-            EVALUATIONS_DATA = []; renderTablePage(1);
+        if (!isLocked) {
+            if (data.all_dept_averages) ALL_DEPT_AVERAGES = data.all_dept_averages;
+            if (data.success && data.evaluations.length > 0) {
+                EVALUATIONS_DATA = data.evaluations; CURRENT_PAGE = 1; renderTablePage(CURRENT_PAGE);
+            } else {
+                EVALUATIONS_DATA = []; renderTablePage(1);
+            }
+            const analyticsTab = document.getElementById('evalTabContent-analytics');
+            if (analyticsTab && analyticsTab.style.display !== 'none') renderAnalytics();
         }
-        const analyticsTab = document.getElementById('evalTabContent-analytics');
-        if (analyticsTab && analyticsTab.style.display !== 'none') renderAnalytics();
     }).fail(function() {
         $('#evalTableBody').html('<tr><td colspan="6" class="table-empty" style="color:#991b1b;">Failed to load data from API.</td></tr>');
     });
+}
+
+function applyDeanLockedState(isLocked) {
+    const banner      = document.getElementById('dean-locked-banner');
+    const tableLocked = document.getElementById('eval-table-locked');
+    const tableWrap   = document.getElementById('eval-table-wrapper');
+    const analyticsLocked  = document.getElementById('eval-analytics-locked');
+    const analyticsContent = document.getElementById('eval-analytics-content');
+
+    if (banner)           banner.style.display          = isLocked ? 'flex'  : 'none';
+    if (tableLocked)      tableLocked.style.display     = isLocked ? 'block' : 'none';
+    if (tableWrap)        tableWrap.style.display       = isLocked ? 'none'  : '';
+    if (analyticsLocked)  analyticsLocked.style.display = isLocked ? 'block' : 'none';
+    if (analyticsContent) analyticsContent.style.display= isLocked ? 'none'  : '';
+
+    // KPI card compact locked style
+    const deptKpis = document.querySelector('#department-view .kpis');
+    if (deptKpis) {
+        if (isLocked) deptKpis.classList.add('eval-locked');
+        else          deptKpis.classList.remove('eval-locked');
+    }
 }
 
 function fetchSemestersAndPopulate() {
@@ -1294,7 +1461,7 @@ function fetchSemestersAndPopulate() {
             data.semesters.forEach(function(sem) {
                 const isCurrent = sem.is_current;
                 const selectedAttr = (isCurrent && !currentTermSet) ? 'selected' : '';
-                const display = isCurrent ? `${sem.text} (Current)` : sem.text;
+                const display = sem.text;
                 semesterFilter.append(`<option value="${sem.id}" ${selectedAttr} data-start="${sem.start_date}" data-end="${sem.end_date}">${display}</option>`);
                 if (isCurrent && !currentTermSet) { window.CURRENT_TERM_ID = sem.id; currentTermSet = true; }
             });

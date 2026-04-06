@@ -15,11 +15,12 @@
       </div>
     </div>
 
-    <div class="kpi card">
-      <div class="icon eval"><i class='bx bx-star'></i></div>
+    <div class="kpi card" id="eval-kpi-card">
+      <div class="icon eval" id="eval-kpi-icon"><i class='bx bx-star'></i></div>
       <div>
         <div class="title">{% if session.get('user_role') == 20002 %}Dept. Avg Score{% else %}Evaluation Score{% endif %}</div>
         <div class="value" id="evaluationScore">Loading... <i class='bx bx-loader-alt bx-spin'></i></div>
+        <div class="subtitle" id="eval-kpi-subtitle" style="display:none;font-size:10px;color:#b45309;margin-top:2px;">Pending HR release</div>
       </div>
     </div>
 
@@ -53,33 +54,47 @@
     -->
 
     {% if session.get('user_role') != 20002 %}
-    <div class="chart-card card">
+    <div class="chart-card card" id="eval-breakdown-card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
         <div style="font-weight:700;">Evaluation Breakdown</div>
         <div id="eval-overall-badge" style="display:none;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;background:#f3f4f6;color:#6b7280;"></div>
       </div>
       <canvas id="myEvalChart" height="170"></canvas>
+      <div id="eval-breakdown-locked" style="display:none;text-align:center;padding:14px 10px;background:#fef3c7;border-radius:8px;border:1px solid #fde68a;">
+        <i class='bx bx-lock-alt' style="font-size:22px;color:#d97706;display:block;margin-bottom:6px;"></i>
+        <div style="font-size:12px;font-weight:700;color:#92400e;">Not Yet Available</div>
+        <div style="font-size:11px;color:#b45309;margin-top:3px;">HR will release your scores at the end of the evaluation period.</div>
+      </div>
     </div>
     {% endif %}
 
     {% if session.get('user_role') == 20002 %}
-    <div class="chart-card card">
+    <div class="chart-card card" id="dean-dept-card">
       <div class="card-header">
         <i class='bx bx-buildings'></i>
         <span>Average Rating by Department</span>
         <div id="dean-dept-badge" style="display:none;margin-left:auto;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;background:#f3f4f6;color:#6b7280;"></div>
       </div>
       <canvas id="deanDeptChart" height="170"></canvas>
+      <div id="dean-dept-locked" style="display:none;text-align:center;padding:20px 10px;background:#fef3c7;border-radius:8px;border:1px solid #fde68a;">
+        <i class='bx bx-lock-alt' style="font-size:22px;color:#d97706;display:block;margin-bottom:6px;"></i>
+        <div style="font-size:12px;font-weight:700;color:#92400e;">Not Yet Available</div>
+        <div style="font-size:11px;color:#b45309;margin-top:3px;">Department ratings will appear once HR releases this term's evaluations.</div>
+      </div>
     </div>
     {% endif %}
 
     {% if session.get('user_role') != 20002 %}
-    <div class="chart-card card">
+    <div class="chart-card card" id="eval-comparison-card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
         <div style="font-weight:700;">Score vs. College Average</div>
         <div id="comparison-college-label" style="font-size:12px;color:var(--muted);"></div>
       </div>
       <canvas id="myComparisonChart" height="130"></canvas>
+      <div id="eval-comparison-locked" style="display:none;text-align:center;padding:10px;background:#fef3c7;border-radius:8px;border:1px solid #fde68a;">
+        <i class='bx bx-lock-alt' style="font-size:18px;color:#d97706;display:block;margin-bottom:4px;"></i>
+        <div style="font-size:11px;color:#92400e;">Comparison data will be available once evaluations are released.</div>
+      </div>
     </div>
     {% endif %}
 
@@ -357,15 +372,23 @@
       const evalResponse = await fetch('/api/faculty/evaluations-data');
       const evalData = await evalResponse.json();
       
-      if (mainData.success && evalData.success) {
-        dashboardData = { ...mainData, ...evalData }; // Combine data
+      if (mainData.success) {
+        dashboardData = { ...mainData };
+        updateDashboardDisplay();
+      } else {
+        console.error('Failed to fetch dashboard data:', mainData.error);
+        showErrorState();
+      }
+
+      if (evalData.locked) {
+        showEvalLockedDashboard();
+      } else if (evalData.success) {
+        hideEvalLockedDashboard();
+        dashboardData = { ...dashboardData, ...evalData };
         updateDashboardDisplay();
         // Use the specific 'chart_data' key returned by the eval API
         renderEvaluationChart(dashboardData.chart_data, dashboardData.kpis);
         renderComparisonChart(dashboardData.comparison);
-      } else {
-        console.error('Failed to fetch dashboard data:', mainData.error || evalData.error);
-        showErrorState();
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -655,6 +678,58 @@
     }
     
     scheduleBody.innerHTML = scheduleHTML;
+  }
+
+  function showEvalLockedDashboard() {
+    // KPI card — compact locked state
+    const evalScoreEl = document.getElementById('evaluationScore');
+    const evalSubtitle = document.getElementById('eval-kpi-subtitle');
+    const evalIcon = document.getElementById('eval-kpi-icon');
+    if (evalScoreEl) evalScoreEl.innerHTML = `<i class='bx bx-lock-alt' style='color:#d97706;font-size:14px;vertical-align:middle;margin-right:3px;'></i>Not Released`;
+    if (evalSubtitle) evalSubtitle.style.display = 'block';
+    if (evalIcon) evalIcon.style.background = '#fef3c7';
+
+    // Breakdown chart card — collapse canvas, show placeholder
+    const evalCanvas = document.getElementById('myEvalChart');
+    const evalLocked = document.getElementById('eval-breakdown-locked');
+    const evalBadge  = document.getElementById('eval-overall-badge');
+    if (evalCanvas) evalCanvas.style.display = 'none';
+    if (evalLocked) evalLocked.style.display = 'block';
+    if (evalBadge)  evalBadge.style.display  = 'none';
+
+    // Comparison chart card — collapse canvas, show placeholder
+    const compCanvas = document.getElementById('myComparisonChart');
+    const compLocked = document.getElementById('eval-comparison-locked');
+    if (compCanvas) compCanvas.style.display = 'none';
+    if (compLocked) compLocked.style.display = 'block';
+
+    // Dean dept chart card — collapse canvas, show placeholder
+    const deanCanvas = document.getElementById('deanDeptChart');
+    const deanLocked = document.getElementById('dean-dept-locked');
+    if (deanCanvas) deanCanvas.style.display = 'none';
+    if (deanLocked) deanLocked.style.display = 'block';
+  }
+
+  function hideEvalLockedDashboard() {
+    const evalSubtitle = document.getElementById('eval-kpi-subtitle');
+    const evalIcon = document.getElementById('eval-kpi-icon');
+    if (evalSubtitle) evalSubtitle.style.display = 'none';
+    if (evalIcon) evalIcon.style.background = '';
+
+    const evalCanvas = document.getElementById('myEvalChart');
+    const evalLocked = document.getElementById('eval-breakdown-locked');
+    if (evalCanvas) evalCanvas.style.display = '';
+    if (evalLocked) evalLocked.style.display = 'none';
+
+    const compCanvas = document.getElementById('myComparisonChart');
+    const compLocked = document.getElementById('eval-comparison-locked');
+    if (compCanvas) compCanvas.style.display = '';
+    if (compLocked) compLocked.style.display = 'none';
+
+    const deanCanvas = document.getElementById('deanDeptChart');
+    const deanLocked = document.getElementById('dean-dept-locked');
+    if (deanCanvas) deanCanvas.style.display = '';
+    if (deanLocked) deanLocked.style.display = 'none';
   }
 
   function showErrorState() {
@@ -1034,6 +1109,18 @@
       const url = termId ? `/api/hr/evaluations?term=${termId}` : '/api/hr/evaluations';
       const res = await fetch(url);
       const data = await res.json();
+
+      const isLocked = data.release_info && !data.release_info.is_released && data.release_info.is_calendar_current;
+      const canvas = document.getElementById('deanDeptChart');
+      const lockedDiv = document.getElementById('dean-dept-locked');
+      if (isLocked) {
+        if (canvas)    canvas.style.display    = 'none';
+        if (lockedDiv) lockedDiv.style.display = 'block';
+        return;
+      }
+      if (canvas)    canvas.style.display    = '';
+      if (lockedDiv) lockedDiv.style.display = 'none';
+
       if (data.all_dept_averages && data.all_dept_averages.length > 0) {
         renderDeanDeptChart(data.all_dept_averages);
       }

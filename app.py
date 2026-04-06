@@ -425,6 +425,34 @@ def save_notification_to_db(target_audience, target_personnel_id, data):
 ensure_notifications_table()
 
 
+def ensure_evaluation_release_table():
+    """Create evaluation_release table if it doesn't exist."""
+    try:
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS evaluation_release (
+                acadcalendar_id INTEGER PRIMARY KEY,
+                released_at     TIMESTAMP NOT NULL DEFAULT NOW(),
+                released_by     INTEGER   NOT NULL,
+                revoked_at      TIMESTAMP,
+                revoked_by      INTEGER
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_evalrelease_acad
+            ON evaluation_release(acadcalendar_id)
+        """)
+        conn.commit()
+        cursor.close()
+        db_pool.return_connection(conn)
+        print("Evaluation release table ready.")
+    except Exception as e:
+        print(f"Error ensuring evaluation_release table: {e}")
+
+ensure_evaluation_release_table()
+
+
 def migrate_campus_attendance_status_constraint():
     """Allow 'Excused' in campus_attendance.status check constraint."""
     try:
@@ -1425,6 +1453,15 @@ def get_current_acadcalendar_info(acadcalendar_id):
         'display': '📅 N/A — AY N/A'
     }
 
+
+def is_term_released(acadcalendar_id, cursor):
+    """Returns True if the given term has been released and not revoked."""
+    cursor.execute("""
+        SELECT 1 FROM evaluation_release
+        WHERE acadcalendar_id = %s AND revoked_at IS NULL
+        LIMIT 1
+    """, (acadcalendar_id,))
+    return cursor.fetchone() is not None
 
 
 # ========== CACHED DATA ==========
@@ -7155,6 +7192,21 @@ def api_faculty_evaluations_data():
             r = cursor.fetchone()
             current_term_id = r[0] if r else 80001
 
+        # Check if this is the calendar-current term and if it's been released
+        cursor.execute("""
+            SELECT acadcalendar_id FROM acadcalendar
+            WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+            ORDER BY semesterstart DESC LIMIT 1
+        """)
+        cal_r = cursor.fetchone()
+        calendar_current_id = cal_r[0] if cal_r else None
+
+        if calendar_current_id and current_term_id == calendar_current_id:
+            if not is_term_released(current_term_id, cursor):
+                cursor.close()
+                db_pool.return_connection(conn)
+                return jsonify({'success': True, 'locked': True, 'current_term_id': current_term_id})
+
         # 2. Fetch scores, comparison data, AND feedback
         cursor.execute("""
             WITH current_term AS (
@@ -10203,9 +10255,25 @@ def api_faculty_evaluation_trends():
             ORDER BY ac.semesterstart ASC NULLS LAST
         """, (personnel_id,))
 
+        rows = cur.fetchall()
+
+        # Determine the calendar-current term and its release status
+        cur.execute("""
+            SELECT acadcalendar_id FROM acadcalendar
+            WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+            ORDER BY semesterstart DESC LIMIT 1
+        """)
+        cal_r = cur.fetchone()
+        current_cal_id = cal_r[0] if cal_r else None
+        current_released = is_term_released(current_cal_id, cur) if current_cal_id else True
+
         trends = []
-        for row in cur.fetchall():
-            _, sem, year, _, avg_s, avg_sv, avg_p = row
+        for row in rows:
+            acal_id, sem, year, _, avg_s, avg_sv, avg_p = row
+            # Suppress current-term data until HR releases it
+            if acal_id == current_cal_id and not current_released:
+                continue
+
             short = '1st Sem' if 'First' in sem else ('2nd Sem' if 'Second' in sem else 'Summer')
             year_str = (year or '').replace('AY ', '')
             label = f"{short} AY {year_str}"
@@ -11460,6 +11528,29 @@ def api_hr_evaluations():
     """, (current_term_id,))
     all_dept_averages = [{"dept": row[0], "avg": float(row[1])} for row in cursor.fetchall()]
 
+    # Fetch release status for the displayed term and determine if it's the calendar-current term
+    cursor.execute("""
+        SELECT released_at, revoked_at
+        FROM evaluation_release
+        WHERE acadcalendar_id = %s
+    """, (current_term_id,))
+    rel_row = cursor.fetchone()
+    is_released = rel_row is not None and rel_row[1] is None
+
+    cursor.execute("""
+        SELECT acadcalendar_id FROM acadcalendar
+        WHERE CURRENT_DATE BETWEEN semesterstart AND semesterend
+        ORDER BY semesterstart DESC LIMIT 1
+    """)
+    cal_r = cursor.fetchone()
+    cal_current_id = cal_r[0] if cal_r else None
+
+    release_info = {
+        'is_released': is_released,
+        'released_at': rel_row[0].isoformat() if (rel_row and rel_row[0]) else None,
+        'is_calendar_current': current_term_id == cal_current_id,
+    }
+
     cursor.close()
     db_pool.return_connection(conn)
 
@@ -11486,7 +11577,8 @@ def api_hr_evaluations():
         kpis=kpis,
         unique_positions=unique_positions,
         acadcalendar_info=acadcalendar_info,
-        all_dept_averages=all_dept_averages
+        all_dept_averages=all_dept_averages,
+        release_info=release_info
     )
 
 
@@ -12889,6 +12981,106 @@ def api_hr_new_evaluation_cycle():
     except Exception as e:
         print(f"Error initiating new evaluation cycle: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/hr/evaluation-release', methods=['POST'])
+@require_auth([20003])
+def api_hr_evaluation_release():
+    """Release evaluations for a given academic term, making scores visible to faculty."""
+    try:
+        data = request.get_json()
+        term_id = data.get('term_id')
+        if not term_id:
+            return jsonify({'success': False, 'error': 'term_id is required.'}), 400
+
+        hr_info = get_personnel_info(session['user_id'])
+        hr_personnel_id = hr_info.get('personnel_id')
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        # Verify term exists
+        cursor.execute("SELECT 1 FROM acadcalendar WHERE acadcalendar_id = %s", (term_id,))
+        if not cursor.fetchone():
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify({'success': False, 'error': 'Academic term not found.'}), 404
+
+        # Upsert: insert or re-release (clear revoked_at if previously revoked)
+        cursor.execute("""
+            INSERT INTO evaluation_release (acadcalendar_id, released_at, released_by, revoked_at, revoked_by)
+            VALUES (%s, NOW(), %s, NULL, NULL)
+            ON CONFLICT (acadcalendar_id) DO UPDATE
+                SET released_at = NOW(),
+                    released_by = EXCLUDED.released_by,
+                    revoked_at  = NULL,
+                    revoked_by  = NULL
+            RETURNING released_at
+        """, (term_id, hr_personnel_id))
+        released_at = cursor.fetchone()[0]
+        conn.commit()
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        log_audit_action(
+            hr_personnel_id,
+            "Released Evaluations",
+            f"Evaluations for term {term_id} released to faculty.",
+            before_value="Not Released",
+            after_value=f"Released at {released_at}"
+        )
+
+        return jsonify({'success': True, 'released_at': released_at.isoformat()})
+
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/hr/evaluation-revoke', methods=['POST'])
+@require_auth([20003])
+def api_hr_evaluation_revoke():
+    """Revoke a previously released evaluation term, hiding scores from faculty again."""
+    try:
+        data = request.get_json()
+        term_id = data.get('term_id')
+        if not term_id:
+            return jsonify({'success': False, 'error': 'term_id is required.'}), 400
+
+        hr_info = get_personnel_info(session['user_id'])
+        hr_personnel_id = hr_info.get('personnel_id')
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            UPDATE evaluation_release
+            SET revoked_at = NOW(), revoked_by = %s
+            WHERE acadcalendar_id = %s AND revoked_at IS NULL
+        """, (hr_personnel_id, term_id))
+
+        if cursor.rowcount == 0:
+            cursor.close()
+            db_pool.return_connection(conn)
+            return jsonify({'success': False, 'error': 'Term is not currently released.'}), 404
+
+        conn.commit()
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        log_audit_action(
+            hr_personnel_id,
+            "Revoked Evaluation Release",
+            f"Evaluation release for term {term_id} revoked.",
+            before_value="Released",
+            after_value="Revoked"
+        )
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/hr/fetch-evaluations', methods=['POST'])
 @require_auth([20003])
