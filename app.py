@@ -16,6 +16,7 @@ import queue
 import threading
 import atexit
 import time
+import random
 from flask import make_response
 from io import BytesIO
 import base64
@@ -1165,6 +1166,95 @@ def stop_campus_sync():
 
 start_campus_sync()
 atexit.register(stop_campus_sync)
+
+# ========== DEFERRED PROMOTION & REGULARIZATION APPLICATION ==========
+# These jobs apply rank/status updates on the effective_date (from acadcalendar),
+# ensuring changes are synchronized to the school calendar, not transaction dates.
+
+deferred_promo_reg_running = False
+deferred_promo_reg_thread = None
+
+def apply_deferred_promotions_and_regularizations():
+    """Background thread: applies deferred rank/status updates when effective_date arrives."""
+    global deferred_promo_reg_running
+    philippines_tz = pytz.timezone('Asia/Manila')
+
+    while deferred_promo_reg_running:
+        conn = None
+        cursor = None
+        try:
+            today = datetime.now(philippines_tz).date()
+            conn = db_pool.get_connection()
+            cursor = conn.cursor()
+
+            # === APPLY DEFERRED PROMOTIONS ===
+            cursor.execute("""
+                SELECT pa.application_id, pa.faculty_id, pa.requested_rank, p.firstname, p.lastname
+                FROM promotion_application pa
+                JOIN personnel p ON pa.faculty_id = p.personnel_id
+                WHERE pa.effective_date = %s
+                  AND pa.final_decision = 1
+                  AND pa.current_status = 'approved'
+            """, (today,))
+
+            promotions_to_apply = cursor.fetchall()
+            for app_id, faculty_id, requested_rank, fname, lname in promotions_to_apply:
+                cursor.execute(
+                    "UPDATE profile SET position = %s WHERE personnel_id = %s",
+                    (requested_rank, faculty_id)
+                )
+                print(f"[DEFERRED-PROMO] Applied promotion for {lname}, {fname} to {requested_rank} (App ID: {app_id})")
+
+            # === APPLY DEFERRED REGULARIZATIONS ===
+            cursor.execute("""
+                SELECT ra.regularization_id, ra.faculty_id, ra.years_of_service,
+                       p.firstname, p.lastname
+                FROM regularization_application ra
+                JOIN personnel p ON ra.faculty_id = p.personnel_id
+                WHERE ra.effective_date = %s
+                  AND ra.final_decision = 1
+                  AND ra.current_status = 'approved'
+            """, (today,))
+
+            regularizations_to_apply = cursor.fetchall()
+            for reg_id, faculty_id, years_of_service, fname, lname in regularizations_to_apply:
+                new_status = 'Tenured' if (years_of_service or 0) >= 7 else 'Regular'
+                cursor.execute(
+                    "UPDATE profile SET employmentstatus = %s WHERE personnel_id = %s",
+                    (new_status, faculty_id)
+                )
+                print(f"[DEFERRED-REG] Applied regularization for {lname}, {fname} to {new_status} (Reg ID: {reg_id})")
+
+            conn.commit()
+            cursor.close()
+            db_pool.return_connection(conn)
+
+            # Run daily (sleep 23 hours + random jitter)
+            time.sleep(82800 + random.randint(0, 3600))
+
+        except Exception as e:
+            print(f"[ERROR] Deferred promo/reg job: {e}")
+            if conn:
+                conn.rollback()
+                cursor.close()
+                db_pool.return_connection(conn)
+            time.sleep(60)  # retry after 1 minute on error
+
+def start_deferred_promo_reg():
+    global deferred_promo_reg_running, deferred_promo_reg_thread
+    if deferred_promo_reg_running:
+        return
+    deferred_promo_reg_running = True
+    deferred_promo_reg_thread = threading.Thread(target=apply_deferred_promotions_and_regularizations, daemon=True)
+    deferred_promo_reg_thread.start()
+    print("[STARTUP] Deferred promotion/regularization job started")
+
+def stop_deferred_promo_reg():
+    global deferred_promo_reg_running
+    deferred_promo_reg_running = False
+
+start_deferred_promo_reg()
+atexit.register(stop_deferred_promo_reg)
 
 def get_db_connection():
     return db_pool.get_connection()
@@ -10643,7 +10733,7 @@ def faculty_promotion():
     # Fetch latest application (including finalized) for stepper display
     cursor.execute("""
         SELECT application_id, current_status, date_submitted, hrmd_approval_date, vpa_approval_date, pres_approval_date,
-               final_decision, requested_rank, letter_acknowledged
+               final_decision, requested_rank, letter_acknowledged, effective_date
         FROM promotion_application
         WHERE faculty_id = %s
         ORDER BY date_submitted DESC LIMIT 1
@@ -10733,6 +10823,7 @@ def faculty_promotion():
     if latest_row:
         _lr_status   = (latest_row[1] or '').lower()
         _lr_decision = latest_row[6]
+        _lr_effective_date = latest_row[9]
         if _lr_decision == 1 or _lr_status == 'approved':
             _display_decision = 'approved'
         elif _lr_decision == 0 or _lr_status == 'rejected':
@@ -10748,11 +10839,17 @@ def faculty_promotion():
         display_final_decision  = _display_decision
         has_unacknowledged_letter = (_lr_decision == 1 and latest_row[8] is False)
         letter_app_id           = latest_row[0] if _lr_decision == 1 else None
+        from datetime import date as _d
+        _today_date = _d.today()
+        pending_effectivity   = (_lr_decision == 1 and _lr_effective_date is not None and _lr_effective_date > _today_date)
+        display_effective_date = _lr_effective_date
     else:
         display_date_submitted = display_hrmd_date = display_vpa_date = display_pres_date = None
         display_current_status = display_requested_rank = display_final_decision = None
         has_unacknowledged_letter = False
         letter_app_id = None
+        pending_effectivity = False
+        display_effective_date = None
 
     template_data = {
         'faculty_name': f"{lastname}, {firstname}, {honorifics}" if honorifics else f"{lastname}, {firstname}",
@@ -10797,6 +10894,8 @@ def faculty_promotion():
         'display_final_decision': display_final_decision,
         'has_unacknowledged_letter': has_unacknowledged_letter,
         'letter_app_id': letter_app_id,
+        'pending_effectivity': pending_effectivity,
+        'display_effective_date': display_effective_date,
     }
 
     if row:
@@ -12946,7 +13045,8 @@ def hr_promotions():
                 pa.pres_approval_date,
                 pr.highest_degree_level,
                 pr.has_aligned_master,
-                pr.has_doctorate
+                pr.has_doctorate,
+                pa.effective_date
             FROM promotion_application pa
             JOIN personnel p ON pa.faculty_id = p.personnel_id
             LEFT JOIN college c ON p.college_id = c.college_id
@@ -12957,20 +13057,27 @@ def hr_promotions():
         promotions = cursor.fetchall()
         
         # Format promotion data
+        from datetime import date as _d
+        _today = _d.today()
         promotions_list = []
         for promo in promotions:
             (application_id, faculty_id, firstname, lastname, honorifics, collegename,
              current_rank, requested_rank, current_status, date_submitted,
              hrmd_approval, vpa_approval, pres_approval,
-             highest_degree_level, has_aligned_master, has_doctorate) = promo
-            
+             highest_degree_level, has_aligned_master, has_doctorate, effective_date) = promo
+
             if honorifics:
                 fullname = f"{lastname}, {firstname}, {honorifics}"
             else:
                 fullname = f"{lastname}, {firstname}"
-            
+
             status_display = str(current_status).replace('_', ' ').title() if current_status else 'Pending HR Review'
-            
+            pending_effectivity = (
+                current_status == 'approved'
+                and effective_date is not None
+                and effective_date > _today
+            )
+
             promotions_list.append({
                 'application_id': application_id,
                 'faculty_id': faculty_id,
@@ -12983,6 +13090,8 @@ def hr_promotions():
                 'highest_degree_level': highest_degree_level or '',
                 'has_aligned_master': bool(has_aligned_master),
                 'has_doctorate': bool(has_doctorate),
+                'effective_date': effective_date.strftime('%b %d, %Y') if effective_date else None,
+                'pending_effectivity': pending_effectivity,
             })
         
         # === FETCH ELIGIBLE FACULTY + ACTIVE REGULARIZATIONS ===
@@ -13247,7 +13356,7 @@ def vp_promotions():
         
         # === FETCH PROMOTIONS (Including OTR and Diploma flags) ===
         cursor.execute("""
-            SELECT 
+            SELECT
                 pa.application_id,
                 pa.faculty_id,
                 p.firstname,
@@ -13264,27 +13373,35 @@ def vp_promotions():
                 pa.tor IS NOT NULL as has_tor,       -- Added for OTR viewing
                 pa.diploma IS NOT NULL as has_diploma, -- Added for Diploma viewing
                 pa.resume IS NOT NULL as has_resume,   -- Added for Resume viewing
-                pa.cover_letter IS NOT NULL as has_cover_letter -- Added for Cover Letter viewing
+                pa.cover_letter IS NOT NULL as has_cover_letter, -- Added for Cover Letter viewing
+                pa.effective_date
             FROM promotion_application pa
             JOIN personnel p ON pa.faculty_id = p.personnel_id
             LEFT JOIN college c ON p.college_id = c.college_id
             LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
             ORDER BY pa.date_submitted DESC
         """)
-        
+
         promotions = cursor.fetchall()
-        
+
         # Format promotion data
+        from datetime import date as _d
+        _today = _d.today()
         promotions_list = []
         for promo in promotions:
             (application_id, faculty_id, firstname, lastname, honorifics, collegename,
-             current_rank, requested_rank, current_status, date_submitted, 
-             hrmd_approval, vpa_approval, pres_approval, 
-             has_tor, has_diploma, has_resume, has_cover_letter) = promo
-            
+             current_rank, requested_rank, current_status, date_submitted,
+             hrmd_approval, vpa_approval, pres_approval,
+             has_tor, has_diploma, has_resume, has_cover_letter, effective_date) = promo
+
             fullname = f"{lastname}, {firstname}" + (f", {honorifics}" if honorifics else "")
             status_display = str(current_status).replace('_', ' ').title() if current_status else 'Pending HR Review'
-            
+            pending_effectivity = (
+                current_status == 'approved'
+                and effective_date is not None
+                and effective_date > _today
+            )
+
             promotions_list.append({
                 'application_id': application_id,
                 'faculty_id': faculty_id,
@@ -13298,7 +13415,9 @@ def vp_promotions():
                 'has_tor': has_tor,
                 'has_diploma': has_diploma,
                 'has_resume': has_resume,
-                'has_cover_letter': has_cover_letter
+                'has_cover_letter': has_cover_letter,
+                'effective_date': effective_date.strftime('%b %d, %Y') if effective_date else None,
+                'pending_effectivity': pending_effectivity,
             })
         
         # === FETCH ACTIVE REGULARIZATIONS ===
@@ -13541,7 +13660,21 @@ def approve_regularization_by_president():
         
         philippines_tz = pytz.timezone('Asia/Manila')
         current_time = datetime.now(philippines_tz)
-        
+
+        # Determine effectivity: Day 1 of the next First Semester per school calendar
+        cursor.execute("""
+            SELECT semesterstart, acadyear FROM acadcalendar
+            WHERE semester ILIKE '%First%' AND semesterstart > CURRENT_DATE
+            ORDER BY semesterstart ASC LIMIT 1
+        """)
+        eff_row = cursor.fetchone()
+        if eff_row:
+            reg_effective_date, reg_effective_ay = eff_row[0], eff_row[1]
+        else:
+            from datetime import date as _d
+            reg_effective_date = _d(current_time.year + 1, 8, 1)
+            reg_effective_ay = f"{current_time.year}-{current_time.year + 1}"
+
         # Fetch faculty_id, years_of_service, current status, and finalization state
         cursor.execute(
             "SELECT faculty_id, years_of_service, current_status, final_decision FROM regularization_application WHERE regularization_id = %s",
@@ -13572,9 +13705,10 @@ def approve_regularization_by_president():
             UPDATE regularization_application
             SET current_status = %s,
                 pres_approval_date = %s,
-                final_decision = %s
+                final_decision = %s,
+                effective_date = %s
             WHERE regularization_id = %s
-        """, ('approved', current_time, 1, regularization_id))
+        """, ('approved', current_time, 1, reg_effective_date, regularization_id))
 
         # Fetch faculty name for audit log
         cursor.execute(
@@ -13584,11 +13718,7 @@ def approve_regularization_by_president():
         name_row = cursor.fetchone()
         fac_name = f"{name_row[1]}, {name_row[0]}" if name_row else f"Faculty (ID: {faculty_id_for_update})"
 
-        # Update faculty employment status in profile
-        cursor.execute(
-            "UPDATE profile SET employmentstatus = %s WHERE personnel_id = %s",
-            (new_employment_status, faculty_id_for_update)
-        )
+        # NOTE: Employment status update is DEFERRED until effective_date (see apply_deferred_regularizations_job)
 
         conn.commit()
 
@@ -14546,22 +14676,32 @@ def approve_promotion():
 
         philippines_tz = pytz.timezone('Asia/Manila')
         current_time = datetime.now(philippines_tz)
-        
+
+        # Determine effectivity: Day 1 of the next First Semester per school calendar
+        cursor.execute("""
+            SELECT semesterstart, acadyear FROM acadcalendar
+            WHERE semester ILIKE '%First%' AND semesterstart > CURRENT_DATE
+            ORDER BY semesterstart ASC LIMIT 1
+        """)
+        eff_row = cursor.fetchone()
+        if eff_row:
+            effective_date, effective_ay = eff_row[0], eff_row[1]
+        else:
+            from datetime import date as _d
+            effective_date = _d(current_time.year + 1, 8, 1)
+            effective_ay = f"{current_time.year}-{current_time.year + 1}"
+
         # Update promotion application to approved
+        # NOTE: Rank update is DEFERRED until effective_date (see apply_deferred_promotions_job)
         cursor.execute(
-            """UPDATE promotion_application 
-               SET current_status = %s, 
-                   pres_approval_date = %s, 
+            """UPDATE promotion_application
+               SET current_status = %s,
+                   pres_approval_date = %s,
                    final_decision = %s,
-                   pres_remarks = %s
+                   pres_remarks = %s,
+                   effective_date = %s
                WHERE application_id = %s""",
-            ('approved', current_time, 1, pres_remarks if pres_remarks else None, application_id)
-        )
-        
-        # Update faculty rank in profile table
-        cursor.execute(
-            "UPDATE profile SET position = %s WHERE personnel_id = %s",
-            (requested_rank, faculty_id)
+            ('approved', current_time, 1, pres_remarks if pres_remarks else None, effective_date, application_id)
         )
 
         # Generate promotion letter PDF with ReportLab
@@ -14637,7 +14777,7 @@ def approve_promotion():
                 body_j),
             Spacer(1, 0.15*inch),
             Paragraph(
-                f"Effective immediately, you are hereby promoted to the rank of <b>{requested_rank}</b>. "
+                f"Effective {effective_date.strftime('%B %d, %Y')} (AY {effective_ay}), you are hereby promoted to the rank of <b>{requested_rank}</b>. "
                 "This promotion reflects your dedication, exemplary performance, and outstanding contributions "
                 "to the academic community of St. Peter's College.",
                 body_j),

@@ -229,9 +229,16 @@
                   <i class='bx bx-time-five' style="font-size:12px;"></i> President Review
                 </span>
                 {% elif 'approved' in promo.status|lower %}
-                <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#f0fdf4;color:#166534;padding:4px 10px;border-radius:10px;border:1px solid #bbf7d0;">
-                  <i class='bx bx-check-circle' style="font-size:12px;"></i> Approved
-                </span>
+                <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start;">
+                  <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#f0fdf4;color:#166534;padding:4px 10px;border-radius:10px;border:1px solid #bbf7d0;">
+                    <i class='bx bx-check-circle' style="font-size:12px;"></i> Approved
+                  </span>
+                  {% if promo.pending_effectivity and promo.effective_date %}
+                  <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;background:#eff6ff;color:#1d4ed8;padding:3px 8px;border-radius:8px;border:1px solid #bfdbfe;white-space:nowrap;">
+                    <i class='bx bx-calendar' style="font-size:11px;"></i> Effective {{ promo.effective_date }}
+                  </span>
+                  {% endif %}
+                </div>
                 {% elif 'rejected' in promo.status|lower %}
                 <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#fef2f2;color:#991b1b;padding:4px 10px;border-radius:10px;border:1px solid #fecaca;">
                   <i class='bx bx-x-circle' style="font-size:12px;"></i> Rejected
