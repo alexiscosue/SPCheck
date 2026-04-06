@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(PGPASSWORD=RyCugEVE4EDUXZCpDbsgc6RcPMc2HhqA psql -h dpg-d6lg7s94tr6s739s64n0-a.oregon-postgres.render.com -U spcheck_user -d spcheck_b86i -c \"\\\\d campus_attendance\")",
+      "Bash(PGPASSWORD=RyCugEVE4EDUXZCpDbsgc6RcPMc2HhqA psql -h dpg-d6lg7s94tr6s739s64n0-a.oregon-postgres.render.com -U spcheck_user -d spcheck_b86i -c \"SHOW timezone; SELECT current_timestamp AT TIME ZONE ''Asia/Manila'' AS manila_now, current_timestamp AS utc_now;\")",
+      "Bash(PGPASSWORD=RyCugEVE4EDUXZCpDbsgc6RcPMc2HhqA psql -h dpg-d6lg7s94tr6s739s64n0-a.oregon-postgres.render.com -U spcheck_user -d spcheck_b86i -c \"SHOW timezone; SELECT time_in, time_in AT TIME ZONE ''Asia/Manila'' as manila_time_in FROM campus_attendance WHERE time_in IS NOT NULL ORDER BY attendance_date DESC, time_in LIMIT 5;\")",
+      "Bash(PGPASSWORD=RyCugEVE4EDUXZCpDbsgc6RcPMc2HhqA psql -h dpg-d6lg7s94tr6s739s64n0-a.oregon-postgres.render.com -U spcheck_user -d spcheck_b86i -c \"SELECT name, setting FROM pg_settings WHERE name = ''TimeZone'';\")",
+      "Bash(PGPASSWORD=RyCugEVE4EDUXZCpDbsgc6RcPMc2HhqA psql -h dpg-d6lg7s94tr6s739s64n0-a.oregon-postgres.render.com -U spcheck_user -d spcheck_b86i -c \":*)"
+    ]
+  }
+}

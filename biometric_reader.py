@@ -97,18 +97,30 @@ class BiometricReader:
     # Business logic (unchanged from original)
     # ------------------------------------------------------------------
 
-    def _get_session(self, dt):
-        """Return 'Morning', 'Afternoon', or None based on tap time.
-        Saturday Afternoon is always rejected (returns None even if time matches).
+    def _get_tap_window(self, dt):
+        """Return (session, window_type) based on tap time.
+
+        Morning   time_in  window:  7:00 AM – 11:44 AM (420–704 mins)
+        Morning   time_out window: 11:45 AM – 12:44 PM (705–764 mins)
+        Afternoon time_in  window: 12:45 PM –  5:14 PM (765–1034 mins)
+        Afternoon time_out window:  5:15 PM –  5:45 PM (1035–1065 mins)
+        Saturday: no Afternoon sessions at all.
+
+        Returns (session, window_type) where window_type is 'time_in', 'time_out',
+        or (None, None) if outside all valid windows.
         """
         tap_mins = dt.hour * 60 + dt.minute
-        if 420 <= tap_mins <= 764:
-            return 'Morning'
-        elif 765 <= tap_mins <= 1065:
-            if dt.weekday() == 5:  # Saturday — no Afternoon session
-                return None
-            return 'Afternoon'
-        return None
+        is_saturday = dt.weekday() == 5
+
+        if 420 <= tap_mins <= 704:
+            return 'Morning', 'time_in'
+        elif 705 <= tap_mins <= 764:
+            return 'Morning', 'time_out'
+        elif 765 <= tap_mins <= 1034:
+            return (None, None) if is_saturday else ('Afternoon', 'time_in')
+        elif 1035 <= tap_mins <= 1065:
+            return (None, None) if is_saturday else ('Afternoon', 'time_out')
+        return None, None
 
     def _process_biometric(self, biometric_uid):
         conn = None
@@ -119,7 +131,7 @@ class BiometricReader:
 
             current_time = self._truncate_timestamp(datetime.now(self.manila_tz))
             day_name = current_time.strftime('%A')
-            session = self._get_session(current_time)
+            session, window_type = self._get_tap_window(current_time)
 
             # ── Reject Sunday and Saturday Afternoon entirely ──────────────
             if day_name == 'Sunday':
@@ -187,9 +199,6 @@ class BiometricReader:
             person_name = f"{lastname}, {firstname}" if firstname and lastname else f"Personnel #{personnel_id}"
 
             # ── Outside session window guard ───────────────────────────────
-            # If the tap time falls outside both the morning (07:00–12:44) and
-            # afternoon (12:45–17:45) windows, treat it like RFID's outside_buffer:
-            # log the scan but do NOT create an Entry/Exit campus attendance record.
             if session is None:
                 remarks = f"[Outside Window] Scanned outside session hours on {day_name} at {current_time.strftime('%H:%M')}"
                 self._log_biometric_scan(cursor, biometric_id, current_time, 'outside_buffer', remarks)
@@ -211,39 +220,62 @@ class BiometricReader:
                 return
             # ──────────────────────────────────────────────────────────────
 
-            status, remarks, is_buffer = self._determine_status(cursor, biometric_id, current_time, day_name)
-            self._log_biometric_scan(cursor, biometric_id, current_time, status, remarks)
+            status, remarks, is_rejected, attendance_status = self._determine_status(
+                cursor, personnel_id, session, window_type, current_time, day_name
+            )
 
-            if not is_buffer:
+            # Log to biometriclogs: use 'buffer' for rejections so the sync ignores them
+            log_status = status if not is_rejected else 'buffer'
+            self._log_biometric_scan(cursor, biometric_id, current_time, log_status, remarks)
+
+            if not is_rejected:
                 cursor.execute("""
                     UPDATE biometric SET lastused = %s WHERE biometric_id = %s
                 """, (current_time, biometric_id))
 
+                # Write directly to campus_attendance for real-time display
+                today = current_time.date()
+                if status == 'Entry':
+                    cursor.execute("""
+                        UPDATE campus_attendance
+                        SET time_in = %s, status = %s
+                        WHERE personnel_id = %s AND attendance_date = %s AND session = %s
+                    """, (current_time, attendance_status, personnel_id, today, session))
+                elif status == 'Exit':
+                    cursor.execute("""
+                        UPDATE campus_attendance
+                        SET time_out = %s
+                        WHERE personnel_id = %s AND attendance_date = %s AND session = %s
+                          AND time_in IS NOT NULL
+                    """, (current_time, personnel_id, today, session))
+
             conn.commit()
 
-            if is_buffer:
-                self._send_to_arduino(f"BUFFER:{person_name}")
+            if is_rejected:
+                # Distinguish "already timed in" (time_in window) from other rejections
+                if window_type == 'time_in':
+                    self._send_to_arduino(f"BUFFER:{person_name}")
+                    action = 'already_timed_in'
+                    msg = f'{person_name} - Already timed in for {session} session. Wait for the time-out window.'
+                else:
+                    self._send_to_arduino(f"OUTSIDE:{person_name}")
+                    action = 'outside_buffer'
+                    msg = f'{person_name} - {remarks}'
                 notification_data = {
                     'biometric_uid': biometric_uid,
                     'biometric_id': biometric_id,
                     'personnel_id': personnel_id,
                     'person_name': person_name,
                     'tap_time': current_time.strftime('%A, %Y-%m-%d %H:%M:%S.%f')[:29],
-                    'action': 'buffer_period',
+                    'action': action,
                     'status': 'buffer',
                     'session': session,
-                    'message': f'{person_name} - Already scanned. Wait 15 minutes.'
+                    'message': msg
                 }
                 self._trigger_notification(notification_data)
-                print(f"⏳ {person_name}: {status} - {remarks}")
+                print(f"⏳ {person_name}: {remarks}")
             else:
                 self._send_to_arduino(f"LOGGED:{status}:{person_name}")
-                # Compute attendance status (Present/Late) for Entry taps
-                attendance_status = None
-                if status == 'Entry' and session:
-                    current_mins = current_time.hour * 60 + current_time.minute
-                    late_threshold = 495 if session == 'Morning' else 825  # 8:15 AM / 1:45 PM
-                    attendance_status = 'Present' if current_mins <= late_threshold else 'Late'
                 notification_data = {
                     'biometric_uid': biometric_uid,
                     'biometric_id': biometric_id,
@@ -254,10 +286,9 @@ class BiometricReader:
                     'status': 'success',
                     'session': session,
                     'attendance_status': attendance_status,
-                    # stored in repurposed DB fields (unused for biometric type)
                     'class_section': session,
                     'classroom': attendance_status,
-                    'message': f'{person_name} - {status} ({session})' if session else f'{person_name} - {status}'
+                    'message': f'{person_name} - {status} ({session})'
                 }
                 self._trigger_notification(notification_data)
                 print(f"✅ {person_name}: {status} - {remarks}")
@@ -272,41 +303,68 @@ class BiometricReader:
             if conn:
                 self.db_pool.return_connection(conn)
 
-    def _determine_status(self, cursor, biometric_id, current_time, day_name):
-        today_start = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
+    def _determine_status(self, cursor, personnel_id, session, window_type, current_time, day_name):
+        """Decide Entry / Exit / rejected based on which sub-window the tap falls in
+        and whether campus_attendance already has a time_in for this session.
+
+        Returns (status, remarks, is_rejected, attendance_status):
+          - status          : 'Entry', 'Exit', or 'outside_buffer'
+          - remarks         : human-readable log string
+          - is_rejected     : True  → don't count as a valid scan
+          - attendance_status: 'Present', 'Late', or None
+        """
+        today = current_time.date()
+        tap_mins = current_time.hour * 60 + current_time.minute
+
         cursor.execute("""
-            SELECT status, taptime FROM biometriclogs
-            WHERE biometric_id = %s AND taptime >= %s
-            ORDER BY taptime DESC
-            LIMIT 1
-        """, (biometric_id, today_start))
-        last_scan = cursor.fetchone()
+            SELECT time_in FROM campus_attendance
+            WHERE personnel_id = %s AND attendance_date = %s AND session = %s
+        """, (personnel_id, today, session))
+        row = cursor.fetchone()
+        has_time_in = row is not None and row[0] is not None
 
-        if not last_scan:
-            status = "Entry"
-            remarks = f"[Entry] First scan of the day on {day_name}"
-            is_buffer = False
-        else:
-            last_status, last_taptime = last_scan
-            buffer_end = last_taptime + timedelta(minutes=15)
-            if current_time <= buffer_end:
-                minutes_left = int((buffer_end - current_time).total_seconds() / 60)
-                status = last_status
-                remarks = f"[{last_status}] Within 15-min buffer. Wait {minutes_left} more minutes."
-                is_buffer = True
-            elif last_status == "Entry":
-                status = "Exit"
-                remarks = f"[Exit] Exit scan on {day_name}"
-                is_buffer = False
+        if window_type == 'time_in':
+            if not has_time_in:
+                # ≤ 8:14 AM (494 mins) = Present for Morning
+                # ≤ 1:44 PM (824 mins) = Present for Afternoon
+                late_threshold = 494 if session == 'Morning' else 824
+                attendance_status = 'Present' if tap_mins <= late_threshold else 'Late'
+                return (
+                    "Entry",
+                    f"[Entry] {attendance_status} – {session} time-in on {day_name}",
+                    False,
+                    attendance_status,
+                )
             else:
-                status = "Entry"
-                remarks = f"[Entry] Re-entry scan on {day_name}"
-                is_buffer = False
+                return (
+                    "Entry",
+                    f"[Already Timed In] {session} time-in already recorded on {day_name}. Wait for the time-out window.",
+                    True,
+                    None,
+                )
 
-        if not is_buffer and day_name in ('Saturday', 'Sunday'):
-            remarks = f"[{status}] Scanned on {day_name} (Weekend)"
+        elif window_type == 'time_out':
+            if has_time_in:
+                return (
+                    "Exit",
+                    f"[Exit] {session} time-out on {day_name}",
+                    False,
+                    None,
+                )
+            else:
+                return (
+                    "outside_buffer",
+                    f"[Rejected] No {session} time-in recorded on {day_name} — cannot time out",
+                    True,
+                    None,
+                )
 
-        return status, remarks, is_buffer
+        return (
+            "outside_buffer",
+            f"[Outside Window] Scanned outside valid session windows on {day_name}",
+            True,
+            None,
+        )
 
     def _log_biometric_scan(self, cursor, biometric_id, taptime, status, remarks):
         try:

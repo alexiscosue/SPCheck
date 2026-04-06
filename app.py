@@ -514,6 +514,52 @@ def update_biometric_state(is_running, port=None, started_by=None):
             biometric_reader_state['started_by'] = None
             biometric_reader_state['started_at'] = None
 
+def auto_reader_manager():
+    """Automatically start and stop RFID and Biometric readers based on schedule."""
+    philippines_tz = pytz.timezone('Asia/Manila')
+    while True:
+        try:
+            import time as _time
+            now = datetime.now(philippines_tz)
+            current_time = now.time()
+            start_time = datetime.strptime('07:00', '%H:%M').time()
+            end_time = datetime.strptime('17:45', '%H:%M').time()
+
+            is_active_window = start_time <= current_time <= end_time
+
+            bio_state = get_biometric_state()
+            if is_active_window and not bio_state['is_running']:
+                res = biometric_reader.start_reading(None)
+                if res.get('success'):
+                    update_biometric_state(is_running=True, port=res.get('port'), started_by='System Schedule')
+                    print("✅ Biometrics Reader automatically started by System Schedule")
+
+            elif not is_active_window and bio_state['is_running']:
+                res = biometric_reader.stop_reading()
+                if res.get('success'):
+                    update_biometric_state(is_running=False, port=None)
+                    print("🛑 Biometrics Reader automatically stopped by System Schedule")
+
+            rfid_state = get_rfid_state()
+            if is_active_window and not rfid_state['is_running']:
+                res = rfid_reader.start_reading(None)
+                if res.get('success'):
+                    update_rfid_state(is_running=True, port=res.get('port'), started_by='System Schedule')
+                    print("✅ RFID Reader automatically started by System Schedule")
+
+            elif not is_active_window and rfid_state['is_running']:
+                res = rfid_reader.stop_reading()
+                if res.get('success'):
+                    update_rfid_state(is_running=False, port=None)
+                    print("🛑 RFID Reader automatically stopped by System Schedule")
+
+        except Exception as e:
+            print(f"Error in auto_reader_manager: {e}")
+            
+        _time.sleep(60)
+
+threading.Thread(target=auto_reader_manager, daemon=True).start()
+
 def check_and_record_absences():
     """Independent absence checker - calculates dates from schedule and records absences"""
     global absence_checker_running
@@ -1023,8 +1069,8 @@ def campus_attendance_daily_sync():
                     FROM active_dates d
                     CROSS JOIN all_faculty p
                     CROSS JOIN (VALUES
-                        ('Morning',   420,  764, 495),
-                        ('Afternoon', 765, 1065, 825)
+                        ('Morning',   420,  764, 494),
+                        ('Afternoon', 765, 1065, 824)
                     ) AS s(session, window_start, window_end, late_threshold)
                     WHERE EXTRACT(DOW FROM d.attendance_date) != 0  -- no Sundays
                       AND NOT (EXTRACT(DOW FROM d.attendance_date) = 6
@@ -1034,12 +1080,13 @@ def campus_attendance_daily_sync():
                     SELECT
                         b.personnel_id,
                         DATE(bl.taptime AT TIME ZONE 'Asia/Manila')                    AS tap_date,
-                        bl.taptime AT TIME ZONE 'Asia/Manila'                          AS local_dt,
+                        bl.taptime                                                      AS raw_taptime,
                         EXTRACT(HOUR  FROM bl.taptime AT TIME ZONE 'Asia/Manila') * 60
                       + EXTRACT(MINUTE FROM bl.taptime AT TIME ZONE 'Asia/Manila')     AS tap_mins
                     FROM biometriclogs bl
                     INNER JOIN biometric b ON bl.biometric_id = b.biometric_id
                     WHERE b.personnel_id IS NOT NULL
+                      AND bl.status IN ('Entry', 'Exit')
                 ),
                 session_agg AS (
                     SELECT
@@ -1048,8 +1095,8 @@ def campus_attendance_daily_sync():
                         ac.session,
                         ac.late_threshold,
                         ac.window_end,
-                        MIN(t.local_dt) AS time_in,
-                        MAX(t.local_dt) AS time_out
+                        MIN(t.raw_taptime) AS time_in,
+                        CASE WHEN COUNT(t.raw_taptime) > 1 THEN MAX(t.raw_taptime) ELSE NULL END AS time_out
                     FROM all_combinations ac
                     LEFT JOIN taps t
                         ON  t.personnel_id = ac.personnel_id
@@ -1071,8 +1118,8 @@ def campus_attendance_daily_sync():
                     sa.time_out,
                     CASE
                         WHEN sa.time_in IS NULL THEN 'Absent'
-                        WHEN (EXTRACT(HOUR  FROM sa.time_in) * 60
-                            + EXTRACT(MINUTE FROM sa.time_in)) <= sa.late_threshold THEN 'Present'
+                        WHEN (EXTRACT(HOUR  FROM sa.time_in AT TIME ZONE 'Asia/Manila') * 60
+                            + EXTRACT(MINUTE FROM sa.time_in AT TIME ZONE 'Asia/Manila')) <= sa.late_threshold THEN 'Present'
                         ELSE 'Late'
                     END AS status
                 FROM session_agg sa, current_mins cm
@@ -1692,12 +1739,20 @@ def api_rfid_start():
             user_id = session.get('user_id')
             personnel_info = get_personnel_info(user_id)
             started_by = personnel_info.get('personnel_name', 'Unknown')
+            personnel_id = personnel_info.get('personnel_id')
             
             update_rfid_state(
                 is_running=True, 
                 port=result.get('port'),
                 started_by=started_by
             )
+            
+            if personnel_id:
+                log_audit_action(
+                    personnel_id,
+                    "RFID Reader Started",
+                    f"RFID reader manually started on port {result.get('port')}"
+                )
             
             print(f"✅ RFID Reader started by: {started_by}")
         
@@ -1722,6 +1777,15 @@ def api_rfid_stop():
             user_id = session.get('user_id')
             personnel_info = get_personnel_info(user_id)
             stopped_by = personnel_info.get('personnel_name', 'Unknown')
+            personnel_id = personnel_info.get('personnel_id')
+            
+            if personnel_id:
+                log_audit_action(
+                    personnel_id,
+                    "RFID Reader Stopped",
+                    "RFID reader manually stopped"
+                )
+            
             print(f"🛑 RFID Reader stopped by: {stopped_by}")
         
         return result
@@ -1798,12 +1862,20 @@ def api_biometric_start():
             user_id = session.get('user_id')
             personnel_info = get_personnel_info(user_id)
             started_by = personnel_info.get('personnel_name', 'Unknown')
+            personnel_id = personnel_info.get('personnel_id')
 
             update_biometric_state(
                 is_running=True,
                 port=result.get('port'),
                 started_by=started_by
             )
+
+            if personnel_id:
+                log_audit_action(
+                    personnel_id,
+                    "Biometric Reader Started",
+                    f"Biometric reader manually started on port {result.get('port')}"
+                )
 
             print(f"✅ Biometrics Reader started by: {started_by}")
 
@@ -1828,6 +1900,15 @@ def api_biometric_stop():
             user_id = session.get('user_id')
             personnel_info = get_personnel_info(user_id)
             stopped_by = personnel_info.get('personnel_name', 'Unknown')
+            personnel_id = personnel_info.get('personnel_id')
+            
+            if personnel_id:
+                log_audit_action(
+                    personnel_id,
+                    "Biometric Reader Stopped",
+                    "Biometric reader manually stopped"
+                )
+                
             print(f"🛑 Biometric Reader stopped by: {stopped_by}")
 
         return result
@@ -2045,24 +2126,25 @@ def api_sync_campus_attendance():
                 FROM active_dates d
                 CROSS JOIN all_faculty p
                 CROSS JOIN (VALUES
-                    ('Morning',   420,  764, 495),
-                    ('Afternoon', 765, 1065, 825)
+                    ('Morning',   420,  764, 494),
+                    ('Afternoon', 765, 1065, 824)
                 ) AS s(session, window_start, window_end, late_threshold)
                 WHERE EXTRACT(DOW FROM d.attendance_date) != 0  -- no Sundays
                   AND NOT (EXTRACT(DOW FROM d.attendance_date) = 6
                            AND s.session = 'Afternoon')         -- no Saturday Afternoon
             ),
-            -- Raw taps with local time in minutes
+            -- Raw taps with local time in minutes (only valid Entry/Exit scans)
             taps AS (
                 SELECT
                     b.personnel_id,
                     DATE(bl.taptime AT TIME ZONE 'Asia/Manila')                    AS tap_date,
-                    bl.taptime AT TIME ZONE 'Asia/Manila'                          AS local_dt,
+                    bl.taptime                                                      AS raw_taptime,
                     EXTRACT(HOUR  FROM bl.taptime AT TIME ZONE 'Asia/Manila') * 60
                   + EXTRACT(MINUTE FROM bl.taptime AT TIME ZONE 'Asia/Manila')     AS tap_mins
                 FROM biometriclogs bl
                 INNER JOIN biometric b ON bl.biometric_id = b.biometric_id
                 WHERE b.personnel_id IS NOT NULL
+                  AND bl.status IN ('Entry', 'Exit')
             ),
             -- Group first/last tap per (person, date, session)
             session_agg AS (
@@ -2071,8 +2153,8 @@ def api_sync_campus_attendance():
                     ac.attendance_date,
                     ac.session,
                     ac.late_threshold,
-                    MIN(t.local_dt) AS time_in,
-                    MAX(t.local_dt) AS time_out
+                    MIN(t.raw_taptime) AS time_in,
+                    CASE WHEN COUNT(t.raw_taptime) > 1 THEN MAX(t.raw_taptime) ELSE NULL END AS time_out
                 FROM all_combinations ac
                 LEFT JOIN taps t
                     ON  t.personnel_id = ac.personnel_id
@@ -2090,8 +2172,8 @@ def api_sync_campus_attendance():
                 time_out,
                 CASE
                     WHEN time_in IS NULL THEN 'Absent'
-                    WHEN (EXTRACT(HOUR  FROM time_in) * 60
-                        + EXTRACT(MINUTE FROM time_in)) <= late_threshold THEN 'Present'
+                    WHEN (EXTRACT(HOUR  FROM time_in AT TIME ZONE 'Asia/Manila') * 60
+                        + EXTRACT(MINUTE FROM time_in AT TIME ZONE 'Asia/Manila')) <= late_threshold THEN 'Present'
                     ELSE 'Late'
                 END AS status
             FROM session_agg
@@ -2101,6 +2183,19 @@ def api_sync_campus_attendance():
 
         synced = cursor.rowcount
         conn.commit()
+        
+        # Add audit trail for syncing campus attendance
+        if synced > 0:
+            hr_user_id = session.get('user_id')
+            if hr_user_id:
+                hr_personnel_info = get_personnel_info(hr_user_id)
+                if hr_personnel_info:
+                    log_audit_action(
+                        hr_personnel_info.get('personnel_id'),
+                        'Campus Attendance Synced',
+                        f"HR manually synced {synced} biometric records into campus attendance."
+                    )
+                    
         return {'success': True, 'message': f'Synced {synced} records', 'synced': synced}
 
     except Exception as e:
@@ -2356,8 +2451,8 @@ def api_update_campus_attendance_time():
 
         # Session windows and late thresholds (minutes from midnight), matching sync logic
         SESSION_WINDOWS = {
-            'Morning':   (420, 764, 495),   # 7:00 AM – 12:44 PM, late after 8:15 AM
-            'Afternoon': (765, 1065, 825),  # 12:45 PM – 5:45 PM, late after 1:45 PM
+            'Morning':   (420, 764, 494),   # 7:00 AM – 12:44 PM, late after 8:15 AM (Present ≤ 8:14)
+            'Afternoon': (765, 1065, 824),  # 12:45 PM – 5:45 PM, late after 1:45 PM (Present ≤ 1:44)
         }
 
         conn = db_pool.get_connection()
@@ -2450,6 +2545,19 @@ def api_update_campus_attendance_time():
                 updated_count += 1
 
         conn.commit()
+        
+        # Add audit trail for updating campus attendance
+        if updated_count > 0:
+            hr_user_id = session.get('user_id')
+            if hr_user_id:
+                hr_personnel_info = get_personnel_info(hr_user_id)
+                if hr_personnel_info:
+                    log_audit_action(
+                        hr_personnel_info.get('personnel_id'),
+                        'Campus Attendance Updated',
+                        f"HR updated {updated_count} campus attendance record(s)."
+                    )
+                    
         cursor.close()
         db_pool.return_connection(conn)
         return jsonify({'success': True, 'updated_count': updated_count})
@@ -5380,8 +5488,7 @@ def api_delete_document(doc_type, index):
         log_audit_action(
             personnel_id,
             f"{doc_type.capitalize()} deleted",
-            f"User deleted {doc_type} document: {deleted_filename}",
-            before_value=before_text,
+        before_value=before_text,
             after_value=after_text
         )
         
@@ -5391,6 +5498,323 @@ def api_delete_document(doc_type, index):
         print(f"Error deleting document: {e}")
         import traceback
         traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/hr/daily-attendance')
+@require_auth([20003])
+def api_hr_daily_attendance():
+    """DEEP REFACTOR: 100% Parity with Class Attendance logs (RFID). 1 Card = 1 Class Session."""
+    try:
+        date_str = request.args.get('date')
+        philippines_tz = pytz.timezone('Asia/Manila')
+        if not date_str:
+            target_date = datetime.now(philippines_tz).date()
+        else:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+
+        day_name = target_date.strftime('%A')
+        
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        # Step 1: FETCH ALL ATTENDANCE RECORDS FOR THIS DATE
+        cursor.execute("""
+            SELECT 
+                a.class_id,
+                a.personnel_id,
+                p.firstname, p.lastname, p.honorifics,
+                r.rolename,
+                c.collegename,
+                a.timein,
+                a.timeout,
+                a.attendancestatus,
+                sub.subjectcode,
+                sub.subjectname,
+                CASE WHEN sch.classday_1 = %s THEN sch.starttime_1 ELSE sch.starttime_2 END as start_time,
+                CASE WHEN sch.classday_1 = %s THEN sch.endtime_1 ELSE sch.endtime_2 END as end_time,
+                p.college_id
+            FROM attendance a
+            JOIN personnel p ON a.personnel_id = p.personnel_id
+            JOIN roles r ON p.role_id = r.role_id
+            LEFT JOIN college c ON p.college_id = c.college_id
+            JOIN schedule sch ON a.class_id = sch.class_id
+            JOIN subjects sub ON sch.subject_id = sub.subject_id
+            WHERE CAST(a.timein AT TIME ZONE 'Asia/Manila' AS DATE) = %s
+            ORDER BY p.lastname, p.firstname, start_time
+        """, (day_name, day_name, target_date))
+        
+        attendance_rows = cursor.fetchall()
+
+        # Step 2: FETCH ALL SCHEDULED CLASSES EXPECTED TODAY (But not yet in attendance)
+        cursor.execute("""
+            SELECT 
+                sch.class_id,
+                sch.personnel_id,
+                p.firstname, p.lastname, p.honorifics,
+                r.rolename,
+                col.collegename,
+                sub.subjectcode,
+                sub.subjectname,
+                CASE WHEN sch.classday_1 = %s THEN sch.starttime_1 ELSE sch.starttime_2 END as start_time,
+                CASE WHEN sch.classday_1 = %s THEN sch.endtime_1 ELSE sch.endtime_2 END as end_time,
+                p.college_id
+            FROM schedule sch
+            JOIN personnel p ON sch.personnel_id = p.personnel_id
+            JOIN roles r ON p.role_id = r.role_id
+            LEFT JOIN college col ON p.college_id = col.college_id
+            JOIN subjects sub ON sch.subject_id = sub.subject_id
+            JOIN acadcalendar cal ON sch.acadcalendar_id = cal.acadcalendar_id
+            WHERE %s BETWEEN cal.semesterstart AND cal.semesterend
+            AND (sch.classday_1 = %s OR sch.classday_2 = %s)
+            AND NOT EXISTS (
+                SELECT 1 FROM attendance a 
+                WHERE a.class_id = sch.class_id 
+                AND CAST(a.timein AT TIME ZONE 'Asia/Manila' AS DATE) = %s
+            )
+        """, (day_name, day_name, target_date, day_name, day_name, target_date))
+        
+        missing_rows = cursor.fetchall()
+        
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        all_sessions = []
+        summary = {'expected': 0, 'present': 0, 'late': 0, 'absent': 0, 'excused': 0}
+
+        # Format helper
+        def format_time(dt):
+            if not dt: return '—'
+            ph = dt.astimezone(philippines_tz) if dt.tzinfo else philippines_tz.localize(dt)
+            if ph.hour == 0 and ph.minute == 0 and ph.second == 0: return '—'
+            return ph.strftime('%I:%M %p').lstrip('0')
+
+        # Combine logic
+        for row in attendance_rows:
+            (cid, pid, fname, lname, hon, role, coll, tin, tout, stat, scode, sname, start, end, college_id) = row
+            
+            # PARITY: Check for 12:00 AM errors
+            timein_val = format_time(tin)
+            if timein_val == '—': 
+                stat = 'Absent'
+            
+            timeout_val = format_time(tout)
+            if stat == 'Absent': 
+                timeout_val = '—'
+
+            session_data = {
+                'personnel_id': pid,
+                'name': f"{lname}, {fname}, {hon}" if hon else f"{lname}, {fname}",
+                'role': role,
+                'college': coll or 'N/A',
+                'college_id': college_id,
+                'subject': f"{scode} - {sname}",
+                'schedule': f"{start} to {end}",
+                'timein': timein_val,
+                'timeout': timeout_val,
+                'status': stat.capitalize() if stat else 'Absent',
+                'raw_start': str(start)
+            }
+            all_sessions.append(session_data)
+            
+            # Update summary strictly from log status
+            summary['expected'] += 1
+            s_low = stat.lower()
+            if s_low in summary: summary[s_low] += 1
+            else: summary['absent'] += 1
+
+        for row in missing_rows:
+            (cid, pid, fname, lname, hon, role, coll, scode, sname, start, end, college_id) = row
+            session_data = {
+                'personnel_id': pid,
+                'name': f"{lname}, {fname}, {hon}" if hon else f"{lname}, {fname}",
+                'role': role,
+                'college': coll or 'N/A',
+                'college_id': college_id,
+                'subject': f"{scode} - {sname}",
+                'schedule': f"{start} to {end}",
+                'timein': '—',
+                'timeout': '—',
+                'status': 'Absent',
+                'raw_start': str(start)
+            }
+            all_sessions.append(session_data)
+            summary['expected'] += 1
+            summary['absent'] += 1
+
+        all_sessions.sort(key=lambda x: (x['name'], x['raw_start']))
+
+        return {
+            'success': True, 
+            'date': target_date.strftime('%Y-%m-%d'),
+            'formatted_date': target_date.strftime('%B %d, %Y'),
+            'summary': summary,
+            'faculty': all_sessions
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@app.route('/api/hr/campus-daily-attendance')
+@require_auth([20003])
+def api_hr_campus_daily_attendance():
+    """Daily summary view for Campus Attendance (Biometrics). 1 Card = 1 Campus Session (Morning/Afternoon)."""
+    try:
+        date_str = request.args.get('date')
+        philippines_tz = pytz.timezone('Asia/Manila')
+        if not date_str:
+            target_date = datetime.now(philippines_tz).date()
+        else:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+
+        conn = db_pool.get_connection()
+        cursor = conn.cursor()
+
+        # Step 1: FETCH ALL LOGS FOR THIS DATE
+        cursor.execute("""
+            SELECT 
+                ca.personnel_id,
+                p.firstname, p.lastname, p.honorifics,
+                r.rolename,
+                c.collegename,
+                ca.session,
+                ca.time_in,
+                ca.time_out,
+                ca.status,
+                pr.employmentstatus,
+                p.college_id
+            FROM campus_attendance ca
+            JOIN personnel p ON ca.personnel_id = p.personnel_id
+            JOIN roles r ON p.role_id = r.role_id
+            LEFT JOIN college c ON p.college_id = c.college_id
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            WHERE ca.attendance_date = %s
+            ORDER BY p.lastname, p.firstname, ca.session
+        """, (target_date,))
+        
+        campus_rows = cursor.fetchall()
+
+        # Step 2: FETCH ALL ACTIVE PERSONNEL (For 'Expected' count)
+        # We assume all personnel are expected for campus unless filter logic (like week-day) is needed.
+        # To keep parity with class attendance dashboard, if it's a weekday, we count everyone.
+        cursor.execute("""
+            SELECT 
+                p.personnel_id,
+                p.firstname, p.lastname, p.honorifics,
+                r.rolename,
+                c.collegename,
+                pr.employmentstatus,
+                p.college_id
+            FROM personnel p
+            JOIN roles r ON p.role_id = r.role_id
+            LEFT JOIN college c ON p.college_id = c.college_id
+            LEFT JOIN profile pr ON p.personnel_id = pr.personnel_id
+            WHERE r.rolename NOT IN ('Student') -- Example filter
+        """)
+        
+        all_personnel_rows = cursor.fetchall()
+        
+        cursor.close()
+        db_pool.return_connection(conn)
+
+        # Helper to format dates to AM/PM Manila
+        def format_time(val):
+            if not val: return '—'
+            if hasattr(val, 'strftime'):
+                # Combine with target_date if it's a time object (no year attribute)
+                dt = datetime.combine(target_date, val) if not hasattr(val, 'year') else val
+                return dt.strftime('%I:%M %p').lstrip('0')
+            return val
+
+        # Group data by personnel_id
+        faculty_map = {}
+        
+        # Initialize with all active personnel for 'Expected' count (Monday-Saturday)
+        is_weekend = target_date.weekday() == 6 # Sunday
+        if not is_weekend:
+            for p_row in all_personnel_rows:
+                (pid, fname, lname, hon, role, coll, employment, college_id) = p_row
+                faculty_map[pid] = {
+                    'personnel_id': pid,
+                    'name': f"{lname}, {fname}, {hon}" if hon else f"{lname}, {fname}",
+                    'role': role,
+                    'college': coll or 'N/A',
+                    'college_id': college_id,
+                    'employment_status': employment or 'N/A',
+                    'morning': {'timein': '—', 'timeout': '—', 'status': 'Absent'},
+                    'afternoon': {'timein': '—', 'timeout': '—', 'status': 'Absent'}
+                }
+
+        # Overlay actual logs
+        for row in campus_rows:
+            (pid, fname, lname, hon, role, coll, sess, tin, tout, stat, employment, college_id) = row
+            if pid not in faculty_map:
+                # If they tapped but aren't in active personnel for some reason
+                faculty_map[pid] = {
+                    'personnel_id': pid,
+                    'name': f"{lname}, {fname}, {hon}" if hon else f"{lname}, {fname}",
+                    'role': role,
+                    'college': coll or 'N/A',
+                    'college_id': college_id,
+                    'employment_status': employment or 'N/A',
+                    'morning': {'timein': '—', 'timeout': '—', 'status': 'Absent'},
+                    'afternoon': {'timein': '—', 'timeout': '—', 'status': 'Absent'}
+                }
+            
+            sess_key = sess.lower() # 'morning' or 'afternoon'
+            if sess_key in faculty_map[pid]:
+                faculty_map[pid][sess_key] = {
+                    'timein': format_time(tin),
+                    'timeout': format_time(tout),
+                    'status': stat.capitalize() if stat else 'Absent'
+                }
+
+        # Calculate Status Precedence & Summary
+        # Order: Absent > Late > Excused > Present
+        summary = {'expected': len(faculty_map), 'present': 0, 'late': 0, 'absent': 0, 'excused': 0}
+        
+        all_faculty = []
+        for pid, f in faculty_map.items():
+            # Personnel Status = the "worse" of the two sessions
+            s1 = f['morning']['status'].lower()
+            s2 = f['afternoon']['status'].lower()
+            
+            # Determine combined status
+            combined_status = 'Absent'
+            if s1 == 'late' or s2 == 'late': combined_status = 'Late'
+            elif s1 == 'excused' or s2 == 'excused': combined_status = 'Excused'
+            elif s1 == 'present' or s2 == 'present': combined_status = 'Present'
+            
+            # If both are absent, it's absent. But if one is present, they are present.
+            # But the user specifically wants Absent cards for missing taps.
+            # If ANY session is logged, we count them as part of present/late.
+            # If BOTH are absent, they are absent.
+            if s1 == 'absent' and s2 == 'absent':
+                combined_status = 'Absent'
+            
+            f['status'] = combined_status
+            all_faculty.append(f)
+            
+            sk = combined_status.lower()
+            if sk in summary: summary[sk] += 1
+            else: summary['absent'] += 1
+
+        all_faculty.sort(key=lambda x: x['name'])
+
+        return {
+            'success': True,
+            'date': target_date.strftime('%Y-%m-%d'),
+            'formatted_date': target_date.strftime('%B %d, %Y'),
+            'summary': summary,
+            'faculty': all_faculty
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
         return {'success': False, 'error': str(e)}
 
 @app.route('/api/hr/faculty-attendance')
