@@ -1,3 +1,4 @@
+import os
 import serial
 import serial.tools.list_ports
 import threading
@@ -42,7 +43,14 @@ class SharedSerialPort:
             return {"success": True, "message": f"Port already open on {self.port_name}", "port": self.port_name}
 
         if port is None:
-            port = self.find_arduino_port()
+            # First try environment variable for explicit port configuration
+            env_port = os.getenv('SERIAL_PORT')
+            if env_port:
+                port = env_port
+                print(f"[INFO] Using SERIAL_PORT from environment: {port}")
+            else:
+                # Fall back to automatic detection
+                port = self.find_arduino_port()
 
         if port is None:
             available = [p.device for p in serial.tools.list_ports.comports()]

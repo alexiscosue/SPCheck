@@ -543,6 +543,27 @@ def update_biometric_state(is_running, port=None, started_by=None):
             biometric_reader_state['started_by'] = None
             biometric_reader_state['started_at'] = None
 
+def _to_manila_iso(dt):
+    """Return ISO string in Asia/Manila for DB timestamps.
+    Handles naive timestamps (assumed UTC) and tz-aware timestamps.
+    """
+    if not dt:
+        return None
+    manila = pytz.timezone('Asia/Manila')
+    try:
+        if getattr(dt, 'tzinfo', None) is None:
+            # Common failure mode: tz-aware datetimes inserted into a "timestamp without time zone"
+            # column get stored as UTC wall time (e.g. 05:30 instead of 13:30 in Manila).
+            dt_utc = dt.replace(tzinfo=pytz.UTC)
+            return dt_utc.astimezone(manila).replace(tzinfo=None).isoformat()
+        return dt.astimezone(manila).replace(tzinfo=None).isoformat()
+    except Exception:
+        # Fallback: keep original representation rather than crashing the API
+        try:
+            return dt.isoformat()
+        except Exception:
+            return None
+
 def auto_reader_manager():
     """Automatically start and stop RFID and Biometric readers based on schedule."""
     philippines_tz = pytz.timezone('Asia/Manila')
@@ -584,8 +605,12 @@ def auto_reader_manager():
 
         except Exception as e:
             print(f"Error in auto_reader_manager: {e}")
-            
-        _time.sleep(60)
+
+        # Debug logging disabled by default (too noisy in production)
+        # Set SPCHECK_DEBUG_READERS=1 to enable.
+        if os.getenv('SPCHECK_DEBUG_READERS') == '1':
+            print(f"[DEBUG] auto_reader_manager: now={current_time}, active_window={is_active_window}")
+        _time.sleep(5)
 
 threading.Thread(target=auto_reader_manager, daemon=True).start()
 
@@ -1159,6 +1184,9 @@ def campus_attendance_daily_sync():
                     time_in  = EXCLUDED.time_in,
                     time_out = EXCLUDED.time_out,
                     status   = EXCLUDED.status
+                -- Preserve seeded/human-edited values if time_in already exists.
+                -- This prevents your simulation seeding from being overwritten every 5 minutes.
+                WHERE campus_attendance.time_in IS NULL
             """)
             conn.commit()
         except Exception as e:
@@ -1926,13 +1954,25 @@ def api_rfid_stop():
 def api_rfid_status():
     """Get RFID reader status - accessible by Faculty, Dean, and HR"""
     try:
+        # Use the actual reader object as source of truth (state dict can desync,
+        # especially under Flask's debug reloader / multi-threading).
+        actual_running = bool(getattr(rfid_reader, 'is_running', False))
+        actual_port = getattr(rfid_reader, 'port_name', None) if actual_running else None
+
         state = get_rfid_state()
+        is_running = actual_running or bool(state.get('is_running'))
+        port = actual_port or state.get('port')
         return {
             'success': True,
-            'is_running': state['is_running'],
-            'port': state['port'],
+            'is_running': is_running,
+            'port': port,
             'started_by': state.get('started_by'),
-            'started_at': state.get('started_at')
+            'started_at': state.get('started_at'),
+            # debug fields (safe; helps frontend resolve mismatches)
+            'actual_running': actual_running,
+            'actual_port': actual_port,
+            'state_running': bool(state.get('is_running')),
+            'state_port': state.get('port')
         }
         
     except Exception as e:
@@ -2049,13 +2089,23 @@ def api_biometric_stop():
 def api_biometric_status():
     """Get biometric reader status - accessible by Faculty, Dean, and HR"""
     try:
+        # Use the actual reader object as source of truth (state dict can desync).
+        actual_running = bool(getattr(biometric_reader, 'is_running', False))
+        actual_port = getattr(biometric_reader, 'port_name', None) if actual_running else None
+
         state = get_biometric_state()
+        is_running = actual_running or bool(state.get('is_running'))
+        port = actual_port or state.get('port')
         return {
             'success': True,
-            'is_running': state['is_running'],
-            'port': state['port'],
+            'is_running': is_running,
+            'port': port,
             'started_by': state.get('started_by'),
-            'started_at': state.get('started_at')
+            'started_at': state.get('started_at'),
+            'actual_running': actual_running,
+            'actual_port': actual_port,
+            'state_running': bool(state.get('is_running')),
+            'state_port': state.get('port')
         }
 
     except Exception as e:
@@ -2190,8 +2240,8 @@ def api_campus_attendance():
                 'name':              row[1],
                 'date':              row[2].isoformat() if row[2] else None,
                 'session':           row[3],
-                'time_in':           row[4].isoformat() if row[4] else None,
-                'time_out':          row[5].isoformat() if row[5] else None,
+                'time_in':           _to_manila_iso(row[4]),
+                'time_out':          _to_manila_iso(row[5]),
                 'status':            row[6],
                 'college':           row[7] or 'N/A',
                 'position':          row[8] or 'N/A',
@@ -5806,8 +5856,8 @@ def api_hr_campus_daily_attendance():
                 r.rolename,
                 c.collegename,
                 ca.session,
-                ca.time_in,
-                ca.time_out,
+                ca.time_in  AT TIME ZONE 'Asia/Manila',
+                ca.time_out AT TIME ZONE 'Asia/Manila',
                 ca.status,
                 pr.employmentstatus,
                 p.college_id
@@ -5845,14 +5895,27 @@ def api_hr_campus_daily_attendance():
         cursor.close()
         db_pool.return_connection(conn)
 
-        # Helper to format dates to AM/PM Manila
+        # Helper to format times in Asia/Manila (prevents 1:30PM -> 5:30AM shifts)
         def format_time(val):
-            if not val: return '—'
-            if hasattr(val, 'strftime'):
-                # Combine with target_date if it's a time object (no year attribute)
-                dt = datetime.combine(target_date, val) if not hasattr(val, 'year') else val
-                return dt.strftime('%I:%M %p').lstrip('0')
-            return val
+            if not val:
+                return '—'
+            if not hasattr(val, 'strftime'):
+                return val
+
+            # If it's a plain time object, treat it as Manila-local clock time
+            dt = datetime.combine(target_date, val) if not hasattr(val, 'year') else val
+
+            try:
+                manila = pytz.timezone('Asia/Manila')
+                if getattr(dt, 'tzinfo', None) is None:
+                    # Stored as naive timestamp; interpret as UTC and convert to Manila
+                    dt = dt.replace(tzinfo=pytz.UTC).astimezone(manila).replace(tzinfo=None)
+                else:
+                    dt = dt.astimezone(manila).replace(tzinfo=None)
+            except Exception:
+                pass
+
+            return dt.strftime('%I:%M %p').lstrip('0')
 
         # Group data by personnel_id
         faculty_map = {}

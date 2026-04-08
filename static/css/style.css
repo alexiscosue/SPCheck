@@ -2984,6 +2984,14 @@ to { opacity: 1; }
   color: #6b7280;
 }
 
+.rfid-status.online {
+  color: #16a34a; /* green text when readers are online */
+}
+
+.rfid-status.offline {
+  color: #6b7280; /* keep offline text neutral (indicator dot already shows state) */
+}
+
 .status-indicator {
   width: 10px;
   height: 10px;

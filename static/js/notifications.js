@@ -110,6 +110,10 @@ const NotifSystem = (function () {
       try {
         var data = JSON.parse(event.data);
         if (data.tap_time) {
+          // Fire popup immediately on live SSE (independent of storage/panel).
+          if (!data._skip_notifsystem_popup) {
+            _showPopupToast(data);
+          }
           window.dispatchEvent(new CustomEvent('spcheck-notification', { detail: data }));
         }
       } catch (err) { /* ignore */ }
@@ -195,6 +199,95 @@ const NotifSystem = (function () {
     _save(notifs);
     _render();
     _updateBadge();
+
+    // Also show a right-side popup toast for real-time scan events.
+    // This used to be handled in individual attendance pages; keeping it here
+    // ensures popups still work even after moving SSE to the base template.
+    if (!data._skip_notifsystem_popup) {
+      _showPopupToast(data);
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Popup toast (top-right)                                            */
+  /* ------------------------------------------------------------------ */
+
+  function _ensurePopupContainer() {
+    var el = document.getElementById('notificationContainer');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'notificationContainer';
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function _showPopupToast(data) {
+    try {
+      if (!data.tap_time) return;
+
+      var container = _ensurePopupContainer();
+      if (!container) return;
+
+      // Use inline styles so the popup cannot be "lost" due to page CSS/layout changes.
+      var t = data.notification_type || 'rfid';
+      var title = (t === 'biometric') ? 'Biometric Scanned' : (t === 'rfid' ? 'RFID Tapped' : 'Notification');
+
+      var border = '#3b82f6';
+      if (data.status === 'error') border = '#ef4444';
+      else if (data.status === 'warning') border = '#f59e0b';
+      else if (data.status) border = '#10b981';
+
+      var who = data.person_name ? String(data.person_name) : '';
+      var msg = data.message ? String(data.message) : '';
+      var time = String(data.tap_time);
+
+      var notification = document.createElement('div');
+      notification.style.cssText =
+        "background:#fff; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.15);" +
+        "padding:14px 14px 12px; border-left:4px solid " + border + ";" +
+        "min-width:320px; max-width:420px;" +
+        "transform:translateX(450px); opacity:0;" +
+        "transition:all 0.25s cubic-bezier(0.4,0,0.2,1);";
+
+      notification.innerHTML =
+        "<div style=\"display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:15px;\">" +
+          "<strong style=\"flex:1;color:#111827;\">" + _escapeHtml(title) + "</strong>" +
+          "<button aria-label=\"Close\" style=\"background:none;border:none;cursor:pointer;color:#9ca3af;font-size:18px;line-height:1;padding:2px;\">✕</button>" +
+        "</div>" +
+        "<div style=\"display:flex;flex-direction:column;gap:6px;font-size:13px;color:#4b5563;\">" +
+          "<div style=\"color:#6b7280;font-weight:600;\">" + _escapeHtml(time) + "</div>" +
+          (who ? "<div style=\"color:#111827;font-weight:700;\">" + _escapeHtml(who) + "</div>" : "") +
+          (msg ? "<div style=\"line-height:1.4;\">" + _escapeHtml(msg) + "</div>" : "") +
+        "</div>";
+
+      container.appendChild(notification);
+
+      var closeBtn = notification.querySelector('button');
+      if (closeBtn) closeBtn.addEventListener('click', function () { notification.remove(); });
+
+      setTimeout(function () {
+        notification.style.transform = 'translateX(0)';
+        notification.style.opacity = '1';
+      }, 10);
+
+      setTimeout(function () {
+        if (!notification.parentElement) return;
+        notification.style.transform = 'translateX(450px)';
+        notification.style.opacity = '0';
+        setTimeout(function () { if (notification.parentElement) notification.remove(); }, 300);
+      }, 10000);
+    } catch (e) {
+      // Never break the notification panel if popup rendering fails
+    }
+  }
+
+  function _escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   function _load() {

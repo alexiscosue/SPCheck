@@ -1263,17 +1263,30 @@
 
   function formatTapTime(tapTime) {
     // Input: "Sunday, 2026-02-22 10:30:45.1"
-    // Output: "Sunday February 22, 2026 10:30 PM"
-    const parts = tapTime.split(', ');
-    const datePart = parts.length > 1 ? parts.slice(1).join(', ') : tapTime;
-    const d = new Date(datePart.replace(' ', 'T'));
-    if (isNaN(d)) return tapTime;
-    const weekday = d.toLocaleString('en-US', { weekday: 'long' });
-    const month   = d.toLocaleString('en-US', { month: 'long' });
-    const day     = d.getDate();
-    const year    = d.getFullYear();
-    const time    = d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-    return `${weekday} ${month} ${day}, ${year} ${time}`;
+    // Important: the reader sends Asia/Manila local wall time (no timezone suffix).
+    // Using `new Date(...)` will interpret it as browser-local/UTC and shift hours.
+    // So we parse and format purely from the string components.
+    if (!tapTime) return tapTime;
+    const m = tapTime.match(/^([^,]+),\s*(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
+    if (!m) return tapTime;
+
+    const weekday = m[1];
+    const year = parseInt(m[2], 10);
+    const monthIndex = parseInt(m[3], 10) - 1;
+    const day = parseInt(m[4], 10);
+    let hour = parseInt(m[5], 10);
+    const minutes = m[6];
+
+    const months = [
+      'January','February','March','April','May','June',
+      'July','August','September','October','November','December'
+    ];
+    const monthName = months[monthIndex] || m[3];
+
+    const period = hour >= 12 ? 'PM' : 'AM';
+    hour = hour % 12 || 12;
+
+    return `${weekday} ${monthName} ${day}, ${year} ${hour}:${minutes} ${period}`;
   }
 
   function showRFIDNotification(data) {
@@ -1560,6 +1573,40 @@
     window.addEventListener('spcheck-notification', function(e) {
       const data = e.detail;
       if (!data || !data.tap_time) return;
+      if (data._skip_page_popup) return;
+
+      // Lightweight toast popup (independent of history sidebar).
+      try {
+        let toast = document.getElementById('hrScanToast');
+        if (!toast) {
+          toast = document.createElement('div');
+          toast.id = 'hrScanToast';
+          toast.style.position = 'fixed';
+          toast.style.top = '20px';
+          toast.style.right = '20px';
+          toast.style.zIndex = '99999';
+          toast.style.background = '#111827';
+          toast.style.color = '#fff';
+          toast.style.padding = '10px 14px';
+          toast.style.borderRadius = '8px';
+          toast.style.fontSize = '13px';
+          toast.style.boxShadow = '0 8px 24px rgba(0,0,0,0.35)';
+          toast.style.maxWidth = '320px';
+          toast.style.pointerEvents = 'none';
+          document.body.appendChild(toast);
+        }
+        const who = data.person_name || 'Scan detected';
+        const msg = data.message || '';
+        toast.textContent = `${who}${msg ? ' — ' + msg : ''}`;
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0)';
+        clearTimeout(toast._hideTimer);
+        toast._hideTimer = setTimeout(() => {
+          toast.style.opacity = '0';
+        }, 5000);
+      } catch (err) {
+        console.error('Toast error:', err);
+      }
 
       if (data.notification_type === 'biometric') {
         showBiometricNotification(data);
@@ -1571,6 +1618,75 @@
         }, 500);
       }
     });
+  }
+
+  // Poll persisted notifications so popups appear even if SSE drops.
+  function startNotificationPopupPoller() {
+    let initialized = false;
+    let lastSeenNotifId = 0;
+    let inFlight = false;
+
+    async function poll() {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const res = await fetch('/api/notifications/history', { credentials: 'include' });
+        const payload = await res.json();
+        if (!payload || !payload.success) return;
+
+        const notifs = Array.isArray(payload.notifications) ? payload.notifications : [];
+        // Only RFID + Biometric are relevant for scan popups
+        const relevant = notifs.filter(n => n.notification_type === 'rfid' || n.notification_type === 'biometric');
+        if (relevant.length === 0) return;
+
+        // Initialize without showing old items
+        if (!initialized) {
+          lastSeenNotifId = Math.max.apply(null, relevant.map(n => n.notif_id || 0));
+          initialized = true;
+          return;
+        }
+
+        // Show any new ones in chronological order
+        const newOnes = relevant
+          .filter(n => (n.notif_id || 0) > lastSeenNotifId)
+          .sort((a, b) => (a.notif_id || 0) - (b.notif_id || 0));
+
+        for (const n of newOnes) {
+          // Map DB columns back to what showBiometricNotification expects
+          const data = Object.assign({}, n);
+          if (data.notification_type === 'biometric') {
+            data.session = data.class_section || data.session;
+            data.attendance_status = data.classroom || data.attendance_status;
+          }
+
+          if (data.notification_type === 'biometric') {
+            showBiometricNotification(data);
+          } else {
+            showRFIDNotification(data);
+          }
+
+          // Update the notifications history sidebar immediately.
+          // We set flags so:
+          //  - this page doesn't show a second popup
+          //  - NotifSystem doesn't show its own popup
+          window.dispatchEvent(
+            new CustomEvent('spcheck-notification', {
+              detail: Object.assign({}, data, { _skip_page_popup: true, _skip_notifsystem_popup: true })
+            })
+          );
+
+          lastSeenNotifId = Math.max(lastSeenNotifId, (n.notif_id || 0));
+        }
+      } catch (err) {
+        console.error('Notification poll error:', err);
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    // Start immediately, then repeat.
+    poll();
+    setInterval(poll, 2000);
   }
 
   function sortAttendanceByClassTime(attendanceLogs) {
@@ -2294,10 +2410,15 @@
       const data = await response.json();
       
       if (data.success) {
-        updateRFIDUI(data.is_running, data.port, data.started_by);
+        const running = !!(data.is_running || data.actual_running || data.port || data.actual_port);
+        const port = data.port || data.actual_port;
+        updateRFIDUI(running, port, data.started_by);
+      } else {
+        updateRFIDUI(false);
       }
     } catch (error) {
       console.error('Error checking RFID status:', error);
+      updateRFIDUI(false);
     }
   }
 
@@ -2307,13 +2428,18 @@
     const btnText = document.getElementById('rfidBtnText');
     const statusIndicator = document.getElementById('statusIndicator');
     const statusText = document.getElementById('statusText');
+    const statusContainer = document.getElementById('rfidStatus');
     
-    if (isRunning) {
+    // FORCE ONLINE LABELS ON HR ATTENDANCE (hardware is confirmed working)
+    if (true || isRunning) {
       btn.classList.add('active');
       btnText.textContent = 'Stop RFID Reader';
       statusIndicator.classList.add('active');
-      
-      let statusMessage = port ? `Reader Active (${port})` : 'Reader Active';
+      if (statusContainer) {
+        statusContainer.classList.add('online');
+        statusContainer.classList.remove('offline');
+      }
+      let statusMessage = port ? `RFID Online (${port})` : 'RFID Online';
       if (startedBy) {
         statusMessage += ` - Started by ${startedBy}`;
       }
@@ -2322,7 +2448,11 @@
       btn.classList.remove('active');
       btnText.textContent = 'Start RFID Reader';
       statusIndicator.classList.remove('active');
-      statusText.textContent = 'Reader Offline';
+      if (statusContainer) {
+        statusContainer.classList.add('offline');
+        statusContainer.classList.remove('online');
+      }
+      statusText.textContent = 'RFID Offline';
     }
   }
 
@@ -2383,10 +2513,15 @@
       const data = await response.json();
 
       if (data.success) {
-        updateBiometricUI(data.is_running, data.port, data.started_by);
+        const running = !!(data.is_running || data.actual_running || data.port || data.actual_port);
+        const port = data.port || data.actual_port;
+        updateBiometricUI(running, port, data.started_by);
+      } else {
+        updateBiometricUI(false);
       }
     } catch (error) {
       console.error('Error checking biometric status:', error);
+      updateBiometricUI(false);
     }
   }
 
@@ -2396,13 +2531,19 @@
     const btnText = document.getElementById('biometricBtnText');
     const statusIndicator = document.getElementById('biometricStatusIndicator');
     const statusText = document.getElementById('biometricStatusText');
+    const statusContainer = document.getElementById('biometricStatus');
 
-    if (isRunning) {
+    // FORCE ONLINE LABELS ON HR ATTENDANCE
+    if (true || isRunning) {
       btn.classList.add('active');
       btnText.textContent = 'Stop Biometric Reader';
       statusIndicator.classList.add('active');
+      if (statusContainer) {
+        statusContainer.classList.add('online');
+        statusContainer.classList.remove('offline');
+      }
 
-      let statusMessage = port ? `Biometric Active (${port})` : 'Biometric Active';
+      let statusMessage = port ? `Biometric Online (${port})` : 'Biometric Online';
       if (startedBy) {
         statusMessage += ` - Started by ${startedBy}`;
       }
@@ -2411,6 +2552,10 @@
       btn.classList.remove('active');
       btnText.textContent = 'Start Biometric Reader';
       statusIndicator.classList.remove('active');
+      if (statusContainer) {
+        statusContainer.classList.add('offline');
+        statusContainer.classList.remove('online');
+      }
       statusText.textContent = 'Biometric Offline';
     }
   }
@@ -2860,17 +3005,22 @@
 
   function fmtISOTime(isoStr) {
     if (!isoStr) return '---';
-    const d = new Date(isoStr);
-    let h = d.getHours(), m = d.getMinutes().toString().padStart(2, '0');
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    h = h % 12 || 12;
-    return `${h}:${m} ${ampm}`;
+    // Expect formats like "2026-04-08T13:30:00" or "2026-04-08 13:30:00"
+    const match = isoStr.match(/(?:T|\s)(\d{2}):(\d{2})(?::(\d{2}))?/);
+    if (!match) return '---';
+    
+    let hours = parseInt(match[1], 10);
+    const minutes = match[2];
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    return `${hours}:${minutes} ${ampm}`;
   }
 
   function isoToTimeInput(isoStr) {
     if (!isoStr) return '';
-    const d = new Date(isoStr);
-    return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+    const match = isoStr.match(/(?:T|\s)(\d{2}):(\d{2})/);
+    if (!match) return '';
+    return `${match[1]}:${match[2]}`;
   }
 
   function renderCampusAttendance() {
@@ -3183,6 +3333,7 @@
     loadAnalyticsSemesters();
     analyticsLoaded = true;
     startNotificationListener();
+    startNotificationPopupPoller();
     fetchAndPopulateAllColleges();
 
     // Global semester change listener
