@@ -4484,11 +4484,10 @@ def api_faculty_dashboard():
             evaluation_data AS (
                 -- Calculate Overall Weighted Evaluation Score (55/35/10)
                 SELECT
-                    COALESCE(
-                        AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END) * 0.55 +
-                        MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END) * 0.35 +
-                        MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END) * 0.10,
-                    0) AS overall_average
+                    COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END), 0) * 0.55 +
+                    COALESCE(AVG(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END), 0) * 0.35 +
+                    COALESCE(AVG(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END), 0) * 0.10
+                        AS overall_average
                 FROM faculty_evaluations fe
                 CROSS JOIN personnel_data pd
                 CROSS JOIN current_semester cs
@@ -7304,23 +7303,23 @@ def api_faculty_evaluations_data():
                 
                 (SELECT AVG(overall_score) FROM (
                     SELECT
-                        COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END) * 0.55 +
-                                 MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END) * 0.35 +
-                                 MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END) * 0.10, 0) AS overall_score
+                        COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END), 0) * 0.55 +
+                        COALESCE(MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END), 0) * 0.35 +
+                        COALESCE(MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END), 0) * 0.10 AS overall_score
                         FROM personnel p
                         LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = (SELECT acadcalendar_id FROM current_term)
                         WHERE p.role_id IN (20001, 20002) AND fe.score IS NOT NULL
                         GROUP BY p.personnel_id
                 ) AS comparison_scores) AS college_wide_avg,
-                
+
                 (SELECT AVG(cb.overall_score)
                  FROM (
                      SELECT
                         fe.personnel_id,
                         p.college_id,
-                        COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END) * 0.55 +
-                                 MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END) * 0.35 +
-                                 MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END) * 0.10, 0) AS overall_score
+                        COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END), 0) * 0.55 +
+                        COALESCE(MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END), 0) * 0.35 +
+                        COALESCE(MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END), 0) * 0.10 AS overall_score
                      FROM faculty_evaluations fe
                      JOIN personnel p ON fe.personnel_id = p.personnel_id
                      WHERE fe.acadcalendar_id = (SELECT acadcalendar_id FROM current_term) AND p.role_id IN (20001, 20002) AND fe.score IS NOT NULL
@@ -11147,8 +11146,8 @@ def api_hr_evaluation_dashboard_data():
                     c.collegename,
                     -- Weighted Overall Score (55/35/10), partial scores included
                     COALESCE(AVG(CASE WHEN fe.evaluator_type = 'student'    THEN fe.score END), 0) * 0.55 +
-                    COALESCE(MAX(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END), 0) * 0.35 +
-                    COALESCE(MAX(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END), 0) * 0.10
+                    COALESCE(AVG(CASE WHEN fe.evaluator_type = 'supervisor' THEN fe.score END), 0) * 0.35 +
+                    COALESCE(AVG(CASE WHEN fe.evaluator_type = 'peer'       THEN fe.score END), 0) * 0.10
                         AS overall_score
                 FROM personnel p
                 LEFT JOIN faculty_evaluations fe ON fe.personnel_id = p.personnel_id AND fe.acadcalendar_id = %s
@@ -11157,10 +11156,10 @@ def api_hr_evaluation_dashboard_data():
                 GROUP BY p.personnel_id, c.collegename
             ),
             valid_eval_breakdown AS (
-                SELECT 
+                SELECT
                     overall_score,
                     collegename,
-                    CASE 
+                    CASE
                         WHEN overall_score >= 3.0 THEN 'Above Average'
                         WHEN overall_score >= 2.0 THEN 'Average'
                         WHEN overall_score > 0 THEN 'Below Average'
@@ -11171,7 +11170,7 @@ def api_hr_evaluation_dashboard_data():
             ),
             final_aggregates AS (
                 SELECT
-                    -- KPI: Average Evaluation Score
+                    -- KPI: Average Evaluation Score (only rated faculty, matching evaluations page)
                     COALESCE(AVG(overall_score), 0) AS avg_eval_score,
                     
                     -- Chart Data: Rating Breakdown
@@ -11192,7 +11191,7 @@ def api_hr_evaluation_dashboard_data():
                         ORDER BY dept_avg DESC
                      ) AS dept_averages) AS dept_scores_json
                 
-                FROM faculty_eval_scores
+                FROM valid_eval_breakdown
             )
             SELECT * FROM final_aggregates;
         """, (current_term_id,))
@@ -11392,7 +11391,7 @@ def api_hr_evaluations():
         SELECT
             -- General KPIs
             (SELECT COUNT(fd.personnel_id) FROM faculty_data fd) AS total_faculty,
-            (SELECT COALESCE(AVG(fd.overall_score), 0) FROM faculty_data fd) AS average_rating,
+            (SELECT COALESCE(AVG(fd.overall_score), 0) FROM faculty_data fd WHERE fd.overall_score > 0) AS average_rating,
             -- Met response rate
             (SELECT SUM(CASE
                 WHEN fd.total_students = 0 THEN 0

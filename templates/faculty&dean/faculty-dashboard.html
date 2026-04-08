@@ -539,7 +539,7 @@
       const deptAvg = parseFloat(dashboardData.comparison?.dept_avg || 0);
       evalScoreElement.innerHTML = deptAvg > 0 ? `${deptAvg.toFixed(2)} / 4` : 'N/A';
     } else {
-      const overallScore = parseFloat(dashboardData.overall_eval_score || dashboardData.kpis.overall_average);
+      const overallScore = parseFloat(dashboardData.kpis?.overall_average || dashboardData.overall_eval_score || 0);
       const scoreDisplay = overallScore.toFixed(2);
       let evalTrend = 'right-arrow-alt', evalTrendColor = '#6b7280';
       if (overallScore >= 3.5) { evalTrend = 'up-arrow-alt'; evalTrendColor = '#10b981'; }
